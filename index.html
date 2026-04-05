@@ -2455,16 +2455,16 @@ function togglePlatItem(id, platform) {
     }
     sib.platforms = sibPlats;
   });
-  // Ulož jen do localStorage bez cloud timeru — cloud se spustí po 300ms debounce
+  // Ulož jen do localStorage bez cloud timeru — cloud se spustí po 500ms debounce
   try { localStorage.setItem(SK, JSON.stringify(items)); localStorage.setItem(SK+'_savedAt', new Date().toISOString()); } catch(e) {}
   if (_svCloudTimer) { clearTimeout(_svCloudTimer); _svCloudTimer = null; }
-  // Debounce renderItems a cloud — rychlé klikání na platformy nepřekreslí DOM po každém kliku
-  if (window._platRenderTimer) clearTimeout(window._platRenderTimer);
-  window._platRenderTimer = setTimeout(function() {
-    window._platRenderTimer = null;
-    renderItems();
+  // Okamžitě překresli DOM, cloud s debounce
+  renderItems();
+  if (window._platCloudTimer) clearTimeout(window._platCloudTimer);
+  window._platCloudTimer = setTimeout(function() {
+    window._platCloudTimer = null;
     if (window._fbUser && typeof fbSaveToCloud === 'function') fbSaveToCloud();
-  }, 300);
+  }, 500);
 }
 
 function setView(mode) {
