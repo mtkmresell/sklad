@@ -1637,24 +1637,24 @@ function load(){
           if(pre && pre.buyCurrency) return {...it, buyCurrency:pre.buyCurrency};
           return {...it, buyCurrency:(it.buyPrice&&it.buyPrice%1!==0)?'EUR':'CZK'};
         }
-        // Přepočítat profit/roi pro paid položky pokud jsou podezřelé
-        // Zachováváme profitRateEur (historický kurz z doby prodeje)!
-        if (it.saleState === 'paid' && it.sellPrice && it.buyPrice && it.profitRateEur) {
+        // Oprav položky kde sellCurrency=EUR ale sellPrice je Kč (chybí sellPriceOrig)
+        if (it.saleState === 'paid' && it.sellCurrency === 'EUR' && it.sellPrice && it.profitRateEur && !it.sellPriceOrig) {
           var _er = it.profitRateEur;
-          var _bp = it.buyCurrency==='EUR' ? it.buyPrice*_er : it.buyPrice;
-          var _ec = it.extraCurrency==='EUR' ? (it.extraCosts||0)*_er : (it.extraCosts||0);
-          var _sp = it.sellPrice; // sellPrice je vždy Kč
-          // Pokud sellCurrency=EUR a sellPriceOrig existuje, sellPrice je správně v Kč
-          // Pokud sellCurrency=EUR a sellPriceOrig chybí, sellPrice může být EUR hodnota
-          if (it.sellCurrency === 'EUR' && !it.sellPriceOrig && it.sellPrice < 2000) {
-            // Pravděpodobně EUR hodnota - přepočítat
-            var _fixed = {...it, sellPriceOrig: it.sellPrice, sellPrice: Math.round(it.sellPrice * _er * 100)/100};
-            _sp = _fixed.sellPrice;
-            it = _fixed;
+          // Pokud sellPrice >> typická EUR cena (> 500), pravděpodobně je to Kč hodnota
+          // Typická EUR cena sneaker = 50-500 EUR, Kč = 1200-15000
+          if (it.sellPrice > 500) {
+            // sellPrice je Kč - odvoď sellPriceOrig
+            var _eurVal = Math.round(it.sellPrice / _er * 100) / 100;
+            return {...it, sellPriceOrig: _eurVal};
+          } else {
+            // sellPrice je EUR - přepočti na Kč
+            var _kcVal = Math.round(it.sellPrice * _er * 100) / 100;
+            var _bp2 = it.buyCurrency==='EUR' ? it.buyPrice*_er : it.buyPrice;
+            var _ec2 = it.extraCurrency==='EUR' ? (it.extraCosts||0)*_er : (it.extraCosts||0);
+            var _profit2 = Math.round((_kcVal - _bp2 - _ec2) * 100) / 100;
+            var _roi2 = _bp2 > 0 ? parseFloat(((_profit2/_bp2)*100).toFixed(1)) : 0;
+            return {...it, sellPriceOrig: it.sellPrice, sellPrice: _kcVal, profit: _profit2, roi: _roi2};
           }
-          var _newProfit = Math.round((_sp - _bp - _ec) * 100) / 100;
-          var _newRoi = _bp > 0 ? parseFloat(((_newProfit/_bp)*100).toFixed(1)) : 0;
-          return {...it, profit: _newProfit, roi: _newRoi};
         }
         // Oprav staré DPD tracking URL
         if(it.trackingUrl && it.trackingUrl.includes('tracking.dpd.de')) {
@@ -2685,7 +2685,7 @@ function tableHTML(list) {
       ${(()=>{ if(tab!=='waiting') return ''; var sp=it.sellPrice||0,bp=it.buyPrice||0,ec=it.extraCosts||0,er=it.profitRateEur||eurRate||25; var bpCzk=it.buyCurrency==='EUR'?bp*er:bp; var spEurVal=it.sellCurrency==='EUR'?(it.sellPriceOrig||sp):null; var spCzk=spEurVal?spEurVal*er:sp; var profit=spCzk-bpCzk-ec; var roi=bpCzk>0?parseFloat(((profit/bpCzk)*100).toFixed(1)):null; var pc2=profit>0?'color:var(--accent)':profit<0?'color:var(--danger)':'color:var(--muted)'; return `<td class="td-num" style="${pc2};text-align:center;font-size:12px;">${sp?(profit>=0?'+':'')+Math.round(profit).toLocaleString('cs'):'—'}</td><td style="text-align:center;font-family:monospace;font-size:11px;${roi>0?'color:var(--accent)':roi<0?'color:var(--danger)':'color:var(--muted)'}">${roi!=null&&sp?((roi>=0?'+':'')+roi+'%'):'—'}</td><td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.buyDate)}</td><td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.saleDate)||'—'}</td>`; })()}
       ${tab==='waiting'?`<td style="font-size:12px;color:var(--muted)">${it.soldWhere||'—'}</td>`:''}
       ${tab==='waiting'?`<td style="padding:8px 10px;">${waitStateBadge(it)}</td>`:''}
-      ${tab==='sold'?`<td class="td-num td-sell" style="text-align:center">${it.sellPrice?(it.sellCurrency==='EUR'?(it.sellPrice.toLocaleString('cs')+' €'):czk(it.sellPrice)):'—'}</td>`:''}
+      ${tab==='sold'?`<td class="td-num td-sell" style="text-align:center">${it.sellPrice?(it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)):'—'}</td>`:''}
       ${tab==='sold'?`<td class="td-num" style="${pc};text-align:center;font-size:12px;">${ps}</td>`:''}
       ${tab==='sold'?`<td style="text-align:center;font-family:monospace;font-size:11px;${it.roi>0?'color:var(--accent)':it.roi<0?'color:var(--danger)':'color:var(--muted)'}">${it.roi!=null?((it.roi>=0?'+':'')+it.roi+'%'):'—'}</td>`:''}
       ${tab==='stock'?(function(){var _loc=it.location||'Doma';var _lc=_loc==='Na cestě'?'var(--warning)':_loc==='Vráceno'?'#ff4444':_loc==='Bude vráceno'?'#ff4444':_loc==='Zrušeno'?'#ff4444':_loc!=='Doma'?'var(--accent2)':'var(--muted)';var _dpdClick2=it.trackingCarrier==='DPD'&&it.trackingNum?' onclick="event.stopPropagation();navigator.clipboard.writeText(\''+it.trackingNum+'\');showToast(\''+it.trackingNum+' zkopírováno\');"':' onclick="event.stopPropagation()"';
@@ -3805,7 +3805,15 @@ function openEdit(id){
   updateFieldsByCat(it.category||'sneakers');
   document.getElementById('fBuy').value=it.buyPrice||'';
   document.getElementById('fBuyCurrency').value=it.buyCurrency||'CZK';
-  document.getElementById('fSell').value=(it.sellCurrency==='EUR' && it.sellPriceOrig) ? it.sellPriceOrig : (it.sellPrice||'');
+  document.getElementById('fSell').value=(function(){
+    if(it.sellCurrency==='EUR') {
+      if(it.sellPriceOrig) return it.sellPriceOrig;
+      // sellPriceOrig chybí - odhadni EUR hodnotu z profitRateEur
+      var _r = it.profitRateEur || eurRate || 25;
+      return Math.round((it.sellPrice||0) / _r * 100) / 100;
+    }
+    return it.sellPrice||'';
+  })();
   const fSC=document.getElementById('fSellCurrency');if(fSC)fSC.value=it.sellCurrency||'CZK';
   var fEC=document.getElementById('fExtraCosts');if(fEC)fEC.value=it.extraCosts||'';
   var fECur=document.getElementById('fExtraCurrency');if(fECur)fECur.value=it.extraCurrency||'CZK';
@@ -3949,10 +3957,16 @@ function saveItem(){
       Object.keys(d).forEach(function(k){ if(d[k] !== undefined) _dClean[k] = d[k]; });
       var _merged = {...items[i],..._dClean};
       // Oprava: pokud je sellCurrency EUR, fSell.value obsahuje EUR hodnotu - přepočti na Kč
+      // Použij profitRateEur z doby prodeje, ne aktuální kurz
       if (_merged.saleState !== 'stock' && _merged.sellCurrency === 'EUR' && d.sellPrice && d.sellPrice > 0) {
         var _erSave = _merged.profitRateEur || eurRate || 25;
         _merged.sellPriceOrig = d.sellPrice; // EUR hodnota z formuláře
         _merged.sellPrice = Math.round(d.sellPrice * _erSave * 100) / 100; // přepočet na Kč
+        // Přepočítej profit se správným kurzem
+        var _bpSave = _merged.buyCurrency==='EUR' ? (_merged.buyPrice||0)*_erSave : (_merged.buyPrice||0);
+        var _ecSave = _merged.extraCurrency==='EUR' ? (_merged.extraCosts||0)*_erSave : (_merged.extraCosts||0);
+        _merged.profit = Math.round((_merged.sellPrice - _bpSave - _ecSave) * 100) / 100;
+        _merged.roi = _bpSave > 0 ? parseFloat(((_merged.profit/_bpSave)*100).toFixed(1)) : 0;
       }
       // Tracking URL — čti přímo z polí (ne z d kde může být undefined)
       var _manualUrl = (document.getElementById('fTrackUrl')||{}).value?.trim();
