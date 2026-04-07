@@ -7212,8 +7212,14 @@ document.addEventListener('fb-auth', function(e) {
     _fbUnsubscribe = fns.onSnapshot(docRef, function(snap) {
       var dot = document.getElementById('fbStatusDot');
       if (!snap.exists()) {
-        // Cloud prázdný — nahraj lokální data
-        if (_firstSnapshot) { _firstSnapshot = false; fbSaveToCloud(); showToast('Data nahrána do cloudu.'); }
+        // Cloud prázdný — nahraj lokální data jen pokud nějaká máme
+        if (_firstSnapshot) {
+          _firstSnapshot = false;
+          if (items.length > 0) {
+            fbSaveToCloud();
+            showToast('Data nahrána do cloudu.');
+          }
+        }
         return;
       }
       var data = snap.data();
@@ -7224,18 +7230,25 @@ document.addEventListener('fb-auth', function(e) {
       if (_firstSnapshot) {
         _firstSnapshot = false;
         // První načtení — rozhodni zda použít cloud nebo lokální
-        if (!localSavedAt || cloudTime > localTime + 5000) {
-          // Cloud je novější nebo nemáme lokální — VŽDY použij cloud
+        if (!localSavedAt) {
+          // Nové zařízení — VŽDY načti z cloudu, nikdy nepřepisuj
           var cloudItems = data.items || [];
-          if (data.items !== undefined) {
-            if (cloudItems.length !== items.length) saveSnapshot('před sync');
-            items = cloudItems;
-            localStorage.setItem(SK, JSON.stringify(items));
-            if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
-            if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
-            renderStats(); renderItems();
-            showToast('Data načtena z cloudu (' + items.length + ' položek).');
-          }
+          items = cloudItems;
+          localStorage.setItem(SK, JSON.stringify(items));
+          if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
+          if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
+          renderStats(); renderItems();
+          showToast('Data načtena z cloudu (' + items.length + ' položek).');
+        } else if (cloudTime > localTime + 5000) {
+          // Cloud je novější — použij cloud
+          var cloudItems2 = data.items || [];
+          if (cloudItems2.length !== items.length) saveSnapshot('před sync');
+          items = cloudItems2;
+          localStorage.setItem(SK, JSON.stringify(items));
+          if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
+          if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
+          renderStats(); renderItems();
+          showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
         } else if (localTime > cloudTime + 5000) {
           // Lokální jsou novější — nahraj do cloudu
           fbSaveToCloud();
@@ -7262,6 +7275,56 @@ document.addEventListener('fb-auth', function(e) {
     });
   }
 });
+function switchAuthTab(tab) {
+  var isLogin = tab === 'login';
+  document.getElementById('authTabLogin').style.background = isLogin ? 'var(--accent)' : 'none';
+  document.getElementById('authTabLogin').style.color = isLogin ? '#000' : 'var(--muted)';
+  document.getElementById('authTabLogin').style.fontWeight = isLogin ? '600' : '500';
+  document.getElementById('authTabRegister').style.background = !isLogin ? 'var(--accent)' : 'none';
+  document.getElementById('authTabRegister').style.color = !isLogin ? '#000' : 'var(--muted)';
+  document.getElementById('authTabRegister').style.fontWeight = !isLogin ? '600' : '500';
+  var forgot = document.getElementById('loginForgot');
+  if (forgot) forgot.style.display = isLogin ? '' : 'none';
+  var btn = document.getElementById('btnDoLogin');
+  if (btn) { btn.textContent = isLogin ? 'Přihlásit se' : 'Registrovat'; btn.onclick = isLogin ? doLogin : doRegister; }
+  var errEl = document.getElementById('loginError');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+}
+
+function doRegister() {
+  var email = (document.getElementById('loginEmail')?.value || '').trim();
+  var pass = document.getElementById('loginPass')?.value || '';
+  var errEl = document.getElementById('loginError');
+  var btn = document.getElementById('btnDoLogin');
+  if (!email || !pass) { if(errEl){errEl.textContent='Vyplň e-mail a heslo.';errEl.style.display='block';} return; }
+  if (pass.length < 6) { if(errEl){errEl.textContent='Heslo musí mít alespoň 6 znaků.';errEl.style.display='block';} return; }
+  if (!window._fbFns || !window._fbAuth) { if(errEl){errEl.textContent='Firebase není připojeno.';errEl.style.display='block';} return; }
+  if(btn){btn.textContent='Registruji…';btn.disabled=true;}
+  if(errEl) errEl.style.display='none';
+  window._fbFns.createUserWithEmailAndPassword(window._fbAuth, email, pass)
+    .then(function() { cm('moLogin'); showToast('Účet vytvořen a přihlášen.'); })
+    .catch(function(e) {
+      var msg = 'Chyba registrace.';
+      if (e.code==='auth/email-already-in-use') msg='Tento e-mail je již registrován.';
+      else if (e.code==='auth/invalid-email') msg='Neplatný formát e-mailu.';
+      else if (e.code==='auth/weak-password') msg='Heslo musí mít alespoň 6 znaků.';
+      if(errEl){errEl.textContent=msg;errEl.style.display='block';}
+    })
+    .finally(function(){ if(btn){btn.textContent='Registrovat';btn.disabled=false;} });
+}
+
+function doForgotPassword() {
+  var email = (document.getElementById('loginEmail')?.value || '').trim();
+  var errEl = document.getElementById('loginError');
+  if (!email) { if(errEl){errEl.textContent='Zadej e-mail pro reset hesla.';errEl.style.display='block';} return; }
+  if (!window._fbFns || !window._fbAuth) return;
+  import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(function(m){
+    m.sendPasswordResetEmail(window._fbAuth, email)
+      .then(function(){ if(errEl){errEl.style.color='var(--accent)';errEl.textContent='Reset odkaz odeslán na '+email;errEl.style.display='block';} })
+      .catch(function(){ if(errEl){errEl.style.color='var(--danger)';errEl.textContent='Nepodařilo se odeslat reset e-mail.';errEl.style.display='block';} });
+  });
+}
+
 function openAuthModal() {
   var emailEl = document.getElementById('loginEmail');
   var passEl = document.getElementById('loginPass');
@@ -9439,14 +9502,20 @@ rebuildBrandTables();
 <!-- Login modal -->
 <div id="moLogin" class="mo" onclick="if(event.target===this)cm('moLogin')">
   <div class="modal" style="max-width:360px;padding:28px;">
-    <div style="font-family:Syne,sans-serif;font-size:17px;font-weight:700;margin-bottom:20px;">Přihlášení</div>
+    <div style="display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:20px;">
+      <button id="authTabLogin" onclick="switchAuthTab('login')" style="flex:1;background:var(--accent);color:#000;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:6px;cursor:pointer;">Přihlášení</button>
+      <button id="authTabRegister" onclick="switchAuthTab('register')" style="flex:1;background:none;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:6px;cursor:pointer;">Registrace</button>
+    </div>
     <div style="margin-bottom:12px;">
       <label style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">E-mail</label>
       <input type="email" id="loginEmail" placeholder="vas@email.cz" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;outline:none;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
-    <div style="margin-bottom:20px;">
+    <div style="margin-bottom:8px;">
       <label style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">Heslo</label>
       <input type="password" id="loginPass" placeholder="••••••••" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;outline:none;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="loginForgot" style="text-align:right;margin-bottom:16px;">
+      <span onclick="doForgotPassword()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;">Zapomenuté heslo?</span>
     </div>
     <div id="loginError" style="font-size:12px;color:var(--danger);margin-bottom:12px;display:none;"></div>
     <div style="display:flex;gap:8px;">
