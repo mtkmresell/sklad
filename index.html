@@ -1671,8 +1671,10 @@ function sv(){
   }
 }
 
+var _fbCloudReady = false; // true až po prvním onSnapshot
 var _fbSaveCallId = 0;
 function fbSaveToCloud() {
+  if (!_fbCloudReady && window._fbUser) { console.log('fbSaveToCloud: čeká na onSnapshot'); return; }
   if (!window._fbUser || !window._fbDb || !window._fbFns) {
     console.warn('fbSaveToCloud: chybí', {user:!!window._fbUser, db:!!window._fbDb, fns:!!window._fbFns});
     return;
@@ -7203,6 +7205,7 @@ document.addEventListener('fb-auth', function(e) {
 
   // Odhlášení — zruš listener
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
+  _fbCloudReady = false;
 
   if (e.detail && e.detail.user) {
     var fns = window._fbFns;
@@ -7215,6 +7218,7 @@ document.addEventListener('fb-auth', function(e) {
         // Cloud prázdný — nahraj lokální data jen pokud nějaká máme
         if (_firstSnapshot) {
           _firstSnapshot = false;
+          _fbCloudReady = true;
           if (items.length > 0) {
             fbSaveToCloud();
             showToast('Data nahrána do cloudu.');
@@ -7229,6 +7233,7 @@ document.addEventListener('fb-auth', function(e) {
 
       if (_firstSnapshot) {
         _firstSnapshot = false;
+        _fbCloudReady = true;
         // První načtení — rozhodni zda použít cloud nebo lokální
         if (!localSavedAt) {
           // Nové zařízení — VŽDY načti z cloudu, nikdy nepřepisuj
