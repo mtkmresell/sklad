@@ -7258,9 +7258,10 @@ document.addEventListener('fb-auth', function(e) {
           renderStats(); renderItems();
           showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
         } else if (localTime > cloudTime + 5000) {
-          // Lokální jsou novější — nahraj do cloudu
-          console.log('DEBUG: localTime='+localTime+' cloudTime='+cloudTime+' localSavedAt='+localSavedAt+' items='+items.length);
-          fbSaveToCloud();
+          // Lokální jsou novější — nahraj do cloudu (jen pokud máme data)
+          if (items.length > 0) {
+            fbSaveToCloud();
+          }
         }
         // Jinak jsou stejné — nic nedělej
       } else {
