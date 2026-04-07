@@ -1820,6 +1820,13 @@ function importJsonBackup(file) {
         return;
       }
       if (!confirm('Importovat ' + imported.length + ' položek? Stávající data budou nahrazena.')) return;
+      // Zajisti unikátní ID při importu
+      var existingIds = new Set(items.map(function(x){ return x.id; }));
+      imported = imported.map(function(it){
+        if (!it.id || existingIds.has(it.id)) { it = Object.assign({}, it, {id: uid()}); }
+        existingIds.add(it.id);
+        return it;
+      });
       items = imported;
       sv();
       renderStats();
@@ -1991,7 +1998,7 @@ function buildLocationFilter(){
 function buildSoldWhereFilter(){
   const sel = document.getElementById('filterSoldWhere');
   if(!sel) return;
-  const waitItems = items.filter(it=>it.saleState==='waiting'&&it.soldWhere);
+  const waitItems = items.filter(it=>(it.saleState==='waiting'||it.saleState==='paid')&&it.soldWhere);
   const places = [...new Set(waitItems.map(it=>it.soldWhere).filter(Boolean))].sort();
   sel.innerHTML = '<option value="">Všechna místa</option>' + places.map(p=>`<option value="${p}">${p}</option>`).join('');
 }
@@ -2050,6 +2057,7 @@ function switchTab(t){
   }
   var grid = document.getElementById('itemsGrid');
   if (grid) grid.classList.add('tab-switch');
+  buildSoldWhereFilter();
   renderStats();renderItems();
   if (grid) {
     grid.classList.remove('tab-content-anim'); void grid.offsetWidth; grid.classList.add('tab-content-anim');
@@ -2170,8 +2178,8 @@ function getFiltered(){
       var _bd_b2=_getDate2(b);
       return _bd_a2.getTime()-_bd_b2.getTime();
     }
-    if(sort==='price-asc'){ var _pa=tab==='stock'?(a.buyPrice||0):(a.sellPrice||0); var _pb=tab==='stock'?(b.buyPrice||0):(b.sellPrice||0); return _pa-_pb; }
-    if(sort==='price-desc'){ var _pa2=tab==='stock'?(a.buyPrice||0):(a.sellPrice||0); var _pb2=tab==='stock'?(b.buyPrice||0):(b.sellPrice||0); return _pb2-_pa2; }
+    if(sort==='price-asc'){ var _pa=tab==='stock'?(a.buyPrice||0):(a.sellCurrency==='EUR'?(getSellOrig(a)||0)*(a.profitRateEur||eurRate):(a.sellPrice||0)); var _pb=tab==='stock'?(b.buyPrice||0):(b.sellCurrency==='EUR'?(getSellOrig(b)||0)*(b.profitRateEur||eurRate):(b.sellPrice||0)); return _pa-_pb; }
+    if(sort==='price-desc'){ var _pa2=tab==='stock'?(a.buyPrice||0):(a.sellCurrency==='EUR'?(getSellOrig(a)||0)*(a.profitRateEur||eurRate):(a.sellPrice||0)); var _pb2=tab==='stock'?(b.buyPrice||0):(b.sellCurrency==='EUR'?(getSellOrig(b)||0)*(b.profitRateEur||eurRate):(b.sellPrice||0)); return _pb2-_pa2; }
     if(sort==='profit-desc') return((b.sellPrice||0)-(b.buyPrice||0))-((a.sellPrice||0)-(a.buyPrice||0));
     return 0;
   });
@@ -2180,9 +2188,10 @@ function getFiltered(){
 
 function _itemProfit(it) {
   if (it.type === 'bulk') return it.profit || 0;
-  if (it.profit != null) return it.profit;
   var _er = it.profitRateEur || eurRate || 25;
-  var _sp = it.sellPrice || 0;
+  if (it.profit != null && it.profitRateEur) return it.profit;
+  // Přepočítej pokud chybí profitRateEur nebo profit
+  var _sp = it.sellCurrency === 'EUR' ? (it.sellPriceOrig || it.sellPrice || 0) * _er : (it.sellPrice || 0);
   var _bp = it.buyCurrency === 'EUR' ? (it.buyPrice||0)*_er : (it.buyPrice||0);
   var _ec = it.extraCurrency === 'EUR' ? (it.extraCosts||0)*_er : (it.extraCosts||0);
   return _sp - _bp - _ec;
@@ -2205,8 +2214,17 @@ function renderStats(){
     var _p=it.profit!=null?it.profit:(_spKc-_bpKc-_ecKc);
     return s+_p*(it.qty||1);
   },0);
-  const rev=pi.reduce((s,it)=>s+(it.sellPrice||0)*(it.qty||1),0);
-  const pendingPayouts=wi.reduce((s,it)=>s+(it.sellPrice||0),0);
+  const rev=pi.reduce((s,it)=>{
+    if(it.type==='bulk') return s+(it.sellPrice||0);
+    var _erR=it.profitRateEur||eurRate||25;
+    var _rv=it.sellCurrency==='EUR'?(it.sellPriceOrig||it.sellPrice||0)*_erR:(it.sellPrice||0);
+    return s+_rv*(it.qty||1);
+  },0);
+  const pendingPayouts=wi.reduce((s,it)=>{
+    var _erP=it.profitRateEur||eurRate||25;
+    var _pv=it.sellCurrency==='EUR'?(it.sellPriceOrig||it.sellPrice||0)*_erP:(it.sellPrice||0);
+    return s+_pv;
+  },0);
   const retItems=si.filter(it=>it.location==='Vráceno'||it.location==='Bude vráceno'||it.location==='Zrušeno');
   const retCzk=retItems.filter(it=>it.buyCurrency!=='EUR').reduce((s,it)=>s+(it.buyPrice||0)*(it.qty||1),0);
   const retEur=retItems.filter(it=>it.buyCurrency==='EUR').reduce((s,it)=>s+(it.buyPrice||0)*(it.qty||1),0);
@@ -2800,7 +2818,11 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
 }
 
 function cardHTML(it){
-  const profit=(it.sellPrice||0)-(it.buyPrice||0);
+  var _erCard = it.profitRateEur||eurRate||25;
+  var _spCard = it.sellCurrency==='EUR'?(getSellOrig(it)||0)*_erCard:(it.sellPrice||0);
+  var _bpCard = it.buyCurrency==='EUR'?(it.buyPrice||0)*_erCard:(it.buyPrice||0);
+  var _ecCard = it.extraCurrency==='EUR'?(it.extraCosts||0)*_erCard:(it.extraCosts||0);
+  const profit = it.profit != null ? it.profit : (_spCard - _bpCard - _ecCard);
   const pc=profit>0?'pp':profit<0?'pn':'pz';
   const ps=profit>0?`+${Math.round(profit).toLocaleString('cs')} Kč`:profit<0?`${Math.round(profit).toLocaleString('cs')} Kč`:'— Kč';
   const metas=[];
@@ -2814,7 +2836,7 @@ function cardHTML(it){
   const platHtml=(it.platforms&&it.platforms.length)?`<div class="plats-row">${it.platforms.map(p=>`<span class="pc pc-on">${p}</span>`).join('')}</div>`:'';
   const priceHtml=`<div class="card-prices">
     <div class="pb"><div class="pl">Nákup</div><div class="pv pv-buy">${it.buyCurrency==='EUR'?(it.buyPrice||0)+' €':czk(it.buyPrice||0)}</div></div>
-    ${(tab!=='stock'&&it.sellPrice)?`<div class="pb"><div class="pl">Prodej</div><div class="pv pv-sell">${Math.round(it.sellPrice||0).toLocaleString('cs')} Kč</div></div>`:''}
+    ${(tab!=='stock'&&it.sellPrice)?`<div class="pb"><div class="pl">Prodej</div><div class="pv pv-sell">${it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)}</div></div>`:''}
     ${it.retailKc||it.retailEur?`<div class="pb"><div class="pl">Retail</div><div class="pv pv-retail">${it.retailKc?czk(it.retailKc):''}${it.retailKc&&it.retailEur?' / ':''}${it.retailEur?it.retailEur+'€':''}</div></div>`:''}
     ${(tab!=='stock'&&it.sellPrice)?`<span class="profit-b ${pc}">${ps}</span>`:''}
   </div>`;
@@ -3294,15 +3316,36 @@ function calcSellStats() {
 // Vrátí Promise<number> — kurz nebo null pokud se nepodaří
 async function fetchRateForDate(dateStr) {
   if (!dateStr) return null;
-  try {
-    // Frankfurter — kurz pro konkrétní datum nebo nejbližší obchodní den
-    var r = await fetch('https://api.frankfurter.app/' + dateStr + '?from=EUR&to=CZK');
-    if (r.ok) {
+  // Zkus uložený denní kurz
+  var cacheKey = 'eurRate_' + dateStr;
+  var cached = localStorage.getItem(cacheKey);
+  if (cached) return parseFloat(cached);
+  var apis = [
+    async function() {
+      var r = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@' + dateStr + '/v1/currencies/eur.json');
+      if (!r.ok) throw new Error('err');
+      var d = await r.json();
+      if (d.eur && d.eur.czk) return Math.round(d.eur.czk * 100) / 100;
+      throw new Error('no rate');
+    },
+    async function() {
+      var r = await fetch('https://open.er-api.com/v6/latest/EUR');
+      if (!r.ok) throw new Error('err');
       var d = await r.json();
       if (d.rates && d.rates.CZK) return Math.round(d.rates.CZK * 100) / 100;
+      throw new Error('no rate');
     }
-  } catch(e) {}
-  return null;
+  ];
+  for (var i = 0; i < apis.length; i++) {
+    try {
+      var rate = await apis[i]();
+      if (rate && rate > 0) {
+        try { localStorage.setItem(cacheKey, rate); } catch(e) {}
+        return rate;
+      }
+    } catch(e) {}
+  }
+  return eurRate || 25;
 }
 
 async function saveSell() {
@@ -3495,11 +3538,25 @@ function changeWaitState(id, newState) {
   if (newState === 'completed') {
     items[idx].saleState = 'paid';
     items[idx].waitState = 'completed';
-    items[idx].payoutDate = (function(){var n=new Date();return ('0'+n.getDate()).slice(-2)+'.'+ ('0'+(n.getMonth()+1)).slice(-2)+'.'+n.getFullYear();})();
+    items[idx].payoutDate = new Date().toISOString().slice(0,10);
   } else {
     items[idx].waitState = newState;
   }
   sv(); renderStats(); renderItems();
+}
+
+function _cleanBulkOnDelete(id) {
+  // Pokud je položka součástí bulk skupiny, vymaž ji z itemIds
+  var it = items.find(function(x){ return x.id === id; });
+  if (!it || !it.bulkId) return;
+  var bulk = items.find(function(x){ return x.id === it.bulkId && x.type === 'bulk'; });
+  if (!bulk) return;
+  bulk.itemIds = (bulk.itemIds || []).filter(function(bid){ return bid !== id; });
+  if (bulk.itemPrices) delete bulk.itemPrices[id];
+  // Pokud bulk nemá žádné children, smaž ho taky
+  if (bulk.itemIds.length === 0) {
+    items = items.filter(function(x){ return x.id !== bulk.id; });
+  }
 }
 
 function del(id){
@@ -3529,10 +3586,12 @@ function del(id){
     if(card) {
       card.classList.add('deleting');
       setTimeout(function(){
+        _cleanBulkOnDelete(id);
         items=items.filter(i=>i.id!==id); sv(); renderStats(); renderItems();
         showToast('Položka smazána', 'err');
       }, 340);
     } else {
+      _cleanBulkOnDelete(id);
       items=items.filter(i=>i.id!==id); sv(); renderStats(); renderItems();
       showToast('Položka smazána', 'err');
     }
@@ -3704,7 +3763,7 @@ function openEdit(id){
   updateFieldsByCat(it.category||'sneakers');
   document.getElementById('fBuy').value=it.buyPrice||'';
   document.getElementById('fBuyCurrency').value=it.buyCurrency||'CZK';
-  document.getElementById('fSell').value=it.sellPrice||'';
+  document.getElementById('fSell').value=(it.sellCurrency==='EUR' && it.sellPriceOrig) ? it.sellPriceOrig : (it.sellPrice||'');
   const fSC=document.getElementById('fSellCurrency');if(fSC)fSC.value=it.sellCurrency||'CZK';
   var fEC=document.getElementById('fExtraCosts');if(fEC)fEC.value=it.extraCosts||'';
   var fECur=document.getElementById('fExtraCurrency');if(fECur)fECur.value=it.extraCurrency||'CZK';
@@ -3789,11 +3848,11 @@ function saveItem(){
   var extraCurSave=fExtraCur2?fExtraCur2.value:'CZK';
   const d={name,category:document.getElementById('fCat').value,condition:getFCondValue(),buyPrice:bp,buyCurrency:buyCurSave,
     sellPrice:parseFloat(document.getElementById('fSell').value)||0,sellCurrency:sellCurSave,
-    extraCosts:parseFloat(document.getElementById('fExtraCosts')?.value)||undefined,extraCurrency:extraCurSave,
-    retailKc:0,
-    retailEur:0,
+    extraCosts:parseFloat(document.getElementById('fExtraCosts')?.value)||0,extraCurrency:extraCurSave,
+    retailKc:undefined,
+    retailEur:undefined,
     size:document.getElementById('fSize').value.trim(),sku:document.getElementById('fSku').value.trim(),
-    buyDate:document.getElementById('fBuyDate').value,qty:1,
+    buyDate:document.getElementById('fBuyDate').value,qty:editId?undefined:1,
     buyWhere:document.getElementById('fWhere').value.trim(),orderNum:document.getElementById('fOrder').value.trim(),stockIntent:document.getElementById('fStockIntent').value,
     from:document.getElementById('fFrom').value.trim(),targetPrice:parseFloat(document.getElementById('fTargetPrice')?.value)||null,saleState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); if(modalEl.classList.contains('modal-waiting')) return 'waiting'; if(modalEl.classList.contains('modal-paid')) return 'paid'; return 'stock'; })(),waitState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return modalEl.classList.contains('modal-waiting')?(document.getElementById('fWaitState')?.value||'sending'):undefined; })(),
     saleRef:document.getElementById('fSaleRef').value.trim(),soldWhere:document.getElementById('fSoldWhere')?.value?.trim()||'',saleDate:document.getElementById('fSaleDate').value,
@@ -3827,7 +3886,16 @@ function saveItem(){
         try { localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(_cache)); } catch(e) {}
       }
       // Merge
-      var _merged = {...items[i],...d};
+      // Odeber undefined hodnoty z d aby nepřepisovaly existující data
+      var _dClean = {};
+      Object.keys(d).forEach(function(k){ if(d[k] !== undefined) _dClean[k] = d[k]; });
+      var _merged = {...items[i],..._dClean};
+      // Oprava: pokud je sellCurrency EUR, fSell.value obsahuje EUR hodnotu - přepočti na Kč
+      if (_merged.saleState !== 'stock' && _merged.sellCurrency === 'EUR' && d.sellPrice && d.sellPrice > 0) {
+        var _erSave = _merged.profitRateEur || eurRate || 25;
+        _merged.sellPriceOrig = d.sellPrice; // EUR hodnota z formuláře
+        _merged.sellPrice = Math.round(d.sellPrice * _erSave * 100) / 100; // přepočet na Kč
+      }
       // Tracking URL — čti přímo z polí (ne z d kde může být undefined)
       var _manualUrl = (document.getElementById('fTrackUrl')||{}).value?.trim();
       var _numField = (document.getElementById('fTrackNum')||{}).value?.trim();
@@ -3869,8 +3937,14 @@ function saveItem(){
       }
     }
   } else {
+    // Nová položka - přepočti EUR sellPrice na Kč pokud je potřeba
+    var _dNew = Object.assign({}, d);
+    if (_dNew.saleState !== 'stock' && _dNew.sellCurrency === 'EUR' && _dNew.sellPrice > 0) {
+      _dNew.sellPriceOrig = _dNew.sellPrice;
+      _dNew.sellPrice = Math.round(_dNew.sellPrice * (eurRate || 25) * 100) / 100;
+    }
     for(var _qi=0; _qi<qty; _qi++){
-      items.unshift({id:uid(),dateAdded:Date.now(),...d});
+      items.unshift({id:uid(),dateAdded:Date.now(),..._dNew});
     }
   }
   sv();buildLocationFilter();renderStats();renderItems();cm('moAdd');
@@ -3961,49 +4035,33 @@ async function fetchImpRate() {
   status.style.color = 'var(--muted)';
   var mm = String(m).padStart(2,'0');
   var rate = null;
+  var lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
+  var midDay = String(Math.floor(lastDay/2)).padStart(2,'0');
+  var dateStr = y+'-'+mm+'-'+midDay;
 
-  // 1. Frankfurter — průměr za měsíc
+  // 1. fawazahmed0 currency API - CORS friendly
   try {
-    var lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
-    var url1 = 'https://api.frankfurter.app/'+y+'-'+mm+'-01..'+y+'-'+mm+'-'+String(lastDay).padStart(2,'0')+'?from=EUR&to=CZK';
-    var r1 = await fetch(url1);
+    var r1 = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@'+dateStr+'/v1/currencies/eur.json');
     if(r1.ok) {
       var d1 = await r1.json();
-      if(d1.rates) {
-        var vals = Object.values(d1.rates).map(function(x){ return x.CZK; }).filter(Boolean);
-        if(vals.length) rate = vals.reduce(function(a,b){return a+b;},0)/vals.length;
-      }
+      if(d1.eur && d1.eur.czk) rate = Math.round(d1.eur.czk * 100) / 100;
     }
   } catch(e) {}
 
-  // 2. Frankfurter — poslední den měsíce
+  // 2. open.er-api.com fallback
   if(!rate) {
     try {
-      var lastDay2 = new Date(parseInt(y), parseInt(m), 0).getDate();
-      var url2 = 'https://api.frankfurter.app/'+y+'-'+mm+'-'+String(lastDay2).padStart(2,'0')+'?from=EUR&to=CZK';
-      var r2 = await fetch(url2);
+      var r2 = await fetch('https://open.er-api.com/v6/latest/EUR');
       if(r2.ok) {
         var d2 = await r2.json();
-        if(d2.rates && d2.rates.CZK) rate = d2.rates.CZK;
-      }
-    } catch(e) {}
-  }
-
-  // 3. ExchangeRate-API
-  if(!rate) {
-    try {
-      var url3 = 'https://open.er-api.com/v6/history/EUR/'+y+'/'+parseInt(m);
-      var r3 = await fetch(url3);
-      if(r3.ok) {
-        var d3 = await r3.json();
-        if(d3.rates && d3.rates.CZK) rate = d3.rates.CZK;
+        if(d2.rates && d2.rates.CZK) rate = Math.round(d2.rates.CZK * 100) / 100;
       }
     } catch(e) {}
   }
 
   if(rate && rate > 0) {
-    document.getElementById('impRate').value = Math.round(rate*100)/100;
-    status.textContent = '✓ Kurz EUR/CZK pro '+mm+'/'+y+': '+Math.round(rate*100)/100+' Kč';
+    document.getElementById('impRate').value = rate;
+    status.textContent = '✓ Kurz EUR/CZK pro '+mm+'/'+y+': '+rate+' Kč';
     status.style.color = 'var(--accent)';
   } else {
     status.textContent = '⚠ Kurz se nepodařilo načíst — zadej ručně';
@@ -4497,7 +4555,7 @@ function detectGender(name, size) {
 }
 
 function lookupSize(euRaw, brand, gender) {
-  const table = BRAND_TABLES[brand] || NIKE;
+  const table = BRAND_TABLES[brand] || BRAND_TABLES[(brand||'').toLowerCase()] || NIKE;
   const eu = normEU(euRaw);
   const euF = parseFloat(eu);
   let best = null, bestDiff = 99;
@@ -4579,7 +4637,7 @@ function convertSize(size, itemName) {
     const brand = detectBrand(itemName);
     const gender = detectGender(itemName, size);
     if (brand && euNum) {
-      const result = lookupSize(euNum, brand, gender);
+      const result = lookupSize(euNum, (brand||'').toLowerCase(), gender);
       if (result) return result;
     }
     const usMatch = size.match(/US\s*([\d.]+[YW]?)/i);
@@ -4862,22 +4920,38 @@ let eurRate = parseFloat(localStorage.getItem('eurRate')) || 25.0;
 let autoRate = localStorage.getItem('autoRate') !== 'false'; // default ON
 
 async function fetchCnbRate(manual=false) {
-  try {
-    const res = await fetch('https://api.frankfurter.app/latest?from=EUR&to=CZK');
-    if (!res.ok) throw new Error('offline');
-    const data = await res.json();
-    const rate = data.rates.CZK;
-    if (rate && rate > 0) {
-      eurRate = Math.round(rate * 100) / 100;
-      localStorage.setItem('eurRate', eurRate);
-      localStorage.setItem('eurRateDate', Date.now());
-      renderStats();
-      if (manual) updateRateInfoUI();
+  var apis = [
+    async function() {
+      var r = await fetch('https://open.er-api.com/v6/latest/EUR');
+      if (!r.ok) throw new Error('err');
+      var d = await r.json();
+      if (d.rates && d.rates.CZK) return Math.round(d.rates.CZK * 100) / 100;
+      throw new Error('no rate');
+    },
+    async function() {
+      var r = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json');
+      if (!r.ok) throw new Error('err');
+      var d = await r.json();
+      if (d.eur && d.eur.czk) return Math.round(d.eur.czk * 100) / 100;
+      throw new Error('no rate');
     }
-  } catch(e) {
-    if (manual) {
-      document.getElementById('eurRateInfo').textContent = '⚠️ Nelze načíst kurz — offline. Používám poslední uložený kurz.';
-    }
+  ];
+  for (var i = 0; i < apis.length; i++) {
+    try {
+      var rate = await apis[i]();
+      if (rate && rate > 0) {
+        eurRate = rate;
+        localStorage.setItem('eurRate', eurRate);
+        localStorage.setItem('eurRateDate', Date.now());
+        renderStats();
+        if (manual) updateRateInfoUI();
+        return;
+      }
+    } catch(e) {}
+  }
+  if (manual) {
+    var infoEl = document.getElementById('eurRateInfo');
+    if (infoEl) infoEl.textContent = '⚠️ Nelze načíst kurz — offline. Používám poslední uložený kurz.';
   }
 }
 
@@ -5485,6 +5559,7 @@ function bulkDelete(){
   overlay.querySelector('#_bdNo').onclick=()=>overlay.remove();
   overlay.querySelector('#_bdYes').onclick=()=>{
     overlay.remove();
+    bulkSelected.forEach(function(id){ _cleanBulkOnDelete(id); });
     items=items.filter(it=>!bulkSelected.has(it.id));
     sv(); renderStats();
     bulkClear();
@@ -6264,40 +6339,8 @@ function updateFieldsByCat(cat) {
   if (fSkuEl && fSkuEl.closest('.fi')) fSkuEl.closest('.fi').style.display = noSku.includes(cat) ? 'none' : '';
 }
 
-function _nameTokens(name) {
-  return name.toLowerCase().replace(/[^a-z0-9čšžýáíéěůúóřďťň\s]/g, '').split(/\s+/).filter(function(w){ return w.length >= 1 && !/^(the|and|with|for|from|og|sp|gs|td|ps|by|de|le|du|van|in|on|at)$/.test(w); });
-}
 
-function _guessCategory(nameLC) {
-  var allItems = (window.items||[]).concat(window.PRELOAD||[]).concat(window.CSV_ITEMS||[]);
-  var tokens = _nameTokens(nameLC);
-  if (!tokens.length) return null;
-  var scores = {};
-  allItems.forEach(function(it) {
-    if (!it.category || !it.name) return;
-    var itTokens = _nameTokens(it.name);
-    var matches = tokens.filter(function(t){ return itTokens.indexOf(t) >= 0; }).length;
-    if (matches > 0) {
-      var score = matches / Math.max(tokens.length, itTokens.length);
-      if (!scores[it.category] || score > scores[it.category]) scores[it.category] = score;
-    }
-  });
-  var best = null, bestScore = 0.3;
-  Object.keys(scores).forEach(function(cat) {
-    if (scores[cat] > bestScore) { bestScore = scores[cat]; best = cat; }
-  });
-  return best;
-}
 
-function _ruleCategory(n) {
-  if (/pok[eé]mon|pikachu|charizard|eevee|booster|elite trainer|etb|prismatic|destined|stellar crown|surging sparks|paldea|obsidian|paradox|temporal|twilight|shrouded|151\b/.test(n)) return 'pokemon';
-  if (/one piece|riftbound|magic.*gathering|mtg|yugioh|yu-gi-oh|lorcana|flesh.*blood|dragon.*ball/.test(n)) return 'jine';
-  if (/lego\b/.test(n)) return 'lego';
-  if (/hot wheels|hotwheels/.test(n)) return 'hotwheels';
-  if (/nike|jordan|adidas|yeezy|new balance|converse|vans|reebok|puma|asics|samba|dunk|air max|air force|foamposite|ultraboost/.test(n)) return 'sneakers';
-  if (/hoodie|hooded|sweatshirt|tee\b|t-shirt|jacket|coat|cap\b|hat\b|shorts|pants|cargo|fleece|pullover|crewneck/.test(n)) return 'obleceni';
-  return null;
-}
 
 function _nameTokens(name) {
   return name.toLowerCase().replace(/[^a-z0-9čšžýáíéěůúóřďťň\s]/g, '').split(/\s+/).filter(function(w){ return w.length >= 1 && !/^(the|and|with|for|from|og|sp|gs|td|ps|by|de|le|du|van|in|on|at)$/.test(w); });
@@ -6325,7 +6368,7 @@ function _guessCategory(nameLC) {
 }
 
 function _ruleCategory(n) {
-  if (/pok[eé]mon|pikachu|charizard|eevee|booster|elite trainer|etb|prismatic|destined|stellar crown|surging sparks|paldea|obsidian|paradox|temporal|twilight|shrouded|151\b/.test(n)) return 'jine';
+  if (/pok[eé]mon|pikachu|charizard|eevee|booster|elite trainer|etb|prismatic|destined|stellar crown|surging sparks|paldea|obsidian|paradox|temporal|twilight|shrouded|151\b/.test(n)) return 'pokemon';
   if (/one piece|riftbound|magic.*gathering|mtg|yugioh|yu-gi-oh|lorcana|flesh.*blood|dragon.*ball/.test(n)) return 'jine';
   if (/lego\b/.test(n)) return 'lego';
   if (/hot wheels|hotwheels/.test(n)) return 'hotwheels';
@@ -6389,7 +6432,7 @@ function getStockxSizeParam(name) {
   // Dočasně přepni sizeUnit na 'us' pro lookupSize
   var prevUnit = sizeUnit;
   sizeUnit = 'us';
-  var result = lookupSize(sizeRaw, brand, gender);
+  var result = lookupSize(sizeRaw, (brand||'').toLowerCase(), gender);
   sizeUnit = prevUnit;
   if (!result) return null;
   // Vytáhni číslo z "US 9.5" nebo "W US 10" → "9.5" nebo "10W"
@@ -6521,8 +6564,14 @@ function checkStartupNotifications() {
   // Payout přes splatnost — dle nastavení per platforma
   var overdue = items.filter(function(it) {
     if (it.saleState !== 'waiting' || it.waitState !== 'payout') return false;
-    var d = it.saleDate ? new Date(it.saleDate).getTime() : 0;
-    if (!d) return false;
+    var _sd = it.saleDate || '';
+    var d = 0;
+    if (_sd) {
+      var _p = _sd.split('.');
+      if (_p.length === 3) d = new Date(parseInt(_p[2]), parseInt(_p[1])-1, parseInt(_p[0])).getTime();
+      else d = new Date(_sd).getTime();
+    }
+    if (!d || isNaN(d)) return false;
     var days = getPayoutDays(it.soldWhere || '');
     return (now - d) > days * 86400000;
   });
@@ -7696,8 +7745,12 @@ function groupSoldByDate(list){
   var groups={};
   sorted.forEach(function(it){
     var d=it.payoutDate||it.saleDate||'';
-    var yr=d.substring(0,4)||'?';
-    var mo=d.substring(5,7)||'?';
+    var yr='?', mo='?';
+    if (d) {
+      var _pp = d.split('.');
+      if (_pp.length===3) { yr=_pp[2]; mo=_pp[1].padStart(2,'0'); }
+      else { yr=d.substring(0,4); mo=d.substring(5,7); }
+    }
     var k=yr+'-'+mo;
     if(!groups[k])groups[k]={year:yr,month:mo,items:[]};
     groups[k].items.push(it);
@@ -7882,11 +7935,12 @@ function renderSoldView(){
       }
       // Normální položka
       var bc=it.buyCurrency||'CZK'; var sc=it.sellCurrency||'CZK';
-      var buyKc = bc==='EUR' ? (it.buyPrice||0)*eurRate : (it.buyPrice||0);
-      var sellKc = sc==='EUR' ? (it.sellPrice||0)*eurRate : (it.sellPrice||0);
-      var extraKc = (it.extraCurrency==='EUR') ? (it.extraCosts||0)*eurRate : (it.extraCosts||0);
+      var _erSold = it.profitRateEur || eurRate || 25;
+      var buyKc = bc==='EUR' ? (it.buyPrice||0)*_erSold : (it.buyPrice||0);
+      var sellKc = it.sellPrice || 0; // sellPrice je vždy Kč
+      var extraKc = (it.extraCurrency==='EUR') ? (it.extraCosts||0)*_erSold : (it.extraCosts||0);
       var profit = it.profit != null ? it.profit : (sellKc - buyKc - extraKc);
-      var roi=buyKc?Math.round((sellKc-buyKc-extraKc)/buyKc*100):null;
+      var roi=buyKc?Math.round(profit/buyKc*100):null;
       var pc=profit>0?'var(--accent)':profit<0?'var(--danger)':'var(--muted)';
       var bs=bc==='EUR'?(it.buyPrice||0)+' €':czk(it.buyPrice||0);
       var ss=it.sellPrice?(sc==='EUR'?getSellOrig(it)+' €':czk(it.sellPrice)):'—';
@@ -8568,11 +8622,26 @@ function getAnalyticsItems() {
   }
   if (analyticsPeriod === 'week') {
     var weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate()-7);
-    var wa = weekAgo.toISOString().slice(0,10);
-    return all.filter(function(it){ var d=it.saleDate||it.payoutDate||''; return d >= wa; });
+    var waTs = weekAgo.getTime();
+    return all.filter(function(it){
+      var _d = it.payoutDate||it.saleDate||'';
+      if (!_d) return false;
+      var _p = _d.split('.');
+      var _dt = _p.length===3 ? new Date(parseInt(_p[2]),parseInt(_p[1])-1,parseInt(_p[0])) : new Date(_d);
+      return !isNaN(_dt.getTime()) && _dt.getTime() >= waTs;
+    });
   }
   if (analyticsPeriod === 'custom' && analyticsFrom && analyticsTo) {
-    return all.filter(function(it){ var d=it.saleDate||it.payoutDate||''; return d >= analyticsFrom && d <= analyticsTo; });
+    var _cfTs = new Date(analyticsFrom).getTime();
+    var _ctTs = new Date(analyticsTo+'T23:59:59').getTime();
+    return all.filter(function(it){
+      var _d = it.payoutDate||it.saleDate||'';
+      if (!_d) return false;
+      var _p = _d.split('.');
+      var _dt = _p.length===3 ? new Date(parseInt(_p[2]),parseInt(_p[1])-1,parseInt(_p[0])) : new Date(_d);
+      var _ts = _dt.getTime();
+      return !isNaN(_ts) && _ts >= _cfTs && _ts <= _ctTs;
+    });
   }
   return all;
 }
