@@ -1679,6 +1679,7 @@ function fbSaveToCloud() {
     console.warn('fbSaveToCloud: chybí', {user:!!window._fbUser, db:!!window._fbDb, fns:!!window._fbFns});
     return;
   }
+  console.log('fbSaveToCloud volán z:', new Error().stack.split('\n')[2], 'items:', items.length);
   var callId = ++_fbSaveCallId;
   var dot = document.getElementById('fbStatusDot');
   if (dot) dot.className = 'fb-status fb-saving';
