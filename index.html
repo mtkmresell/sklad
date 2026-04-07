@@ -7238,8 +7238,8 @@ document.addEventListener('fb-auth', function(e) {
         // Zruš jakýkoli pending sv() cloud timer
         if (_svCloudTimer) { clearTimeout(_svCloudTimer); _svCloudTimer = null; }
         // První načtení — rozhodni zda použít cloud nebo lokální
-        if (!localSavedAt) {
-          // Nové zařízení — VŽDY načti z cloudu, nikdy nepřepisuj
+        if (!localSavedAt || items.length === 0) {
+          // Nové zařízení nebo prázdný stav — VŽDY načti z cloudu
           var cloudItems = data.items || [];
           items = cloudItems;
           localStorage.setItem(SK, JSON.stringify(items));
