@@ -1109,6 +1109,10 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       <button type="button" class="intent-btn" data-val="" onclick="setStockIntent('')">— žádná</button>
     </div>
     <input type="hidden" id="fStockIntent">
+    <div class="fi" style="margin-top:10px;max-width:200px;">
+      <label>Cílová cena (Kč)</label>
+      <input type="number" id="fTargetPrice" placeholder="Za kolik chceš prodat" min="0">
+    </div>
   </div>
 <div class="fs"><div class="fs-title">Nákup</div>
     <div class="fg">
@@ -1140,7 +1144,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
         <option value="payout">Čeká na payout</option>
       </select></div>
       <div class="fi"><label>Prodejní reference / č. prodeje</label><input type="text" id="fSaleRef" placeholder="ID prodeje"></div>
-      <div class="fi hide-if-waiting hide-if-paid"><label>Cílová cena (target price)</label><input type="number" id="fTargetPrice" placeholder="Za kolik chceš prodat" min="0"></div>
+      
       <div class="fi"><label>Kde prodáno</label><input type="text" id="fSoldWhere" placeholder="StockX, Vinted..."></div>
       <div class="fi"><label>Datum prodeje</label><input type="date" id="fSaleDate"></div>
       <div class="fi hide-if-stock hide-if-waiting"><label>Datum vyplacení</label><input type="date" id="fPayoutDate"></div>
@@ -1367,6 +1371,7 @@ function cleanupOverlays() {
   document.addEventListener('keydown', function(e) {
     if (e.key !== 'Escape') return;
     // Zavři fixed overlaye (tracking, confirm atd.)
+    cleanupOverlays();
     document.querySelectorAll('div[style*="position:fixed"][style*="inset:0"][style*="z-index:9999"]').forEach(function(el) { el.remove(); });
     // Zavři modaly
     document.querySelectorAll('.mo.open').forEach(function(m) { m.classList.remove('open'); });
@@ -1398,6 +1403,9 @@ function makeConfirmOverlay(msgHtml, yesLabel, yesCls, onYes) {
   btns.appendChild(noBtn); btns.appendChild(yesBtn);
   box.appendChild(msg); box.appendChild(btns);
   ov.appendChild(box); document.body.appendChild(ov);
+  // Escape = zavřít
+  function _mcoEsc(e) { if(e.key==='Escape'){ ov.remove(); document.removeEventListener('keydown',_mcoEsc); } }
+  document.addEventListener('keydown', _mcoEsc);
   return ov;
 }
 
@@ -1625,6 +1633,25 @@ function load(){
           const pre=allBase.find(p=>p.id===it.id);
           if(pre && pre.buyCurrency) return {...it, buyCurrency:pre.buyCurrency};
           return {...it, buyCurrency:(it.buyPrice&&it.buyPrice%1!==0)?'EUR':'CZK'};
+        }
+        // Přepočítat profit/roi pro paid položky pokud jsou podezřelé
+        // Zachováváme profitRateEur (historický kurz z doby prodeje)!
+        if (it.saleState === 'paid' && it.sellPrice && it.buyPrice && it.profitRateEur) {
+          var _er = it.profitRateEur;
+          var _bp = it.buyCurrency==='EUR' ? it.buyPrice*_er : it.buyPrice;
+          var _ec = it.extraCurrency==='EUR' ? (it.extraCosts||0)*_er : (it.extraCosts||0);
+          var _sp = it.sellPrice; // sellPrice je vždy Kč
+          // Pokud sellCurrency=EUR a sellPriceOrig existuje, sellPrice je správně v Kč
+          // Pokud sellCurrency=EUR a sellPriceOrig chybí, sellPrice může být EUR hodnota
+          if (it.sellCurrency === 'EUR' && !it.sellPriceOrig && it.sellPrice < 2000) {
+            // Pravděpodobně EUR hodnota - přepočítat
+            var _fixed = {...it, sellPriceOrig: it.sellPrice, sellPrice: Math.round(it.sellPrice * _er * 100)/100};
+            _sp = _fixed.sellPrice;
+            it = _fixed;
+          }
+          var _newProfit = Math.round((_sp - _bp - _ec) * 100) / 100;
+          var _newRoi = _bp > 0 ? parseFloat(((_newProfit/_bp)*100).toFixed(1)) : 0;
+          return {...it, profit: _newProfit, roi: _newRoi};
         }
         // Oprav staré DPD tracking URL
         if(it.trackingUrl && it.trackingUrl.includes('tracking.dpd.de')) {
@@ -2137,6 +2164,7 @@ function animStatCard(action, dir) {
 }
 
 function getFiltered(){
+  if (!items || !items.length) return [];
   const q=(document.getElementById('searchInput').value||'').toLowerCase();
   const cat=document.getElementById('filterCategory').value;
   const sort=document.getElementById('sortBy').value;
@@ -2180,7 +2208,7 @@ function getFiltered(){
     }
     if(sort==='price-asc'){ var _pa=tab==='stock'?(a.buyPrice||0):(a.sellCurrency==='EUR'?(getSellOrig(a)||0)*(a.profitRateEur||eurRate):(a.sellPrice||0)); var _pb=tab==='stock'?(b.buyPrice||0):(b.sellCurrency==='EUR'?(getSellOrig(b)||0)*(b.profitRateEur||eurRate):(b.sellPrice||0)); return _pa-_pb; }
     if(sort==='price-desc'){ var _pa2=tab==='stock'?(a.buyPrice||0):(a.sellCurrency==='EUR'?(getSellOrig(a)||0)*(a.profitRateEur||eurRate):(a.sellPrice||0)); var _pb2=tab==='stock'?(b.buyPrice||0):(b.sellCurrency==='EUR'?(getSellOrig(b)||0)*(b.profitRateEur||eurRate):(b.sellPrice||0)); return _pb2-_pa2; }
-    if(sort==='profit-desc') return((b.sellPrice||0)-(b.buyPrice||0))-((a.sellPrice||0)-(a.buyPrice||0));
+    if(sort==='profit-desc') return _itemProfit(b)-_itemProfit(a);
     return 0;
   });
   return list;
@@ -2198,6 +2226,7 @@ function _itemProfit(it) {
 }
 
 function renderStats(){
+  if (!items) return;
   const si=items.filter(it=>it.saleState==='stock'||!it.saleState);
   const wi=items.filter(it=>it.saleState==='waiting');
   const pi=items.filter(it=>it.saleState==='paid');
@@ -3320,6 +3349,13 @@ async function fetchRateForDate(dateStr) {
   var cacheKey = 'eurRate_' + dateStr;
   var cached = localStorage.getItem(cacheKey);
   if (cached) return parseFloat(cached);
+  // Cleanup starých cache záznamů (max 60)
+  try {
+    var rateKeys = Object.keys(localStorage).filter(function(k){ return k.startsWith('eurRate_20'); });
+    if (rateKeys.length > 60) {
+      rateKeys.sort().slice(0, rateKeys.length-60).forEach(function(k){ localStorage.removeItem(k); });
+    }
+  } catch(e) {}
   var apis = [
     async function() {
       var r = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@' + dateStr + '/v1/currencies/eur.json');
@@ -3698,7 +3734,9 @@ document.addEventListener('click', function(e) {
 });
 
 function buildPlatGrid(sel=[]){
-  document.getElementById('platGrid').innerHTML=PLATFORMS.map(p=>`<label class="pl-lbl${sel.includes(p)?' ck':''}" data-action="tgplat"><span>${p}</span></label>`).join('');
+  var g=getPlatGroups();
+  var allPlats=[...(g.platforms||[]),...(g.eshopy||[]),...(g.local||[])];
+  document.getElementById('platGrid').innerHTML=allPlats.map(function(p){return '<label class="pl-lbl'+(sel.includes(p)?' ck':'')+'" data-action="tgplat"><span>'+p+'</span></label>';}).join('');
 }
 function tgPlat(el){el.classList.toggle('ck');}
 function getPlats(){return[...document.querySelectorAll('#platGrid .pl-lbl.ck')].map(e=>e.querySelector('span').textContent);}
@@ -7815,14 +7853,19 @@ function renderSoldView(){
   var soldWhereFilter=document.getElementById('filterSoldWhere')?.value||'';
   var sold=soldAll.filter(function(it){
     var d=it.payoutDate||it.saleDate||'';
-    if(soldYearFilter!=='all'&&!d.startsWith(soldYearFilter))return false;
-    if(soldMonthFilter!=='all'&&d.substring(5,7)!==soldMonthFilter)return false;
+    var _yr='', _mo='';
+    if(d){var _pp=d.split('.');if(_pp.length===3){_yr=_pp[2];_mo=_pp[1].padStart(2,'0');}else{_yr=d.substring(0,4);_mo=d.substring(5,7);}}
+    if(soldYearFilter!=='all'&&_yr!==soldYearFilter)return false;
+    if(soldMonthFilter!=='all'&&_mo!==soldMonthFilter)return false;
     if(soldWhereFilter&&(it.soldWhere||'')!==soldWhereFilter)return false;
     return true;
   });
   if(!soldAll.length){grid.innerHTML='';empty.style.display='';return;}
   empty.style.display='none';
-  var years=[...new Set(soldAll.map(function(it){return(it.payoutDate||it.saleDate||'').substring(0,4);}).filter(Boolean))].sort(function(a,b){return b-a;});
+  var years=[...new Set(soldAll.map(function(it){
+    var d=it.payoutDate||it.saleDate||''; if(!d) return '';
+    var p=d.split('.'); return p.length===3?p[2]:d.substring(0,4);
+  }).filter(Boolean))].sort(function(a,b){return b-a;});
   var stats=calcSoldStats(sold);
   // Viditelnost filtru míst
   var _fswEl=document.getElementById('filterSoldWhere');
@@ -7853,7 +7896,14 @@ function renderSoldView(){
   years.forEach(function(y){html+='<div class="rok-opt'+(soldYearFilter===y?' selected':'')+'" onclick="soldYearFilter=\''+y+'\';soldMonthFilter=\'all\';renderSoldView();">'+y+'</div>';});
   html+='</div></div>';
   if(soldYearFilter!=='all'){
-    var miy=[...new Set(soldAll.filter(function(it){return(it.payoutDate||it.saleDate||'').startsWith(soldYearFilter);}).map(function(it){return(it.payoutDate||it.saleDate||'').substring(5,7);}).filter(Boolean))].sort();
+    var miy=[...new Set(soldAll.filter(function(it){
+      var d=it.payoutDate||it.saleDate||''; if(!d) return false;
+      var p=d.split('.'); var yr=p.length===3?p[2]:d.substring(0,4);
+      return yr===soldYearFilter;
+    }).map(function(it){
+      var d=it.payoutDate||it.saleDate||''; if(!d) return '';
+      var p=d.split('.'); return p.length===3?p[1].padStart(2,'0'):d.substring(5,7);
+    }).filter(Boolean))].sort();
     html+='<span style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);">Měsíc:</span>';
     var monthLabel = soldMonthFilter==='all' ? 'Všechny' : (MONTHS_FULL[parseInt(soldMonthFilter)]||soldMonthFilter);
     html+='<div class="rok-wrap" id="rokMonthWrap"><div class="rok-btn" id="rokMonthBtn"><span class="rok-label">'+monthLabel+'</span><span class="rok-arrow">▾</span></div><div class="rok-drop" id="rokMonthDrop">';
@@ -8006,14 +8056,14 @@ function renderStockAnalytics() {
   var flipItems = si.filter(function(it){ return it.stockIntent==='flip'; });
   var flipInv = flipItems.reduce(function(s,it){ return s+buyKc(it); }, 0);
   var flipTarget = flipItems.filter(function(it){ return it.targetPrice; }).reduce(function(s,it){
-    var er=it.sellCurrency==='EUR'?eurRate:1; return s+(it.targetPrice||0)*er;
+    return s+(it.targetPrice||0); // targetPrice je vždy v Kč
   }, 0);
   var flipPot = flipTarget - flipItems.filter(function(it){ return it.targetPrice; }).reduce(function(s,it){ return s+buyKc(it); }, 0);
   var likvidita = flipInv > 0 ? Math.round(flipPot) : null;
 
   // Potenciální zisk (vše s target)
   var withTarget=si.filter(function(it){return it.targetPrice&&it.buyPrice;});
-  var potProfit=withTarget.reduce(function(s,it){ var er=it.buyCurrency==='EUR'?eurRate:1; var bp=(it.buyPrice||0)*er; var tp=it.sellCurrency==='EUR'?(it.targetPrice||0)*er:(it.targetPrice||0); return s+(tp-bp); },0);
+  var potProfit=withTarget.reduce(function(s,it){ var er=it.buyCurrency==='EUR'?eurRate:1; var bp=(it.buyPrice||0)*er; var tp=it.targetPrice||0; return s+(tp-bp); },0);
 
   // Výkonnost nákupů — dle měsíce (poslední rok)
   var buyByMonth = {};
@@ -8399,8 +8449,18 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
     var prev=new Date(now3.getFullYear(),now3.getMonth()-1,1);
     var ymp=prev.getFullYear()+'-'+String(prev.getMonth()+1).padStart(2,'0');
     function mStats(prefix){
-      var list=soldAll.filter(function(it){return!it.bulkId&&(it.payoutDate||it.saleDate||'').startsWith(prefix);});
-      var bulks=soldAll.filter(function(it){return it.type==='bulk'&&(it.payoutDate||it.saleDate||'').startsWith(prefix);});
+      function _matchPrefix(it) {
+        var d = it.payoutDate||it.saleDate||'';
+        if (!d) return false;
+        // YYYY-MM-DD formát
+        if (d.startsWith(prefix)) return true;
+        // DD.MM.YYYY formát
+        var p = d.split('.');
+        if (p.length===3) return (p[2]+'-'+p[1].padStart(2,'0')).startsWith(prefix);
+        return false;
+      }
+      var list=soldAll.filter(function(it){return!it.bulkId&&_matchPrefix(it);});
+      var bulks=soldAll.filter(function(it){return it.type==='bulk'&&_matchPrefix(it);});
       list=list.concat(bulks);
       var profit=0,cost=0,rev=0;
       list.forEach(function(it){
@@ -8749,15 +8809,18 @@ function getCellValue(it, colId) {
   switch(colId) {
     case 'category': return getCatLabel(it.category) || it.category || '';
     case 'condition': return it.condition || '';
-    case 'buyPrice': return it.buyPrice ? it.buyPrice.toString() : '';
-    case 'sellPrice': return it.sellPrice ? it.sellPrice.toString() : '';
+    case 'buyPrice': return it.buyPrice ? (it.buyCurrency==='EUR' ? it.buyPrice+' EUR' : it.buyPrice.toString()) : '';
+    case 'sellPrice': return it.sellPrice ? (it.sellCurrency==='EUR' ? (getSellOrig(it)||it.sellPrice)+' EUR' : it.sellPrice.toString()) : '';
     case 'profit': {
-      var p = (it.sellPrice||0)-(it.buyPrice||0)-(it.extraCosts||0);
-      return it.sellPrice ? (p>=0?'+':'')+Math.round(p).toString() : '';
+      var _p = _itemProfit(it);
+      return it.sellPrice ? (_p>=0?'+':'')+Math.round(_p).toString() : '';
     }
     case 'roi': {
       if (!it.sellPrice || !it.buyPrice) return '';
-      var roi = Math.round(((it.sellPrice||0)-(it.buyPrice||0)-(it.extraCosts||0))/it.buyPrice*100);
+      var _er2 = it.profitRateEur||eurRate||25;
+      var _bp2 = it.buyCurrency==='EUR'?(it.buyPrice||0)*_er2:(it.buyPrice||0);
+      var _pr2 = _itemProfit(it);
+      var roi = _bp2>0?Math.round(_pr2/_bp2*100):0;
       return (roi>=0?'+':'')+roi+'%';
     }
     case 'platforms': return (it.platforms||[]).join(', ');
