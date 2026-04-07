@@ -3885,6 +3885,12 @@ function openEdit(id){
     if(fBC) { fBC.value = it.buyCurrency||'CZK'; if(fBC._csSync) fBC._csSync(); }
     var fSC2 = document.getElementById('fSellCurrency');
     if(fSC2) { fSC2.value = it.sellCurrency||'CZK'; if(fSC2._csSync) fSC2._csSync(); }
+    // Taky sync fSell hodnotu znovu po initAllCustomInputs
+    var _fSellEl = document.getElementById('fSell');
+    if(_fSellEl && it.sellCurrency==='EUR') {
+      if(it.sellPriceOrig) _fSellEl.value = it.sellPriceOrig;
+      else { var _r2=it.profitRateEur||eurRate||25; _fSellEl.value=Math.round((it.sellPrice||0)/_r2*100)/100; }
+    }
     var fECur2 = document.getElementById('fExtraCurrency');
     if(fECur2) { fECur2.value = it.extraCurrency||'CZK'; if(fECur2._csSync) fECur2._csSync(); if(fECur2.parentNode && fECur2.parentNode.classList.contains('cs-wrap')) { fECur2.parentNode.style.flexShrink='0'; fECur2.parentNode.style.width='48px'; } }
     // Sync dopravce — musí být po initAllCustomInputs
@@ -3956,13 +3962,17 @@ function saveItem(){
       var _dClean = {};
       Object.keys(d).forEach(function(k){ if(d[k] !== undefined) _dClean[k] = d[k]; });
       var _merged = {...items[i],..._dClean};
-      // Oprava: pokud je sellCurrency EUR, fSell.value obsahuje EUR hodnotu - přepočti na Kč
-      // Použij profitRateEur z doby prodeje, ne aktuální kurz
-      if (_merged.saleState !== 'stock' && _merged.sellCurrency === 'EUR' && d.sellPrice && d.sellPrice > 0) {
+      // Přepočet prodejní ceny pro EUR položky
+      if (_merged.saleState !== 'stock' && _merged.sellCurrency === 'EUR') {
         var _erSave = _merged.profitRateEur || eurRate || 25;
-        _merged.sellPriceOrig = d.sellPrice; // EUR hodnota z formuláře
-        _merged.sellPrice = Math.round(d.sellPrice * _erSave * 100) / 100; // přepočet na Kč
-        // Přepočítej profit se správným kurzem
+        // fSell.value obsahuje EUR hodnotu (zobrazena v openEdit)
+        // d.sellPrice = EUR číslo z formuláře
+        var _eurVal = d.sellPrice || 0;
+        if (_eurVal > 0) {
+          _merged.sellPriceOrig = _eurVal;
+          _merged.sellPrice = Math.round(_eurVal * _erSave * 100) / 100;
+        }
+        // Vždy přepočítej profit z aktuálních hodnot se správným historickým kurzem
         var _bpSave = _merged.buyCurrency==='EUR' ? (_merged.buyPrice||0)*_erSave : (_merged.buyPrice||0);
         var _ecSave = _merged.extraCurrency==='EUR' ? (_merged.extraCosts||0)*_erSave : (_merged.extraCosts||0);
         _merged.profit = Math.round((_merged.sellPrice - _bpSave - _ecSave) * 100) / 100;
