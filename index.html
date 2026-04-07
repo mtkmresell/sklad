@@ -2926,7 +2926,19 @@ function openSellModal(id) {
   else imgEl.textContent = '📦';
   // Pokud je položka na skladě (vrácena z Čeká), nevyplňuj staré prodejní hodnoty
   var isStock = !it.saleState || it.saleState === 'stock';
-  document.getElementById('sSellPrice').value = isStock ? '' : (it.sellPrice || '');
+  // Pro EUR položky načti původní EUR hodnotu (sellPriceOrig), ne přepočtenou Kč
+  var existingSellVal = '';
+  var existingSellCur = 'CZK';
+  if (!isStock) {
+    if (it.sellCurrency === 'EUR' && it.sellPriceOrig) {
+      existingSellVal = it.sellPriceOrig;
+      existingSellCur = 'EUR';
+    } else {
+      existingSellVal = it.sellPrice || '';
+      existingSellCur = it.sellCurrency || 'CZK';
+    }
+  }
+  document.getElementById('sSellPrice').value = existingSellVal;
   // Kde prodáno — nastav hodnotu do custom inputu
   var sSW = document.getElementById('sSoldWhere');
   if(sSW) {
@@ -2960,7 +2972,7 @@ function openSellModal(id) {
   setTimeout(function(){
     initAllCustomInputs();
     var ssc = document.getElementById('sSellCurrency');
-    if(ssc) { ssc.value = 'CZK'; if(ssc._csSync) ssc._csSync(); }
+    if(ssc) { ssc.value = existingSellCur; if(ssc._csSync) ssc._csSync(); }
     var sec = document.getElementById('sExtraCurrency');
     if(sec) { sec.value = 'CZK'; if(sec._csSync) sec._csSync(); }
     var swst = document.getElementById('sWaitState');
@@ -4003,11 +4015,17 @@ function saveItem(){
         var _itemRef = items[i];
         var _doRecalc = function(rate) {
           var _buyKc = _itemRef.buyCurrency==='EUR' ? (_itemRef.buyPrice||0)*rate : (_itemRef.buyPrice||0);
-          var _sellKc = _itemRef.sellCurrency==='EUR' ? (_itemRef.sellPrice||0)*rate : (_itemRef.sellPrice||0);
-          var _extra = _itemRef.extraCosts||0;
+          // sellPrice je vždy Kč; sellPriceOrig je EUR — pro EUR položky přepočti z orig
+          var _sellKc = _itemRef.sellCurrency==='EUR'
+            ? (_itemRef.sellPriceOrig||0)*rate
+            : (_itemRef.sellPrice||0);
+          var _extra = _itemRef.extraCurrency==='EUR' ? (_itemRef.extraCosts||0)*rate : (_itemRef.extraCosts||0);
           _itemRef.profit = Math.round((_sellKc - _buyKc - _extra)*100)/100;
           _itemRef.roi = _buyKc > 0 ? parseFloat((((_itemRef.profit/_buyKc)*100).toFixed(1))) : 0;
           _itemRef.profitRateEur = rate;
+          if (_itemRef.sellCurrency==='EUR' && _itemRef.sellPriceOrig) {
+            _itemRef.sellPrice = Math.round(_itemRef.sellPriceOrig * rate * 100) / 100;
+          }
         };
         var _saleDate = items[i].saleDate || items[i].payoutDate || '';
         if (_saleDate && !items[i].profitRateEur) {
