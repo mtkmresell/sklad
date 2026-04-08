@@ -1096,7 +1096,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <div class="fg">
       <div class="fi"><label>Nákupní cena</label><div style="display:flex;gap:6px;"><input type="number" id="fBuy" placeholder="0" style="flex:1"><select id="fBuyCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
       <div class="fi hide-if-stock"><label>Prodejní cena</label><div style="display:flex;gap:6px;"><input type="number" id="fSell" placeholder="0" style="flex:1"><select id="fSellCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
-      <div class="fi hide-if-stock"><label>Další náklady</label><div style="display:flex;gap:6px;"><input type="number" id="fExtraCosts" placeholder="0" style="flex:1"><select id="fExtraCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
+      <div class="fi full hide-if-stock"><label>Další náklady</label><div style="display:flex;gap:6px;"><input type="number" id="fExtraCosts" placeholder="0" style="flex:1"><select id="fExtraCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
 
     </div>
   </div>
@@ -6762,7 +6762,7 @@ function initCustomSelect(selectEl) {
   selectEl._csInited = true;
   selectEl.style.display = 'none';
   const wrap = document.createElement('div');
-  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
+  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
   selectEl.parentNode.insertBefore(wrap, selectEl);
   wrap.appendChild(selectEl);
   const btn = document.createElement('div');
