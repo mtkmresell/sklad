@@ -281,6 +281,8 @@ header { flex-shrink: 0; }
   opacity: 0;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none;
 }
 .filters {
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -990,10 +992,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 </header>
 
 
-<div style="position:relative;">
-  <div class="stats-bar" id="statsBar" style="position:relative;"><button id="btnStockAnalytics" onclick="stockViewMode='analytics';renderItems();" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Analytika →</button></div>
-  <button id="btnStockAnalytics" onclick="stockViewMode='analytics';renderItems();" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Analytika →</button>
-</div>
+<div class="stats-bar" id="statsBar"></div>
 
 <div class="filters">
   <div class="search-wrap">
@@ -1093,10 +1092,11 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   </div>
 
   <div class="fs"><div class="fs-title">Ceny</div>
-    <div class="fg" style="grid-template-columns:1fr;">
+    <div class="fg">
       <div class="fi"><label>Nákupní cena</label><div style="display:flex;gap:6px;"><input type="number" id="fBuy" placeholder="0" style="flex:1"><select id="fBuyCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
       <div class="fi hide-if-stock"><label>Prodejní cena</label><div style="display:flex;gap:6px;"><input type="number" id="fSell" placeholder="0" style="flex:1"><select id="fSellCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
       <div class="fi hide-if-stock"><label>Další náklady</label><div style="display:flex;gap:6px;"><input type="number" id="fExtraCosts" placeholder="0" style="flex:1"><select id="fExtraCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
+      <div class="fi hide-if-stock"></div>
     </div>
   </div>
 
@@ -1108,12 +1108,9 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       <button type="button" class="intent-btn" data-val="" onclick="setStockIntent('')">— žádná</button>
     </div>
     <input type="hidden" id="fStockIntent">
-    <div class="fi" style="margin-top:10px;">
+        <div class="fi" style="margin-top:10px;">
       <label>Cílová cena</label>
-      <div style="display:flex;gap:6px;max-width:240px;">
-        <input type="number" id="fTargetPrice" placeholder="" min="0" style="flex:1">
-        <select id="fTargetCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select>
-      </div>
+      <div style="display:flex;gap:6px;"><input type="number" id="fTargetPrice" placeholder="0" min="0" style="flex:1"><select id="fTargetCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div>
     </div>
   </div>
 <div class="fs"><div class="fs-title">Nákup</div>
@@ -3894,6 +3891,8 @@ function openEdit(id){
   updateWaitStateVisibility();
   updateSizeVisibility();
   document.getElementById('moAdd').classList.add('open');
+  // Vypni autocomplete na všech inputech v modalu
+  document.querySelectorAll('#moAdd input[type=text], #moAdd input[type=number], #moAdd input[type=url]').forEach(function(el){ el.setAttribute('autocomplete','off'); });
   // Vždy scrolluj na vrch modalu
   var _moAddInner = document.querySelector('#moAdd .modal');
   if(_moAddInner) _moAddInner.scrollTop = 0;
@@ -3921,13 +3920,17 @@ function openEdit(id){
     var fECur2 = document.getElementById('fExtraCurrency');
     if(fECur2) {
       fECur2.value = it.extraCurrency||'CZK';
-      // Resetuj _csInited aby se custom select znovu inicializoval správně (element byl skrytý při prvním init)
+      // Force reinit — dočasně zobraz parent aby initCustomSelect fungoval správně
+      var _ecParentFi = fECur2.closest('.fi');
+      var _ecWasHidden = _ecParentFi && _ecParentFi.style.display === 'none';
+      if(_ecWasHidden) _ecParentFi.style.display = 'flex';
       if(fECur2._csInited) {
         var _ecWrap = fECur2.closest('.cs-wrap');
         if(_ecWrap) { _ecWrap.parentNode.insertBefore(fECur2, _ecWrap); _ecWrap.remove(); }
         fECur2._csInited = false;
       }
       initCustomSelect(fECur2);
+      if(_ecWasHidden) _ecParentFi.style.display = 'none';
       if(fECur2._csSync) fECur2._csSync();
     }
     // Sync dopravce — musí být po initAllCustomInputs
@@ -7206,7 +7209,7 @@ function initNumberSteppers() {
 }
 function initAllCustomInputs() {
   // Custom selects - všechny v modal formuláři
-  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterCategory','filterLocation','filterSoldWhere','filterWaitState','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod'].forEach(id => {
+  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fTargetCurrency','sortBy','filterCategory','filterLocation','filterSoldWhere','filterWaitState','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.tagName === 'SELECT') {
       // Naplň dopravce
