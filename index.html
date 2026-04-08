@@ -1842,7 +1842,7 @@ function importJsonBackup(file) {
         }
       }
       if (!imported || !imported.length) {
-        alert('Soubor neobsahuje platná data.');
+        showToast('Soubor neobsahuje platná data.', 'err');
         return;
       }
       if (!confirm('Importovat ' + imported.length + ' položek? Stávající data budou nahrazena.')) return;
@@ -1864,7 +1864,7 @@ function importJsonBackup(file) {
       cm('moSettings');
       showToast('Import úspěšný — načteno ' + imported.length + ' položek.');
     } catch(err) {
-      alert('Chyba při čtení souboru: ' + err.message);
+      showToast('Chyba při čtení souboru: ' + err.message, 'err');
     }
   };
   reader.readAsText(file);
@@ -3398,7 +3398,7 @@ async function saveSell() {
   const spRawSv = parseFloat(document.getElementById('sSellPrice').value);
   const spCurSv = document.getElementById('sSellCurrency')?.value || 'CZK';
   const spOrig = spRawSv; const spOrigCur = spCurSv;
-  if (!spRawSv || spRawSv <= 0) { alert('Vyplň prodejní cenu.'); return; }
+  if (!spRawSv || spRawSv <= 0) { showToast('Vyplň prodejní cenu.', 'err'); return; }
   const idx = items.findIndex(i => i.id === sellModalId);
   if (idx === -1) return;
   const it = items[idx];
@@ -3523,9 +3523,7 @@ function openTrackingModal(id) {
   const overlay = document.createElement('div');
   overlay.id = '_trackOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
-  // Klik na pozadí = zavřít
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) _closeTracking(); });
   const carrierFreq = JSON.parse(localStorage.getItem('carrier_freq')||'{}');
   const carrierOpts = Object.keys(CARRIERS).sort((a,b)=>(carrierFreq[b]||0)-(carrierFreq[a]||0)).map(k=>'<option value="'+k+'">'+k+'</option>').join('');
   const html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;max-width:420px;width:90%;overflow:visible;">'
@@ -3559,7 +3557,7 @@ function openTrackingModal(id) {
   trkCancel.onmouseleave = () => { trkCancel.style.background='none'; trkCancel.style.color='var(--muted)'; };
   trkOk.onmouseenter = () => { trkOk.style.opacity='0.85'; };
   trkOk.onmouseleave = () => { trkOk.style.opacity='1'; };
-  trkCancel.onclick = () => overlay.remove();
+  trkCancel.onclick = () => _closeTracking();
   overlay.querySelector('#_trkOk').onclick = () => {
     const num = overlay.querySelector('#_trkNum').value.trim();
     if(!num){ overlay.querySelector('#_trkErr').style.display=''; return; }
@@ -3568,13 +3566,13 @@ function openTrackingModal(id) {
     const idx2 = items.findIndex(i=>i.id===id);
     if(idx2 !== -1){ items[idx2].trackingNum=num; items[idx2].trackingCarrier=carrier; items[idx2].trackingUrl=trackUrl; }
     const cf = JSON.parse(localStorage.getItem('carrier_freq')||'{}'); cf[carrier]=(cf[carrier]||0)+1; localStorage.setItem('carrier_freq',JSON.stringify(cf));
-    overlay.remove();
+    _closeTracking();
     changeWaitState(id, 'sent');
   };
-  // Escape = zavřít
-  function _trkEsc(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _trkEsc); } }
+  // Escape = zavřít — _closeTracking vždy odebere i listener
+  function _trkEsc(e) { if (e.key === 'Escape') _closeTracking(); }
+  function _closeTracking() { document.removeEventListener('keydown', _trkEsc); overlay.remove(); }
   document.addEventListener('keydown', _trkEsc);
-  overlay.addEventListener('remove', function() { document.removeEventListener('keydown', _trkEsc); });
   setTimeout(() => { const inp=overlay.querySelector('#_trkNum'); if(inp)inp.focus(); }, 100);
 }
 
@@ -3644,14 +3642,8 @@ function del(id){
   };
 }
 
-function syncLocationSel(){
-  // legacy — nepoužívá se, zachováno pro kompatibilitu
-}
-
-function buildLocationSel(){
-  // Sestav seznam možností pro location dropdown z platforem (eshopy)
-  // Volá se při inicializaci a po změně platforem
-}
+function syncLocationSel(){}
+function buildLocationSel(){}
 
 function setLocationFields(loc){
   var inp = document.getElementById('fLocation');
@@ -3669,9 +3661,7 @@ function setLocationFields(loc){
   updateWaitStateVisibility();
 }
 
-function handleLocationSelChange(){
-  // legacy — nepoužívá se
-}
+function handleLocationSelChange(){}
 
 function getLocationValue(){
   var inp = document.getElementById('fLocation');
@@ -3698,9 +3688,7 @@ function openLocDrop() {
   drop.classList.add('open');
 }
 
-function filterLocDrop(val) {
-  // nepoužívá se — filtrování zrušeno
-}
+function filterLocDrop(val) {}
 
 function renderLocDrop() {
   var drop = document.getElementById('locDrop');
@@ -3946,7 +3934,7 @@ function openEdit(id){
 function saveItem(){
   const name=document.getElementById('fName').value.trim();
   const bp=parseFloat(document.getElementById('fBuy').value);
-  if(!name||isNaN(bp)){alert('Vyplň název a nákupní cenu.');return;}
+  if(!name||isNaN(bp)){showToast('Vyplň název a nákupní cenu.', 'err');return;}
   var fBuyCur2=document.getElementById('fBuyCurrency');
   var fSellCur2=document.getElementById('fSellCurrency');
   var fExtraCur2=document.getElementById('fExtraCurrency');
@@ -4204,24 +4192,24 @@ function handleCsv(e) {
   if(ext === 'xlsx' || ext === 'xls') {
     var reader = new FileReader();
     reader.onload = function(ev) { parseXlsx(ev.target.result); };
-    reader.onerror = function() { alert('Chyba čtení souboru. Zavři Excel a zkus znovu.'); if(statusEl) statusEl.textContent = ''; };
+    reader.onerror = function() { showToast('Chyba čtení souboru. Zavři Excel a zkus znovu.', 'err'); if(statusEl) statusEl.textContent = ''; };
     reader.readAsArrayBuffer(file);
   } else {
     var reader = new FileReader();
     reader.onload = function(ev) { parseCsvText(ev.target.result); };
-    reader.onerror = function() { alert('Chyba čtení souboru.'); if(statusEl) statusEl.textContent = ''; };
+    reader.onerror = function() { showToast('Chyba čtení souboru.', 'err'); if(statusEl) statusEl.textContent = ''; };
     reader.readAsText(file, 'UTF-8');
   }
 }
 
 function parseXlsx(ab) {
   var statusEl = document.getElementById('csvFileStatus');
-  if(typeof XLSX === 'undefined') { alert('Knihovna pro Excel se nenačetla. Zkus CSV.'); if(statusEl) statusEl.textContent = ''; return; }
+  if(typeof XLSX === 'undefined') { showToast('Knihovna pro Excel se nenačetla. Zkus CSV.', 'err'); if(statusEl) statusEl.textContent = ''; return; }
   try {
     if(statusEl) { statusEl.textContent = 'Parsuju Excel…'; }
     var wb = XLSX.read(ab, {type:'array', cellDates:false});
     var ws = wb.Sheets[wb.SheetNames[0]];
-    if(!ws) { alert('Excel neobsahuje žádný list.'); if(statusEl) statusEl.textContent = ''; return; }
+    if(!ws) { showToast('Excel neobsahuje žádný list.', 'err'); if(statusEl) statusEl.textContent = ''; return; }
     // Find header row - skip merged/empty top rows
     var range = XLSX.utils.decode_range(ws['!ref']||'A1');
     var headerRow = 0;
@@ -4234,7 +4222,7 @@ function parseXlsx(ab) {
       if(nonEmpty >= 3) { headerRow = r; break; }
     }
     var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, dateNF:'DD.MM.YYYY', range:headerRow});
-    if(!rows || rows.length < 2) { alert('Excel je prázdný nebo nelze přečíst.'); if(statusEl) statusEl.textContent = ''; return; }
+    if(!rows || rows.length < 2) { showToast('Excel je prázdný nebo nelze přečíst.', 'err'); if(statusEl) statusEl.textContent = ''; return; }
     // flatten headers (handle merged cells by using last non-empty)
     var hdrs = rows[0].map(function(h){ return h!=null?String(h).trim():''; });
     var lastHdr = '';
@@ -4244,14 +4232,14 @@ function parseXlsx(ab) {
     if(statusEl) statusEl.textContent = '';
     buildPreviewAndMap();
   } catch(err) {
-    alert('Chyba při čtení Excelu: ' + err.message);
+    showToast('Chyba při čtení Excelu: ' + err.message, 'err');
     if(statusEl) statusEl.textContent = '';
   }
 }
 
 function parseCsvText(text) {
   var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});
-  if(lines.length<2){alert('CSV je prázdné.');return;}
+  if(lines.length<2){showToast('CSV je prázdné.', 'err');return;}
   var delims=[',',';','\t'];var delim=',',mx=0;
   delims.forEach(function(d){var c=lines[0].split(d).length;if(c>mx){mx=c;delim=d;}});
   function sp(line){
@@ -4380,7 +4368,7 @@ function doImport() {
   var sels=document.querySelectorAll('#mapRows .map-sel');
   var map={};
   sels.forEach(function(s){if(s.value!=='')map[s.dataset.field]=parseInt(s.value);});
-  if(map.name===undefined){alert('Namapuj prosím pole Název.');return;}
+  if(map.name===undefined){showToast('Namapuj prosím pole Název.', 'err');return;}
 
   var catMap={};
   catMap['sneakers']='sneakers'; catMap['shoes']='sneakers';
@@ -4899,7 +4887,7 @@ function fallbackCopy(text, cb) {
   document.body.appendChild(ta);
   ta.focus();
   ta.select();
-  try { document.execCommand('copy'); cb(); } catch(e) { alert('SKU: ' + text); }
+  try { document.execCommand('copy'); cb(); } catch(e) { showToast('Nelze zkopírovat automaticky. SKU: ' + text, 'err'); }
   document.body.removeChild(ta);
 }
 
@@ -8931,8 +8919,8 @@ function getCellValue(it, colId) {
 function doExport() {
   var expItems = getExpItems();
   var cols = getExpSelectedCols();
-  if (!expItems.length) { alert('Žádné položky k exportu.'); return; }
-  if (!cols.length) { alert('Vyber alespoň jeden sloupec.'); return; }
+  if (!expItems.length) { showToast('Žádné položky k exportu.', 'err'); return; }
+  if (!cols.length) { showToast('Vyber alespoň jeden sloupec.', 'err'); return; }
   if (expFormat === 'csv') exportCsv(expItems, cols);
   else exportPdf(expItems, cols);
 }
