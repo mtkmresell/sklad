@@ -991,7 +991,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 
 
 <div style="position:relative;">
-  <div class="stats-bar" id="statsBar"></div>
+  <div class="stats-bar" id="statsBar" style="position:relative;"><button id="btnStockAnalytics" onclick="stockViewMode='analytics';renderItems();" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Analytika →</button></div>
   <button id="btnStockAnalytics" onclick="stockViewMode='analytics';renderItems();" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Analytika →</button>
 </div>
 
@@ -1093,11 +1093,10 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   </div>
 
   <div class="fs"><div class="fs-title">Ceny</div>
-    <div class="fg">
+    <div class="fg" style="grid-template-columns:1fr;">
       <div class="fi"><label>Nákupní cena</label><div style="display:flex;gap:6px;"><input type="number" id="fBuy" placeholder="0" style="flex:1"><select id="fBuyCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
       <div class="fi hide-if-stock"><label>Prodejní cena</label><div style="display:flex;gap:6px;"><input type="number" id="fSell" placeholder="0" style="flex:1"><select id="fSellCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
-      <div class="fi full hide-if-stock"><label>Další náklady</label><div style="display:flex;gap:6px;"><input type="number" id="fExtraCosts" placeholder="0" style="flex:1"><select id="fExtraCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
-
+      <div class="fi hide-if-stock"><label>Další náklady</label><div style="display:flex;gap:6px;"><input type="number" id="fExtraCosts" placeholder="0" style="flex:1"><select id="fExtraCurrency" style="width:52px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 6px;outline:none;"><option value="CZK">CZK</option><option value="EUR">EUR</option></select></div></div>
     </div>
   </div>
 
@@ -2926,7 +2925,18 @@ function openSellModal(id) {
   else imgEl.textContent = '📦';
   // Pokud je položka na skladě (vrácena z Čeká), nevyplňuj staré prodejní hodnoty
   var isStock = !it.saleState || it.saleState === 'stock';
-  document.getElementById('sSellPrice').value = isStock ? '' : (it.sellPrice || '');
+  var existingSellVal = '';
+  var existingSellCur = 'CZK';
+  if (!isStock) {
+    if (it.sellCurrency === 'EUR' && it.sellPriceOrig) {
+      existingSellVal = it.sellPriceOrig;
+      existingSellCur = 'EUR';
+    } else {
+      existingSellVal = it.sellPrice || '';
+      existingSellCur = it.sellCurrency || 'CZK';
+    }
+  }
+  document.getElementById('sSellPrice').value = existingSellVal;
   // Kde prodáno — nastav hodnotu do custom inputu
   var sSW = document.getElementById('sSoldWhere');
   if(sSW) {
@@ -2960,7 +2970,7 @@ function openSellModal(id) {
   setTimeout(function(){
     initAllCustomInputs();
     var ssc = document.getElementById('sSellCurrency');
-    if(ssc) { ssc.value = 'CZK'; if(ssc._csSync) ssc._csSync(); }
+    if(ssc) { ssc.value = existingSellCur; if(ssc._csSync) ssc._csSync(); }
     var sec = document.getElementById('sExtraCurrency');
     if(sec) { sec.value = 'CZK'; if(sec._csSync) sec._csSync(); }
     var swst = document.getElementById('sWaitState');
@@ -3780,6 +3790,23 @@ function openAddModal(){
   document.getElementById('fImgUrl').value='';
   buildPlatGrid([]);
   document.getElementById('moAdd').classList.add('open');
+  setTimeout(function(){
+    var dbg = document.getElementById('_debugPanel');
+    if(!dbg){dbg=document.createElement('div');dbg.id='_debugPanel';dbg.style.cssText='background:#111;border:1px solid #c8ff00;padding:8px;margin-bottom:12px;font-family:monospace;font-size:11px;color:#c8ff00;border-radius:6px;';document.querySelector('#moAdd .modal').prepend(dbg);}
+    var ids=['fBuyCurrency','fSellCurrency','fExtraCurrency'];
+    var out='';
+    ids.forEach(function(id){
+      var el=document.getElementById(id);
+      if(!el){out+=id+': NOT FOUND\n';return;}
+      var wrap=el.closest('.cs-wrap');
+      var inp=wrap?wrap.parentNode.querySelector('input'):el.parentNode.querySelector('input');
+      var wrapW=wrap?wrap.getBoundingClientRect().width:0;
+      var inpW=inp?inp.getBoundingClientRect().width:0;
+      var parentW=wrap?wrap.parentNode.getBoundingClientRect().width:0;
+      out+=id+': wrapW='+Math.round(wrapW)+' inpW='+Math.round(inpW)+' parentW='+Math.round(parentW)+' cls='+(wrap?wrap.className:'NO_WRAP')+'\n';
+    });
+    dbg.textContent=out;
+  }, 200);
   var _moAddInner2 = document.querySelector('#moAdd .modal');
   if(_moAddInner2) _moAddInner2.scrollTop = 0;
   setTimeout(function(){
@@ -3892,7 +3919,17 @@ function openEdit(id){
       else { var _r2=it.profitRateEur||eurRate||25; _fSellEl.value=Math.round((it.sellPrice||0)/_r2*100)/100; }
     }
     var fECur2 = document.getElementById('fExtraCurrency');
-    if(fECur2) { fECur2.value = it.extraCurrency||'CZK'; if(fECur2._csSync) fECur2._csSync(); if(fECur2.parentNode && fECur2.parentNode.classList.contains('cs-wrap')) { fECur2.parentNode.style.flexShrink='0'; fECur2.parentNode.style.width='48px'; } }
+    if(fECur2) {
+      fECur2.value = it.extraCurrency||'CZK';
+      // Resetuj _csInited aby se custom select znovu inicializoval správně (element byl skrytý při prvním init)
+      if(fECur2._csInited) {
+        var _ecWrap = fECur2.closest('.cs-wrap');
+        if(_ecWrap) { _ecWrap.parentNode.insertBefore(fECur2, _ecWrap); _ecWrap.remove(); }
+        fECur2._csInited = false;
+      }
+      initCustomSelect(fECur2);
+      if(fECur2._csSync) fECur2._csSync();
+    }
     // Sync dopravce — musí být po initAllCustomInputs
     var fTC2=document.getElementById('fTrackCarrier');
     if(fTC2&&it.trackingCarrier){fTC2.value=it.trackingCarrier;if(fTC2._csSync)fTC2._csSync();}
@@ -4003,11 +4040,16 @@ function saveItem(){
         var _itemRef = items[i];
         var _doRecalc = function(rate) {
           var _buyKc = _itemRef.buyCurrency==='EUR' ? (_itemRef.buyPrice||0)*rate : (_itemRef.buyPrice||0);
-          var _sellKc = _itemRef.sellCurrency==='EUR' ? (_itemRef.sellPrice||0)*rate : (_itemRef.sellPrice||0);
-          var _extra = _itemRef.extraCosts||0;
+          var _sellKc = _itemRef.sellCurrency==='EUR'
+            ? (_itemRef.sellPriceOrig||0)*rate
+            : (_itemRef.sellPrice||0);
+          var _extra = _itemRef.extraCurrency==='EUR' ? (_itemRef.extraCosts||0)*rate : (_itemRef.extraCosts||0);
           _itemRef.profit = Math.round((_sellKc - _buyKc - _extra)*100)/100;
           _itemRef.roi = _buyKc > 0 ? parseFloat((((_itemRef.profit/_buyKc)*100).toFixed(1))) : 0;
           _itemRef.profitRateEur = rate;
+          if (_itemRef.sellCurrency==='EUR' && _itemRef.sellPriceOrig) {
+            _itemRef.sellPrice = Math.round(_itemRef.sellPriceOrig * rate * 100) / 100;
+          }
         };
         var _saleDate = items[i].saleDate || items[i].payoutDate || '';
         if (_saleDate && !items[i].profitRateEur) {
@@ -4890,8 +4932,10 @@ function openDetail(id) {
   var trackingHtml = null;
   if (isWaiting && it.trackingNum) {
     var tLabel = (it.trackingCarrier ? it.trackingCarrier + ' · ' : '') + it.trackingNum;
+    var _isDpdW = it.trackingCarrier === 'DPD' && it.trackingNum;
+    var _dpdAttrW = _isDpdW ? ' onclick="event.preventDefault();navigator.clipboard.writeText(\''+it.trackingNum+'\').then(function(){showToast(\''+it.trackingNum+' zkopírováno\');});window.open(\''+it.trackingUrl+'\',\'_blank\');"' : '';
     trackingHtml = it.trackingUrl
-      ? '<a href="'+it.trackingUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;">'+tLabel+'</a>'
+      ? '<a href="'+it.trackingUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;cursor:pointer;"'+_dpdAttrW+'>'+tLabel+'</a>'
       : '<span style="font-family:monospace;font-size:12px;">'+tLabel+'</span>';
   }
   // Bazoš expirace — zobraz pro každou Bazoš platformu kde je položka zaškrtnutá
@@ -4935,7 +4979,15 @@ function openDetail(id) {
       ['Číslo obj. prodeje', it.saleRef||'—', !!(it.saleRef)],
       ['Způsob platby', it.paymentMethod||'—'],
       ...(it.extraCosts ? [['Další náklady', (it.extraCurrency==='EUR'?it.extraCosts+' €':czk(it.extraCosts))]] : []),
-      ...(it.trackingNum ? [['Sledování zásilky', it.trackingUrl ? '<a href="'+it.trackingUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;">'+(it.trackingCarrier?it.trackingCarrier+' · ':'')+it.trackingNum+'</a>' : '<span style="font-family:monospace;font-size:12px;">'+(it.trackingCarrier?it.trackingCarrier+' · ':'')+it.trackingNum+'</span>']] : []),
+      ...(it.trackingNum ? (function(){
+        var _tl = (it.trackingCarrier?it.trackingCarrier+' · ':'')+it.trackingNum;
+        var _isDpd = it.trackingCarrier==='DPD' && it.trackingNum;
+        var _dpdA = _isDpd ? ' onclick="event.preventDefault();navigator.clipboard.writeText(\''+it.trackingNum+'\').then(function(){showToast(\''+it.trackingNum+' zkopírováno\');});window.open(\''+it.trackingUrl+'\',\'_blank\');"' : '';
+        var _html = it.trackingUrl
+          ? '<a href="'+it.trackingUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;cursor:pointer;"'+_dpdA+'>'+_tl+'</a>'
+          : '<span style="font-family:monospace;font-size:12px;">'+_tl+'</span>';
+        return [['Sledování zásilky', _html]];
+      })() : []),
     ] : []),
 
     ['Poznámka', it.note||'—'],
@@ -6762,7 +6814,7 @@ function initCustomSelect(selectEl) {
   selectEl._csInited = true;
   selectEl.style.display = 'none';
   const wrap = document.createElement('div');
-  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
+  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
   selectEl.parentNode.insertBefore(wrap, selectEl);
   wrap.appendChild(selectEl);
   const btn = document.createElement('div');
