@@ -3775,23 +3775,6 @@ function openAddModal(){
   document.getElementById('fImgUrl').value='';
   buildPlatGrid([]);
   document.getElementById('moAdd').classList.add('open');
-  setTimeout(function(){
-    var dbg = document.getElementById('_debugPanel');
-    if(!dbg){dbg=document.createElement('div');dbg.id='_debugPanel';dbg.style.cssText='background:#111;border:1px solid #c8ff00;padding:8px;margin-bottom:12px;font-family:monospace;font-size:11px;color:#c8ff00;border-radius:6px;';document.querySelector('#moAdd .modal').prepend(dbg);}
-    var ids=['fBuyCurrency','fSellCurrency','fExtraCurrency'];
-    var out='';
-    ids.forEach(function(id){
-      var el=document.getElementById(id);
-      if(!el){out+=id+': NOT FOUND\n';return;}
-      var wrap=el.closest('.cs-wrap');
-      var inp=wrap?wrap.parentNode.querySelector('input'):el.parentNode.querySelector('input');
-      var wrapW=wrap?wrap.getBoundingClientRect().width:0;
-      var inpW=inp?inp.getBoundingClientRect().width:0;
-      var parentW=wrap?wrap.parentNode.getBoundingClientRect().width:0;
-      out+=id+': wrapW='+Math.round(wrapW)+' inpW='+Math.round(inpW)+' parentW='+Math.round(parentW)+' cls='+(wrap?wrap.className:'NO_WRAP')+'\n';
-    });
-    dbg.textContent=out;
-  }, 200);
   var _moAddInner2 = document.querySelector('#moAdd .modal');
   if(_moAddInner2) _moAddInner2.scrollTop = 0;
   setTimeout(function(){
