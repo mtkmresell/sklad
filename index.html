@@ -2120,6 +2120,8 @@ function switchTab(t){
   }
   var bulkBtn = document.getElementById('btnBulkMode');
   if (bulkBtn) bulkBtn.style.display = (t === 'sold' || t === 'dashboard') ? 'none' : '';
+  var btnAdd = document.getElementById('btnAdd');
+  if (btnAdd) btnAdd.style.display = (t === 'dashboard' || t === 'wishlist') ? 'none' : '';
   // Dashboard: skryj stats-bar a filters, ukaž jen grid
   var statsBar = document.querySelector('.stats-bar');
   var filtersBar = document.querySelector('.filters');
