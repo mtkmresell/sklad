@@ -2535,7 +2535,7 @@ function renderStats(){
     '<div class="stat-card" data-action="nextsold" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;"><div class="stat-label">'+_curSoldLbl+'</div><div class="stat-value sv-yellow">'+_curSoldVal+'</div></div>'+
     '<div class="stat-card" data-action="nextprofit" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;min-width:175px;"><div class="stat-label">'+_curProfitLbl+'</div><div class="stat-value '+(_curProfitVal>=0?'sv-green':'sv-red')+'">'+czkSign(_curProfitVal)+'</div></div>'+
     '<div class="stat-card" data-action="nextrev" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;min-width:175px;max-width:175px;width:175px;"><div class="stat-label">'+_curRevLbl+'</div><div class="stat-value sv-orange">'+czk(_curRevVal)+'</div></div>'+
-    (tab==='stock'?'<button id="btnStockAnalytics" onclick="stockViewMode=\'analytics\';renderItems();" style="margin-left:auto;background:var(--accent);color:#000;border:none;border-radius:8px;padding:8px 22px;font-family:\'Syne\',sans-serif;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap;align-self:center;">Analytika →</button>':'');
+    (tab==='stock'?'<button id="btnStockAnalytics" class="sold-btn-action" onclick="stockViewMode=\'analytics\';renderItems();" style="margin-left:auto;background:var(--accent);color:#000;align-self:center;">Analytika →</button>':'');
   // Animuj stat karty jen jednou při prvním načtení stránky
   if(!window._statsAnimDone) {
     window._statsAnimDone = true;
