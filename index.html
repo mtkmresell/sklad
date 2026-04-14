@@ -3878,6 +3878,7 @@ function saveLocOptions(arr) {
 function openLocDrop() {
   var drop = document.getElementById('locDrop');
   if(!drop) return;
+  if(drop.classList.contains('open')) { closeLocDrop(); return; }
   renderLocDrop();
   drop.style.display = '';
   drop.classList.add('open');
