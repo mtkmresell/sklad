@@ -280,19 +280,22 @@ header { flex-shrink: 0; }
 }
 
 /* Scroll hide/show animace */
+#statsBarWrap {
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 300px;
+  opacity: 1;
+}
+#statsBarWrap.hide-panel {
+  max-height: 0 !important;
+  opacity: 0;
+  overflow: hidden !important;
+  pointer-events: none;
+}
 .stats-bar {
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   max-height: 300px;
   opacity: 1;
   overflow: hidden;
-}
-.stats-bar.hide-panel {
-  max-height: 0 !important;
-  opacity: 0;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  overflow: hidden !important;
-  pointer-events: none;
 }
 .filters {
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -302,7 +305,7 @@ header { flex-shrink: 0; }
   padding-top: 0;
 }
 /* Když jsou stats schované, dej filtrům více prostoru nahoře */
-.stats-bar.hide-panel ~ .filters:not(.hide-panel) {
+#statsBarWrap.hide-panel ~ .filters:not(.hide-panel) {
   padding-top: 10px;
 }
 .filters.hide-panel {
@@ -1006,7 +1009,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 </header>
 
 
-<div style="position:relative;overflow:hidden;">
+<div id="statsBarWrap" style="position:relative;overflow:hidden;flex-shrink:0;">
   <div class="stats-bar" id="statsBar"></div>
   <button id="btnStockAnalytics" onclick="stockViewMode='analytics';renderItems();" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Analytika →</button>
   <button id="btnPayoutCal" onclick="openPayoutCalendar()" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Kalendář</button>
@@ -2123,10 +2126,10 @@ function switchTab(t){
   var btnAdd = document.getElementById('btnAdd');
   if (btnAdd) btnAdd.style.display = (t === 'dashboard' || t === 'wishlist') ? 'none' : '';
   // Dashboard: skryj stats-bar a filters, ukaž jen grid
-  var statsBar = document.querySelector('.stats-bar');
+  var statsBarWrap = document.getElementById('statsBarWrap');
   var filtersBar = document.querySelector('.filters');
   var isDash = t === 'dashboard';
-  if (statsBar) statsBar.classList.toggle('hide-panel', isDash);
+  if (statsBarWrap) statsBarWrap.classList.toggle('hide-panel', isDash);
   if (filtersBar) filtersBar.classList.toggle('hide-panel', isDash);
   var btnCalc = document.getElementById('btnCalc');
   if (btnCalc) btnCalc.style.display = isDash ? 'none' : '';
@@ -5084,7 +5087,7 @@ function openDetail(id) {
   const sizeUs = it.size ? convertSizeToUS(it.size, it.name) : null;
   const sizeCm = it.size ? convertSizeToCM(it.size, it.name) : null;
   const sizeStr = sizeEu ? [
-    'EU\xa0' + sizeEu,
+    (it.category === 'sneakers' ? 'EU\xa0' : '') + sizeEu,
     sizeUs && sizeUs!==sizeEu ? 'US\xa0' + sizeUs : null,
     sizeCm ? 'CM\xa0' + sizeCm : null
   ].filter(Boolean).join(' – ') : '—';
@@ -10303,7 +10306,7 @@ rebuildBrandTables();
 /* ══ SCROLL HIDE/SHOW PANELS + THEAD KLON ══ */
 (function() {
   var mainEl    = document.querySelector('.main');
-  var statsBar  = document.getElementById('statsBar');
+  var statsBar  = document.getElementById('statsBarWrap');
   var filtersEl = document.querySelector('.filters');
   var lastST    = 0;
 
