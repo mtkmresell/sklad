@@ -1002,6 +1002,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <button class="icon-btn" id="btnBulkMode" style="font-size:12px;letter-spacing:-0.3px;" onclick="toggleBulkMode()">☑ Vybrat</button>
     <button class="icon-btn" onclick="toggleCalc()" id="btnCalc" style="width:36px;padding:0;" data-tip="Kalkulačka marže"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 4h2M10 4h2M4 8h2M10 8h2M4 12h2M10 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
     <button class="icon-btn" id="btnMobileSimple" onclick="toggleMobileSimple()" data-tip="Jednoduché zobrazení" style="width:36px;padding:0;font-size:14px;">☰</button>
+    <button class="icon-btn" id="btnCustomerMode" onclick="toggleCustomerMode()" data-tip="Zákaznický režim" style="width:36px;padding:0;font-size:14px;">👁</button>
     <button class="icon-btn" id="btnGlobalSearch" style="width:36px;padding:0;" onclick="openGlobalSearch()" data-tip="Hledat napříč sekcemi (Ctrl+F)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 10l3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
     <button class="icon-btn" id="btnSettings" style="width:36px;padding:0;font-size:16px;" onclick="openSettings()">⚙</button>
     <button class="add-btn" id="btnAdd" onclick="openAddModal()">+ Přidat</button>
@@ -2605,6 +2606,7 @@ function renderStats(){
 }
 
 let viewMode = 'table';
+var customerMode = false;
 const platExpanded = {platforms:false, eshopy:false, local:false};
 
 function togglePlatExpand(group) {
@@ -3061,24 +3063,24 @@ function cardHTML(it){
   if(it.sku) metas.push({type:'sku',val:it.sku});
   if(it.size) metas.push({type:'txt',val:it.size});
   if(it.condition) metas.push({type:'txt',val:COND_L[it.condition]||it.condition});
-  if(it.buyDate) metas.push({type:'txt',val:it.buyDate});
+  if(!customerMode && it.buyDate) metas.push({type:'txt',val:fmtDate(it.buyDate)});
   if((it.qty||1)>1) metas.push({type:'txt',val:`×${it.qty}`});
   const stMap={stock:['sd-stock','Na skladě'],waiting:['sd-waiting','Čeká'],paid:['sd-paid','Zaplaceno']};
   const st=stMap[it.saleState||'stock'];
   const platHtml=(it.platforms&&it.platforms.length)?`<div class="plats-row">${it.platforms.map(p=>`<span class="pc pc-on">${p}</span>`).join('')}</div>`:'';
-  const priceHtml=`<div class="card-prices">
+  const priceHtml= customerMode ? '' : `<div class="card-prices">
     <div class="pb"><div class="pl">Nákup</div><div class="pv pv-buy">${it.buyCurrency==='EUR'?(it.buyPrice||0)+' €':czk(it.buyPrice||0)}</div></div>
     ${(tab!=='stock'&&it.sellPrice)?`<div class="pb"><div class="pl">Prodej</div><div class="pv pv-sell">${it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)}</div></div>`:''}
     ${it.retailKc||it.retailEur?`<div class="pb"><div class="pl">Retail</div><div class="pv pv-retail">${it.retailKc?czk(it.retailKc):''}${it.retailKc&&it.retailEur?' / ':''}${it.retailEur?it.retailEur+'€':''}</div></div>`:''}
     ${(tab!=='stock'&&it.sellPrice)?`<span class="profit-b ${pc}">${ps}</span>`:''}
   </div>`;
   const extraParts=[];
-  if(it.buyWhere) extraParts.push(`<span class="mt" style="font-size:9px;">${it.buyWhere}</span>`);
-  if(it.orderNum) extraParts.push(`<span class="mt" style="font-size:9px;cursor:pointer;" data-tip="Klikni pro zkopírování" data-action="copytext" data-text="${encodeURIComponent('Obj: '+it.orderNum)}">Obj: ${it.orderNum}</span>`);
-  if(it.saleRef) extraParts.push(`<span class="mt" style="font-size:9px;">Prodej: ${it.saleRef}</span>`);
-  if(it.actualSell&&it.saleState==='paid') extraParts.push(`<span class="mt" style="font-size:9px;">Prodáno: ${Math.round(it.actualSell).toLocaleString('cs')} Kč</span>`);
-  if(it.from) extraParts.push(`<span class="mt" style="font-size:9px;">Od: ${it.from}</span>`);
-  if(it.note) extraParts.push(`<span style="font-size:10px;color:var(--muted);">${it.note}</span>`);
+  if(!customerMode && it.buyWhere) extraParts.push(`<span class="mt" style="font-size:9px;">${it.buyWhere}</span>`);
+  if(!customerMode && it.orderNum) extraParts.push(`<span class="mt" style="font-size:9px;cursor:pointer;" data-tip="Klikni pro zkopírování" data-action="copytext" data-text="${encodeURIComponent('Obj: '+it.orderNum)}">Obj: ${it.orderNum}</span>`);
+  if(!customerMode && it.saleRef) extraParts.push(`<span class="mt" style="font-size:9px;">Prodej: ${it.saleRef}</span>`);
+  if(!customerMode && it.actualSell&&it.saleState==='paid') extraParts.push(`<span class="mt" style="font-size:9px;">Prodáno: ${Math.round(it.actualSell).toLocaleString('cs')} Kč</span>`);
+  if(!customerMode && it.from) extraParts.push(`<span class="mt" style="font-size:9px;">Od: ${it.from}</span>`);
+  if(!customerMode && it.note) extraParts.push(`<span style="font-size:10px;color:var(--muted);">${it.note}</span>`);
   if(it.tags&&it.tags.length) it.tags.forEach(function(t){ extraParts.push(`<span style="font-size:9px;background:rgba(200,255,0,0.08);border:1px solid rgba(200,255,0,0.2);color:var(--accent);border-radius:20px;padding:1px 6px;font-family:'DM Mono',monospace;">${t}</span>`); });
   const extraHtml=extraParts.length?`<div class="extra-info" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${extraParts.join('')}</div>`:'';
   let waitBtnHtml = '';
@@ -3105,7 +3107,7 @@ function cardHTML(it){
     <div class="card-top"><div class="item-name">${nameHtml}</div><span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></div>
     ${metas.length?`<div class="card-meta">${metas.map(m=>m.type==='sku'?`<span class="mt" style="cursor:pointer" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${m.val}">${m.val}</span>`:`<span class="mt">${m.val}</span>`).join('')}</div>`:''}
     ${platHtml}${priceHtml}
-    <div class="sale-row"><div class="sd ${st[0]}"></div><div class="st">${st[1]}</div>${it.saleState==='waiting'?`<span style="margin-left:6px;">${waitStateBadge(it)}</span>`:''}${it.stockIntent&&it.saleState==='stock'?'<span style="margin-left:6px;">'+intentBadge(it.stockIntent)+'</span>':''}</div>
+    <div class="sale-row"><div class="sd ${st[0]}"></div><div class="st">${st[1]}</div>${it.saleState==='waiting'?`<span style="margin-left:6px;">${waitStateBadge(it)}</span>`:''}${!customerMode&&it.stockIntent&&it.saleState==='stock'?'<span style="margin-left:6px;">'+intentBadge(it.stockIntent)+'</span>':''}</div>
     ${extraHtml}${actions}
   </div>`;
 }
@@ -5452,6 +5454,18 @@ function toggleMobileSimple() {
     btn.style.background = isOn ? 'rgba(200,255,0,0.08)' : '';
   }
   try { localStorage.setItem('mobileSimpleView', isOn?'1':'0'); } catch(e){}
+}
+
+function toggleCustomerMode() {
+  customerMode = !customerMode;
+  var btn = document.getElementById('btnCustomerMode');
+  if (btn) {
+    btn.style.color = customerMode ? 'var(--accent)' : '';
+    btn.style.borderColor = customerMode ? 'var(--accent)' : '';
+    btn.style.background = customerMode ? 'rgba(200,255,0,0.08)' : '';
+    btn.title = customerMode ? 'Zákaznický režim ZAPNUT' : 'Zákaznický režim';
+  }
+  renderItems();
 }
 
 function renderTagSuggestions() {
