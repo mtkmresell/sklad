@@ -10529,6 +10529,26 @@ rebuildBrandTables();
 })();
 </script>
 
+<script>
+/* Globální vypnutí autocomplete — pokrývá statické i dynamicky vytvořené inputy */
+(function() {
+  function disableAC(root) {
+    (root.querySelectorAll ? root : document).querySelectorAll('input[type=text],input[type=number],input[type=url],input[type=email],input:not([type])').forEach(function(el) {
+      el.setAttribute('autocomplete', 'new-password');
+    });
+  }
+  document.addEventListener('DOMContentLoaded', function() { disableAC(document); });
+  var obs = new MutationObserver(function(muts) {
+    muts.forEach(function(m) {
+      m.addedNodes.forEach(function(n) {
+        if (n.nodeType === 1) disableAC(n);
+      });
+    });
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+
 <!-- Login modal -->
 <div id="moLogin" class="mo" onclick="if(event.target===this)cm('moLogin')">
   <div class="modal" style="max-width:360px;padding:28px;">
