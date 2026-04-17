@@ -6628,7 +6628,7 @@ function openBulkEditModal(bulkId) {
         (ch.imgUrl ? '<img src="'+ch.imgUrl+'" style="width:32px;height:32px;object-fit:contain;border-radius:4px;" onerror="this.style.display=\'none\'">' : '<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--muted);">📷</div>') +
         '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ch.name+'</div>' +
         '<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(ch.size||'')+(ch.sku?' · '+ch.sku:'')+'</div></div>' +
-        '<button onclick="removeBulkChild(\''+bulkId+'\',\''+ch.id+'\')" data-tip="Vyjmout z bulku a vrátit na sklad" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;">↩ Vyjmout</button></div>';
+        '<button onclick="removeBulkChild(\''+bulkId+'\',\''+ch.id+'\')" data-tip="Vyjmout z bulku a vrátit na sklad" onmouseover="this.style.background=\'rgba(255,60,60,0.12)\';this.style.borderColor=\'var(--danger)\';" onmouseout="this.style.background=\'none\';this.style.borderColor=\'var(--danger)\';" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;transition:background 0.15s;">↩ Vyjmout</button></div>';
     });
     body += '</div></div>';
     var footer = '<div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;">' +
