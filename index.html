@@ -2999,7 +2999,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
       var id = rec.id;
       var del_btn = '<button class="ta-btn t-del" onclick="event.stopPropagation();delBulk(\'' + id + '\')">✕</button>';
       var ret_btn = '<button class="ta-btn t-del" onclick="event.stopPropagation();returnBulkToStock(\'' + id + '\')">↩</button>';
-      var edit_btn = '<button class="ta-btn" onclick="event.stopPropagation();openBulkEditModal(\'' + id + '\')">✏ Upravit</button>';
+      var edit_btn = '<button class="ta-btn" onclick="event.stopPropagation();openBulkEditModal(\'' + id + '\')">Upravit</button>';
       var act_btn = '';
       if (ws === 'sending') act_btn = '<button class="ta-btn t-sell" onclick="event.stopPropagation();openBulkTrackingModal(\'' + id + '\')">→ Odesláno</button>';
       else if (ws === 'sent') act_btn = '<button class="ta-btn" style="border-color:#00aaff66;color:#00aaff;" onclick="event.stopPropagation();setBulkWaitState(\'' + id + '\',\'payout\')">Na payout →</button>';
@@ -6612,15 +6612,12 @@ function openBulkEditModal(bulkId) {
     var body = '<div style="padding:16px 20px;overflow-y:auto;flex:1;">' +
       fld('Název', '<input id="_beN" style="'+iStyle+'" value="'+rec.name.replace(/"/g,'&quot;')+'">') +
       fld('Stav', '<div style="display:flex;gap:6px;">'+wsHtml+'</div>') +
-      '<div style="display:flex;gap:10px;">' +
-        '<div style="flex:1;">'+fld('Prodejní cena', '<input id="_beP" type="number" style="'+iStyle+'" value="'+(rec.sellPrice||0)+'">')+'</div>' +
-        '<div style="width:90px;">'+fld('Měna', '<select id="_beC"><option value="CZK"'+(rec.sellCurrency!=='EUR'?' selected':'')+'>CZK</option><option value="EUR"'+(rec.sellCurrency==='EUR'?' selected':'')+'>EUR</option></select>')+'</div>' +
-      '</div>' +
+      fld('Prodejní cena', '<div style="display:flex;gap:6px;"><input id="_beP" type="number" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" value="'+(rec.sellPrice||0)+'"><select id="_beC"><option value="CZK"'+(rec.sellCurrency!=='EUR'?' selected':'')+'>CZK</option><option value="EUR"'+(rec.sellCurrency==='EUR'?' selected':'')+'>EUR</option></select></div>') +
       fld('Datum prodeje', '<input id="_beD" type="date" value="'+rawDate+'">') +
       fld('Platforma / kde prodáno', '<input id="_beW" style="'+iStyle+'" value="'+(rec.soldWhere||'').replace(/"/g,'&quot;')+'">') +
       '<div style="display:flex;gap:10px;">' +
         '<div style="flex:1;">'+fld('Sledovací číslo', '<input id="_beTrkNum" style="'+iStyle+';font-family:monospace;" value="'+(rec.trackingNum||'')+'">')+'</div>' +
-        '<div style="flex:1;">'+fld('Dopravce', '<input id="_beTrkCarrier" style="'+iStyle+'" value="'+(rec.trackingCarrier||'')+'">')+'</div>' +
+        '<div style="flex:1;">'+fld('Dopravce', (function(){ var cf=JSON.parse(localStorage.getItem('carrier_freq')||'{}'); var opts=Object.keys(CARRIERS).sort(function(a,b){return (cf[b]||0)-(cf[a]||0);}).map(function(k){return '<option value="'+k+'"'+(rec.trackingCarrier===k?' selected':'')+'>'+k+'</option>';}).join(''); return '<select id="_beTrkCarrier">'+opts+'</select>'; })())+'</div>' +
       '</div>' +
       '<div style="margin-bottom:12px;border-top:1px solid var(--border);padding-top:12px;">' +
         '<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">Položky v bulku ('+ch2.length+' ks)</div>';
@@ -6636,17 +6633,20 @@ function openBulkEditModal(bulkId) {
       '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 18px;font-size:13px;cursor:pointer;">Zrušit</button>' +
       '<button id="_beSave" style="background:var(--accent);border:none;color:#000;border-radius:var(--radius-sm);padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;font-family:\'Syne\',sans-serif;">Uložit</button></div>';
     box.innerHTML = '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
-      '<span style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:15px;">✏ Upravit Bulk</span>' +
+      '<span style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:15px;">Upravit Bulk</span>' +
       '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:var(--surface2);border:none;color:var(--muted);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;">×</button></div>' +
       body + footer;
     ov.appendChild(box);
     // Custom select pro měnu
     var curSel = box.querySelector('#_beC');
     if (curSel) { initCustomSelect(curSel); var cw=curSel.closest('.cs-wrap'); if(cw){cw.classList.add('cs-currency');} }
+    // Custom select pro dopravce
+    var carrierSel = box.querySelector('#_beTrkCarrier');
+    if (carrierSel) { initCustomSelect(carrierSel); var cw2=carrierSel.closest('.cs-wrap'); if(cw2){cw2.classList.add('cs-wide');cw2.style.width='100%';} }
     // Custom date picker
     var dateInp = box.querySelector('#_beD');
     if (dateInp) initCustomDatePicker(dateInp);
-    // State toggle
+    // State toggle + hover
     var selectedWs = curWs;
     box.querySelectorAll('[data-ws]').forEach(function(btn) {
       btn.addEventListener('click', function() {
@@ -6658,7 +6658,14 @@ function openBulkEditModal(bulkId) {
           b.style.color = a?'var(--accent)':'var(--muted)';
         });
       });
+      btn.addEventListener('mouseenter', function() { if(btn.dataset.ws!==selectedWs){btn.style.borderColor='var(--text)';btn.style.color='var(--text)';} });
+      btn.addEventListener('mouseleave', function() { var a=btn.dataset.ws===selectedWs; btn.style.borderColor=a?'var(--accent)':'var(--border)'; btn.style.color=a?'var(--accent)':'var(--muted)'; });
     });
+    // Footer button hover
+    var btnCancel = box.querySelector('[onclick*="closest"][onclick*="remove"]');
+    if(btnCancel){btnCancel.addEventListener('mouseenter',function(){btnCancel.style.background='var(--surface)';});btnCancel.addEventListener('mouseleave',function(){btnCancel.style.background='var(--surface2)';});}
+    var btnSave = box.querySelector('#_beSave');
+    if(btnSave){btnSave.addEventListener('mouseenter',function(){btnSave.style.opacity='0.85';});btnSave.addEventListener('mouseleave',function(){btnSave.style.opacity='1';});}
     box.querySelector('#_beSave').addEventListener('click', function() {
       var idx = items.findIndex(function(x){ return x.id===bulkId; });
       if (idx === -1) return;
