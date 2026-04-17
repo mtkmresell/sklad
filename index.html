@@ -6614,9 +6614,8 @@ function openBulkEditModal(bulkId) {
       fld('Stav', '<div style="display:flex;gap:6px;">'+wsHtml+'</div>') +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
         fld('Prodejní cena', '<div style="display:flex;gap:6px;align-items:stretch;"><input id="_beP" type="number" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" value="'+(rec.sellPrice||0)+'"><select id="_beC"><option value="CZK"'+(rec.sellCurrency!=='EUR'?' selected':'')+'>CZK</option><option value="EUR"'+(rec.sellCurrency==='EUR'?' selected':'')+'>EUR</option></select></div>') +
-        '<div></div>' +
+        fld('Datum prodeje', '<input id="_beD" type="date" value="'+rawDate+'">') +
       '</div>' +
-      fld('Datum prodeje', '<input id="_beD" type="date" value="'+rawDate+'">') +
       fld('Platforma / kde prodáno', '<input id="_beW" style="'+iStyle+'" value="'+(rec.soldWhere||'').replace(/"/g,'&quot;')+'">') +
       '<div style="display:flex;gap:10px;">' +
         '<div style="flex:1;">'+fld('Sledovací číslo', '<input id="_beTrkNum" style="'+iStyle+';font-family:monospace;" value="'+(rec.trackingNum||'')+'">')+'</div>' +
