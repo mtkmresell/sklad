@@ -6589,11 +6589,10 @@ function delBulk(bulkId) {
 function openBulkEditModal(bulkId) {
   var rec = getBulkRecord(bulkId);
   if (!rec) return;
-  var children = getBulkItems(bulkId);
   var ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  function close() { ov.remove(); }
-  function _esc(e) { if(e.key==='Escape'){ close(); document.removeEventListener('keydown',_esc); } }
+  function close() { ov.remove(); document.removeEventListener('keydown',_esc); }
+  function _esc(e) { if(e.key==='Escape') close(); }
   document.addEventListener('keydown', _esc);
   ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
 
@@ -6602,24 +6601,26 @@ function openBulkEditModal(bulkId) {
     ov.innerHTML = '';
     var box = document.createElement('div');
     box.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);width:90%;max-width:600px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;';
-    var hdr = '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
-      '<span style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:15px;">✏ Upravit bulk prodej</span>' +
-      '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:var(--surface2);border:none;color:var(--muted);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;">×</button></div>';
     var fld = function(lbl, inp) {
       return '<div style="margin-bottom:12px;"><div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:5px;">'+lbl+'</div>'+inp+'</div>';
     };
     var iStyle = 'width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;';
+    var curWs = rec.waitState || 'sending';
+    var wsStates = [{v:'sending',l:'K odeslání'},{v:'sent',l:'Odesláno'},{v:'payout',l:'Čeká na payout'}];
+    var wsHtml = wsStates.map(function(s){ var a=curWs===s.v; return '<button data-ws="'+s.v+'" style="flex:1;padding:7px 6px;border:1px solid '+(a?'var(--accent)':'var(--border)')+';background:'+(a?'rgba(200,255,0,0.1)':'none')+';color:'+(a?'var(--accent)':'var(--muted)')+';border-radius:var(--radius-sm);cursor:pointer;font-size:12px;font-family:inherit;">'+s.l+'</button>'; }).join('');
+    var rawDate = rec.saleDate ? (rec.saleDate.includes('.')?rec.saleDate.split('.').reverse().join('-'):rec.saleDate) : '';
     var body = '<div style="padding:16px 20px;overflow-y:auto;flex:1;">' +
       fld('Název', '<input id="_beN" style="'+iStyle+'" value="'+rec.name.replace(/"/g,'&quot;')+'">') +
+      fld('Stav', '<div style="display:flex;gap:6px;">'+wsHtml+'</div>') +
       '<div style="display:flex;gap:10px;">' +
         '<div style="flex:1;">'+fld('Prodejní cena', '<input id="_beP" type="number" style="'+iStyle+'" value="'+(rec.sellPrice||0)+'">')+'</div>' +
-        '<div style="width:80px;">'+fld('Měna', '<select id="_beC" style="'+iStyle+'"><option value="CZK"'+(rec.sellCurrency!=='EUR'?' selected':'')+'>CZK</option><option value="EUR"'+(rec.sellCurrency==='EUR'?' selected':'')+'>EUR</option></select>')+'</div>' +
+        '<div style="width:90px;">'+fld('Měna', '<select id="_beC"><option value="CZK"'+(rec.sellCurrency!=='EUR'?' selected':'')+'>CZK</option><option value="EUR"'+(rec.sellCurrency==='EUR'?' selected':'')+'>EUR</option></select>')+'</div>' +
       '</div>' +
-      fld('Datum prodeje', '<input id="_beD" type="date" style="'+iStyle+'" value="'+(rec.saleDate&&rec.saleDate.includes('-')?rec.saleDate:(rec.saleDate?rec.saleDate.split('.').reverse().join('-'):''))+'">') +
-      fld('Platforma / kde prodáno', '<input id="_beW" autocomplete="new-password" style="'+iStyle+'" value="'+(rec.soldWhere||'').replace(/"/g,'&quot;')+'">') +
+      fld('Datum prodeje', '<input id="_beD" type="date" value="'+rawDate+'">') +
+      fld('Platforma / kde prodáno', '<input id="_beW" style="'+iStyle+'" value="'+(rec.soldWhere||'').replace(/"/g,'&quot;')+'">') +
       '<div style="display:flex;gap:10px;">' +
-        '<div style="flex:1;">'+fld('Sledovací číslo', '<input id="_beTrkNum" autocomplete="new-password" style="'+iStyle+';font-family:monospace;" value="'+(rec.trackingNum||'')+'">')+'</div>' +
-        '<div style="flex:1;">'+fld('Dopravce', '<input id="_beTrkCarrier" autocomplete="new-password" style="'+iStyle+'" value="'+(rec.trackingCarrier||'')+'">')+'</div>' +
+        '<div style="flex:1;">'+fld('Sledovací číslo', '<input id="_beTrkNum" style="'+iStyle+';font-family:monospace;" value="'+(rec.trackingNum||'')+'">')+'</div>' +
+        '<div style="flex:1;">'+fld('Dopravce', '<input id="_beTrkCarrier" style="'+iStyle+'" value="'+(rec.trackingCarrier||'')+'">')+'</div>' +
       '</div>' +
       '<div style="margin-bottom:12px;border-top:1px solid var(--border);padding-top:12px;">' +
         '<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:8px;">Položky v bulku ('+ch2.length+' ks)</div>';
@@ -6628,42 +6629,63 @@ function openBulkEditModal(bulkId) {
         (ch.imgUrl ? '<img src="'+ch.imgUrl+'" style="width:32px;height:32px;object-fit:contain;border-radius:4px;" onerror="this.style.display=\'none\'">' : '<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--muted);">📷</div>') +
         '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ch.name+'</div>' +
         '<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(ch.size||'')+(ch.sku?' · '+ch.sku:'')+'</div></div>' +
-        '<button onclick="removeBulkChild(\''+bulkId+'\',\''+ch.id+'\')" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;" title="Vyjmout z bulku a vrátit na sklad">↩ Vyjmout</button></div>';
+        '<button onclick="removeBulkChild(\''+bulkId+'\',\''+ch.id+'\')" data-tip="Vyjmout z bulku a vrátit na sklad" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;">↩ Vyjmout</button></div>';
     });
     body += '</div></div>';
     var footer = '<div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;">' +
       '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 18px;font-size:13px;cursor:pointer;">Zrušit</button>' +
       '<button id="_beSave" style="background:var(--accent);border:none;color:#000;border-radius:var(--radius-sm);padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;font-family:\'Syne\',sans-serif;">Uložit</button></div>';
-    box.innerHTML = hdr + body + footer;
+    box.innerHTML = '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
+      '<span style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:15px;">✏ Upravit Bulk</span>' +
+      '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:var(--surface2);border:none;color:var(--muted);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;">×</button></div>' +
+      body + footer;
     ov.appendChild(box);
+    // Custom select pro měnu
+    var curSel = box.querySelector('#_beC');
+    if (curSel) { initCustomSelect(curSel); var cw=curSel.closest('.cs-wrap'); if(cw){cw.classList.add('cs-currency');} }
+    // Custom date picker
+    var dateInp = box.querySelector('#_beD');
+    if (dateInp) initCustomDatePicker(dateInp);
+    // State toggle
+    var selectedWs = curWs;
+    box.querySelectorAll('[data-ws]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        selectedWs = btn.dataset.ws;
+        box.querySelectorAll('[data-ws]').forEach(function(b) {
+          var a = b.dataset.ws === selectedWs;
+          b.style.borderColor = a?'var(--accent)':'var(--border)';
+          b.style.background = a?'rgba(200,255,0,0.1)':'none';
+          b.style.color = a?'var(--accent)':'var(--muted)';
+        });
+      });
+    });
     box.querySelector('#_beSave').addEventListener('click', function() {
       var idx = items.findIndex(function(x){ return x.id===bulkId; });
       if (idx === -1) return;
-      var rawDate = box.querySelector('#_beD').value;
-      var fmted = rawDate ? rawDate.split('-').reverse().join('.') : '';
+      var rawDate2 = box.querySelector('#_beD').value;
+      var fmted = rawDate2 ? rawDate2.split('-').reverse().join('.') : '';
       items[idx].name = box.querySelector('#_beN').value.trim() || items[idx].name;
       items[idx].sellPrice = parseFloat(box.querySelector('#_beP').value) || 0;
       items[idx].sellCurrency = box.querySelector('#_beC').value;
       items[idx].saleDate = fmted;
       items[idx].soldWhere = box.querySelector('#_beW').value.trim();
+      // Stav — propaguj na děti
+      if (selectedWs !== items[idx].waitState) {
+        items[idx].waitState = selectedWs;
+        getBulkItems(bulkId).forEach(function(ch){ var ci=items.findIndex(function(x){return x.id===ch.id;}); if(ci!==-1) items[ci].waitState=selectedWs; });
+      }
       var newTrkNum = box.querySelector('#_beTrkNum').value.trim();
       var newTrkCarrier = box.querySelector('#_beTrkCarrier').value.trim();
       if (newTrkNum) {
         var trkUrl = CARRIERS[newTrkCarrier] ? (CARRIERS[newTrkCarrier].includes('{num}') ? CARRIERS[newTrkCarrier].replace('{num}', encodeURIComponent(newTrkNum)) : CARRIERS[newTrkCarrier]+encodeURIComponent(newTrkNum)) : '';
-        items[idx].trackingNum = newTrkNum;
-        items[idx].trackingCarrier = newTrkCarrier;
-        items[idx].trackingUrl = trkUrl || items[idx].trackingUrl;
-        getBulkItems(bulkId).forEach(function(ch) {
-          var ci = items.findIndex(function(x){ return x.id===ch.id; });
-          if (ci !== -1) { items[ci].trackingNum=newTrkNum; items[ci].trackingCarrier=newTrkCarrier; items[ci].trackingUrl=trkUrl||items[ci].trackingUrl; }
-        });
+        items[idx].trackingNum = newTrkNum; items[idx].trackingCarrier = newTrkCarrier; items[idx].trackingUrl = trkUrl||items[idx].trackingUrl;
+        getBulkItems(bulkId).forEach(function(ch){ var ci=items.findIndex(function(x){return x.id===ch.id;}); if(ci!==-1){items[ci].trackingNum=newTrkNum;items[ci].trackingCarrier=newTrkCarrier;items[ci].trackingUrl=trkUrl||items[ci].trackingUrl;} });
       }
       // Přepočítej profit
       var totalBuy = getBulkItems(bulkId).reduce(function(s,ch){ return s+(ch.buyCurrency==='EUR'?(ch.buyPrice||0)*(eurRate||25):(ch.buyPrice||0)); }, 0);
       items[idx].profit = Math.round(items[idx].sellPrice*(items[idx].sellCurrency==='EUR'?eurRate:1) - totalBuy);
       sv(); renderItems(); renderStats();
-      close(); document.removeEventListener('keydown',_esc);
-      showToast('Bulk upraven.', 'ok');
+      close(); showToast('Bulk upraven.', 'ok');
     });
   }
 
