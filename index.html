@@ -2370,7 +2370,7 @@ function getFiltered(){
     if(tab==='waiting') return it.saleState==='waiting' && !it.bulkId && it.type!=='bulk';
     if(tab==='sold') return it.saleState==='paid' && !it.bulkId && it.type!=='bulk';
   });
-  if(q) list=list.filter(it=>(it.name||'').toLowerCase().includes(q)||(it.sku||'').toLowerCase().includes(q)||(it.orderNum||'').toLowerCase().includes(q)||(it.saleRef||'').toLowerCase().includes(q));
+  if(q) list=list.filter(it=>(it.name||'').toLowerCase().includes(q)||(it.sku||'').toLowerCase().includes(q)||(it.orderNum||'').toLowerCase().includes(q)||(it.saleRef||'').toLowerCase().includes(q)||(it.buyWhere||'').toLowerCase().includes(q));
   if(cat) list=list.filter(it=>it.category===cat);
   const loc=document.getElementById('filterLocation')?.value||'';
   if(loc) list=list.filter(it=>(it.location||'Doma')===loc);
