@@ -10601,9 +10601,13 @@ rebuildBrandTables();
     if (Math.abs(st - lastST) < 5) return;
     lastST = st;
 
+    // Kolik px zbývá pod aktuální pozicí — pokud málo, skrytí panelu by způsobilo
+    // layout skok a browser by vrátil scrollTop zpět → smyčka blikání
+    var slack = mainEl.scrollHeight - mainEl.clientHeight - st;
+
     if (down) {
-      if (st > 40)  statsBar.classList.add('hide-panel');
-      if (st > 100) filtersEl.classList.add('hide-panel');
+      if (st > 40  && slack > 80)  statsBar.classList.add('hide-panel');
+      if (st > 100 && slack > 80) filtersEl.classList.add('hide-panel');
     } else {
       if (filtersEl.classList.contains('hide-panel')) {
         filtersEl.classList.add('is-animating');
