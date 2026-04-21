@@ -834,14 +834,19 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   from { transform: translateX(0); opacity: 1; }
   to   { transform: translateX(120%); opacity: 0; }
 }
-.toast {
+#_toastContainer {
   position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  pointer-events: none;
+}
+.toast {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 10px 16px;
   font-size: 13px; color: var(--text);
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   animation: toastIn 0.25s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
   display: flex; align-items: center; gap: 8px;
+  pointer-events: auto;
 }
 .toast.toast-out {
   animation: toastOut 0.2s ease forwards;
@@ -6176,10 +6181,16 @@ function czkSign(val) { var r=Math.round(val); return (r>=0?'+':'')+r.toLocaleSt
 
 /* Toast notifikace */
 function showToast(msg, type, duration) {
+  var container = document.getElementById('_toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = '_toastContainer';
+    document.body.appendChild(container);
+  }
   var t = document.createElement('div');
   t.className = 'toast toast-' + (type || 'ok');
   t.innerHTML = '<span class="toast-dot"></span><span>' + msg + '</span>';
-  document.body.appendChild(t);
+  container.appendChild(t);
   setTimeout(function() {
     t.classList.add('toast-out');
     setTimeout(function(){ t.remove(); }, 220);
