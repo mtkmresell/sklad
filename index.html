@@ -3077,7 +3077,7 @@ function cardHTML(it){
   if((it.qty||1)>1) metas.push({type:'txt',val:`×${it.qty}`});
   const stMap={stock:['sd-stock','Na skladě'],waiting:['sd-waiting','Čeká'],paid:['sd-paid','Zaplaceno']};
   const st=stMap[it.saleState||'stock'];
-  const platHtml=(it.platforms&&it.platforms.length)?`<div class="plats-row">${it.platforms.map(p=>`<span class="pc pc-on">${p}</span>`).join('')}</div>`:'';
+  const platHtml=(!customerMode&&it.platforms&&it.platforms.length)?`<div class="plats-row">${it.platforms.map(p=>`<span class="pc pc-on">${p}</span>`).join('')}</div>`:'';
   const priceHtml= customerMode ? '' : `<div class="card-prices">
     <div class="pb"><div class="pl">Nákup</div><div class="pv pv-buy">${it.buyCurrency==='EUR'?(it.buyPrice||0)+' €':czk(it.buyPrice||0)}</div></div>
     ${(tab!=='stock'&&it.sellPrice)?`<div class="pb"><div class="pl">Prodej</div><div class="pv pv-sell">${it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)}</div></div>`:''}
