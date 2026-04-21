@@ -9071,8 +9071,8 @@ function renderStockAnalytics() {
   // Koláčový graf
   var ageData = [{l:'0\u201330 dn\u00ed',n:age0_30,c:'#c8ff00'},{l:'30\u201390 dn\u00ed',n:age30_90,c:'#ffaa00'},{l:'90\u2013180 dn\u00ed',n:age90_180,c:'#ff6b35'},{l:'180+ dn\u00ed',n:age180p,c:'#ff4444'}];
   var ageTotal = age0_30+age30_90+age90_180+age180p||1;
-  var pieHtml = '<div style="display:flex;flex-direction:column;align-items:center;gap:20px;">';
-  pieHtml += '<svg viewBox="0 0 200 200" style="width:200px;height:200px;display:block;flex-shrink:0;">';
+  var pieHtml = '<div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap;">';
+  pieHtml += '<svg viewBox="0 0 200 200" style="width:260px;height:260px;display:block;flex-shrink:0;">';
   var cumAngle = -Math.PI/2, pieDelay = 0;
   ageData.forEach(function(d){
     if(!d.n) return;
@@ -9088,7 +9088,7 @@ function renderStockAnalytics() {
       '</path>';
     pieDelay+=Math.round(dur*0.6);
   });
-  pieHtml += '</svg><div style="display:flex;flex-direction:column;gap:8px;width:100%;">';
+  pieHtml += '</svg><div style="display:flex;flex-direction:column;gap:10px;flex:1;min-width:160px;">';
   ageData.forEach(function(d){
     pieHtml += '<div style="display:flex;align-items:center;gap:8px;font-size:13px;">'+
       '<div style="width:12px;height:12px;border-radius:2px;background:'+d.c+';flex-shrink:0;"></div>'+
