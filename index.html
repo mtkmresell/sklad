@@ -6723,7 +6723,7 @@ function openBulkEditModal(bulkId) {
               items[idx2].sellPrice = 0;
               if (bRec && bRec.trackingNum) { items[idx2].trackingNum=bRec.trackingNum; items[idx2].trackingCarrier=bRec.trackingCarrier; items[idx2].trackingUrl=bRec.trackingUrl; }
               var bIdx2 = items.findIndex(function(x){ return x.id===bulkId; });
-              if (bIdx2!==-1) { var tb=getBulkItems(bulkId).reduce(function(s,c){return s+(c.buyCurrency==='EUR'?(c.buyPrice||0)*(eurRate||25):(c.buyPrice||0));},0); items[bIdx2].profit=Math.round((items[bIdx2].sellPrice||0)*(items[bIdx2].sellCurrency==='EUR'?eurRate:1)-tb); }
+              if (bIdx2!==-1) { var tb=getBulkItems(bulkId).reduce(function(s,c){return s+(c.buyCurrency==='EUR'?(c.buyPrice||0)*(eurRate||25):(c.buyPrice||0));},0); items[bIdx2].profit=Math.round((items[bIdx2].sellPrice||0)-tb); items[bIdx2].roi=tb>0?parseFloat(((items[bIdx2].profit/tb)*100).toFixed(1)):0; }
               sv();
               pickerOv.remove();
               render();
@@ -6760,9 +6760,10 @@ function openBulkEditModal(bulkId) {
         items[idx].trackingNum = newTrkNum; items[idx].trackingCarrier = newTrkCarrier; items[idx].trackingUrl = trkUrl||items[idx].trackingUrl;
         getBulkItems(bulkId).forEach(function(ch){ var ci=items.findIndex(function(x){return x.id===ch.id;}); if(ci!==-1){items[ci].trackingNum=newTrkNum;items[ci].trackingCarrier=newTrkCarrier;items[ci].trackingUrl=trkUrl||items[ci].trackingUrl;} });
       }
-      // Přepočítej profit
+      // Přepočítej profit — sellPrice v bulku je vždy v Kč
       var totalBuy = getBulkItems(bulkId).reduce(function(s,ch){ return s+(ch.buyCurrency==='EUR'?(ch.buyPrice||0)*(eurRate||25):(ch.buyPrice||0)); }, 0);
-      items[idx].profit = Math.round(items[idx].sellPrice*(items[idx].sellCurrency==='EUR'?eurRate:1) - totalBuy);
+      items[idx].profit = Math.round(items[idx].sellPrice - totalBuy);
+      items[idx].roi = totalBuy > 0 ? parseFloat(((items[idx].profit / totalBuy) * 100).toFixed(1)) : 0;
       sv(); renderItems(); renderStats();
       close(); showToast('Bulk upraven.', 'ok');
     });
@@ -6789,7 +6790,8 @@ function openBulkEditModal(bulkId) {
         return;
       }
       var totalBuy2 = remaining.reduce(function(s,ch){ return s+(ch.buyCurrency==='EUR'?(ch.buyPrice||0)*(eurRate||25):(ch.buyPrice||0)); }, 0);
-      items[bIdx].profit = Math.round((items[bIdx].sellPrice||0)*(items[bIdx].sellCurrency==='EUR'?eurRate:1) - totalBuy2);
+      items[bIdx].profit = Math.round((items[bIdx].sellPrice||0) - totalBuy2);
+      items[bIdx].roi = totalBuy2 > 0 ? parseFloat(((items[bIdx].profit / totalBuy2) * 100).toFixed(1)) : 0;
     }
     sv(); renderItems(); renderStats();
     render();
