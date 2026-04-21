@@ -2223,8 +2223,8 @@ function renderDashboard() {
     stagnant.forEach(function(it){
       var days=Math.floor((now-parseBuyDate(it))/86400000);
       var bp=(it.buyCurrency==='EUR'?(it.buyPrice||0)*eurRate:(it.buyPrice||0));
-      h+='<div onclick="switchTab(\'stock\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
-      h+='<div><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">'+it.name+'</div>';
+      h+='<div onclick="switchTab(\'stock\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
+      h+='<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+it.name+'</div>';
       h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(CAT_N[it.category]||it.category||'—')+(it.size?' · '+it.size:'')+'</div></div>';
       h+='<div style="text-align:right;flex-shrink:0;"><div style="font-size:12px;color:var(--warning);font-family:\'DM Mono\',monospace;">'+days+' dní</div>';
       h+='<div style="font-size:10px;color:var(--muted);">'+Math.round(bp).toLocaleString('cs')+' Kč</div></div>';
@@ -2244,8 +2244,8 @@ function renderDashboard() {
       var d=it.dateAdded?new Date(it.dateAdded):null;
       var days=d?Math.floor((now-d)/86400000):null;
       var sp=(it.sellCurrency==='EUR'?(it.sellPriceOrig||it.sellPrice||0)*eurRate:(it.sellPrice||0));
-      h+='<div onclick="switchTab(\'waiting\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
-      h+='<div><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">'+it.name+'</div>';
+      h+='<div onclick="switchTab(\'waiting\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
+      h+='<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+it.name+'</div>';
       h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(it.soldWhere||'—')+(it.waitState?' · '+(WS_LABEL[it.waitState]||it.waitState):'')+'</div></div>';
       h+='<div style="text-align:right;flex-shrink:0;"><div style="font-size:12px;color:var(--accent);font-family:\'DM Mono\',monospace;">'+(sp?Math.round(sp).toLocaleString('cs')+' Kč':'—')+'</div>';
       h+='<div style="font-size:10px;color:var(--muted);">'+(days!==null?days+' dní':'—')+'</div></div>';
@@ -2264,8 +2264,8 @@ function renderDashboard() {
       var bp=(it.buyCurrency==='EUR'?(it.buyPrice||0)*eurRate:(it.buyPrice||0));
       var d=it.dateAdded?new Date(it.dateAdded):null;
       var days=d?Math.floor((now-d)/86400000):null;
-      h+='<div onclick="switchTab(\'stock\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
-      h+='<div><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">'+it.name+'</div>';
+      h+='<div onclick="switchTab(\'stock\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
+      h+='<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+it.name+'</div>';
       h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(CAT_N[it.category]||it.category||'—')+(it.size?' · '+it.size:'')+'</div></div>';
       h+='<div style="text-align:right;flex-shrink:0;"><div style="font-size:12px;font-family:\'DM Mono\',monospace;">'+Math.round(bp).toLocaleString('cs')+' Kč</div>';
       h+='<div style="font-size:10px;color:var(--muted);">'+(days!==null?'před '+days+' dny':'—')+'</div></div>';
@@ -2283,8 +2283,8 @@ function renderDashboard() {
   } else {
     topMonth.forEach(function(it){
       var p=_itemProfit(it);
-      h+='<div onclick="switchTab(\'sold\')" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
-      h+='<div><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">'+it.name+'</div>';
+      h+='<div onclick="switchTab(\'sold\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
+      h+='<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+it.name+'</div>';
       h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(it.soldWhere||'—')+(it.size?' · '+it.size:'')+'</div></div>';
       h+='<div style="font-size:13px;color:'+(p>=0?'var(--accent)':'var(--danger)')+';font-family:\'Syne\',sans-serif;font-weight:700;flex-shrink:0;">'+(p>=0?'+':'')+Math.round(p).toLocaleString('cs')+' Kč</div>';
       h+='</div>';
