@@ -2170,6 +2170,7 @@ function renderDashboard() {
 
   var ym = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   var MONTHS=['Ledna','Února','Března','Dubna','Května','Června','Července','Srpna','Září','Října','Listopadu','Prosince'];
+  var MONTHS_NOM=['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
   var thisMonthItems = paidItems.filter(function(it){
     var d=it.payoutDate||it.saleDate||''; if(!d) return false;
     var p=d.split('.'); if(p.length===3) return p[2]+'-'+p[1].padStart(2,'0')===ym; return d.slice(0,7)===ym;
@@ -2183,9 +2184,15 @@ function renderDashboard() {
     return (now-d)/(86400000) > 60;
   }).sort(function(a,b){ return (parseBuyDate(a)||now)-(parseBuyDate(b)||now); }).slice(0,5);
 
-  // Nejdéle čekající
+  // Nejdéle čekající — řadíme od nejstaršího data prodeje (saleDate)
+  function _parseSaleDate(it) {
+    var sd=it.saleDate||''; if(!sd) return null;
+    if(/^\d{4}-\d{2}-\d{2}$/.test(sd)) return new Date(sd+'T00:00:00');
+    var p=sd.split('.'); if(p.length===3) return new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
+    return null;
+  }
   var longWait = waitItems.slice().sort(function(a,b){
-    return new Date(a.dateAdded||0)-new Date(b.dateAdded||0);
+    return (_parseSaleDate(a)||new Date(a.dateAdded||0))-(_parseSaleDate(b)||new Date(b.dateAdded||0));
   }).slice(0,5);
 
   // Naposledy přidané
@@ -2237,13 +2244,13 @@ function renderDashboard() {
 
   // Čeká nejdéle
   h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
-  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">⏳ Čeká nejdéle na payout</div>';
+  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">Čeká nejdéle na payout</div>';
   if (longWait.length===0) {
     h+='<div style="font-size:12px;color:var(--muted);">Nic nečeká na payout.</div>';
   } else {
     var WS_LABEL={sending:'Odesílání',sent:'Odesláno',payout:'Čeká na payout',completed:'Dokončeno'};
     longWait.forEach(function(it){
-      var d=it.dateAdded?new Date(it.dateAdded):null;
+      var d=_parseSaleDate(it);
       var days=d?Math.floor((now-d)/86400000):null;
       var sp=(it.sellCurrency==='EUR'?(it.sellPriceOrig||it.sellPrice||0)*eurRate:(it.sellPrice||0));
       h+='<div onclick="switchTab(\'waiting\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
@@ -2258,7 +2265,7 @@ function renderDashboard() {
 
   // Naposledy přidané
   h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
-  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;">🆕 Naposledy přidané</div>';
+  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;">Naposledy přidané</div>';
   if (recentStock.length===0) {
     h+='<div style="font-size:12px;color:var(--muted);">Sklad je prázdný.</div>';
   } else {
@@ -2279,7 +2286,7 @@ function renderDashboard() {
   // Tento měsíc — top prodeje
   var topMonth = thisMonthItems.slice().sort(function(a,b){return _itemProfit(b)-_itemProfit(a);}).slice(0,5);
   h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
-  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">'+MONTHS[now.getMonth()]+' — top prodeje</div>';
+  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">Top prodeje — '+MONTHS_NOM[now.getMonth()]+'</div>';
   if (topMonth.length===0) {
     h+='<div style="font-size:12px;color:var(--muted);">Tento měsíc zatím žádné prodeje.</div>';
   } else {
