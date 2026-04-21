@@ -9157,7 +9157,17 @@ function renderStockAnalytics() {
   var allCats = Object.keys(Object.fromEntries(allSi.map(function(it){ return [it.category||'jine',1]; })));
   var catFilterH = '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:20px;">';
   catFilterH += '<button onclick="window._saFilterCat=\'\';renderStockAnalytics();" style="background:'+(saFilterCat===''?'var(--accent)':'var(--surface2)')+';color:'+(saFilterCat===''?'#000':'var(--muted)')+';border:'+(saFilterCat===''?'none':'1px solid var(--border)')+';border-radius:6px;padding:5px 12px;font-size:12px;font-weight:'+(saFilterCat===''?'700':'400')+';cursor:pointer;font-family:inherit;">Vše</button>';
-  allCats.sort().forEach(function(c){
+  var _catPriority = ['sneakers','obleceni','pokemon','lego','hotwheels','alternate','sberatelske'];
+  allCats.sort(function(a,b){
+    if (a==='jine') return 1;
+    if (b==='jine') return -1;
+    var ai = _catPriority.indexOf(a), bi = _catPriority.indexOf(b);
+    if (ai>=0 && bi>=0) return ai-bi;
+    if (ai>=0) return -1;
+    if (bi>=0) return 1;
+    return (getCatLabel(a)||a).localeCompare(getCatLabel(b)||b, 'cs');
+  });
+  allCats.forEach(function(c){
     var active = saFilterCat===c;
     catFilterH += '<button onclick="window._saFilterCat=\''+c+'\';renderStockAnalytics();" style="background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#000':'var(--muted)')+';border:'+(active?'none':'1px solid var(--border)')+';border-radius:6px;padding:5px 12px;font-size:12px;font-weight:'+(active?'700':'400')+';cursor:pointer;font-family:inherit;">'+(getCatLabel(c)||c)+'</button>';
   });
