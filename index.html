@@ -8321,7 +8321,7 @@ document.addEventListener('fb-auth', function(e) {
             localStorage.setItem(SK+'_savedAt', data.savedAt);
             if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
             renderStats(); renderItems();
-            showToast('🔄 Synchronizováno z jiného zařízení.');
+            showToast('Synchronizováno.');
           }
         }
       }
