@@ -1007,7 +1007,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <button class="icon-btn" id="btnBulkMode" style="font-size:12px;letter-spacing:-0.3px;" onclick="toggleBulkMode()">Vybrat</button>
     <button class="icon-btn" onclick="toggleCalc()" id="btnCalc" style="width:36px;padding:0;" data-tip="Kalkulačka marže"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 4h2M10 4h2M4 8h2M10 8h2M4 12h2M10 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
     <button class="icon-btn" id="btnMobileSimple" onclick="toggleMobileSimple()" data-tip="Jednoduché zobrazení" style="width:36px;padding:0;font-size:14px;">☰</button>
-    <button class="icon-btn" id="btnCustomerMode" onclick="toggleCustomerMode()" data-tip="Zákaznický režim" style="width:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    <button class="icon-btn" id="btnCustomerMode" onclick="toggleCustomerMode()" data-tip="Zákaznický režim" style="width:36px;padding:0;display:none;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
     <button class="icon-btn" id="btnGlobalSearch" style="width:36px;padding:0;" onclick="openGlobalSearch()" data-tip="Hledat napříč sekcemi (Ctrl+F)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 10l3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
     <button class="icon-btn" id="btnSettings" style="width:36px;padding:0;font-size:16px;" onclick="openSettings()">⚙</button>
     <button class="add-btn" id="btnAdd" onclick="openAddModal()">+ Přidat</button>
@@ -2129,6 +2129,8 @@ function switchTab(t){
   }
   var bulkBtn = document.getElementById('btnBulkMode');
   if (bulkBtn) bulkBtn.style.display = (t === 'sold' || t === 'dashboard') ? 'none' : '';
+  var btnCM = document.getElementById('btnCustomerMode');
+  if (btnCM) btnCM.style.display = (t === 'stock' && viewMode === 'grid') ? 'inline-flex' : 'none';
   var btnAdd = document.getElementById('btnAdd');
   if (btnAdd) btnAdd.style.display = (t === 'dashboard' || t === 'wishlist') ? 'none' : '';
   // Dashboard: skryj stats-bar a filters, ukaž jen grid
@@ -2729,6 +2731,8 @@ function setView(mode) {
   viewMode = mode;
   document.getElementById('btnGrid').classList.toggle('active', mode === 'grid');
   document.getElementById('btnTable').classList.toggle('active', mode === 'table');
+  var btnCM = document.getElementById('btnCustomerMode');
+  if (btnCM) btnCM.style.display = (tab === 'stock' && mode === 'grid') ? 'inline-flex' : 'none';
   renderItems();
 }
 
@@ -5521,7 +5525,6 @@ function toggleCustomerMode() {
     btn.style.color = customerMode ? 'var(--accent)' : '';
     btn.style.borderColor = customerMode ? 'var(--accent)' : '';
     btn.style.background = customerMode ? 'rgba(200,255,0,0.08)' : '';
-    btn.title = customerMode ? 'Zákaznický režim ZAPNUT' : 'Zákaznický režim';
   }
   renderItems();
 }
