@@ -2999,6 +2999,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
     var _bulkLabel = '<span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:2px 5px;font-family:monospace;margin-right:6px;">BULK</span>'+rec.name+' <span style="font-size:10px;color:var(--muted);font-family:monospace;">('+children.length+' ks)</span>'+_editIcon;
     // Bulk hlavní řádek
     out += '<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+'" onclick="toggleBulkExpand(\''+rec.id+'\')" onmouseover="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'1\';_eb.style.pointerEvents=\'auto\';}" onmouseout="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'0\';_eb.style.pointerEvents=\'none\';}">';
+    if(bulkMode) out += '<td style="width:32px;"></td>';
     out += '<td colspan="3" class="td-name" style="font-weight:700;">'+_bulkLabel+'</td>';
     out += '<td></td>';
     out += '<td></td>';
@@ -3043,6 +3044,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
         var chRoi = chBpKc > 0 ? ((chProfit/chBpKc)*100).toFixed(1) : null;
         var chPc = chProfit>0?'color:var(--accent)':chProfit<0?'color:var(--danger)':'color:var(--muted)';
         out += '<tr class="bulk-child-row" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
+        if(bulkMode) out += '<td style="width:32px;"></td>';
         out += '<td><span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
         out += '<td style="padding:4px 6px;">'+chImgHtml+'</td>';
         out += '<td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+chNameHtml+'</td>';
@@ -5847,6 +5849,7 @@ document.addEventListener('click', function(e) {
   if (action === 'bulkdelete') { bulkDelete(); return; }
   if (action === 'bulkchangeloc') { bulkChangeLoc(); return; }
   if (action === 'bulkprodat') { openBulkSellModal(); return; }
+  if (action === 'bulkreturnwait') { bulkReturnWaiting(); return; }
   if (action === 'savebulksell') { saveBulkSell(); return; }
   if (action === 'bulkselectall') { bulkSelectAll(); return; }
   if (action === 'bulkclear') { bulkClear(); return; }
@@ -6179,6 +6182,8 @@ function updateBulkBar(){
     if(locBtn) locBtn.style.display = (tab === 'stock') ? '' : 'none';
     var prodatBtn = document.getElementById('btnBulkProdat');
     if(prodatBtn) prodatBtn.style.display = (tab === 'stock') ? '' : 'none';
+    var returnWaitBtn = document.getElementById('btnBulkReturnWait');
+    if(returnWaitBtn) returnWaitBtn.style.display = (tab === 'waiting') ? '' : 'none';
   } else {
     bar.classList.add('hiding');
     setTimeout(function(){ bar.classList.remove('vis'); bar.classList.remove('hiding'); }, 200);
@@ -6278,6 +6283,31 @@ function bulkClear(){
   if(btn) { btn.textContent = 'Vybrat'; btn.style.color=''; btn.style.borderColor=''; }
   updateBulkBar();
   renderItems();
+}
+
+function bulkReturnWaiting(){
+  if(bulkSelected.size===0) return;
+  var cnt = bulkSelected.size;
+  makeConfirmOverlay(
+    'Vrátit '+cnt+' vybranou/é položku/y na sklad?<br><span style="color:var(--muted);font-size:12px;">Prodejní informace budou smazány.</span>',
+    'Vrátit na sklad', '#ff9900',
+    function(){
+      var _grps = getPlatGroups();
+      bulkSelected.forEach(function(id){
+        var rIt = items.find(function(x){ return x.id===id; });
+        if(!rIt || rIt.saleState!=='waiting') return;
+        var _sw = rIt.soldWhere || '';
+        var _isEshop = _grps.eshopy && _grps.eshopy.some(function(p){ return p.toLowerCase()===_sw.toLowerCase(); });
+        if(_sw && _isEshop) { rIt.location = _sw; }
+        else if(_sw) { rIt.location = 'Na cestě'; }
+        rIt.saleState='stock'; rIt.waitState=null; rIt.sellPrice=null; rIt.profit=null;
+        onReturnToStock(rIt);
+      });
+      bulkSelected.clear();
+      sv(); renderStats(); renderItems();
+      showToast(cnt+' položek vráceno na sklad.');
+    }
+  );
 }
 
 function bulkChangeLoc(){
@@ -10604,6 +10634,7 @@ rebuildBrandTables();
   <button data-action="bulkdelete" class="bulk-btn bulk-btn-del">Smazat vybrané</button>
   <button data-action="bulkchangeloc" class="bulk-btn bulk-btn-sec" id="btnBulkChangeLoc">Změnit lokaci</button>
   <button data-action="bulkprodat" class="bulk-btn bulk-btn-sec" id="btnBulkProdat" style="border-color:var(--accent);color:var(--accent);">Prodat bulk</button>
+  <button data-action="bulkreturnwait" class="bulk-btn bulk-btn-sec" id="btnBulkReturnWait" style="border-color:#ff9900;color:#ff9900;">Vrátit vybrané</button>
   <button data-action="bulkselectall" class="bulk-btn bulk-btn-sec">Vybrat vše</button>
   <button data-action="bulkclear" class="bulk-btn bulk-btn-sec">Zrušit výběr</button>
 </div>
