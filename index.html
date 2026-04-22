@@ -944,9 +944,9 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 <script type="module">
   // FIREBASE CONFIG — vyplň po vytvoření projektu (viz návod)
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged }
+  import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, deleteUser }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot }
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const FIREBASE_CONFIG = {
@@ -969,7 +969,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     // Exportuj na window pro přístup z hlavního scriptu
     window._fbAuth = auth;
     window._fbDb = db;
-    window._fbFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot };
+    window._fbFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteUser };
     window._fbReady = true;
 
     // Sleduj přihlašovací stav
@@ -1445,6 +1445,14 @@ function makeConfirmOverlay(msgHtml, yesLabel, yesCls, onYes) {
 }
 
 const SK = 'sklad_v3';
+
+function clearSkladLocalStorage() {
+  ['sklad_v3','sklad_v3_savedAt','sklad_v3_snapshots','sklad_custom_cats_v1',
+   'sklad_plat_groups_v1','sklad_payment_opts_v1','sklad_loc_opts_v1','sklad_wishlist_v1',
+   'carrier_freq','soldWhere_freq','payoutCustom_freq','an_order_v2','sa_order',
+   'ste_brand_order','ste_custom_tables'].forEach(function(k){ localStorage.removeItem(k); });
+}
+
 const PLATFORMS = [
   'StockX','Hypeboost','Klekt','Alias',
   'TheBeast','Stuffsell','Purekickz','Pikastore','Sellect','Released','Tnsky','Adonio','Sneakerstore','Spikaprague','Section','Sneakysneakers','Sneakersnow',
@@ -8291,9 +8299,16 @@ var _fbUnsubscribe = null; // onSnapshot unsubscribe funkce
 document.addEventListener('fb-auth', function(e) {
   updateUserBadge(e.detail && e.detail.user ? e.detail.user : null);
 
-  // Odhlášení — zruš listener
+  // Odhlášení — zruš listener a vyčisti data
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
   _fbCloudReady = false;
+
+  if (!(e.detail && e.detail.user)) {
+    clearSkladLocalStorage();
+    items = [];
+    renderStats(); renderItems();
+    return;
+  }
 
   if (e.detail && e.detail.user) {
     var fns = window._fbFns;
@@ -8310,6 +8325,8 @@ document.addEventListener('fb-auth', function(e) {
           if (items.length > 0) {
             fbSaveToCloud();
             showToast('Data nahrána do cloudu.');
+          } else {
+            showOnboarding();
           }
         }
         return;
@@ -8481,10 +8498,76 @@ function handleCloudAuthBtn() {
   }
 }
 
+function showOnboarding() {
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:32px;width:90%;max-width:420px;font-family:\'DM Sans\',sans-serif;">' +
+    '<div style="font-family:Syne,sans-serif;font-size:22px;font-weight:800;margin-bottom:6px;">Vítej v Skladu!</div>' +
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Tvůj osobní nástroj pro správu resell skladu. Sleduj nákupy, prodeje, platformy a zisky na jednom místě.</div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;">' +
+      '<div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="color:var(--accent);font-size:16px;">+</span> Přidávej položky tlačítkem <b>+ Přidat</b> nebo zkratkou <kbd style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:11px;">N</kbd></div>' +
+      '<div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="color:var(--accent);font-size:16px;">→</span> Prodej položky přesune do záložky <b>Čeká</b>, pak do <b>Prodáno</b></div>' +
+      '<div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="color:var(--accent);font-size:16px;">☁</span> Data se automaticky ukládají do cloudu</div>' +
+    '</div>' +
+    '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Začít</button>' +
+  '</div>';
+  document.body.appendChild(ov);
+}
+
+function deleteAccount() {
+  if (!window._fbUser) { showToast('Nejsi přihlášen.', 'err'); return; }
+  makeConfirmOverlay(
+    'Smazat účet natrvalo?<br><span style="color:var(--muted);font-size:12px;">Všechna tvoje data v cloudu budou nenávratně smazána. Tuto akci nelze vzít zpět.</span>',
+    'Smazat účet', 'var(--danger)',
+    function() {
+      var fns = window._fbFns;
+      if (!fns || !window._fbDb) return;
+      var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
+      fns.deleteDoc(docRef)
+        .then(function() { return fns.deleteUser(window._fbUser); })
+        .then(function() {
+          clearSkladLocalStorage();
+          showToast('Účet byl smazán.');
+          setTimeout(function() { location.reload(); }, 1500);
+        })
+        .catch(function(e) {
+          if (e.code === 'auth/requires-recent-login') {
+            showToast('Pro smazání účtu se musíš znovu přihlásit.', 'err');
+          } else {
+            showToast('Chyba při mazání účtu: ' + (e.message || e.code), 'err');
+          }
+        });
+    }
+  );
+}
+
+function openPrivacyPolicy() {
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  function close() { ov.remove(); }
+  ov.addEventListener('click', function(e){ if(e.target===ov) close(); });
+  ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto;font-family:\'DM Sans\',sans-serif;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">' +
+      '<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;">Zásady ochrany osobních údajů</div>' +
+      '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0;">×</button>' +
+    '</div>' +
+    '<div style="font-size:13px;color:var(--muted);line-height:1.7;">' +
+      '<p style="margin-bottom:12px;"><b style="color:var(--text);">Jaká data sbíráme</b><br>E-mailová adresa pro přihlášení a data skladu, která sám zadáváš (názvy položek, ceny, platformy, obrázky a podobně).</p>' +
+      '<p style="margin-bottom:12px;"><b style="color:var(--text);">Kde jsou data uložena</b><br>Data jsou uložena v cloudové databázi Google Firebase (Firestore) na serverech v EU. Nikdo jiný nemá přístup k tvým datům.</p>' +
+      '<p style="margin-bottom:12px;"><b style="color:var(--text);">Jak data používáme</b><br>Data slouží výhradně k provozu aplikace. Neprodáváme je ani nesdílíme s třetími stranami.</p>' +
+      '<p style="margin-bottom:12px;"><b style="color:var(--text);">Cookies a lokální úložiště</b><br>Aplikace ukládá data do localStorage tvého prohlížeče jako lokální zálohu. Žádné sledovací cookies nepoužíváme.</p>' +
+      '<p style="margin-bottom:0;"><b style="color:var(--text);">Smazání dat</b><br>Svůj účet a všechna data můžeš kdykoliv smazat v Nastavení → Smazat účet.</p>' +
+    '</div>' +
+  '</div>';
+  document.body.appendChild(ov);
+}
+
 function updateCloudAuthBtn() {
   var btn = document.getElementById('btnCloudAuth');
   if (!btn) return;
   btn.textContent = window._fbUser ? 'Odhlásit se' : 'Přihlásit se';
+  var delWrap = document.getElementById('deleteAccountWrap');
+  if (delWrap) delWrap.style.display = window._fbUser ? '' : 'none';
 }
 
 document.addEventListener('fb-auth', function(e) {
@@ -10499,7 +10582,13 @@ rebuildBrandTables();
     <div class="fs-title" style="color:var(--accent);">Cloud Sync</div>
     <div id="cloudSyncStatus" style="font-size:12px;margin-bottom:8px;padding:8px;background:var(--surface);border-radius:6px;border:1px solid var(--border);font-family:'DM Mono',monospace;"></div>
     <button onclick="handleCloudAuthBtn()" class="btn-sec" style="font-size:12px;width:100%;margin-bottom:6px;" id="btnCloudAuth">Přihlásit se</button>
-    <button onclick="if(!window._fbUser){showToast('Nejsi přihlášen','err');return;}localStorage.setItem('sklad_v3_savedAt','2000-01-01');fbSaveToCloud();showToast('Nahrávám data do cloudu...');" class="btn-sec" style="font-size:12px;width:100%;">⬆ Nahrát vše do cloudu</button>
+    <button onclick="if(!window._fbUser){showToast('Nejsi přihlášen','err');return;}localStorage.setItem('sklad_v3_savedAt','2000-01-01');fbSaveToCloud();showToast('Nahrávám data do cloudu...');" class="btn-sec" style="font-size:12px;width:100%;margin-bottom:6px;">⬆ Nahrát vše do cloudu</button>
+    <div id="deleteAccountWrap" style="display:none;margin-top:4px;padding-top:10px;border-top:1px solid var(--border);">
+      <button onclick="cm('moSettings');setTimeout(deleteAccount,100);" class="btn-sec" style="font-size:12px;width:100%;border-color:#ff444433;color:var(--danger);">Smazat účet a všechna data</button>
+    </div>
+    <div style="margin-top:10px;text-align:center;">
+      <button onclick="openPrivacyPolicy()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit;">Zásady ochrany osobních údajů</button>
+    </div>
   </div>
 
   <!-- Záloha -->
