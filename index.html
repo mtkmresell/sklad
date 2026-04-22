@@ -4017,8 +4017,7 @@ function openAddModal(){
   updateFieldsByCat('sneakers');
   setStockIntent('');
   renderTagSuggestions();
-  var _fCondCustom = document.getElementById('fCondCustom');
-  if(_fCondCustom) { _fCondCustom.style.display='none'; _fCondCustom.value=''; }
+  setFCondValue('DS');
   document.getElementById('fQty').value='1';
   var _todayEl = document.getElementById('fBuyDate');
   var _today = new Date().toISOString().slice(0,10);
@@ -4082,6 +4081,7 @@ function openEdit(id){
   var fECur=document.getElementById('fExtraCurrency');if(fECur)fECur.value=it.extraCurrency||'CZK';
   document.getElementById('fSize').value=it.size||'';
   document.getElementById('fSku').value=it.sku||'';
+  setFCondValue(it.condition||'DS');
   document.getElementById('fBuyDate').value=it.buyDate||'';
   document.getElementById('fQty').value=it.qty||1;
   document.getElementById('fWhere').value=it.buyWhere||'';
