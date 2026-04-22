@@ -8422,7 +8422,18 @@ function doRegister() {
   if(btn){btn.textContent='Registruji…';btn.disabled=true;}
   if(errEl) errEl.style.display='none';
   window._fbFns.createUserWithEmailAndPassword(window._fbAuth, email, pass)
-    .then(function() { cm('moLogin'); showToast('Účet vytvořen a přihlášen.'); })
+    .then(function(cred) {
+      var uid = cred.user.uid;
+      var consentDoc = window._fbFns.doc(window._fbDb, 'users', uid, 'meta', 'consent');
+      window._fbFns.setDoc(consentDoc, {
+        consentGiven: true,
+        consentDate: new Date().toISOString(),
+        consentVersion: '1.0',
+        email: email,
+        method: 'registration-checkbox'
+      });
+      cm('moLogin'); showToast('Účet vytvořen a přihlášen.');
+    })
     .catch(function(e) {
       var msg = 'Chyba registrace.';
       if (e.code==='auth/email-already-in-use') msg='Tento e-mail je již registrován.';
