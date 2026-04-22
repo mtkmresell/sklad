@@ -8403,6 +8403,10 @@ function switchAuthTab(tab) {
   if (btn) { btn.textContent = isLogin ? 'Přihlásit se' : 'Registrovat'; btn.onclick = isLogin ? doLogin : doRegister; }
   var errEl = document.getElementById('loginError');
   if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  var consentWrap = document.getElementById('registerConsentWrap');
+  if (consentWrap) consentWrap.style.display = isLogin ? 'none' : '';
+  var consentCb = document.getElementById('registerConsent');
+  if (consentCb && isLogin) consentCb.checked = false;
 }
 
 function doRegister() {
@@ -8412,6 +8416,8 @@ function doRegister() {
   var btn = document.getElementById('btnDoLogin');
   if (!email || !pass) { if(errEl){errEl.textContent='Vyplň e-mail a heslo.';errEl.style.display='block';} return; }
   if (pass.length < 6) { if(errEl){errEl.textContent='Heslo musí mít alespoň 6 znaků.';errEl.style.display='block';} return; }
+  var consentCb = document.getElementById('registerConsent');
+  if (!consentCb || !consentCb.checked) { if(errEl){errEl.textContent='Pro registraci je nutný souhlas se zpracováním údajů.';errEl.style.display='block';} return; }
   if (!window._fbFns || !window._fbAuth) { if(errEl){errEl.textContent='Firebase není připojeno.';errEl.style.display='block';} return; }
   if(btn){btn.textContent='Registruji…';btn.disabled=true;}
   if(errEl) errEl.style.display='none';
@@ -8553,10 +8559,12 @@ function openPrivacyPolicy() {
     '</div>' +
     '<div style="font-size:13px;color:var(--muted);line-height:1.7;">' +
       '<p style="margin-bottom:12px;"><b style="color:var(--text);">Jaká data sbíráme</b><br>E-mailová adresa pro přihlášení a data skladu, která sám zadáváš (názvy položek, ceny, platformy, obrázky a podobně).</p>' +
+      '<p style="margin-bottom:12px;"><b style="color:var(--text);">Právní základ zpracování</b><br>Data zpracováváme na základě tvého souhlasu uděleného při registraci (čl. 6 odst. 1 písm. a) GDPR). Souhlas můžeš kdykoli odvolat smazáním účtu.</p>' +
       '<p style="margin-bottom:12px;"><b style="color:var(--text);">Kde jsou data uložena</b><br>Data jsou uložena v cloudové databázi Google Firebase (Firestore) na serverech v EU. Nikdo jiný nemá přístup k tvým datům.</p>' +
       '<p style="margin-bottom:12px;"><b style="color:var(--text);">Jak data používáme</b><br>Data slouží výhradně k provozu aplikace. Neprodáváme je ani nesdílíme s třetími stranami.</p>' +
       '<p style="margin-bottom:12px;"><b style="color:var(--text);">Cookies a lokální úložiště</b><br>Aplikace ukládá data do localStorage tvého prohlížeče jako lokální zálohu. Žádné sledovací cookies nepoužíváme.</p>' +
-      '<p style="margin-bottom:0;"><b style="color:var(--text);">Smazání dat</b><br>Svůj účet a všechna data můžeš kdykoliv smazat v Nastavení → Smazat účet.</p>' +
+      '<p style="margin-bottom:12px;"><b style="color:var(--text);">Přenositelnost dat</b><br>Svá data si kdykoli můžeš stáhnout ve formátu JSON nebo Excel přes Nastavení → Export zálohy.</p>' +
+      '<p style="margin-bottom:0;"><b style="color:var(--text);">Smazání dat</b><br>Svůj účet a všechna data můžeš kdykoliv smazat v Nastavení → Smazat účet. Tím zároveň odvoláváš souhlas se zpracováním.</p>' +
     '</div>' +
   '</div>';
   document.body.appendChild(ov);
@@ -10912,6 +10920,12 @@ rebuildBrandTables();
       <span onclick="doForgotPassword()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;">Zapomenuté heslo?</span>
     </div>
     <div id="loginError" style="font-size:12px;color:var(--danger);margin-bottom:12px;display:none;"></div>
+    <div id="registerConsentWrap" style="display:none;margin-bottom:14px;">
+      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);line-height:1.5;">
+        <input type="checkbox" id="registerConsent" style="margin-top:2px;width:14px;height:14px;flex-shrink:0;accent-color:var(--accent);">
+        <span>Souhlasím se <span onclick="event.preventDefault();event.stopPropagation();openPrivacyPolicy();" style="color:var(--accent);text-decoration:underline;cursor:pointer;">zpracováním osobních údajů</span> za účelem poskytování služby Sklad.</span>
+      </label>
+    </div>
     <div style="display:flex;gap:8px;">
       <button onclick="cm('moLogin')" class="btn-sec" style="flex:1;">Zrušit</button>
       <button onclick="doLogin()" class="btn-pri" style="flex:2;" id="btnDoLogin">Přihlásit se</button>
