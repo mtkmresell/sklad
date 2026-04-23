@@ -9543,9 +9543,9 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
   // Použij filtrovaná data pro stats
   stats = filtStats; sold = filtSold;
   var avgP=stats.count?Math.round(stats.totalProfit/stats.count):0;
-  // Průměr ROI = průměr měsíčních ROI
-  var _monthRois=(function(){var md={};filtSold.forEach(function(it){var d=it.payoutDate||it.saleDate||'';var k=d.slice(0,7);if(!k)return;if(!md[k])md[k]={cost:0,profit:0};if(it.type==='bulk'){md[k].cost+=(it.totalBuyPrice||0);md[k].profit+=(it.profit||0);}else{var er=it.profitRateEur||eurRate||25;var bp=it.buyCurrency==='EUR'?(it.buyPrice||0)*er:(it.buyPrice||0);var ec=it.extraCurrency==='EUR'?(it.extraCosts||0)*er:(it.extraCosts||0);var p=it.profit!=null?it.profit:((it.sellPrice||0)-bp-ec);md[k].cost+=bp;md[k].profit+=p;}});return Object.values(md).filter(function(m){return m.cost>0;}).map(function(m){return m.profit/m.cost*100;});})();
-  var avgR=_monthRois.length?Math.round(_monthRois.reduce(function(a,b){return a+b;},0)/_monthRois.length):0;
+  // ROI = celkový zisk / celkové náklady (vážený průměr, nezávisí na počtu položek)
+  var _totalCost=filtSold.reduce(function(s,it){if(it.type==='bulk')return s+(it.totalBuyPrice||0);var er=it.profitRateEur||eurRate||25;var bp=it.buyCurrency==='EUR'?(it.buyPrice||0)*er:(it.buyPrice||0);var ec=it.extraCurrency==='EUR'?(it.extraCosts||0)*er:(it.extraCosts||0);return s+bp+ec;},0);
+  var avgR=_totalCost>0?Math.round(stats.totalProfit/_totalCost*100):0;
   html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px;">';
   [{l:'Celkem prodejů',n:stats.count,pre:'',suf:'',c:'var(--text)'},{l:'Celkový zisk',n:Math.round(stats.totalProfit),pre:(stats.totalProfit>=0?'+':''),suf:' Kč',c:'var(--accent)'},{l:'Celkové tržby',n:Math.round(stats.totalRevenue),pre:'',suf:' Kč',c:'var(--text)'},{l:'Průměr/kus',n:avgP,pre:(avgP>=0?'+':''),suf:' Kč',c:avgP>=0?'var(--accent)':'var(--danger)'},{l:'Průměr ROI',n:avgR,pre:(avgR>=0?'+':''),suf:'%',c:avgR>=0?'var(--accent)':'var(--danger)'}].forEach(function(k){
     html+='<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;">';
