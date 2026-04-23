@@ -4355,6 +4355,22 @@ function saveItem(){
     if (_propagated > 0) showToast('Cílová cena nastavena u ' + _propagated + ' dalších stejných položek.');
   }
   sv();buildLocationFilter();renderStats();renderItems();cm('moAdd');
+  // Propagace faktury na položky se stejným nákupem (datum + místo + číslo obj.)
+  if (editId && d.invoiceUrl && d.buyDate && d.buyWhere && d.orderNum) {
+    var _eBuyDate  = d.buyDate.trim();
+    var _eBuyWhere = d.buyWhere.trim().toLowerCase();
+    var _eOrderNum = d.orderNum.trim().toLowerCase();
+    var _invPropagated = 0;
+    items.forEach(function(it) {
+      if (it.id === editId) return;
+      if ((it.buyDate  || '').trim()              !== _eBuyDate)  return;
+      if ((it.buyWhere || '').trim().toLowerCase() !== _eBuyWhere) return;
+      if ((it.orderNum || '').trim().toLowerCase() !== _eOrderNum) return;
+      it.invoiceUrl = d.invoiceUrl;
+      _invPropagated++;
+    });
+    if (_invPropagated > 0) showToast('Odkaz na fakturu doplněn u ' + _invPropagated + ' dalších položek ze stejného nákupu.');
+  }
   // Ulož do historického cache
   if (d.name) itemCacheSet(d.name, {sku: d.sku, stockxUrl: d.stockxUrl || '', imgUrl: d.imgUrl});
   showToast(editId ? 'Položka upravena' : (qty>1 ? qty+'× položka přidána' : 'Položka přidána'));
