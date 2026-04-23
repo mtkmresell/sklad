@@ -4337,15 +4337,14 @@ function saveItem(){
       var _iSize = (it.size || '').trim().toLowerCase();
       if (_iName !== _eName) return;
       var _match;
-      if (_eSku) {
-        // Má SKU → páruj název + SKU, velikost neřeš (tenisky)
+      if (_eSku && _eSize) {
+        _match = _iSku === _eSku && _iSize === _eSize;
+      } else if (_eSku) {
         _match = _iSku === _eSku;
       } else if (_eSize) {
-        // Nemá SKU, má velikost → páruj název + velikost (oblečení)
-        _match = _iSize === _eSize;
+        _match = !_iSku && _iSize === _eSize;
       } else {
-        // Nemá SKU ani velikost → stačí název (Pokémon, sběratelské, Hot Wheels)
-        _match = true;
+        _match = !_iSku && !_iSize;
       }
       if (_match) {
         it.targetPrice    = d.targetPrice;
