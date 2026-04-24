@@ -6136,7 +6136,7 @@ function updateFilterBtn(type, selected, defaultLabel) {
 }
 // Předdefinované značky — víceslovné musí být před jednoslovnými
 var KNOWN_BRANDS = [
-  'New Balance','Air Jordan','Nike SB','Nike ACG',
+  'New Balance','Nike SB','Nike ACG',
   'Nike','Jordan','adidas','Yeezy','YZY',
   'Corteiz','Supreme','Palace','Stüssy','Stussy',
   'The North Face','Arcteryx','Stone Island',
@@ -6151,6 +6151,8 @@ var KNOWN_BRANDS = [
 function detectBrand(name) {
   if (!name) return null;
   var n = name.trim();
+  // "Air Jordan ..." a "Jordan ..." patří pod jednu značku Jordan
+  if (n.toLowerCase().startsWith('air jordan')) return 'Jordan';
   for (var i = 0; i < KNOWN_BRANDS.length; i++) {
     var b = KNOWN_BRANDS[i];
     if (n.toLowerCase().startsWith(b.toLowerCase())) return b;
