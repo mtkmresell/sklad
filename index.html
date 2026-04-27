@@ -9079,10 +9079,11 @@ function renderSoldView(){
     html+='<span style="font-family:\'Syne\',sans-serif;font-weight:700;font-size:15px;">'+mn+' '+grp.year+'</span>';
     html+='<span style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+grp.items.length+' ks</span>';
     html+='<div style="flex:1;"></div>';
-    var _grpAvgRoi=null;
-    (function(){var totalCost=0,totalProfit=0;grp.items.forEach(function(it){if(it.type==='bulk'){totalCost+=(it.totalBuyPrice||0);totalProfit+=(it.profit||0);}else{var er=it.profitRateEur||eurRate||25;var bp=it.buyCurrency==='EUR'?(it.buyPrice||0)*er:(it.buyPrice||0);var ec=it.extraCurrency==='EUR'?(it.extraCosts||0)*er:(it.extraCosts||0);var p=it.profit!=null?it.profit:((it.sellPrice||0)-bp-ec);totalCost+=bp;totalProfit+=p;}});if(totalCost>0)_grpAvgRoi=Math.round(totalProfit/totalCost*100);})();
+    var _grpAvgRoi=null,_grpTotalCost=0;
+    (function(){var totalCost=0,totalProfit=0;grp.items.forEach(function(it){if(it.type==='bulk'){totalCost+=(it.totalBuyPrice||0);totalProfit+=(it.profit||0);}else{var er=it.profitRateEur||eurRate||25;var bp=it.buyCurrency==='EUR'?(it.buyPrice||0)*er:(it.buyPrice||0);var ec=it.extraCurrency==='EUR'?(it.extraCosts||0)*er:(it.extraCosts||0);var p=it.profit!=null?it.profit:((it.sellPrice||0)-bp-ec);totalCost+=bp;totalProfit+=p;}});_grpTotalCost=totalCost;if(totalCost>0)_grpAvgRoi=Math.round(totalProfit/totalCost*100);})();
     if(_grpAvgRoi!=null){var _rc=_grpAvgRoi>=0?'var(--accent)':'var(--danger)';html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:'+_rc+';background:rgba(200,255,0,0.07);padding:1px 7px;border-radius:4px;border:1px solid rgba(200,255,0,0.18);">'+(_grpAvgRoi>=0?'+':'')+_grpAvgRoi+'% ROI</span>';}
     html+='<span style="font-family:\'DM Mono\',monospace;font-size:12px;color:var(--accent);font-weight:700;">'+czkSign(gs.totalProfit)+'</span>';
+    if(_grpTotalCost>0)html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">'+czk(_grpTotalCost)+' inv.</span>';
     html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">'+czk(gs.totalRevenue)+' tržby</span>';
     html+='</div>';
     html+='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
