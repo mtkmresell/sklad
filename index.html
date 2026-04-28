@@ -5995,7 +5995,7 @@ document.addEventListener('click', function(e) {
   else if (action === 'markpaid') { openPayoutModal(id); }
   else if (action === 'waitstate-completed') { if(confirm('Označit payout jako obdržený?')) changeWaitState(id, 'completed'); }
   else if (action === 'sizeunit') { event.stopPropagation(); toggleSizeUnit(); }
-  else if (action === 'bulktoggle') { e.stopPropagation(); bulkToggle(id); }
+  else if (action === 'bulktoggle') { e.stopPropagation(); bulkToggle(id, e.shiftKey); }
   else if (action === 'bulkselectallcb') { event.stopPropagation(); btn.checked ? bulkSelectAll() : bulkClear(); }
   else if (action === 'platexpand') { togglePlatExpand(btn.dataset.group); }
   else if (action === 'tgplat') { tgPlat(btn); }
@@ -6209,6 +6209,7 @@ function toggleTagFilter(val, checked) {
 
 
 let bulkMode = false;
+var lastBulkClickId = null;
 
 function toggleBulkMode(){
   bulkMode = !bulkMode;
@@ -6319,11 +6320,30 @@ function animateCountUp() {
   });
 }
 
-function bulkToggle(id){
+function bulkToggle(id, shiftKey){
+  if(shiftKey && lastBulkClickId && lastBulkClickId !== id){
+    var list = getFiltered();
+    var ids = list.map(function(it){ return it.id; });
+    var fromIdx = ids.indexOf(lastBulkClickId);
+    var toIdx = ids.indexOf(id);
+    if(fromIdx !== -1 && toIdx !== -1){
+      var start = Math.min(fromIdx, toIdx);
+      var end = Math.max(fromIdx, toIdx);
+      var shouldSelect = !bulkSelected.has(id);
+      for(var i = start; i <= end; i++){
+        if(shouldSelect) bulkSelected.add(ids[i]);
+        else bulkSelected.delete(ids[i]);
+      }
+      lastBulkClickId = id;
+      updateBulkBar();
+      renderItems();
+      return;
+    }
+  }
   if(bulkSelected.has(id)) bulkSelected.delete(id);
   else bulkSelected.add(id);
+  lastBulkClickId = id;
   updateBulkBar();
-  // Najdi checkbox v correct TD - data-id je na TD, input je uvnitř
   const td = document.querySelector('.bulk-cb-td[data-id="'+id+'"]');
   const cb = td ? td.querySelector('input') : null;
   if(cb) cb.checked=bulkSelected.has(id);
@@ -6338,6 +6358,7 @@ function bulkSelectAll(){
 
 function bulkClear(){
   bulkSelected.clear();
+  lastBulkClickId = null;
   bulkMode = false;
   const btn = document.getElementById('btnBulkMode');
   if(btn) { btn.textContent = 'Vybrat'; btn.style.color=''; btn.style.borderColor=''; }
