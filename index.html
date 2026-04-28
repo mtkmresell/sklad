@@ -5334,18 +5334,6 @@ function openDetail(id) {
 
   document.getElementById('detailContent').innerHTML = sectionsHtml + btnsHtml;
   currentDetailId = id;
-  // Aktualizuj stav nav šipek
-  var _list = getFiltered();
-  var _idx = _list.findIndex(function(x){ return x.id === id; });
-  var _prevBtn = document.getElementById('detailNavPrev');
-  var _nextBtn = document.getElementById('detailNavNext');
-  if (_prevBtn) _prevBtn.style.opacity = _list.length > 1 ? '1' : '0.3';
-  if (_nextBtn) _nextBtn.style.opacity = _list.length > 1 ? '1' : '0.3';
-  if (_prevBtn) _prevBtn.style.display = '';
-  if (_nextBtn) _nextBtn.style.display = '';
-  // Zobraz pozici
-  var _posEl = document.getElementById('detailNavPos');
-  if (_posEl) _posEl.textContent = _list.length > 1 ? (_idx+1)+'/'+_list.length : '';
   document.getElementById('moDetail').classList.add('open');
   var _moDetailInner = document.querySelector('#moDetail .modal');
   if(_moDetailInner) _moDetailInner.scrollTop = 0;
@@ -10591,14 +10579,7 @@ rebuildBrandTables();
 <div class="mo" id="moDetail">
 <div class="modal" style="max-width:560px;">
   <div class="mh" style="margin-bottom:20px;">
-    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
-      <button id="detailNavPrev" onclick="navigateDetail(-1)" title="Předchozí (←)" style="flex-shrink:0;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:15px;padding:3px 10px;line-height:1;">‹</button>
-      <div style="flex:1;min-width:0;">
-        <div class="mt2" id="detailTitle" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Detail položky</div>
-        <div id="detailNavPos" style="font-size:10px;color:var(--muted2);font-family:'DM Mono',monospace;margin-top:1px;"></div>
-      </div>
-      <button id="detailNavNext" onclick="navigateDetail(1)" title="Další (→)" style="flex-shrink:0;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;font-size:15px;padding:3px 10px;line-height:1;">›</button>
-    </div>
+    <div class="mt2" id="detailTitle">Detail položky</div>
   </div>
   <div id="detailContent"></div>
 </div>
