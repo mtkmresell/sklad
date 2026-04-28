@@ -1026,17 +1026,10 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <span class="si" style="font-size:13px;opacity:0.5;font-family:monospace;font-weight:700;">⌕</span>
     <input type="text" id="searchInput" placeholder="Název, SKU, objednávka..." ><span id="searchClear" data-action="searchclear" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:14px;width:18px;height:18px;align-items:center;justify-content:center;border-radius:50%;background:var(--surface3);">✕</span>
   </div>
-  <select id="filterCategory">
-    <option value="">Všechny typy</option>
-    <option value="sneakers">Sneakers</option>
-    <option value="obleceni">Oblečení</option>
-    <option value="pokemon">Pokémon</option>
-    <option value="lego">LEGO</option>
-    <option value="hotwheels">Hot Wheels</option>
-    <option value="alternate">Alternate</option>
-    <option value="sberatelske">Sběratelské</option>
-    <option value="jine">Jiné</option>
-  </select>
+  <div class="multi-filter" id="catFilterWrap" style="position:relative;">
+    <button class="multi-filter-btn" id="catFilterBtn" data-action="multifilter" data-filter="cat"><span class="mfb-label">Všechny typy</span><span class="mfb-arrow">▾</span></button>
+    <div class="multi-filter-drop" id="catFilterDrop" style="display:none;"></div>
+  </div>
   <div class="multi-filter" id="brandFilterWrap" style="position:relative;">
     <button class="multi-filter-btn" id="brandFilterBtn" data-action="multifilter" data-filter="brand"><span class="mfb-label">Všechny značky</span><span class="mfb-arrow">▾</span></button>
     <div class="multi-filter-drop" id="brandFilterDrop" style="display:none;"></div>
@@ -1049,10 +1042,10 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <button class="multi-filter-btn" id="tagFilterBtn" data-action="multifilter" data-filter="tag"><span class="mfb-label">Všechny štítky</span><span class="mfb-arrow">▾</span></button>
     <div class="multi-filter-drop" id="tagFilterDrop" style="display:none;"></div>
   </div>
-  <select id="filterLocation">
-    <option value="">Všechny sklady</option>
-    <option value="Doma">Doma</option>
-  </select>
+  <div class="multi-filter" id="locFilterWrap" style="position:relative;">
+    <button class="multi-filter-btn" id="locFilterBtn" data-action="multifilter" data-filter="loc"><span class="mfb-label">Všechny sklady</span><span class="mfb-arrow">▾</span></button>
+    <div class="multi-filter-drop" id="locFilterDrop" style="display:none;"></div>
+  </div>
 
   <select id="filterSoldWhere">
     <option value="">Všechna místa</option>
@@ -1648,14 +1641,7 @@ function buildCatSelects() {
     if(fCat._csSync) fCat._csSync();
   }
 
-  // filterCategory — select ve filtrech
-  var fc = document.getElementById('filterCategory');
-  if(fc) {
-    var fcVal = fc.value;
-    fc.innerHTML = '<option value="">Všechny typy</option>' + builtinOpts + customOpts;
-    if(fcVal && fc.querySelector('option[value="'+fcVal+'"]')) fc.value = fcVal;
-    if(fc._csSync) fc._csSync();
-  }
+  // filterCategory je nyní multi-filter — kategorie se buildují dynamicky v buildCategoryFilter()
 }
 const COND_L = {'DS':'DS','pouzite':'Použité','poskozene':'Poškozené','nove-stitky':'Nové','pouzite-dobre':'Použité','pouzite-horsi':'Použité'};
 
@@ -2058,13 +2044,6 @@ function savePlatMgr(){
 }
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 
-function buildLocationFilter(){
-  const sel=document.getElementById('filterLocation');
-  if(!sel) return;
-  while(sel.options.length>2) sel.remove(2);
-  const locs=[...new Set(items.map(it=>it.location||'Doma').filter(l=>l&&l!=='Doma'))].sort();
-  locs.forEach(l=>{const o=document.createElement('option');o.value=l;o.textContent=l;sel.appendChild(o);});
-}
 function buildSoldWhereFilter(){
   const sel = document.getElementById('filterSoldWhere');
   if(!sel) return;
@@ -2086,18 +2065,16 @@ function switchTab(t){
   tab=t;
   if(t!=='stock') stockViewMode='table';
   document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['dashboard','stock','waiting','sold','wishlist'][i]===t));
-  var floc = document.getElementById('filterLocation');
+  var floc = document.getElementById('locFilterWrap');
   var fswhere = document.getElementById('filterSoldWhere');
   var fsearch = document.querySelector('.search-wrap');
-  var fcat = document.getElementById('filterCategory');
+  var fcat = document.getElementById('catFilterWrap');
   var fbrand = document.getElementById('brandFilterWrap');
   var fsize = document.getElementById('sizeFilterWrap');
   var fviewtoggle = document.querySelector('.view-toggle');
-  // Helper: skryj/ukáž element včetně jeho cs-wrap wrapperu
   function setVis(el, visible) {
     if (!el) return;
-    var wrap = el.closest('.cs-wrap') || el;
-    wrap.style.display = visible ? '' : 'none';
+    el.style.display = visible ? '' : 'none';
   }
   // Sklad filtr: jen na Stock tabu
   setVis(floc, t==='stock');
@@ -2385,7 +2362,6 @@ function animStatCard(action, dir) {
 function getFiltered(){
   if (!items || !items.length) return [];
   const q=(document.getElementById('searchInput').value||'').toLowerCase();
-  const cat=document.getElementById('filterCategory').value;
   const sort=document.getElementById('sortBy').value;
   let list=items.filter(it=>{
     if(tab==='stock') return (it.saleState==='stock'||!it.saleState) && !it.bulkId && it.type!=='bulk';
@@ -2393,9 +2369,8 @@ function getFiltered(){
     if(tab==='sold') return it.saleState==='paid' && !it.bulkId && it.type!=='bulk';
   });
   if(q) list=list.filter(it=>(it.name||'').toLowerCase().includes(q)||(it.sku||'').toLowerCase().includes(q)||(it.orderNum||'').toLowerCase().includes(q)||(it.saleRef||'').toLowerCase().includes(q)||(it.buyWhere||'').toLowerCase().includes(q));
-  if(cat) list=list.filter(it=>it.category===cat);
-  const loc=document.getElementById('filterLocation')?.value||'';
-  if(loc) list=list.filter(it=>(it.location||'Doma')===loc);
+  if(selectedCategories.size>0) list=list.filter(it=>selectedCategories.has(it.category||'jine'));
+  if(selectedLocations.size>0) list=list.filter(it=>selectedLocations.has(it.location||'Doma'));
   if(selectedBrands.size > 0) {
     list = list.filter(it => {
       const n = (it.name||'').toLowerCase();
@@ -2787,13 +2762,11 @@ function renderItems(){
   if(tab==='sold'){renderSoldView();renderStats();return;}
   if(tab==='stock' && stockViewMode==='analytics'){
     // Skrýt filtry
-    ['.search-wrap','.view-toggle','#brandFilterWrap','#sizeFilterWrap'].forEach(function(sel){
+    ['.search-wrap','.view-toggle','#brandFilterWrap','#sizeFilterWrap','#catFilterWrap','#locFilterWrap'].forEach(function(sel){
       var el=document.querySelector(sel); if(el) el.style.display='none';
     });
-    var _fcat=document.getElementById('filterCategory'); if(_fcat){var _fw=_fcat.closest('.cs-wrap')||_fcat;_fw.style.display='none';}
     var _btnSA=document.getElementById('btnStockAnalytics'); if(_btnSA) _btnSA.style.display='none';
     var _sortBy=document.getElementById('sortBy'); if(_sortBy){var _sw2=_sortBy.closest('.cs-wrap')||_sortBy;_sw2.style.display='none';}
-    var _floc=document.getElementById('filterLocation'); if(_floc){var _fl=_floc.closest('.cs-wrap')||_floc;_fl.style.display='none';}
     renderStockAnalytics();return;
   }
   // Obnovit filtry při návratu — přes showTab
@@ -2805,13 +2778,13 @@ function renderItems(){
     var _sortBy2=document.getElementById('sortBy'); if(_sortBy2){var _sw3=_sortBy2.closest('.cs-wrap')||_sortBy2;_sw3.style.display='';}
     var _bf=document.getElementById('brandFilterWrap'); if(_bf)_bf.style.display='';
     var _sf=document.getElementById('sizeFilterWrap'); if(_sf)_sf.style.display='';
-    var _fc=document.getElementById('filterCategory'); if(_fc){var _fw2=_fc.closest('.cs-wrap')||_fc;_fw2.style.display='';}
-    var _fl2=document.getElementById('filterLocation'); if(_fl2){var _flw=_fl2.closest('.cs-wrap')||_fl2;_flw.style.display='';}
+    var _cf=document.getElementById('catFilterWrap'); if(_cf)_cf.style.display='';
+    var _lf=document.getElementById('locFilterWrap'); if(_lf)_lf.style.display='';
   }
   var vtEl = document.querySelector('.view-toggle');
   if(vtEl) vtEl.style.display = (tab==='stock') ? '' : 'none';
   const effectiveView = (tab==='stock') ? viewMode : 'table';
-  buildSizeFilter(); buildBrandFilter(); buildTagFilter();
+  buildSizeFilter(); buildBrandFilter(); buildTagFilter(); buildCategoryFilter(); buildLocationFilter();
   const list=getFiltered();
   const grid=document.getElementById('itemsGrid');
   const empty=document.getElementById('emptyState');
@@ -6078,7 +6051,7 @@ function toggleMultiFilter(type) {
   // Zavři VŠECHNY dropdowny - cs-drop, cdp-cal, multi-filter-drop
   document.querySelectorAll('.cs-drop.open, .cdp-cal.open').forEach(d => d.classList.remove('open'));
   document.querySelectorAll('.cs-btn.open, .cdp-input.open').forEach(b => b.classList.remove('open'));
-  ['size','brand','tag'].forEach(t => {
+  ['size','brand','tag','cat','loc'].forEach(t => {
     const d = document.getElementById(t+'FilterDrop');
     const b = document.getElementById(t+'FilterBtn');
     if (d) d.style.display = 'none';
@@ -6204,6 +6177,45 @@ function buildTagFilter() {
 function toggleTagFilter(val, checked) {
   if (checked) selectedTags.add(val); else selectedTags.delete(val);
   updateFilterBtn('tag', selectedTags, 'Všechny štítky');
+  renderItems();
+}
+
+var selectedCategories = new Set();
+var CAT_LABELS = {sneakers:'Sneakers',obleceni:'Oblečení',pokemon:'Pokémon',lego:'LEGO',hotwheels:'Hot Wheels',alternate:'Alternate',sberatelske:'Sběratelské',jine:'Jiné'};
+function buildCategoryFilter() {
+  var drop = document.getElementById('catFilterDrop');
+  if (!drop) return;
+  var customCats = getCustomCats ? getCustomCats() : [];
+  customCats.forEach(function(c){ CAT_LABELS[c.key] = c.label; });
+  var visItems = items.filter(function(it){
+    if (tab === 'stock') return it.saleState === 'stock' || !it.saleState;
+    return it.saleState === tab;
+  });
+  var foundCats = [...new Set(visItems.map(function(it){ return it.category || 'jine'; }))];
+  [...selectedCategories].forEach(function(c){ if (!foundCats.includes(c)) selectedCategories.delete(c); });
+  drop.innerHTML = foundCats.sort(function(a,b){ return (CAT_LABELS[a]||a).localeCompare(CAT_LABELS[b]||b,'cs'); })
+    .map(function(c){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+c+'" '+(selectedCategories.has(c)?'checked':'')+' onchange="toggleCategoryFilter(\''+c+'\',this.checked)"> '+(CAT_LABELS[c]||c)+'</label>'; }).join('');
+  updateFilterBtn('cat', selectedCategories, 'Všechny typy');
+}
+function toggleCategoryFilter(val, checked) {
+  if (checked) selectedCategories.add(val); else selectedCategories.delete(val);
+  updateFilterBtn('cat', selectedCategories, 'Všechny typy');
+  renderItems();
+}
+
+var selectedLocations = new Set();
+function buildLocationFilter() {
+  var drop = document.getElementById('locFilterDrop');
+  if (!drop) return;
+  var stockItems = items.filter(function(it){ return it.saleState === 'stock' || !it.saleState; });
+  var locs = [...new Set(stockItems.map(function(it){ return it.location || 'Doma'; }))].sort(function(a,b){ return a.localeCompare(b,'cs'); });
+  [...selectedLocations].forEach(function(l){ if (!locs.includes(l)) selectedLocations.delete(l); });
+  drop.innerHTML = locs.map(function(l){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+l+'" '+(selectedLocations.has(l)?'checked':'')+' onchange="toggleLocationFilter(\''+l+'\',this.checked)"> '+l+'</label>'; }).join('');
+  updateFilterBtn('loc', selectedLocations, 'Všechny sklady');
+}
+function toggleLocationFilter(val, checked) {
+  if (checked) selectedLocations.add(val); else selectedLocations.delete(val);
+  updateFilterBtn('loc', selectedLocations, 'Všechny sklady');
   renderItems();
 }
 
@@ -7579,7 +7591,7 @@ function attachListeners() {
       if(sc) sc.style.display = this.value ? 'flex' : 'none';
     });
   }
-  ['filterCategory','filterLocation','filterSoldWhere','filterWaitState','sortBy'].forEach(id => {
+  ['filterSoldWhere','filterWaitState','sortBy'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener('change', renderItems);
   });
@@ -7622,7 +7634,7 @@ function _init() {
   try{initAllCustomInputs();}catch(e){console.error('customInputs',e);}
   // Globální handler pro zavření multi-filter-drop při kliknutí mimo
   document.addEventListener('click', function(e) {
-    var insideMF = e.target.closest('#brandFilterWrap, #sizeFilterWrap, .multi-filter-drop');
+    var insideMF = e.target.closest('#brandFilterWrap, #sizeFilterWrap, #catFilterWrap, #locFilterWrap, .multi-filter-drop');
     if (!insideMF) {
       var drops = document.querySelectorAll('.multi-filter-drop');
       drops.forEach(function(d) { d.style.display = 'none'; });
@@ -8186,7 +8198,7 @@ function initNumberSteppers() {
 }
 function initAllCustomInputs() {
   // Custom selects - všechny v modal formuláři
-  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterCategory','filterLocation','filterSoldWhere','filterWaitState','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod'].forEach(id => {
+  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.tagName === 'SELECT') {
       // Naplň dopravce
