@@ -4328,6 +4328,7 @@ function saveItem(){
     var _eName = d.name.trim().toLowerCase();
     var _eSku  = d.sku  ? d.sku.trim().toLowerCase()  : '';
     var _eSize = d.size ? d.size.trim().toLowerCase() : '';
+    var _eCond = (d.condition || 'DS').trim().toLowerCase();
     var _propagated = 0;
     items.forEach(function(it) {
       if (it.id === editId) return;
@@ -4335,7 +4336,9 @@ function saveItem(){
       var _iName = (it.name || '').trim().toLowerCase();
       var _iSku  = (it.sku  || '').trim().toLowerCase();
       var _iSize = (it.size || '').trim().toLowerCase();
+      var _iCond = (it.condition || 'DS').trim().toLowerCase();
       if (_iName !== _eName) return;
+      if (_iCond !== _eCond) return;
       var _match;
       if (_eSku && _eSize) {
         _match = _iSku === _eSku && _iSize === _eSize;
