@@ -1006,6 +1006,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <div id="userBadge" class="user-badge" onclick="handleUserBadgeClick()" style="display:none;"><span class="fb-status fb-offline" id="fbStatusDot"></span><span id="fbUserLabel">Offline</span></div>
     <button class="icon-btn" id="btnBulkMode" style="font-size:12px;letter-spacing:-0.3px;" onclick="toggleBulkMode()">Vybrat</button>
     <button class="icon-btn" onclick="toggleCalc()" id="btnCalc" style="width:36px;padding:0;" data-tip="Kalkulačka marže"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 4h2M10 4h2M4 8h2M10 8h2M4 12h2M10 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+    <button class="icon-btn" onclick="openMissingListings()" id="btnMissingList" style="width:36px;padding:0;" data-tip="Chybějící listingy"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="13" cy="11" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M13 10v1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13.2" r="0.4" fill="currentColor"/></svg></button>
     <button class="icon-btn" id="btnMobileSimple" onclick="toggleMobileSimple()" data-tip="Jednoduché zobrazení" style="width:36px;padding:0;font-size:14px;">☰</button>
     <button class="icon-btn" id="btnCustomerMode" onclick="toggleCustomerMode()" data-tip="Zákaznický režim" style="width:36px;padding:0;display:none;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
     <button class="icon-btn" id="btnGlobalSearch" style="width:36px;padding:0;" onclick="openGlobalSearch()" data-tip="Hledat napříč sekcemi (Ctrl+F)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 10l3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
@@ -5337,6 +5338,58 @@ function openDetail(id) {
   document.getElementById('moDetail').classList.add('open');
   var _moDetailInner = document.querySelector('#moDetail .modal');
   if(_moDetailInner) _moDetailInner.scrollTop = 0;
+}
+
+function openMissingListings() {
+  var grps = getPlatGroups();
+  var allPlats = [...(grps.platforms||[]), ...(grps.eshopy||[]), ...(grps.local||[])];
+  if (!allPlats.length) { showToast('Nemáš nastavené žádné platformy.'); return; }
+
+  var ov = document.createElement('div');
+  ov.className = 'modal-overlay open';
+  ov.style.cssText = 'z-index:1100;';
+
+  function render(selPlat) {
+    var stockItems = items.filter(function(it){
+      return (it.saleState === 'stock' || !it.saleState) && !it.bulkId && it.type !== 'bulk';
+    });
+    var missing = selPlat ? stockItems.filter(function(it){
+      var plats = (it.platforms || []).map(function(p){ return p.toLowerCase(); });
+      return !plats.includes(selPlat.toLowerCase());
+    }) : [];
+    var lines = missing.map(function(it){ return (it.sku || it.name || '').trim(); }).filter(Boolean);
+
+    ov.innerHTML = '<div class="modal" style="max-width:500px;">'
+      + '<div class="mh" style="margin-bottom:18px;"><div class="mt2">Chybějící listingy</div></div>'
+      + '<div style="margin-bottom:14px;font-size:12px;color:var(--muted);">Položky na skladě, které nemáš nalistované na vybrané platformě.</div>'
+      + '<div style="margin-bottom:16px;">'
+      + '<label style="font-size:11px;color:var(--muted2);font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Platforma</label>'
+      + '<select id="mlPlatSel" style="width:100%;">'
+      + '<option value="">-- Vyber platformu --</option>'
+      + allPlats.map(function(p){ return '<option value="'+p+'"'+(p===selPlat?' selected':'')+'>'+p+'</option>'; }).join('')
+      + '</select></div>'
+      + (selPlat ? (
+          '<div style="margin-bottom:10px;font-size:12px;color:var(--muted);">'
+          + (lines.length ? '<strong style="color:var(--text);">'+lines.length+' položek</strong> nemá listing na <strong style="color:var(--accent);">'+selPlat+'</strong>:' : '<span style="color:var(--accent);">Všechny položky jsou nalistované!</span>')
+          + '</div>'
+          + (lines.length ? '<textarea id="mlOutput" readonly style="width:100%;height:220px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:\'DM Mono\',monospace;font-size:12px;padding:10px;resize:none;outline:none;line-height:1.7;">'+lines.join('\n')+'</textarea>' : '')
+          + (lines.length ? '<button onclick="var t=document.getElementById(\'mlOutput\');t.select();document.execCommand(\'copy\');navigator.clipboard&&navigator.clipboard.writeText(t.value);showToast(\'Zkopírováno '+lines.length+' položek.\');" style="margin-top:10px;width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:13px;padding:10px;cursor:pointer;">Kopírovat vše</button>' : '')
+        ) : '')
+      + '</div>';
+
+    var selEl = ov.querySelector('#mlPlatSel');
+    if (selEl) {
+      initCustomSelect(selEl);
+      selEl.addEventListener('change', function(){ render(this.value); });
+    }
+    // Zavírání
+    ov.onclick = function(e){ if(e.target === ov) { ov.remove(); } };
+    document.onkeydown_ml = function(e){ if(e.key==='Escape'){ ov.remove(); document.removeEventListener('keydown', document.onkeydown_ml); } };
+    document.addEventListener('keydown', document.onkeydown_ml);
+  }
+
+  render('');
+  document.body.appendChild(ov);
 }
 
 let eurRate = parseFloat(localStorage.getItem('eurRate')) || 25.0;
