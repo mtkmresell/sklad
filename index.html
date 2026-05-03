@@ -5385,15 +5385,19 @@ function openMissingListings() {
       var plats = (it.platforms || []).map(function(p){ return p.toLowerCase(); });
       return !plats.includes(selPlat.toLowerCase());
     }) : [];
-    // Formát: "SKU velikost" nebo "Název velikost", bez duplicit
-    var seen = new Set();
-    var lines = [];
+    // Seskup dle SKU/názvu, seber unikátní velikosti → "SKU 38, 38.5, 42"
+    var groups = new Map();
     missing.forEach(function(it){
       var base = (it.sku || it.name || '').trim();
       if (!base) return;
       var size = (it.size || '').trim();
-      var line = size ? base + ' ' + size : base;
-      if (!seen.has(line)) { seen.add(line); lines.push(line); }
+      if (!groups.has(base)) groups.set(base, new Set());
+      if (size) groups.get(base).add(size);
+    });
+    var lines = [];
+    groups.forEach(function(sizes, base){
+      if (sizes.size > 0) lines.push(base + ' ' + Array.from(sizes).join(', '));
+      else lines.push(base);
     });
 
     ov.innerHTML = '<div class="modal" style="max-width:680px;width:90%;min-height:520px;display:flex;flex-direction:column;overflow:visible;">'
