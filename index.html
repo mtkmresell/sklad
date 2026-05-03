@@ -2070,7 +2070,8 @@ function switchTab(t){
   if(t!=='stock') stockViewMode='table';
   document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['dashboard','stock','waiting','sold','wishlist'][i]===t));
   var floc = document.getElementById('locFilterWrap');
-  var fswhere = document.getElementById('filterSoldWhere');
+  var _fswhereEl = document.getElementById('filterSoldWhere');
+  var fswhere = _fswhereEl ? (_fswhereEl.closest('.cs-wrap') || _fswhereEl) : null;
   var fsearch = document.querySelector('.search-wrap');
   var fcat = document.getElementById('catFilterWrap');
   var fbrand = document.getElementById('brandFilterWrap');
@@ -2097,7 +2098,8 @@ function switchTab(t){
   if(fsize) fsize.style.display = hideForSold ? 'none' : '';
   var fsort = document.getElementById('sortBy');
   setVis(fsort, !hideForSold);
-  var fwaitstate = document.getElementById('filterWaitState');
+  var _fwaitstateEl = document.getElementById('filterWaitState');
+  var fwaitstate = _fwaitstateEl ? (_fwaitstateEl.closest('.cs-wrap') || _fwaitstateEl) : null;
   if(fwaitstate) setVis(fwaitstate, t === 'waiting');
   var btnPayCal = document.getElementById('btnPayoutCal');
   if(btnPayCal) btnPayCal.style.display = (t === 'waiting') ? '' : 'none';
