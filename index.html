@@ -61,6 +61,7 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 .ta-btn.t-del:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
 .icon-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px;gap:6px;transition:all 0.15s ease;white-space:nowrap;}
 .icon-btn:hover { background:var(--surface2); transform:translateY(-1px); }
+.icon-btn.active{color:var(--accent);border-color:var(--accent);background:rgba(200,255,0,0.08);}
 .add-btn { transition: all 0.15s ease; }
 .add-btn:hover { filter:brightness(1.15); transform:translateY(-1px); box-shadow:0 4px 16px rgba(200,255,0,0.3); }
 .btn-sec { transition: all 0.15s ease; }
@@ -7847,6 +7848,8 @@ function toggleCalc() {
   if (!el) return;
   var isOpen = el.style.display !== 'none';
   el.style.display = isOpen ? 'none' : 'block';
+  var btn = document.getElementById('btnCalc');
+  if (btn) btn.classList.toggle('active', !isOpen);
   if (!isOpen) {
     // Init custom selecty pro měnu
     ['calcBuyCur','calcSellCur'].forEach(function(id) {
