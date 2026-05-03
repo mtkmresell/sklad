@@ -5358,8 +5358,8 @@ function openMissingListings() {
 
   var ov = document.createElement('div');
   ov.id = 'missingListingsOv';
-  ov.className = 'modal-overlay open';
-  ov.style.cssText = 'z-index:1100;';
+  ov.className = 'mo open';
+  ov.style.zIndex = '1100';
 
   function closeMl() {
     ov.remove();
