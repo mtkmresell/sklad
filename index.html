@@ -1025,11 +1025,11 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 </div>
 
 <div class="filters">
-  <button id="btnClearFilters" onclick="clearAllFilters()" class="icon-btn" style="display:none;height:34px;padding:0 12px;font-size:12px;color:var(--danger);border-color:var(--danger);background:rgba(255,68,68,0.07);flex-shrink:0;">✕ Zrušit filtry</button>
   <div class="search-wrap">
     <span class="si" style="font-size:13px;opacity:0.5;font-family:monospace;font-weight:700;">⌕</span>
     <input type="text" id="searchInput" placeholder="Název, SKU, objednávka..." ><span id="searchClear" data-action="searchclear" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:14px;width:18px;height:18px;align-items:center;justify-content:center;border-radius:50%;background:var(--surface3);">✕</span>
   </div>
+  <button id="btnClearFilters" onclick="clearAllFilters()" class="icon-btn" style="display:none;width:34px;height:34px;padding:0;font-size:13px;color:var(--danger);border-color:var(--danger);background:rgba(255,68,68,0.07);flex-shrink:0;">✕</button>
   <div class="multi-filter" id="catFilterWrap" style="position:relative;">
     <button class="multi-filter-btn" id="catFilterBtn" data-action="multifilter" data-filter="cat"><span class="mfb-label">Všechny typy</span><span class="mfb-arrow">▾</span></button>
     <div class="multi-filter-drop" id="catFilterDrop" style="display:none;"></div>
