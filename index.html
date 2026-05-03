@@ -171,6 +171,7 @@ table { table-layout:auto; }
 .ta-btns{display:flex;align-items:center;gap:6px;justify-content:flex-end;flex-wrap:nowrap;}
 
 .xb:hover{background:var(--surface3,var(--border));color:var(--text);}
+.ml-xb{display:none;}@media(max-width:700px){.ml-xb{display:flex;}}
 
 .multi-filter{position:relative;}
 
@@ -5401,12 +5402,12 @@ function openMissingListings() {
     });
 
     ov.innerHTML = '<div class="modal" style="max-width:680px;width:90%;min-height:520px;display:flex;flex-direction:column;overflow:visible;">'
-      + '<div class="mh"><div class="mt2">Chybějící listingy</div><button class="xb" onclick="document.getElementById(\'missingListingsOv\').remove();var b=document.getElementById(\'btnMissingList\');if(b)b.classList.remove(\'active\');">✕</button></div>'
+      + '<div class="mh"><div class="mt2">Chybějící listingy</div><button class="xb ml-xb" onclick="document.getElementById(\'missingListingsOv\').remove();var b=document.getElementById(\'btnMissingList\');if(b)b.classList.remove(\'active\');">✕</button></div>'
       + '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;">Položky ze skladu, které nemáš nalistované na vybraném eshopu. Formát: SKU (nebo název) + velikost. Stejné SKU/velikost se zobrazí jen jednou.</div>'
       + '<div style="margin-bottom:20px;position:relative;z-index:10;">'
       + '<label style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:0.7px;display:block;margin-bottom:8px;">Komisní eshop</label>'
       + '<select id="mlPlatSel" style="width:100%;">'
-      + '<option value="">— Vyber eshop —</option>'
+      + '<option value="" style="display:none;"></option>'
       + allPlats.map(function(p){ return '<option value="'+p+'"'+(p===selPlat?' selected':'')+'>'+p+'</option>'; }).join('')
       + '</select></div>'
       + (selPlat ? (
@@ -5425,6 +5426,13 @@ function openMissingListings() {
     var selEl = ov.querySelector('#mlPlatSel');
     if (selEl) {
       initCustomSelect(selEl);
+      // Skryj placeholder v dropdown, nastav label "Vybrat" pokud nic není vybráno
+      var csWrap = selEl.closest('.cs-wrap');
+      if (csWrap) {
+        var firstOpt = csWrap.querySelector('.cs-opt[data-idx="0"]');
+        if (firstOpt) firstOpt.style.display = 'none';
+        if (!selPlat) { var lbl = csWrap.querySelector('.cs-label'); if (lbl) lbl.textContent = 'Vybrat'; }
+      }
       selEl.addEventListener('change', function(){ render(this.value); });
     }
   }
