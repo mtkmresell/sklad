@@ -5341,13 +5341,34 @@ function openDetail(id) {
 }
 
 function openMissingListings() {
+  var btn = document.getElementById('btnMissingList');
+  // Toggle — pokud je panel otevřený, zavři ho
+  var existing = document.getElementById('missingListingsOv');
+  if (existing) {
+    existing.remove();
+    if (btn) btn.classList.remove('active');
+    return;
+  }
+
   var grps = getPlatGroups();
   var allPlats = [...(grps.platforms||[]), ...(grps.eshopy||[]), ...(grps.local||[])];
   if (!allPlats.length) { showToast('Nemáš nastavené žádné platformy.'); return; }
 
+  if (btn) btn.classList.add('active');
+
   var ov = document.createElement('div');
+  ov.id = 'missingListingsOv';
   ov.className = 'modal-overlay open';
   ov.style.cssText = 'z-index:1100;';
+
+  function closeMl() {
+    ov.remove();
+    if (btn) btn.classList.remove('active');
+    document.removeEventListener('keydown', _escMl);
+  }
+  function _escMl(e) { if (e.key === 'Escape') closeMl(); }
+  document.addEventListener('keydown', _escMl);
+  ov.addEventListener('click', function(e){ if (e.target === ov) closeMl(); });
 
   function render(selPlat) {
     var stockItems = items.filter(function(it){
@@ -5373,7 +5394,7 @@ function openMissingListings() {
           + (lines.length ? '<strong style="color:var(--text);">'+lines.length+' položek</strong> nemá listing na <strong style="color:var(--accent);">'+selPlat+'</strong>:' : '<span style="color:var(--accent);">Všechny položky jsou nalistované!</span>')
           + '</div>'
           + (lines.length ? '<textarea id="mlOutput" readonly style="width:100%;height:220px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:\'DM Mono\',monospace;font-size:12px;padding:10px;resize:none;outline:none;line-height:1.7;">'+lines.join('\n')+'</textarea>' : '')
-          + (lines.length ? '<button onclick="var t=document.getElementById(\'mlOutput\');t.select();document.execCommand(\'copy\');navigator.clipboard&&navigator.clipboard.writeText(t.value);showToast(\'Zkopírováno '+lines.length+' položek.\');" style="margin-top:10px;width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:13px;padding:10px;cursor:pointer;">Kopírovat vše</button>' : '')
+          + (lines.length ? '<button onclick="var t=document.getElementById(\'mlOutput\');navigator.clipboard.writeText(t.value).then(function(){showToast(\'Zkopírováno '+lines.length+' položek.\');});" style="margin-top:10px;width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:13px;padding:10px;cursor:pointer;">Kopírovat vše</button>' : '')
         ) : '')
       + '</div>';
 
@@ -5382,10 +5403,6 @@ function openMissingListings() {
       initCustomSelect(selEl);
       selEl.addEventListener('change', function(){ render(this.value); });
     }
-    // Zavírání
-    ov.onclick = function(e){ if(e.target === ov) { ov.remove(); } };
-    document.onkeydown_ml = function(e){ if(e.key==='Escape'){ ov.remove(); document.removeEventListener('keydown', document.onkeydown_ml); } };
-    document.addEventListener('keydown', document.onkeydown_ml);
   }
 
   render('');
