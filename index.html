@@ -5374,15 +5374,31 @@ function openMissingListings() {
     var stockItems = items.filter(function(it){
       return (it.saleState === 'stock' || !it.saleState) && !it.bulkId && it.type !== 'bulk';
     });
+    // Filtruj dle povolených kategorií platformy (prázdné = vše)
+    if (selPlat) {
+      var allowedCats = (grps.platCategories && grps.platCategories[selPlat]) || [];
+      if (allowedCats.length > 0) {
+        stockItems = stockItems.filter(function(it){ return allowedCats.includes(it.category || 'jine'); });
+      }
+    }
     var missing = selPlat ? stockItems.filter(function(it){
       var plats = (it.platforms || []).map(function(p){ return p.toLowerCase(); });
       return !plats.includes(selPlat.toLowerCase());
     }) : [];
-    var lines = missing.map(function(it){ return (it.sku || it.name || '').trim(); }).filter(Boolean);
+    // Formát: "SKU velikost" nebo "Název velikost", bez duplicit
+    var seen = new Set();
+    var lines = [];
+    missing.forEach(function(it){
+      var base = (it.sku || it.name || '').trim();
+      if (!base) return;
+      var size = (it.size || '').trim();
+      var line = size ? base + ' ' + size : base;
+      if (!seen.has(line)) { seen.add(line); lines.push(line); }
+    });
 
     ov.innerHTML = '<div class="modal" style="max-width:680px;width:90%;min-height:520px;display:flex;flex-direction:column;overflow:visible;">'
       + '<div class="mh"><div class="mt2">Chybějící listingy</div><button class="xb" onclick="document.getElementById(\'missingListingsOv\').remove();var b=document.getElementById(\'btnMissingList\');if(b)b.classList.remove(\'active\');">✕</button></div>'
-      + '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;">Položky na komisním eshopu, které tam nemáš nalistované. Výstup: SKU (nebo název pokud SKU chybí).</div>'
+      + '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;">Položky ze skladu, které nemáš nalistované na vybraném eshopu. Formát: SKU (nebo název) + velikost. Stejné SKU/velikost se zobrazí jen jednou.</div>'
       + '<div style="margin-bottom:20px;position:relative;z-index:10;">'
       + '<label style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:0.7px;display:block;margin-bottom:8px;">Komisní eshop</label>'
       + '<select id="mlPlatSel" style="width:100%;">'
