@@ -4335,7 +4335,7 @@ function saveItem(){
   }
   sv();buildLocationFilter();renderStats();renderItems();cm('moAdd');
   // Propagace faktury na položky se stejným nákupem (datum + místo + číslo obj.)
-  if (editId && d.invoiceUrl && d.buyDate && d.buyWhere && d.orderNum) {
+  if (editId && d.buyDate && d.buyWhere && d.orderNum) {
     var _eBuyDate  = d.buyDate.trim();
     var _eBuyWhere = d.buyWhere.trim().toLowerCase();
     var _eOrderNum = d.orderNum.trim().toLowerCase();
@@ -4345,10 +4345,14 @@ function saveItem(){
       if ((it.buyDate  || '').trim()              !== _eBuyDate)  return;
       if ((it.buyWhere || '').trim().toLowerCase() !== _eBuyWhere) return;
       if ((it.orderNum || '').trim().toLowerCase() !== _eOrderNum) return;
+      if ((it.invoiceUrl || '') === (d.invoiceUrl || '')) return;
       it.invoiceUrl = d.invoiceUrl;
       _invPropagated++;
     });
-    if (_invPropagated > 0) showToast('Odkaz na fakturu doplněn u ' + _invPropagated + ' dalších položek ze stejného nákupu.');
+    if (_invPropagated > 0) {
+      var _invMsg = d.invoiceUrl ? 'doplněn' : 'odstraněn';
+      showToast('Odkaz na fakturu ' + _invMsg + ' u ' + _invPropagated + ' dalších položek ze stejného nákupu.');
+    }
   }
   // Ulož do historického cache
   if (d.name) itemCacheSet(d.name, {sku: d.sku, stockxUrl: d.stockxUrl || '', imgUrl: d.imgUrl});
@@ -11156,9 +11160,8 @@ rebuildBrandTables();
 
 <!-- KALKULAČKA MARŽE -->
 <div id="moCalc" style="display:none;position:fixed;bottom:80px;right:20px;z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;width:280px;box-shadow:0 8px 32px #000a;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+  <div style="margin-bottom:14px;">
     <span style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;">Kalkulačka marže</span>
-    <button onclick="toggleCalc()" class="xb">×</button>
   </div>
   <div style="display:flex;flex-direction:column;gap:10px;">
     <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;">
