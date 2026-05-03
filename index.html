@@ -1065,6 +1065,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <option value="price-asc">Cena ↑</option>
     <option value="price-desc">Cena ↓</option>
   </select>
+  <button id="btnClearFilters" onclick="clearAllFilters()" class="icon-btn" style="display:none;height:34px;padding:0 12px;font-size:12px;color:var(--danger);border-color:var(--danger);background:rgba(255,68,68,0.07);">✕ Zrušit filtry</button>
   <div class="view-toggle">
     <button class="vt-btn" id="btnGrid" data-action="setview" data-view="grid">⊞</button>
     <button class="vt-btn active" id="btnTable" data-action="setview" data-view="table">☰</button>
@@ -2788,6 +2789,7 @@ function renderItems(){
   if(vtEl) vtEl.style.display = (tab==='stock') ? '' : 'none';
   const effectiveView = (tab==='stock') ? viewMode : 'table';
   buildSizeFilter(); buildBrandFilter(); buildTagFilter(); buildCategoryFilter(); buildLocationFilter();
+  updateClearFiltersBtn();
   const list=getFiltered();
   const grid=document.getElementById('itemsGrid');
   const empty=document.getElementById('emptyState');
@@ -6340,6 +6342,32 @@ function toggleLocationFilter(val, checked) {
   renderItems();
 }
 
+function updateClearFiltersBtn() {
+  var btn = document.getElementById('btnClearFilters');
+  if (!btn) return;
+  var si = document.getElementById('searchInput');
+  var hasSearch = si && si.value.trim().length > 0;
+  var hasMulti = selectedBrands.size > 0 || selectedSizes.size > 0 || selectedTags.size > 0 || selectedCategories.size > 0 || selectedLocations.size > 0;
+  var hasDropdown = (document.getElementById('filterSoldWhere')?.value || '') !== '' || (document.getElementById('filterWaitState')?.value || '') !== '';
+  var active = hasSearch || hasMulti || hasDropdown;
+  btn.style.display = active ? '' : 'none';
+}
+
+function clearAllFilters() {
+  selectedBrands.clear(); selectedSizes.clear(); selectedTags.clear(); selectedCategories.clear(); selectedLocations.clear();
+  updateFilterBtn('brand', selectedBrands, 'Všechny značky');
+  updateFilterBtn('size', selectedSizes, 'Všechny vel.');
+  updateFilterBtn('tag', selectedTags, 'Všechny štítky');
+  updateFilterBtn('cat', selectedCategories, 'Všechny typy');
+  updateFilterBtn('loc', selectedLocations, 'Všechny sklady');
+  var si = document.getElementById('searchInput'); if (si) si.value = '';
+  var sc = document.getElementById('searchClear'); if (sc) sc.style.display = 'none';
+  ['filterSoldWhere','filterWaitState'].forEach(function(id) {
+    var el = document.getElementById(id); if (!el) return;
+    el.value = ''; if (el._csSync) el._csSync();
+  });
+  renderItems();
+}
 
 let bulkMode = false;
 var lastBulkClickId = null;
