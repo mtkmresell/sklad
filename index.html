@@ -5380,22 +5380,26 @@ function openMissingListings() {
     }) : [];
     var lines = missing.map(function(it){ return (it.sku || it.name || '').trim(); }).filter(Boolean);
 
-    ov.innerHTML = '<div class="modal" style="max-width:500px;">'
-      + '<div class="mh" style="margin-bottom:18px;"><div class="mt2">Chybějící listingy</div></div>'
-      + '<div style="margin-bottom:14px;font-size:12px;color:var(--muted);">Položky na skladě, které nemáš nalistované na vybrané platformě.</div>'
-      + '<div style="margin-bottom:16px;">'
-      + '<label style="font-size:11px;color:var(--muted2);font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:6px;">Platforma</label>'
+    ov.innerHTML = '<div class="modal" style="max-width:680px;width:90%;display:flex;flex-direction:column;max-height:80vh;">'
+      + '<div class="mh"><div class="mt2">Chybějící listingy</div><button class="xb" onclick="document.getElementById(\'missingListingsOv\').remove();var b=document.getElementById(\'btnMissingList\');if(b)b.classList.remove(\'active\');">✕</button></div>'
+      + '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;">Položky na skladě, které nemáš nalistované na vybrané platformě. Výstup: SKU (nebo název pokud SKU chybí).</div>'
+      + '<div style="margin-bottom:20px;">'
+      + '<label style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:0.7px;display:block;margin-bottom:8px;">Platforma</label>'
       + '<select id="mlPlatSel" style="width:100%;">'
-      + '<option value="">-- Vyber platformu --</option>'
+      + '<option value="">— Vyber platformu —</option>'
       + allPlats.map(function(p){ return '<option value="'+p+'"'+(p===selPlat?' selected':'')+'>'+p+'</option>'; }).join('')
       + '</select></div>'
       + (selPlat ? (
-          '<div style="margin-bottom:10px;font-size:12px;color:var(--muted);">'
-          + (lines.length ? '<strong style="color:var(--text);">'+lines.length+' položek</strong> nemá listing na <strong style="color:var(--accent);">'+selPlat+'</strong>:' : '<span style="color:var(--accent);">Všechny položky jsou nalistované!</span>')
+          '<div style="margin-bottom:12px;font-size:13px;">'
+          + (lines.length
+              ? '<span style="color:var(--text);font-weight:600;">'+lines.length+' položek</span> <span style="color:var(--muted);">nemá listing na</span> <span style="color:var(--accent);font-weight:600;">'+selPlat+'</span>'
+              : '<span style="color:var(--accent);font-weight:600;">✓ Všechny položky jsou nalistované!</span>')
           + '</div>'
-          + (lines.length ? '<textarea id="mlOutput" readonly style="width:100%;height:220px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:\'DM Mono\',monospace;font-size:12px;padding:10px;resize:none;outline:none;line-height:1.7;">'+lines.join('\n')+'</textarea>' : '')
-          + (lines.length ? '<button onclick="var t=document.getElementById(\'mlOutput\');navigator.clipboard.writeText(t.value).then(function(){showToast(\'Zkopírováno '+lines.length+' položek.\');});" style="margin-top:10px;width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:13px;padding:10px;cursor:pointer;">Kopírovat vše</button>' : '')
-        ) : '')
+          + (lines.length
+              ? '<textarea id="mlOutput" readonly style="width:100%;flex:1;min-height:300px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:\'DM Mono\',monospace;font-size:13px;padding:14px;resize:none;outline:none;line-height:1.9;display:block;">'+lines.join('\n')+'</textarea>'
+              + '<button onclick="navigator.clipboard.writeText(document.getElementById(\'mlOutput\').value).then(function(){showToast(\'Zkopírováno '+lines.length+' položek.\');});" style="margin-top:12px;width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:14px;padding:12px;cursor:pointer;flex-shrink:0;">Kopírovat vše ('+lines.length+')</button>'
+              : '')
+        ) : '<div style="text-align:center;padding:40px 0;color:var(--muted2);font-size:13px;">Vyber platformu a uvidíš chybějící listingy.</div>')
       + '</div>';
 
     var selEl = ov.querySelector('#mlPlatSel');
