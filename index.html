@@ -11043,12 +11043,12 @@ rebuildBrandTables();
       if (st > 40  && slack > 80)  statsBar.classList.add('hide-panel');
       if (st > 100 && slack > 80) filtersEl.classList.add('hide-panel');
     } else {
-      if (filtersEl.classList.contains('hide-panel')) {
+      if (tab !== 'dashboard' && filtersEl.classList.contains('hide-panel')) {
         filtersEl.classList.add('is-animating');
         filtersEl.classList.remove('hide-panel');
         setTimeout(function() { filtersEl.classList.remove('is-animating'); }, 320);
       }
-      if (st < 40 && statsBar.classList.contains('hide-panel')) {
+      if (tab !== 'dashboard' && st < 40 && statsBar.classList.contains('hide-panel')) {
         statsBar.classList.remove('hide-panel');
       }
     }
