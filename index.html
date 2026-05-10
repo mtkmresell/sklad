@@ -1718,7 +1718,10 @@ function load(){
   sv();
 }
 var _svCloudTimer = null;
+var _itemsVersion = 0;
 function sv(){
+  _itemsVersion++;
+  window._lastFilterBuildKey = null; // invalidate filter cache
   try {
     localStorage.setItem(SK, JSON.stringify(items));
     // Zapisuj savedAt okamžitě — zajišťuje že refresh před Firebase .then() nepřepíše data
@@ -2790,7 +2793,11 @@ function renderItems(){
   var vtEl = document.querySelector('.view-toggle');
   if(vtEl) vtEl.style.display = (tab==='stock') ? '' : 'none';
   const effectiveView = (tab==='stock') ? viewMode : 'table';
-  buildSizeFilter(); buildBrandFilter(); buildTagFilter(); buildCategoryFilter(); buildLocationFilter();
+  var _fbKey = tab + '|' + _itemsVersion;
+  if (_fbKey !== window._lastFilterBuildKey) {
+    window._lastFilterBuildKey = _fbKey;
+    buildSizeFilter(); buildBrandFilter(); buildTagFilter(); buildCategoryFilter(); buildLocationFilter();
+  }
   updateClearFiltersBtn();
   const list=getFiltered();
   const grid=document.getElementById('itemsGrid');
@@ -7736,10 +7743,12 @@ function attachListeners() {
   });
   const si = document.getElementById('searchInput');
   if(si) {
+    var _searchDebounce = null;
     si.addEventListener('input', function() {
-      renderItems();
       const sc = document.getElementById('searchClear');
       if(sc) sc.style.display = this.value ? 'flex' : 'none';
+      clearTimeout(_searchDebounce);
+      _searchDebounce = setTimeout(renderItems, 250);
     });
   }
   ['filterSoldWhere','filterWaitState','sortBy'].forEach(id => {
@@ -8594,6 +8603,7 @@ document.addEventListener('fb-auth', function(e) {
           localStorage.setItem(SK, JSON.stringify(items));
           if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
           if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
+          _itemsVersion++; window._lastFilterBuildKey = null;
           renderStats(); renderItems();
           showToast('Data načtena z cloudu (' + items.length + ' položek).');
         } else if (cloudTime > localTime + 5000) {
@@ -8604,6 +8614,7 @@ document.addEventListener('fb-auth', function(e) {
           localStorage.setItem(SK, JSON.stringify(items));
           if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
           if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
+          _itemsVersion++; window._lastFilterBuildKey = null;
           renderStats(); renderItems();
           showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
         } else if (localTime > cloudTime + 5000) {
@@ -11056,9 +11067,7 @@ rebuildBrandTables();
     updateTheadClone();
   });
 
-  /* Průběžná aktualizace klonu každý frame */
-  function loop() { updateTheadClone(); requestAnimationFrame(loop); }
-  requestAnimationFrame(loop);
+  /* updateTheadClone se volá ze scroll handleru, renderItems wrapperu a resize — RAF loop není potřeba */
 
   /* Fixní klon thead */
   var cloneEl = null;
