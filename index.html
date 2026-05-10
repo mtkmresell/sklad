@@ -658,8 +658,6 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 .mo.open .sell-modal,
 .mo.open .img-modal {
   animation: modalIn 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  will-change: transform, opacity;
-  contain: layout style;
 }
 
 /* 2. Modal overlay — fade pozadí, blur statický (animace blur = jank) */
@@ -915,7 +913,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 .modal::-webkit-scrollbar-track,.csv-modal::-webkit-scrollbar-track,.sell-modal::-webkit-scrollbar-track,.img-modal::-webkit-scrollbar-track { background:transparent !important; }
 .modal::-webkit-scrollbar-thumb,.csv-modal::-webkit-scrollbar-thumb,.sell-modal::-webkit-scrollbar-thumb,.img-modal::-webkit-scrollbar-thumb { background:transparent !important; border-radius:4px !important; transition:background 0.3s ease !important; }
 .modal.sb-active::-webkit-scrollbar-thumb,.csv-modal.sb-active::-webkit-scrollbar-thumb,.sell-modal.sb-active::-webkit-scrollbar-thumb,.img-modal.sb-active::-webkit-scrollbar-thumb { background:rgba(200,255,0,0.35) !important; }
-.modal,.csv-modal,.sell-modal,.img-modal { scrollbar-width:thin !important; scrollbar-color:transparent transparent !important; overflow-y:auto !important; scrollbar-gutter:stable both-edges !important; padding-left:20px !important; padding-right:20px !important; }
+.modal,.csv-modal,.sell-modal,.img-modal { scrollbar-width:thin !important; scrollbar-color:transparent transparent !important; overflow-y:auto !important; scrollbar-gutter:stable !important; }
 .modal.sb-active,.csv-modal.sb-active,.sell-modal.sb-active,.img-modal.sb-active { scrollbar-color:rgba(200,255,0,0.35) transparent !important; }
 /* pmg-scroll — tenký zelenkavý */
 .pmg-scroll::-webkit-scrollbar { width:3px !important; display:block !important; }
@@ -10684,7 +10682,7 @@ rebuildBrandTables();
     if (e.target && e.target.matches && e.target.matches(modalSelectors)) {
       onModalScroll(e);
     }
-  }, true);
+  }, { capture: true, passive: true });
 })();
 </script>
 <!-- IMAGE MODAL -->
@@ -11167,12 +11165,20 @@ rebuildBrandTables();
     });
   }
   document.addEventListener('DOMContentLoaded', function() { disableAC(document); });
+  var _acTimer = null;
+  var _acPending = [];
   var obs = new MutationObserver(function(muts) {
     muts.forEach(function(m) {
       m.addedNodes.forEach(function(n) {
-        if (n.nodeType === 1) disableAC(n);
+        if (n.nodeType === 1) _acPending.push(n);
       });
     });
+    if (_acTimer) return;
+    _acTimer = setTimeout(function() {
+      _acTimer = null;
+      var nodes = _acPending.splice(0);
+      nodes.forEach(function(n) { disableAC(n); });
+    }, 200);
   });
   obs.observe(document.body, { childList: true, subtree: true });
 })();
