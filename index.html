@@ -1145,6 +1145,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <div class="fg">
       <div class="fi"><label>Datum nákupu</label><input type="date" id="fBuyDate"></div>
       <div class="fi"><label>Kde koupeno</label><input type="text" id="fWhere" placeholder="SNKRS, LVR, Nike…" autocomplete="new-password"></div>
+      <div class="fi" id="fHomeDateWrap" style="display:none"><label>Datum přijetí na sklad</label><input type="date" id="fHomeDate"></div>
       <div class="fi full"><label>Číslo objednávky</label><input type="text" id="fOrder" placeholder="pro dohledání faktury / emailu"></div>
       <div class="fi full hide-if-waiting hide-if-paid"><label>Stav</label>
         <select id="fLocationSel" style="display:none;">
@@ -3978,6 +3979,10 @@ function renderLocDrop() {
         inp.style.cursor = 'pointer';
         closeLocDrop();
         updateWaitStateVisibility();
+        if (opt === 'Doma') {
+          var _hd = document.getElementById('fHomeDate');
+          if (_hd && !_hd.value) _hd.value = new Date().toISOString().slice(0,10);
+        }
       }
     });
     drop.appendChild(el);
@@ -4084,6 +4089,7 @@ function openEdit(id){
   document.getElementById('fOrder').value=it.orderNum||'';
   document.getElementById('fFrom').value=it.from||'';
   setLocationFields(it.location||'');
+  var _fhd = document.getElementById('fHomeDate'); if(_fhd) _fhd.value = it.homeDate||'';
   // fState removed
   var fws=document.getElementById('fWaitState'); if(fws && it.waitState){ fws.value=it.waitState; if(fws._csSync) fws._csSync(); }
   document.getElementById('fSaleRef').value=it.saleRef||'';
@@ -4204,6 +4210,7 @@ function saveItem(){
   })(),targetCurrency:document.getElementById('fTargetCurrency')?.value||'CZK',saleState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); if(modalEl.classList.contains('modal-waiting')) return 'waiting'; if(modalEl.classList.contains('modal-paid')) return 'paid'; return 'stock'; })(),waitState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return modalEl.classList.contains('modal-waiting')?(document.getElementById('fWaitState')?.value||'sending'):undefined; })(),
     saleRef:document.getElementById('fSaleRef').value.trim(),soldWhere:document.getElementById('fSoldWhere')?.value?.trim()||'',saleDate:document.getElementById('fSaleDate').value,
     payoutDate:document.getElementById('fPayoutDate')?.value||undefined,payoutMethod:document.getElementById('fPayoutMethod')?.value||undefined,
+    homeDate:document.getElementById('fHomeDate')?.value||undefined,
     actualSell:0,
     location:getLocationValue()||'Doma',
     tags:(function(){ var v=document.getElementById('fTags')?.value||''; return v.split(',').map(function(t){return t.trim().toLowerCase();}).filter(Boolean); })(),
@@ -6594,9 +6601,13 @@ function bulkChangeLoc(){
     saveBtn.addEventListener('mouseleave', function(){ this.style.opacity='1'; });
     saveBtn.addEventListener('click', function(){
       var newLoc = sel.value;
+      var _bulkToday = new Date().toISOString().slice(0,10);
       bulkSelected.forEach(function(id){
         var it = items.find(function(x){ return x.id===id; });
-        if(it) it.location = newLoc;
+        if(it) {
+          it.location = newLoc;
+          if(newLoc === 'Doma' && !it.homeDate) it.homeDate = _bulkToday;
+        }
       });
       sv(); renderItems(); buildLocationFilter();
       overlay.remove();
@@ -8263,6 +8274,8 @@ function updateWaitStateVisibility() {
   var loc = fLoc ? fLoc.value : '';
   var locNeedsTracking = loc === 'Na cestě' || loc === 'Vráceno' || loc === 'Bude vráceno' || loc === 'Zrušeno';
   if (tw) tw.style.display = ((isStock && locNeedsTracking) || (isWaiting && fws && fws.value === 'sent')) ? '' : 'none';
+  var hdWrap = document.getElementById('fHomeDateWrap');
+  if (hdWrap) hdWrap.style.display = (loc === 'Doma') ? '' : 'none';
 }
 function updateSizeVisibility() {
   var catEl = document.getElementById('fCat');
