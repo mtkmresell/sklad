@@ -3981,7 +3981,11 @@ function renderLocDrop() {
         updateWaitStateVisibility();
         if (opt === 'Doma') {
           var _hd = document.getElementById('fHomeDate');
-          if (_hd && !_hd.value) _hd.value = new Date().toISOString().slice(0,10);
+          if (_hd && !_hd.value) {
+            var _hdToday = new Date().toISOString().slice(0,10);
+            _hd.value = _hdToday;
+            if (_hd._cdpSetVal) _hd._cdpSetVal(_hdToday);
+          }
         }
       }
     });
@@ -4178,7 +4182,7 @@ function openEdit(id){
     var fTC2=document.getElementById('fTrackCarrier');
     if(fTC2&&it.trackingCarrier){fTC2.value=it.trackingCarrier;if(fTC2._csSync)fTC2._csSync();}
     initNumberSteppers();
-    ['fBuyDate','fSaleDate','fPayoutDate'].forEach(function(id){
+    ['fBuyDate','fSaleDate','fPayoutDate','fHomeDate'].forEach(function(id){
       var el = document.getElementById(id);
       if (el && el._cdpSync) el._cdpSync();
     });
@@ -8385,7 +8389,7 @@ function initAllCustomInputs() {
     }
   });
   // Date pickers
-  ['fBuyDate','fSaleDate','fPayoutDate','sSaleDate','bsSaleDate'].forEach(id => {
+  ['fBuyDate','fSaleDate','fPayoutDate','fHomeDate','sSaleDate','bsSaleDate'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.type === 'date') initCustomDatePicker(el);
   });
