@@ -948,7 +948,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, deleteUser }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc }
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, getDocs, query, where }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const FIREBASE_CONFIG = {
@@ -971,7 +971,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     // Exportuj na window pro přístup z hlavního scriptu
     window._fbAuth = auth;
     window._fbDb = db;
-    window._fbFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteUser };
+    window._fbFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteUser, collection, getDocs, query, where };
     window._fbReady = true;
 
     // Sleduj přihlašovací stav
@@ -1147,6 +1147,17 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       <div class="fi"><label>Kde koupeno</label><input type="text" id="fWhere" placeholder="SNKRS, LVR, Nike…" autocomplete="new-password"></div>
       <div class="fi" id="fHomeDateWrap" style="display:none"><label>Datum přijetí na sklad</label><input type="date" id="fHomeDate"></div>
       <div class="fi full"><label>Číslo objednávky</label><input type="text" id="fOrder" placeholder="pro dohledání faktury / emailu"></div>
+      <div class="fi full"><label>Typ dokladu nákupu</label>
+        <select id="fDokladTyp" onchange="onDokladTypChange()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 10px;outline:none;">
+          <option value="id">Bez FP — doklad ID (hotovost / karta)</option>
+          <option value="fp">Na fakturu přijatou (FP)</option>
+        </select>
+      </div>
+      <div class="fi full" id="fFpCisloWrap" style="display:none"><label>Faktura přijatá (FP)</label>
+        <select id="fFpCislo" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 10px;outline:none;">
+          <option value="">— vybrat FP —</option>
+        </select>
+      </div>
       <div class="fi full hide-if-waiting hide-if-paid"><label>Stav</label>
         <select id="fLocationSel" style="display:none;">
           <option value="">— vybrat —</option>
@@ -4011,6 +4022,46 @@ function buildPlatGrid(sel=[]){
 function tgPlat(el){el.classList.toggle('ck');}
 function getPlats(){return[...document.querySelectorAll('#platGrid .pl-lbl.ck')].map(e=>e.querySelector('span').textContent);}
 
+function onDokladTypChange() {
+  var val = (document.getElementById('fDokladTyp') || {}).value;
+  var wrap = document.getElementById('fFpCisloWrap');
+  if (!wrap) return;
+  wrap.style.display = val === 'fp' ? '' : 'none';
+  if (val === 'fp') loadOpenFakturyPrijate();
+}
+
+async function loadOpenFakturyPrijate() {
+  var fpSelect = document.getElementById('fFpCislo');
+  if (!fpSelect) return;
+  fpSelect.innerHTML = '<option value="">— načítám… —</option>';
+  try {
+    var db = window._fbDb;
+    var user = window._fbUser;
+    if (!db || !user) { fpSelect.innerHTML = '<option value="">— nepřihlášen —</option>'; return; }
+    var fns = window._fbFns;
+    var colRef = fns.collection(db, 'users', user.uid, 'fakturyPrijate');
+    var q = fns.query(colRef, fns.where('stav', '!=', 'zaplaceno'));
+    var snap = await fns.getDocs(q);
+    var fps = [];
+    snap.forEach(function(d) { fps.push(Object.assign({ _id: d.id }, d.data())); });
+    fps.sort(function(a, b) { return (b.cislo||'').localeCompare(a.cislo||''); });
+    if (!fps.length) {
+      fpSelect.innerHTML = '<option value="">— žádné otevřené FP —</option>';
+      return;
+    }
+    fpSelect.innerHTML = '<option value="">— vybrat FP —</option>' +
+      fps.map(function(f) {
+        var label = (f.cislo||f._id) +
+          (f.dodavatel ? ' — ' + f.dodavatel : '') +
+          (f.castka ? ' (' + f.castka + ' Kč)' : '');
+        return '<option value="' + (f.cislo||f._id) + '">' + label + '</option>';
+      }).join('');
+  } catch (e) {
+    console.error('Nepodařilo se načíst FP:', e);
+    fpSelect.innerHTML = '<option value="">— chyba načítání —</option>';
+  }
+}
+
 function openAddModal(){
   editId=null;
   var tabTitles = {stock: 'Nová položka — Na skladě', waiting: 'Nová položka — Čeká', sold: 'Nová položka — Prodáno'};
@@ -4042,6 +4093,8 @@ function openAddModal(){
   document.getElementById('fLocation').value='Na cestě';
   setLocationFields('Na cestě');
   var _fhd2=document.getElementById('fHomeDate'); if(_fhd2){_fhd2.value='';if(_fhd2._cdpSetVal)_fhd2._cdpSetVal('');}
+  var _fDT=document.getElementById('fDokladTyp'); if(_fDT) _fDT.value='id';
+  var _fFPW=document.getElementById('fFpCisloWrap'); if(_fFPW) _fFPW.style.display='none';
   document.getElementById('fBuyCurrency').value='CZK';
   document.getElementById('fStockxUrl').value=''; document.getElementById('fStockxUrl')._autoGenerated=false;
   document.getElementById('fImgUrl').value='';
@@ -4092,6 +4145,14 @@ function openEdit(id){
   document.getElementById('fWhere').value=it.buyWhere||'';
   setStockIntent(it.stockIntent||'');
   document.getElementById('fOrder').value=it.orderNum||'';
+  (function(){
+    var _dt=document.getElementById('fDokladTyp');
+    var _fpw=document.getElementById('fFpCisloWrap');
+    var _fps=document.getElementById('fFpCislo');
+    if(_dt) _dt.value=it.dokladTyp||'id';
+    if(_fpw) _fpw.style.display=(it.dokladTyp==='fp')?'':'none';
+    if(_fps && it.dokladTyp==='fp') { if(it.fpCislo) { _fps.innerHTML='<option value="'+it.fpCislo+'">'+it.fpCislo+'</option>'; _fps.value=it.fpCislo; } loadOpenFakturyPrijate().then(function(){ if(it.fpCislo && _fps) _fps.value=it.fpCislo; }); }
+  })();
   document.getElementById('fFrom').value=it.from||'';
   setLocationFields(it.location||'');
   var _fhd = document.getElementById('fHomeDate'); if(_fhd) _fhd.value = it.homeDate||'';
@@ -4207,6 +4268,8 @@ function saveItem(){
     size:document.getElementById('fSize').value.trim(),sku:document.getElementById('fSku').value.trim(),
     buyDate:document.getElementById('fBuyDate').value,qty:editId?undefined:1,
     buyWhere:document.getElementById('fWhere').value.trim(),orderNum:document.getElementById('fOrder').value.trim(),stockIntent:document.getElementById('fStockIntent').value,
+    dokladTyp:(document.getElementById('fDokladTyp')?.value||'id'),
+    fpCislo:(document.getElementById('fDokladTyp')?.value==='fp'?document.getElementById('fFpCislo')?.value||'':''),
     from:document.getElementById('fFrom').value.trim(),targetPrice:(function(){
     var tp=parseFloat(document.getElementById('fTargetPrice')?.value)||null;
     var tc=document.getElementById('fTargetCurrency')?.value||'CZK';
