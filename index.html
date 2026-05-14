@@ -4098,7 +4098,7 @@ function openAddModal(){
   document.getElementById('fLocation').value='Na cestě';
   setLocationFields('Na cestě');
   var _fhd2=document.getElementById('fHomeDate'); if(_fhd2){_fhd2.value='';if(_fhd2._cdpSetVal)_fhd2._cdpSetVal('');}
-  var _fDT=document.getElementById('fDokladTyp'); if(_fDT) _fDT.value='id';
+  var _fDT=document.getElementById('fDokladTyp'); if(_fDT){_fDT.value='id';if(_fDT._csSync)_fDT._csSync();}
   var _fFPW=document.getElementById('fFpCisloWrap'); if(_fFPW) _fFPW.style.display='none';
   var _fDCW=document.getElementById('fDokladCisloWrap'); if(_fDCW) _fDCW.style.display='none';
   var _fDC=document.getElementById('fDokladCislo'); if(_fDC) _fDC.value='';
@@ -4156,7 +4156,7 @@ function openEdit(id){
     var _dt=document.getElementById('fDokladTyp');
     var _fpw=document.getElementById('fFpCisloWrap');
     var _fps=document.getElementById('fFpCislo');
-    if(_dt) _dt.value=it.dokladTyp||'id';
+    if(_dt){_dt.value=it.dokladTyp||'id';if(_dt._csSync)_dt._csSync();}
     if(_fpw) _fpw.style.display=(it.dokladTyp==='fp')?'':'none';
     if(_fps && it.dokladTyp==='fp') { if(it.fpCislo) { _fps.innerHTML='<option value="'+it.fpCislo+'">'+it.fpCislo+'</option>'; _fps.value=it.fpCislo; } loadOpenFakturyPrijate().then(function(){ if(it.fpCislo && _fps) _fps.value=it.fpCislo; }); }
     var _dcw=document.getElementById('fDokladCisloWrap'); if(_dcw) _dcw.style.display=(it.dokladTyp==='ks')?'':'none';
@@ -5472,6 +5472,8 @@ function openMissingListings() {
   document.addEventListener('keydown', _escMl);
   ov.addEventListener('click', function(e){ if (e.target === ov) closeMl(); });
 
+  var mlSelCats = new Set(); // currently selected category filter
+
   function render(selPlat) {
     var stockItems = items.filter(function(it){
       return (it.saleState === 'stock' || !it.saleState) && !it.bulkId && it.type !== 'bulk';
@@ -5487,9 +5489,16 @@ function openMissingListings() {
       var plats = (it.platforms || []).map(function(p){ return p.toLowerCase(); });
       return !plats.includes(selPlat.toLowerCase());
     }) : [];
+
+    // Collect available categories from missing items
+    var availCats = [...new Set(missing.map(function(it){ return it.category || 'jine'; }))].sort(function(a,b){ return (getCatLabel(a)||a).localeCompare(getCatLabel(b)||b,'cs'); });
+
+    // Apply category filter
+    var filtered = mlSelCats.size > 0 ? missing.filter(function(it){ return mlSelCats.has(it.category||'jine'); }) : missing;
+
     // Seskup dle SKU/názvu, seber unikátní velikosti → "SKU 38, 38.5, 42"
     var groups = new Map();
-    missing.forEach(function(it){
+    filtered.forEach(function(it){
       var base = (it.sku || it.name || '').trim();
       if (!base) return;
       var size = (it.size || '').trim();
@@ -5502,6 +5511,19 @@ function openMissingListings() {
       else lines.push(base);
     });
 
+    // Build category chips HTML
+    var catChipsHtml = '';
+    if (selPlat && availCats.length > 1) {
+      catChipsHtml = '<div style="margin-bottom:16px;">'
+        + '<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px;">Filtr kategorií</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
+        + availCats.map(function(cat){
+            var active = mlSelCats.has(cat);
+            return '<button class="ml-cat-chip'+(active?' active':'')+'" data-cat="'+cat+'" style="font-size:12px;padding:4px 10px;border-radius:20px;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#000':'var(--text)')+';cursor:pointer;font-family:\'DM Sans\',sans-serif;white-space:nowrap;">'+getCatLabel(cat)+'</button>';
+          }).join('')
+        + '</div></div>';
+    }
+
     ov.innerHTML = '<div class="modal" style="max-width:680px;width:90%;min-height:520px;display:flex;flex-direction:column;overflow:visible;">'
       + '<div class="mh"><div class="mt2">Chybějící listingy</div><button class="xb ml-xb" onclick="document.getElementById(\'missingListingsOv\').remove();var b=document.getElementById(\'btnMissingList\');if(b)b.classList.remove(\'active\');">✕</button></div>'
       + '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;">Položky ze skladu, které nemáš nalistované na vybraném eshopu. Formát: SKU (nebo název) + velikost. Stejné SKU/velikost se zobrazí jen jednou.</div>'
@@ -5511,14 +5533,15 @@ function openMissingListings() {
       + '<option value="" style="display:none;"></option>'
       + allPlats.map(function(p){ return '<option value="'+p+'"'+(p===selPlat?' selected':'')+'>'+p+'</option>'; }).join('')
       + '</select></div>'
+      + catChipsHtml
       + (selPlat ? (
           '<div style="margin-bottom:12px;font-size:13px;">'
           + (lines.length
-              ? '<span style="color:var(--text);font-weight:600;">'+lines.length+' položek</span> <span style="color:var(--muted);">nemá listing na</span> <span style="color:var(--accent);font-weight:600;">'+selPlat+'</span>'
+              ? '<span style="color:var(--text);font-weight:600;">'+lines.length+' položek</span> <span style="color:var(--muted);">nemá listing na</span> <span style="color:var(--accent);font-weight:600;">'+selPlat+'</span>'+(mlSelCats.size>0?' <span style="color:var(--muted);">(filtr: '+[...mlSelCats].map(getCatLabel).join(', ')+')</span>':'')
               : '<span style="color:var(--accent);font-weight:600;">✓ Všechny položky jsou nalistované!</span>')
           + '</div>'
           + (lines.length
-              ? '<textarea id="mlOutput" readonly style="width:100%;height:320px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:\'DM Mono\',monospace;font-size:13px;padding:14px;resize:none;outline:none;line-height:1.9;display:block;">'+lines.join('\n')+'</textarea>'
+              ? '<textarea id="mlOutput" readonly style="width:100%;height:280px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:\'DM Mono\',monospace;font-size:13px;padding:14px;resize:none;outline:none;line-height:1.9;display:block;">'+lines.join('\n')+'</textarea>'
               + '<button onclick="navigator.clipboard.writeText(document.getElementById(\'mlOutput\').value).then(function(){showToast(\'Zkopírováno '+lines.length+' položek.\');});" style="margin-top:12px;width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:14px;padding:12px;cursor:pointer;">Kopírovat vše ('+lines.length+')</button>'
               : '')
         ) : '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:13px;">Vyber eshop a uvidíš chybějící listingy.</div>')
@@ -5527,15 +5550,23 @@ function openMissingListings() {
     var selEl = ov.querySelector('#mlPlatSel');
     if (selEl) {
       initCustomSelect(selEl);
-      // Skryj placeholder v dropdown, nastav label "Vybrat" pokud nic není vybráno
       var csWrap = selEl.closest('.cs-wrap');
       if (csWrap) {
         var firstOpt = csWrap.querySelector('.cs-opt[data-idx="0"]');
         if (firstOpt) firstOpt.style.display = 'none';
         if (!selPlat) { var lbl = csWrap.querySelector('.cs-label'); if (lbl) lbl.textContent = 'Vybrat'; }
       }
-      selEl.addEventListener('change', function(){ render(this.value); });
+      selEl.addEventListener('change', function(){ mlSelCats.clear(); render(this.value); });
     }
+
+    // Bind category chip clicks
+    ov.querySelectorAll('.ml-cat-chip').forEach(function(chip){
+      chip.addEventListener('click', function(){
+        var cat = this.dataset.cat;
+        if (mlSelCats.has(cat)) mlSelCats.delete(cat); else mlSelCats.add(cat);
+        render(selPlat);
+      });
+    });
   }
 
   render('');
@@ -8057,7 +8088,7 @@ function initCustomSelect(selectEl) {
   selectEl._csInited = true;
   selectEl.style.display = 'none';
   const wrap = document.createElement('div');
-  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency','_beC'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
+  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod','fDokladTyp'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency','_beC'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
   selectEl.parentNode.insertBefore(wrap, selectEl);
   wrap.appendChild(selectEl);
   const btn = document.createElement('div');
@@ -8451,7 +8482,7 @@ function initNumberSteppers() {
 }
 function initAllCustomInputs() {
   // Custom selects - všechny v modal formuláři
-  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod'].forEach(id => {
+  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.tagName === 'SELECT') {
       // Naplň dopravce
@@ -10820,7 +10851,7 @@ rebuildBrandTables();
 <div class="mo" id="moDetail">
 <div class="modal" style="max-width:560px;">
   <div class="mh" style="margin-bottom:20px;">
-    <div class="mt2" id="detailTitle">Detail položky</div>
+    <div class="mt2" id="detailTitle" title="Klikni pro kopírování názvu" style="cursor:pointer;" onclick="(function(el){var t=el.textContent;if(!t||t==='Detail položky')return;navigator.clipboard.writeText(t).then(function(){showToast('Název zkopírován');});})(this)">Detail položky</div>
   </div>
   <div id="detailContent"></div>
 </div>
