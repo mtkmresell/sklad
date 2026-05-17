@@ -1780,7 +1780,9 @@ function fbSaveToCloud() {
   var payload = {
     items: stripUndefined(items),
     savedAt: ts,
-    platGroups: (function(){ try { return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); } catch(e){ return null; } })()
+    platGroups: (function(){ try { return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); } catch(e){ return null; } })(),
+    steTables: (function(){ try { savePanelToMemory(steCurrentBrand); return JSON.parse(JSON.stringify(steTables)); } catch(e){ return null; } })(),
+    steBrandOrder: (function(){ try { return steBrandOrder.slice(); } catch(e){ return null; } })()
   };
   fns.setDoc(docRef, payload)
     .then(function(){
@@ -8725,6 +8727,9 @@ document.addEventListener('fb-auth', function(e) {
           localStorage.setItem(SK, JSON.stringify(items));
           if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
           if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
+          if (data.steTables) { steTables = data.steTables; localStorage.setItem('ste_custom_tables', JSON.stringify(steTables)); }
+          if (data.steBrandOrder) { steBrandOrder = data.steBrandOrder; localStorage.setItem('ste_brand_order', JSON.stringify(steBrandOrder)); }
+          if (data.steTables || data.steBrandOrder) rebuildBrandTables();
           _itemsVersion++; window._lastFilterBuildKey = null;
           renderStats(); renderItems();
           showToast('Data načtena z cloudu (' + items.length + ' položek).');
@@ -8736,6 +8741,9 @@ document.addEventListener('fb-auth', function(e) {
           localStorage.setItem(SK, JSON.stringify(items));
           if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
           if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
+          if (data.steTables) { steTables = data.steTables; localStorage.setItem('ste_custom_tables', JSON.stringify(steTables)); }
+          if (data.steBrandOrder) { steBrandOrder = data.steBrandOrder; localStorage.setItem('ste_brand_order', JSON.stringify(steBrandOrder)); }
+          if (data.steTables || data.steBrandOrder) rebuildBrandTables();
           _itemsVersion++; window._lastFilterBuildKey = null;
           renderStats(); renderItems();
           showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
@@ -8755,6 +8763,9 @@ document.addEventListener('fb-auth', function(e) {
             localStorage.setItem(SK, JSON.stringify(items));
             localStorage.setItem(SK+'_savedAt', data.savedAt);
             if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
+            if (data.steTables) { steTables = data.steTables; localStorage.setItem('ste_custom_tables', JSON.stringify(steTables)); }
+            if (data.steBrandOrder) { steBrandOrder = data.steBrandOrder; localStorage.setItem('ste_brand_order', JSON.stringify(steBrandOrder)); }
+            if (data.steTables || data.steBrandOrder) rebuildBrandTables();
             renderStats(); renderItems();
             showToast('Synchronizováno.');
           }
@@ -10764,6 +10775,7 @@ function saveSizeTables(){
   savePanelToMemory(steCurrentBrand);
   saveToStorage();
   rebuildBrandTables();
+  if (window._fbUser && typeof fbSaveToCloud === 'function') fbSaveToCloud();
   document.getElementById('steInfo').textContent='✓ Uloženo';
   setTimeout(function(){cm('moSizeTables');},700);
 }
