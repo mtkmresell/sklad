@@ -1796,8 +1796,14 @@ function _applyCloudData(data) {
   items = cloudItems;
   localStorage.setItem(SK, JSON.stringify(items));
   if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
-  if (data.platGroups) localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
-  if (data.steTables) { steTables = data.steTables; localStorage.setItem('ste_custom_tables', JSON.stringify(steTables)); }
+  if (data.platGroups) {
+    var pg = typeof data.platGroups === 'string' ? JSON.parse(data.platGroups) : data.platGroups;
+    localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(pg));
+  }
+  if (data.steTables) {
+    steTables = typeof data.steTables === 'string' ? JSON.parse(data.steTables) : data.steTables;
+    localStorage.setItem('ste_custom_tables', JSON.stringify(steTables));
+  }
   if (data.steBrandOrder) { steBrandOrder = data.steBrandOrder; localStorage.setItem('ste_brand_order', JSON.stringify(steBrandOrder)); }
   if (data.steTables || data.steBrandOrder) rebuildBrandTables();
   _itemsVersion++; window._lastFilterBuildKey = null;
@@ -1819,8 +1825,8 @@ function _buildCloudPayload() {
   return {
     items: stripUndefined(items),
     savedAt: new Date().toISOString(),
-    platGroups: (function(){ try { return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); } catch(e){ return null; } })(),
-    steTables: (function(){ try { return JSON.parse(JSON.stringify(steTables)); } catch(e){ return null; } })(),
+    platGroups: (function(){ try { var v=localStorage.getItem('sklad_plat_groups_v1'); return v||null; } catch(e){ return null; } })(),
+    steTables: (function(){ try { return JSON.stringify(steTables); } catch(e){ return null; } })(),
     steBrandOrder: (function(){ try { return steBrandOrder.slice(); } catch(e){ return null; } })()
   };
 }
