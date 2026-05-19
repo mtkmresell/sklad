@@ -1764,26 +1764,8 @@ function fbSaveToCloud() {
   if (dot) dot.className = 'fb-status fb-saving';
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
-  var ts = new Date().toISOString();
-  // Vyčisti undefined hodnoty — Firestore je nepodporuje
-  function stripUndefined(obj) {
-    if (Array.isArray(obj)) return obj.map(stripUndefined);
-    if (obj && typeof obj === 'object') {
-      var out = {};
-      Object.keys(obj).forEach(function(k) {
-        if (obj[k] !== undefined) out[k] = stripUndefined(obj[k]);
-      });
-      return out;
-    }
-    return obj;
-  }
-  var payload = {
-    items: stripUndefined(items),
-    savedAt: ts,
-    platGroups: (function(){ try { return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); } catch(e){ return null; } })(),
-    steTables: (function(){ try { savePanelToMemory(steCurrentBrand); return JSON.parse(JSON.stringify(steTables)); } catch(e){ return null; } })(),
-    steBrandOrder: (function(){ try { return steBrandOrder.slice(); } catch(e){ return null; } })()
-  };
+  var payload = _buildCloudPayload();
+  var ts = payload.savedAt;
   fns.setDoc(docRef, payload)
     .then(function(){
       localStorage.setItem(SK+'_savedAt', ts);
@@ -1817,8 +1799,49 @@ function _applyCloudData(data) {
   return true;
 }
 
+function _buildCloudPayload() {
+  function stripUndefined(obj) {
+    if (Array.isArray(obj)) return obj.map(stripUndefined);
+    if (obj && typeof obj === 'object') {
+      var out = {};
+      Object.keys(obj).forEach(function(k) { if (obj[k] !== undefined) out[k] = stripUndefined(obj[k]); });
+      return out;
+    }
+    return obj;
+  }
+  savePanelToMemory(steCurrentBrand);
+  return {
+    items: stripUndefined(items),
+    savedAt: new Date().toISOString(),
+    platGroups: (function(){ try { return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); } catch(e){ return null; } })(),
+    steTables: (function(){ try { return JSON.parse(JSON.stringify(steTables)); } catch(e){ return null; } })(),
+    steBrandOrder: (function(){ try { return steBrandOrder.slice(); } catch(e){ return null; } })()
+  };
+}
+
+function fbForceUploadToCloud() {
+  if (!window._fbUser || !window._fbDb || !window._fbFns) { showToast('Nejsi přihlášen do cloudu', 'err'); return; }
+  var fns = window._fbFns;
+  var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
+  var dot = document.getElementById('fbStatusDot');
+  if (dot) dot.className = 'fb-status fb-saving';
+  var payload = _buildCloudPayload();
+  fns.setDoc(docRef, payload)
+    .then(function() {
+      localStorage.setItem(SK+'_savedAt', payload.savedAt);
+      _fbCloudReady = true;
+      if (dot) dot.className = 'fb-status fb-online';
+      showToast('Data nahrána do cloudu (' + items.length + ' položek).');
+    })
+    .catch(function(e) {
+      if (dot) dot.className = 'fb-status fb-error';
+      showToast('Chyba nahrávání: ' + (e.message || e), 'err');
+      console.error('fbForceUploadToCloud:', e);
+    });
+}
+
 function fbForceLoadFromCloud() {
-  if (!window._fbUser || !window._fbDb || !window._fbFns) { showToast('Nejsi přihlášen', 'err'); return; }
+  if (!window._fbUser || !window._fbDb || !window._fbFns) { showToast('Nejsi přihlášen do cloudu', 'err'); return; }
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
   var dot = document.getElementById('fbStatusDot');
@@ -1830,7 +1853,7 @@ function fbForceLoadFromCloud() {
     showToast(loaded ? 'Data načtena z cloudu (' + items.length + ' položek).' : 'V cloudu jsou prázdná data.', loaded ? '' : 'err');
   }).catch(function(e) {
     if (dot) dot.className = 'fb-status fb-error';
-    showToast('Chyba načtení z cloudu!', 'err');
+    showToast('Chyba načtení z cloudu: ' + (e.message || e), 'err');
     console.error('fbForceLoadFromCloud:', e);
   });
 }
@@ -11015,7 +11038,7 @@ rebuildBrandTables();
     <div class="fs-title" style="color:var(--accent);">Cloud Sync</div>
     <div id="cloudSyncStatus" style="font-size:12px;margin-bottom:8px;padding:8px;background:var(--surface);border-radius:6px;border:1px solid var(--border);font-family:'DM Mono',monospace;"></div>
     <button onclick="handleCloudAuthBtn()" class="btn-sec" style="font-size:12px;width:100%;margin-bottom:6px;" id="btnCloudAuth">Přihlásit se</button>
-    <button onclick="if(!window._fbUser){showToast('Nejsi přihlášen','err');return;}localStorage.setItem('sklad_v3_savedAt','2000-01-01');fbSaveToCloud();showToast('Nahrávám data do cloudu...');" class="btn-sec" style="font-size:12px;width:100%;margin-bottom:6px;">⬆ Nahrát vše do cloudu</button>
+    <button onclick="fbForceUploadToCloud();" class="btn-sec" style="font-size:12px;width:100%;margin-bottom:6px;">⬆ Nahrát vše do cloudu</button>
     <button onclick="if(!window._fbUser){showToast('Nejsi přihlášen','err');return;}fbForceLoadFromCloud();" class="btn-sec" style="font-size:12px;width:100%;margin-bottom:6px;">⬇ Stáhnout z cloudu</button>
     <div id="deleteAccountWrap" style="display:none;margin-top:4px;padding-top:10px;border-top:1px solid var(--border);">
       <button onclick="cm('moSettings');setTimeout(deleteAccount,100);" class="btn-sec" style="font-size:12px;width:100%;border-color:#ff444433;color:var(--danger);">Smazat účet a všechna data</button>
