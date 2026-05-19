@@ -7740,7 +7740,7 @@ function onStockxUrlChange() {
 var _stockxUrlTimer = null;
 // ── AUTO KATEGORIE Z NÁZVU ────────────────────────────────
 // ── HISTORICKÝ CACHE POLOŽEK ──────────────────────────────
-var ITEM_CACHE_KEY = 'sklad_item_cache_v1';
+var ITEM_CACHE_KEY = 'sklad_item_cache_v2';
 function itemCacheGet() {
   try { return JSON.parse(localStorage.getItem(ITEM_CACHE_KEY) || '{}'); } catch(e) { return {}; }
 }
