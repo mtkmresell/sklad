@@ -1752,6 +1752,7 @@ function sv(){
 
 var _fbCloudReady = false; // true až po prvním onSnapshot
 var _fbSaveCallId = 0;
+var _lastOwnSavedAt = null; // savedAt string našeho posledního cloudu — ignorujeme vlastní snapshot
 function fbSaveToCloud() {
   if (!_fbCloudReady) { console.log('fbSaveToCloud: čeká na onSnapshot'); return; }
   if (!window._fbUser || !window._fbDb || !window._fbFns) {
@@ -1769,6 +1770,7 @@ function fbSaveToCloud() {
   fns.setDoc(docRef, payload)
     .then(function(){
       localStorage.setItem(SK+'_savedAt', ts);
+      _lastOwnSavedAt = ts;
       // Aktualizuj tečku jen pokud toto je poslední volání
       if (callId === _fbSaveCallId) {
         if (dot) dot.className = 'fb-status fb-online';
@@ -1829,6 +1831,7 @@ function fbForceUploadToCloud() {
   fns.setDoc(docRef, payload)
     .then(function() {
       localStorage.setItem(SK+'_savedAt', payload.savedAt);
+      _lastOwnSavedAt = payload.savedAt;
       _fbCloudReady = true;
       if (dot) dot.className = 'fb-status fb-online';
       showToast('Data nahrána do cloudu (' + items.length + ' položek).');
@@ -8814,8 +8817,9 @@ document.addEventListener('fb-auth', function(e) {
         // Jinak jsou stejné — nic nedělej
       } else {
         // Subsequent snapshot — přišla změna z jiného zařízení
-        // Ignoruj pokud jsme to my sami právě uložili (cloudTime <= localTime)
-        if (cloudTime > localTime + 2000) {
+        // Ignoruj pokud jsme to MY sami právě uložili (stejný savedAt string)
+        var isOwnSave = _lastOwnSavedAt && data.savedAt === _lastOwnSavedAt;
+        if (!isOwnSave && cloudTime > localTime + 500) {
           if (_applyCloudData(data)) showToast('Synchronizováno.');
         }
       }
