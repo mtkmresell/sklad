@@ -966,7 +966,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   if (fbReady) {
     const app = initializeApp(FIREBASE_CONFIG);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    const db = getFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false });
 
     // Exportuj na window pro přístup z hlavního scriptu
     window._fbAuth = auth;
