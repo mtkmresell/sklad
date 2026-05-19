@@ -8803,13 +8803,13 @@ document.addEventListener('fb-auth', function(e) {
           // Nové zařízení nebo prázdný stav — VŽDY načti z cloudu
           _applyCloudData(data);
           showToast('Data načtena z cloudu (' + items.length + ' položek).');
-        } else if (cloudTime > localTime + 2000) {
-          // Cloud je novější — použij cloud
+        } else if (cloudTime > localTime) {
+          // Cloud je novější (byť jen o ms) — použij cloud
           if ((data.items||[]).length !== items.length) saveSnapshot('před sync');
           _applyCloudData(data);
           showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
-        } else if (localTime > cloudTime + 5000) {
-          // Lokální jsou novější — nahraj do cloudu (jen pokud máme data)
+        } else if (localTime > cloudTime + 30000) {
+          // Lokální jsou výrazně novější (>30s) — nahraj do cloudu
           if (items.length > 0) {
             fbSaveToCloud();
           }
