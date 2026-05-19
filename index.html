@@ -1761,20 +1761,16 @@ function fbSaveToCloud() {
   var callId = ++_fbSaveCallId;
   var dot = document.getElementById('fbStatusDot');
   if (dot) dot.className = 'fb-status fb-saving';
-  // Pojistka: pokud write do 15s neskončí, resetuj tečku
-  var safetyTimer = setTimeout(function() {
-    if (callId === _fbSaveCallId) {
-      var d = document.getElementById('fbStatusDot');
-      if (d && d.className === 'fb-status fb-saving') d.className = 'fb-status fb-online';
-    }
-  }, 15000);
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
   var payload = _buildCloudPayload();
   var ts = payload.savedAt;
-  fns.setDoc(docRef, payload)
+  // Timeout 10s — Firestore ve offline stavu nechá promise viset navždy
+  var writeTimeout = new Promise(function(_, reject) {
+    setTimeout(function() { reject(new Error('timeout')); }, 10000);
+  });
+  Promise.race([fns.setDoc(docRef, payload), writeTimeout])
     .then(function(){
-      clearTimeout(safetyTimer);
       localStorage.setItem(SK+'_savedAt', ts);
       _lastOwnSavedAt = ts;
       if (callId === _fbSaveCallId) {
@@ -1782,12 +1778,15 @@ function fbSaveToCloud() {
       }
     })
     .catch(function(e){
-      clearTimeout(safetyTimer);
       if (callId === _fbSaveCallId) {
         if (dot) dot.className = 'fb-status fb-error';
       }
       console.error('fbSaveToCloud chyba:', e);
-      showToast('Chyba uložení do cloudu!', 'err');
+      if (e.message === 'timeout') {
+        showToast('Cloud nedostupný – data jsou uložena lokálně.', 'err');
+      } else {
+        showToast('Chyba uložení do cloudu!', 'err');
+      }
     });
 }
 
@@ -1833,7 +1832,10 @@ function fbForceUploadToCloud() {
   var dot = document.getElementById('fbStatusDot');
   if (dot) dot.className = 'fb-status fb-saving';
   var payload = _buildCloudPayload();
-  fns.setDoc(docRef, payload)
+  var writeTimeout = new Promise(function(_, reject) {
+    setTimeout(function() { reject(new Error('timeout')); }, 10000);
+  });
+  Promise.race([fns.setDoc(docRef, payload), writeTimeout])
     .then(function() {
       localStorage.setItem(SK+'_savedAt', payload.savedAt);
       _lastOwnSavedAt = payload.savedAt;
@@ -1843,7 +1845,7 @@ function fbForceUploadToCloud() {
     })
     .catch(function(e) {
       if (dot) dot.className = 'fb-status fb-error';
-      showToast('Chyba nahrávání: ' + (e.message || e), 'err');
+      showToast(e.message === 'timeout' ? 'Cloud nedostupný – zkus to znovu.' : ('Chyba nahrávání: ' + (e.message || e)), 'err');
       console.error('fbForceUploadToCloud:', e);
     });
 }
