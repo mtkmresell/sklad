@@ -948,7 +948,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, deleteUser }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, getDocs, query, where }
+  import { initializeFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, getDocs, query, where }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const FIREBASE_CONFIG = {
@@ -966,7 +966,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   if (fbReady) {
     const app = initializeApp(FIREBASE_CONFIG);
     const auth = getAuth(app);
-    const db = getFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false });
+    const db = initializeFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false });
 
     // Exportuj na window pro přístup z hlavního scriptu
     window._fbAuth = auth;
