@@ -3956,9 +3956,14 @@ function changeWaitState(id, newState) {
   const idx = items.findIndex(i => i.id === id);
   if (idx === -1) return;
   if (newState === 'completed') {
+    var _itForCache = items[idx];
     items[idx].saleState = 'paid';
     items[idx].waitState = 'completed';
     items[idx].payoutDate = new Date().toISOString().slice(0,10);
+    if (_itForCache.name) {
+      itemCacheSet(_itForCache.name, { sku: _itForCache.sku, stockxUrl: _itForCache.stockxUrl, imgUrl: _itForCache.imgUrl });
+      fbSaveItemCache();
+    }
   } else {
     items[idx].waitState = newState;
   }
@@ -4544,8 +4549,11 @@ function saveItem(){
       showToast('Odkaz na fakturu ' + _invMsg + ' u ' + _invPropagated + ' dalších položek ze stejného nákupu.');
     }
   }
-  // Ulož do historického cache
-  if (d.name) itemCacheSet(d.name, {sku: d.sku, stockxUrl: d.stockxUrl || '', imgUrl: d.imgUrl});
+  // Ulož do historického cache jen pokud jde do Prodáno
+  if (d.name && d.saleState === 'paid') {
+    itemCacheSet(d.name, { sku: d.sku, stockxUrl: d.stockxUrl || '', imgUrl: d.imgUrl });
+    fbSaveItemCache();
+  }
   showToast(editId ? 'Položka upravena' : (qty>1 ? qty+'× položka přidána' : 'Položka přidána'));
 }
 
@@ -7402,7 +7410,7 @@ function openBulkPayoutModal(bulkId) {
       items[bulkIdx].payoutDate = dateVal;
       items[bulkIdx].paymentMethod = methodVal;
     }
-    // Označ i jednotlivé položky jako paid
+    // Označ i jednotlivé položky jako paid + přidej do cache
     getBulkItems(bulkId).forEach(function(it){
       var idx2 = items.findIndex(function(x){ return x.id===it.id; });
       if(idx2 !== -1) {
@@ -7410,8 +7418,10 @@ function openBulkPayoutModal(bulkId) {
         items[idx2].waitState = 'completed';
         items[idx2].payoutDate = dateVal;
         items[idx2].paymentMethod = methodVal;
+        if (it.name) itemCacheSet(it.name, { sku: it.sku, stockxUrl: it.stockxUrl, imgUrl: it.imgUrl });
       }
     });
+    fbSaveItemCache();
 
     // Učení vlastních hodnot
     if(m && m.value==='Vlastní' && methodVal) {
@@ -7725,15 +7735,60 @@ function itemCacheGet() {
 function itemCacheSet(name, data) {
   if (!name) return;
   var cache = itemCacheGet();
-  // Primární klíč: SKU (pokud existuje), fallback: název
-  var key = (data.sku ? 'sku:' + data.sku.trim().toLowerCase() : 'name:' + name.trim().toLowerCase());
-  var existing = cache[key] || {};
-  if (data.sku) existing.sku = data.sku;
-  if (data.stockxUrl) existing.stockxUrl = data.stockxUrl;
-  if (data.imgUrl) existing.imgUrl = data.imgUrl;
-  existing.name = name.trim();
-  cache[key] = existing;
+  var skuKey  = data.sku ? 'sku:' + data.sku.trim().toLowerCase() : null;
+  var nameKey = 'name:' + name.trim().toLowerCase();
+  var entry = (skuKey && cache[skuKey]) || cache[nameKey] || {};
+  if (data.sku)       entry.sku       = data.sku;
+  if (data.stockxUrl) entry.stockxUrl = data.stockxUrl;
+  if (data.imgUrl)    entry.imgUrl    = data.imgUrl;
+  entry.name = name.trim();
+  if (skuKey)  cache[skuKey]  = entry;
+  cache[nameKey] = entry;
   try { localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(cache)); } catch(e) {}
+}
+
+// Ulož cache do Firestore (volá se po přesunu do Prodáno)
+function fbSaveItemCache() {
+  if (!window._fbUser || !window._fbDb || !window._fbFns) return;
+  var fns = window._fbFns;
+  var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'itemCache');
+  var payload = { data: JSON.stringify(itemCacheGet()) };
+  var writeTimeout = new Promise(function(_, reject) {
+    setTimeout(function() { reject(new Error('timeout')); }, 10000);
+  });
+  Promise.race([fns.setDoc(docRef, payload), writeTimeout])
+    .catch(function(e) { console.error('fbSaveItemCache:', e); });
+}
+
+// Načti cache z Firestore a sluč s lokální (volá se po přihlášení)
+function fbLoadItemCache() {
+  if (!window._fbUser || !window._fbDb || !window._fbFns) return;
+  var fns = window._fbFns;
+  var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'itemCache');
+  fns.getDoc(docRef).then(function(snap) {
+    if (!snap.exists()) {
+      // Žádná cloudová cache — migruj z aktuálních Prodáno položek
+      _migrateItemCacheFromSold();
+      return;
+    }
+    try {
+      var cloudCache = JSON.parse(snap.data().data || '{}');
+      var localCache = itemCacheGet();
+      // Cloud je master — lokální doplní jen co cloud nemá
+      var merged = Object.assign({}, localCache, cloudCache);
+      localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(merged));
+    } catch(e) { console.error('fbLoadItemCache parse:', e); }
+  }).catch(function(e) { console.error('fbLoadItemCache:', e); });
+}
+
+// Jednorázová migrace: přidej do cache všechny aktuálně Prodáno položky
+function _migrateItemCacheFromSold() {
+  var sold = (items || []).filter(function(it) { return it.saleState === 'paid' && it.name; });
+  if (!sold.length) return;
+  sold.forEach(function(it) {
+    itemCacheSet(it.name, { sku: it.sku, stockxUrl: it.stockxUrl, imgUrl: it.imgUrl });
+  });
+  fbSaveItemCache();
 }
 
 function autoFillFromHistory(nameLC, skuLC) {
@@ -7771,6 +7826,7 @@ function autoFillFromHistory(nameLC, skuLC) {
   var fStockx = document.getElementById('fStockxUrl');
   var fSku    = document.getElementById('fSku');
 
+  var fName   = document.getElementById('fName');
   if (fImg && !fImg.value && found.imgUrl) {
     fImg.value = found.imgUrl;
     var prev = document.getElementById('fImgPreview');
@@ -7781,6 +7837,11 @@ function autoFillFromHistory(nameLC, skuLC) {
   }
   if (fSku && !fSku.value && found.sku) {
     fSku.value = found.sku;
+  }
+  // Doplň název pokud byl nalezen podle SKU a pole je prázdné
+  if (fName && !fName.value.trim() && found.name) {
+    fName.value = found.name;
+    autoFillCategory(found.name);
   }
 }
 
@@ -8833,6 +8894,8 @@ document.addEventListener('fb-auth', function(e) {
           }
         }
         // Jinak jsou stejné — nic nedělej
+        // Načti historickou cache položek (po items jsou k dispozici pro migraci)
+        fbLoadItemCache();
       } else {
         // Subsequent snapshot — přišla změna z jiného zařízení
         // Ignoruj pokud jsme to MY sami právě uložili (stejný savedAt string)
