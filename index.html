@@ -1758,25 +1758,31 @@ function fbSaveToCloud() {
     console.warn('fbSaveToCloud: chybí', {user:!!window._fbUser, db:!!window._fbDb, fns:!!window._fbFns});
     return;
   }
-  console.log('fbSaveToCloud volán z:', new Error().stack.split('\n')[2], 'items:', items.length);
   var callId = ++_fbSaveCallId;
   var dot = document.getElementById('fbStatusDot');
   if (dot) dot.className = 'fb-status fb-saving';
+  // Pojistka: pokud write do 15s neskončí, resetuj tečku
+  var safetyTimer = setTimeout(function() {
+    if (callId === _fbSaveCallId) {
+      var d = document.getElementById('fbStatusDot');
+      if (d && d.className === 'fb-status fb-saving') d.className = 'fb-status fb-online';
+    }
+  }, 15000);
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
   var payload = _buildCloudPayload();
   var ts = payload.savedAt;
   fns.setDoc(docRef, payload)
     .then(function(){
+      clearTimeout(safetyTimer);
       localStorage.setItem(SK+'_savedAt', ts);
       _lastOwnSavedAt = ts;
-      // Aktualizuj tečku jen pokud toto je poslední volání
       if (callId === _fbSaveCallId) {
         if (dot) dot.className = 'fb-status fb-online';
       }
-      console.log('fbSaveToCloud OK', ts);
     })
     .catch(function(e){
+      clearTimeout(safetyTimer);
       if (callId === _fbSaveCallId) {
         if (dot) dot.className = 'fb-status fb-error';
       }
