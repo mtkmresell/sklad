@@ -7808,23 +7808,18 @@ function autoFillFromHistory(nameLC, skuLC) {
   // 3. Fallback — živé položky
   if (!found) {
     var allItems = (window.items||[]).concat(window.PRELOAD||[]).concat(window.CSV_ITEMS||[]);
-    // Pro non-sneaker kategorie (pokemon, lego...) ignoruj auto-generované stockx.com URL z živých položek
-    var _detectedCat = (nameLC ? (_ruleCategory(nameLC) || '') : '');
-    var _stockxCats = ['sneakers', 'obleceni'];
-    function _sanitizeUrl(url) {
-      if (!url) return '';
-      if (url.includes('stockx.com') && !_stockxCats.includes(_detectedCat)) return '';
-      return url;
-    }
+    // Normalizace: sjednoť mezery, ignoruj diakritiku
+    function _nn(s) { return (s||'').toLowerCase().trim().replace(/\s+/g,' ').normalize('NFD').replace(/[̀-ͯ]/g,''); }
     // Přesná shoda SKU
     if (skuLC) {
       var bysku = allItems.find(function(it){ return it.sku && it.sku.trim().toLowerCase() === skuLC.trim().toLowerCase(); });
-      if (bysku && (bysku.imgUrl || bysku.stockxUrl)) found = {sku: bysku.sku, stockxUrl: _sanitizeUrl(bysku.stockxUrl), imgUrl: bysku.imgUrl};
+      if (bysku) found = {name: bysku.name, sku: bysku.sku, stockxUrl: bysku.stockxUrl, imgUrl: bysku.imgUrl};
     }
-    // Přesná shoda názvu v živých položkách
+    // Shoda názvu v živých položkách (s normalizací)
     if (!found && nameLC) {
-      var exactItem = allItems.find(function(it){ return it.name && it.name.trim().toLowerCase() === nameLC.trim(); });
-      if (exactItem && (exactItem.imgUrl || exactItem.stockxUrl)) found = {sku: exactItem.sku, stockxUrl: _sanitizeUrl(exactItem.stockxUrl), imgUrl: exactItem.imgUrl};
+      var normName = _nn(nameLC);
+      var exactItem = allItems.find(function(it){ return it.name && _nn(it.name) === normName; });
+      if (exactItem) found = {name: exactItem.name, sku: exactItem.sku, stockxUrl: exactItem.stockxUrl, imgUrl: exactItem.imgUrl};
     }
   }
 
