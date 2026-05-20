@@ -2792,7 +2792,7 @@ function bazosExpireCheck() {
 
 function togglePlatItem(id, platform) {
   const idx = items.findIndex(i => i.id === id);
-  if (idx === -1) return;
+  if (idx === -1) return false;
   const plats = items[idx].platforms || [];
   const i = plats.indexOf(platform);
   const isBazos = BAZOS_PLATS.includes(platform);
@@ -2807,7 +2807,7 @@ function togglePlatItem(id, platform) {
       );
       if (!alreadyCounted && currentCount >= BAZOS_LIMIT) {
         showToast(platform + ' má limit 50 inzerátů (aktuálně: ' + currentCount + '). Nelze přidat další.', 4000);
-        return; // zablokuj
+        return false; // zablokuj
       }
       // Ulož datum zaškrtnutí
       if (!items[idx].bazosCheckedAt) items[idx].bazosCheckedAt = {};
@@ -2828,10 +2828,8 @@ function togglePlatItem(id, platform) {
     var sibPlats = sib.platforms || [];
     var sibIdx2 = sibPlats.indexOf(platform);
     if (i === -1) {
-      // Přidáváme — přidej i sestrám pokud ještě nemají
       if (sibIdx2 === -1) sibPlats.push(platform);
     } else {
-      // Odebíráme — odeber i sestrám
       if (sibIdx2 !== -1) sibPlats.splice(sibIdx2, 1);
     }
     sib.platforms = sibPlats;
@@ -2846,6 +2844,7 @@ function togglePlatItem(id, platform) {
     window._platCloudTimer = null;
     if (window._fbUser && typeof fbSaveToCloud === 'function') fbSaveToCloud();
   }, 500);
+  return true;
 }
 
 function setView(mode) {
@@ -3045,7 +3044,14 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
               ${grp.map(p=>{
                 if(!platAcceptsCategory(p,it.category||'jine',GROUPS)) return '<span style="display:inline-block;width:18px;height:18px;flex-shrink:0;"></span>';
                 const on=(it.platforms||[]).includes(p);
-                return `<span data-action="toggleplat" data-id="${it.id}" data-plat="${p}" data-tip="${p}" style="cursor:pointer;display:inline-block;width:18px;height:18px;border-radius:3px;border:1px solid;line-height:18px;font-size:9px;text-align:center;flex-shrink:0;${on?'background:#c8ff0020;color:#8ab200;border-color:#c8ff0035':'background:var(--surface3);color:transparent;border-color:var(--border)'}">
+                const isBazosP = BAZOS_PLATS.includes(p);
+                const bazosFullP = isBazosP && !on && bazosActiveCount(p) >= BAZOS_LIMIT;
+                const style = on
+                  ? 'background:#c8ff0020;color:#8ab200;border-color:#c8ff0035;cursor:pointer;'
+                  : bazosFullP
+                    ? 'background:var(--surface3);color:transparent;border-color:var(--border);opacity:0.35;cursor:not-allowed;'
+                    : 'background:var(--surface3);color:transparent;border-color:var(--border);cursor:pointer;';
+                return `<span data-action="toggleplat" data-id="${it.id}" data-plat="${p}" data-tip="${bazosFullP?p+' — plný (50/50)':p}" style="display:inline-block;width:18px;height:18px;border-radius:3px;border:1px solid;line-height:18px;font-size:9px;text-align:center;flex-shrink:0;${style}">
                   ${on?'✓':''}
                 </span>`;
               }).join('')}
@@ -6295,24 +6301,24 @@ document.addEventListener('click', function(e) {
   else if (action === 'detail') { openDetail(id); }
   else if (action === 'toggleplat') {
     var _plat = btn.dataset.plat;
-    var isOn = btn.style.background.includes('c8ff');
-    var _newOn = !isOn;
-    // Okamžitě aktualizuj všechny buňky se stejnou platformou (tento i sourozenci)
-    document.querySelectorAll('[data-action="toggleplat"][data-plat="' + _plat + '"]').forEach(function(el) {
-      var elId = el.dataset.id;
-      var it = items.find(function(x){ return x.id === elId; });
-      // Ukaž nový stav jen pokud je to kliknutý element nebo sourozenec (stejná skupina)
-      var isSelf = elId === id;
-      var isSibling = it && items.find(function(x){ return x.id === id; }) &&
-        platGroupKey(it) === platGroupKey(items.find(function(x){ return x.id === id; }));
-      if (isSelf || isSibling) {
-        el.style.background = _newOn ? '#c8ff0020' : 'var(--surface3)';
-        el.style.color = _newOn ? '#8ab200' : 'transparent';
-        el.style.borderColor = _newOn ? '#c8ff0035' : 'var(--border)';
-        el.textContent = _newOn ? '✓' : '';
-      }
-    });
-    togglePlatItem(id, _plat);
+    var ok = togglePlatItem(id, _plat);
+    // DOM aktualizuj jen pokud toggle proběhl (nebyl zablokován limitem)
+    if (ok) {
+      var _newOn = (items.find(function(x){ return x.id === id; })?.platforms || []).includes(_plat);
+      document.querySelectorAll('[data-action="toggleplat"][data-plat="' + _plat + '"]').forEach(function(el) {
+        var elId = el.dataset.id;
+        var it = items.find(function(x){ return x.id === elId; });
+        var isSelf = elId === id;
+        var isSibling = it && items.find(function(x){ return x.id === id; }) &&
+          platGroupKey(it) === platGroupKey(items.find(function(x){ return x.id === id; }));
+        if (isSelf || isSibling) {
+          el.style.background = _newOn ? '#c8ff0020' : 'var(--surface3)';
+          el.style.color = _newOn ? '#8ab200' : 'transparent';
+          el.style.borderColor = _newOn ? '#c8ff0035' : 'var(--border)';
+          el.textContent = _newOn ? '✓' : '';
+        }
+      });
+    }
   }
   else if (action === 'copysku') { copySku(id, btn); }
   else if (action === 'img') { openImgModal(id); }
