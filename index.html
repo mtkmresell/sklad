@@ -1050,6 +1050,16 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <button class="multi-filter-btn" id="locFilterBtn" data-action="multifilter" data-filter="loc"><span class="mfb-label">Všechny sklady</span><span class="mfb-arrow">▾</span></button>
     <div class="multi-filter-drop" id="locFilterDrop" style="display:none;"></div>
   </div>
+  <div id="localListingFilterWrap">
+    <select id="filterLocalListing">
+      <option value="">Local listing: vše</option>
+      <option value="any">Má local listing</option>
+      <option value="none">Bez local listingu</option>
+      <option value="Bazoš.cz">Bazoš.cz</option>
+      <option value="Bazoš.sk">Bazoš.sk</option>
+      <option value="Bazoš.pl">Bazoš.pl</option>
+    </select>
+  </div>
 
   <select id="filterSoldWhere">
     <option value="">Všechna místa</option>
@@ -2208,6 +2218,7 @@ function switchTab(t){
   }
   // Sklad filtr: jen na Stock tabu
   setVis(floc, t==='stock');
+  setVis(document.getElementById('localListingFilterWrap'), t==='stock');
   // Místo prodeje: na Waiting a Sold tabu (ne na Stock, ne v analytice)
   setVis(fswhere, (t==='sold' || t==='waiting') && soldViewMode!=='analytics');
   // View toggle: skryj pro Waiting a Sold
@@ -2523,6 +2534,17 @@ function getFiltered(){
   if(swhere) list=list.filter(it=>(it.soldWhere||'').toLowerCase().includes(swhere.toLowerCase()));
   const fws = document.getElementById('filterWaitState')?.value||'';
   if(fws && tab==='waiting') list=list.filter(it=>(it.waitState||'sending')===fws);
+  const fll = document.getElementById('filterLocalListing')?.value||'';
+  if(fll && tab==='stock') {
+    const localPlats = ['Bazoš.cz','Bazoš.sk','Bazoš.pl','Facebook','Vinted','Refresher'];
+    if(fll === 'any') {
+      list = list.filter(it => (it.platforms||[]).some(p => localPlats.includes(p)));
+    } else if(fll === 'none') {
+      list = list.filter(it => !(it.platforms||[]).some(p => localPlats.includes(p)));
+    } else {
+      list = list.filter(it => (it.platforms||[]).includes(fll));
+    }
+  }
   list.sort((a,b)=>{
     if(sort==='date-desc'){
       var _getDate=function(it){ if(tab==='waiting'){ var sd=it.saleDate||''; var d=null; if(/^\d{4}-\d{2}-\d{2}$/.test(sd)){d=new Date(sd+'T00:00:00');} else {var p=sd.split('.');if(p.length===3)d=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));} return d&&!isNaN(d)?d:new Date(it.dateAdded||0); } return parseBuyDate(it)||new Date(it.dateAdded||0); };
@@ -8041,7 +8063,7 @@ function attachListeners() {
       _searchDebounce = setTimeout(renderItems, 250);
     });
   }
-  ['filterSoldWhere','filterWaitState','sortBy'].forEach(id => {
+  ['filterSoldWhere','filterWaitState','sortBy','filterLocalListing'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener('change', renderItems);
   });
