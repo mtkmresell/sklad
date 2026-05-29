@@ -1754,6 +1754,7 @@ function sv(){
     localStorage.setItem(SK, JSON.stringify(items));
     // Zapisuj savedAt okamžitě — zajišťuje že refresh před Firebase .then() nepřepíše data
     localStorage.setItem(SK+'_savedAt', new Date().toISOString());
+    localStorage.setItem(SK+'_dirty','1');
   } catch(e) {}
   // Automaticky ulož do cloudu pokud jsme přihlášeni (s 500ms debounce)
   if (window._fbUser && typeof fbSaveToCloud === 'function') {
@@ -1784,6 +1785,7 @@ function fbSaveToCloud() {
   Promise.race([fns.setDoc(docRef, payload), writeTimeout])
     .then(function(){
       localStorage.setItem(SK+'_savedAt', ts);
+      localStorage.removeItem(SK+'_dirty');
       _lastOwnSavedAt = ts;
       if (callId === _fbSaveCallId) {
         if (dot) dot.className = 'fb-status fb-online';
@@ -1808,6 +1810,7 @@ function _applyCloudData(data) {
   items = cloudItems;
   localStorage.setItem(SK, JSON.stringify(items));
   if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
+  localStorage.removeItem(SK+'_dirty');
   if (data.platGroups) {
     var pg = typeof data.platGroups === 'string' ? JSON.parse(data.platGroups) : data.platGroups;
     localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(pg));
@@ -1868,6 +1871,7 @@ function fbForceUploadToCloud() {
   Promise.race([fns.setDoc(docRef, payload), writeTimeout])
     .then(function() {
       localStorage.setItem(SK+'_savedAt', payload.savedAt);
+      localStorage.removeItem(SK+'_dirty');
       _lastOwnSavedAt = payload.savedAt;
       _fbCloudReady = true;
       if (dot) dot.className = 'fb-status fb-online';
@@ -1901,18 +1905,19 @@ function fbForceLoadFromCloud() {
 var _lastVisSync = 0;
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState !== 'visible') return;
-  if (!window._fbUser || !window._fbDb || !window._fbFns || !_fbCloudReady) return;
+  if (!window._fbUser || !window._fbDb || !window._fbFns) return;
   var now = Date.now();
-  if (now - _lastVisSync < 30000) return;
+  if (now - _lastVisSync < 15000) return;
   _lastVisSync = now;
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
   fns.getDoc(docRef).then(function(snap) {
     if (!snap.exists()) return;
+    _fbCloudReady = true;
     var data = snap.data();
     var cloudTime = data.savedAt ? new Date(data.savedAt).getTime() : 0;
     var localTime = (localStorage.getItem(SK+'_savedAt') ? new Date(localStorage.getItem(SK+'_savedAt')).getTime() : 0);
-    if (cloudTime > localTime + 1000) {
+    if (cloudTime > localTime) {
       if (_applyCloudData(data)) showToast('Synchronizováno z cloudu.');
     }
   }).catch(function(e) { console.warn('visibilitychange sync check:', e); });
@@ -8080,7 +8085,6 @@ function attachListeners() {
       _svCloudTimer = null;
       try {
         localStorage.setItem(SK, JSON.stringify(items));
-        localStorage.setItem(SK+'_savedAt', new Date().toISOString());
       } catch(e) {}
     }
   });
@@ -8953,12 +8957,16 @@ document.addEventListener('fb-auth', function(e) {
         // Zruš jakýkoli pending sv() cloud timer
         if (_svCloudTimer) { clearTimeout(_svCloudTimer); _svCloudTimer = null; }
         // První načtení — rozhodni zda použít cloud nebo lokální
+        var isDirty = !!localStorage.getItem(SK+'_dirty');
         if (!localSavedAt || items.length === 0) {
           // Nové zařízení nebo prázdný stav — VŽDY načti z cloudu
           _applyCloudData(data);
           showToast('Data načtena z cloudu (' + items.length + ' položek).');
+        } else if (isDirty && cloudTime <= localTime) {
+          // Neuložené lokální změny (zavřeno před sync) a cloud není novější — nahraj lokální
+          fbSaveToCloud();
         } else if (cloudTime > localTime) {
-          // Cloud je novější (byť jen o ms) — použij cloud
+          // Cloud je novější — použij cloud
           if ((data.items||[]).length !== items.length) saveSnapshot('před sync');
           _applyCloudData(data);
           showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
@@ -8971,6 +8979,7 @@ document.addEventListener('fb-auth', function(e) {
         // Jinak jsou stejné — nic nedělej
       } else {
         // Subsequent snapshot — přišla změna z jiného zařízení
+        if (!_fbCloudReady) _fbCloudReady = true;
         // Ignoruj pokud jsme to MY sami právě uložili (stejný savedAt string)
         var isOwnSave = _lastOwnSavedAt && data.savedAt === _lastOwnSavedAt;
         if (!isOwnSave && cloudTime > localTime + 500) {
