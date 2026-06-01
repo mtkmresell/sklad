@@ -8289,8 +8289,8 @@ var crmDetailId = null;
 var crmDetailCurrentTab = 'overview';
 
 function openCustomerDetail(id) {
-  var c = customers.find(function(x){ return x.id === id; });
-  if (!c) { showToast('Zákazník nenalezen.','err'); return; }
+  var c = customers.find(function(x){ return x.id === id; }) || partners.find(function(x){ return x.id === id; });
+  if (!c) { showToast('Nenalezeno.','err'); return; }
   crmDetailId = id;
   crmDetailCurrentTab = 'overview';
   _renderCrmDetailHeader(c);
@@ -8331,7 +8331,7 @@ function crmDetailTab(tabName) {
   document.querySelectorAll('.crm-detail-tab').forEach(function(b){
     b.classList.toggle('active', b.dataset.tab===tabName);
   });
-  var c = customers.find(function(x){return x.id===crmDetailId;});
+  var c = customers.find(function(x){return x.id===crmDetailId;}) || partners.find(function(x){return x.id===crmDetailId;});
   if(!c) return;
   var el = document.getElementById('crmDetailContent');
   if(!el) return;
@@ -8339,9 +8339,21 @@ function crmDetailTab(tabName) {
     case 'overview':  el.innerHTML=_crmTabOverview(c); break;
     case 'contacts':  el.innerHTML=_crmTabContacts(c); break;
     case 'prefs':     el.innerHTML=_crmTabPrefs(c); break;
-    case 'behavior':  el.innerHTML=_crmTabBehavior(c); break;
-    case 'followup':  el.innerHTML=_crmTabFollowup(c); break;
-    case 'history':   el.innerHTML=_crmTabHistory(c); break;
+    case 'behavior':  el.innerHTML=_crmTabBehavior(c);
+      setTimeout(function(){
+        ['crmBPayRel','crmBDeliv','crmBHaggle','crmBInvoice'].forEach(function(id){
+          var s=document.getElementById(id); if(s&&s.tagName==='SELECT') initCustomSelect(s);
+        });
+      }, 0); break;
+    case 'followup':  el.innerHTML=_crmTabFollowup(c);
+      setTimeout(function(){
+        var fs=document.getElementById('crmFupStatus'); if(fs&&fs.tagName==='SELECT') initCustomSelect(fs);
+        var fd=document.getElementById('crmFupDate'); if(fd&&fd.type==='date') initCustomDatePicker(fd);
+      }, 0); break;
+    case 'history':   el.innerHTML=_crmTabHistory(c);
+      setTimeout(function(){
+        var hs=document.getElementById('crmHistType'); if(hs&&hs.tagName==='SELECT') initCustomSelect(hs);
+      }, 0); break;
   }
 }
 
@@ -8498,7 +8510,7 @@ function _crmTabHistory(c){
 
 // Action handlers
 function crmSaveBehavior(id){
-  var c=customers.find(function(x){return x.id===id;}); if(!c) return;
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   c.payment_reliability=document.getElementById('crmBPayRel').value;
   c.delivery_preference=document.getElementById('crmBDeliv').value;
   c.haggles=document.getElementById('crmBHaggle').value;
@@ -8508,7 +8520,7 @@ function crmSaveBehavior(id){
 }
 
 function crmSaveFollowup(id){
-  var c=customers.find(function(x){return x.id===id;}); if(!c) return;
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   c.followup_date=document.getElementById('crmFupDate').value||null;
   c.followup_note=(document.getElementById('crmFupNote').value||'').trim();
   c.followup_status=document.getElementById('crmFupStatus').value;
@@ -8519,7 +8531,7 @@ function crmSaveFollowup(id){
 }
 
 function crmPostponeFollowup(id){
-  var c=customers.find(function(x){return x.id===id;}); if(!c) return;
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   var base=c.followup_date?new Date(c.followup_date):new Date();
   base.setDate(base.getDate()+3);
   c.followup_date=base.toISOString().slice(0,10);
@@ -8530,7 +8542,7 @@ function crmPostponeFollowup(id){
 }
 
 function crmCompleteFollowup(id){
-  var c=customers.find(function(x){return x.id===id;}); if(!c) return;
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   c.followup_status='splneno'; c.updatedAt=new Date().toISOString();
   saveCrmToFirestore();
   crmDetailTab('followup'); _renderCrmDetailHeader(c); renderCustomers(); updateCrmFollowupBadge();
@@ -8540,7 +8552,7 @@ function crmCompleteFollowup(id){
 function crmAddTag(id,type){
   var inp=document.getElementById(type==='likes'?'crmTagLikeInp':'crmTagDislikeInp');
   var tag=inp?inp.value.trim():''; if(!tag) return;
-  var c=customers.find(function(x){return x.id===id;}); if(!c) return;
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   var arr=type==='likes'?(c.tags_likes=c.tags_likes||[]):(c.tags_dislikes=c.tags_dislikes||[]);
   if(arr.indexOf(tag)===-1) arr.push(tag);
   c.updatedAt=new Date().toISOString();
@@ -8549,7 +8561,7 @@ function crmAddTag(id,type){
 }
 
 function crmRemoveTag(id,type,tag){
-  var c=customers.find(function(x){return x.id===id;}); if(!c) return;
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   if(type==='likes') c.tags_likes=(c.tags_likes||[]).filter(function(t){return t!==tag;});
   else c.tags_dislikes=(c.tags_dislikes||[]).filter(function(t){return t!==tag;});
   c.updatedAt=new Date().toISOString();
@@ -8557,7 +8569,7 @@ function crmRemoveTag(id,type,tag){
 }
 
 function crmAddHistory(id){
-  var c=customers.find(function(x){return x.id===id;}); if(!c) return;
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   var note=(document.getElementById('crmHistNote').value||'').trim();
   var type=document.getElementById('crmHistType').value;
   if(!note){showToast('Zadej poznámku.','err');return;}
@@ -8568,17 +8580,23 @@ function crmAddHistory(id){
 }
 
 function openEditCustomerModal(id){
-  var c=customers.find(function(x){return x.id===id;}); if(!c) return;
+  var c=customers.find(function(x){return x.id===id;});
+  var _editMode='b2c';
+  if(!c){ c=partners.find(function(x){return x.id===id;}); _editMode='b2b'; }
+  if(!c) return;
   closeCustomerDetail();
-  crmEditId=id; crmNewRating=c.rating||0; _crmContactIdx=0;
-  document.getElementById('newCustomerModalTitle').textContent='Upravit zákazníka';
+  crmEditId=id; crmEditMode=_editMode; crmNewRating=c.rating||0; _crmContactIdx=0;
+  _crmUpdateModalForMode(_editMode);
   document.getElementById('crmFldName').value=c.name||'';
-  document.getElementById('crmFldStatus').value=c.status||'bezny';
+  document.getElementById('crmFldStatus').value=c.status||(_editMode==='b2b'?'aktivni':'bezny');
   document.getElementById('crmFldNoteQuick').value=c.note_quick||'';
   document.getElementById('crmFldShoeEu').value=c.size_shoes_eu||'';
   document.getElementById('crmFldTop').value=c.size_clothing_top||'';
   document.getElementById('crmFldBottom').value=c.size_clothing_bottom||'';
   document.getElementById('crmFldSizeNote').value=c.size_clothing_note||'';
+  var _ico=document.getElementById('crmFldIco'); if(_ico) _ico.value=c.ico||'';
+  var _dic=document.getElementById('crmFldDic'); if(_dic) _dic.value=c.dic||'';
+  var _web=document.getElementById('crmFldWeb'); if(_web) _web.value=c.web||'';
   document.getElementById('crmFldFollowupDate').value=c.followup_date||'';
   document.getElementById('crmFldFollowupNote').value=c.followup_note||'';
   crmRenderStars(c.rating||0);
@@ -8586,9 +8604,14 @@ function openEditCustomerModal(id){
   (c.contacts||[]).forEach(function(ct){addContactRow(ct.type,ct.value,ct.primary);});
   if(!c.contacts||!c.contacts.length) addContactRow('instagram','',true);
   document.getElementById('newCustomerModal').classList.add('open');
+  setTimeout(function(){
+    initAllCustomInputs();
+    var _st=document.getElementById('crmFldStatus'); if(_st&&_st._csSync) _st._csSync();
+  }, 30);
 }
 
 var crmEditId = null;
+var crmEditMode = 'b2c';
 var crmNewRating = 0;
 var _crmContactIdx = 0;
 var _crmFbUnsub = null;
@@ -8609,6 +8632,7 @@ function loadCrmFromFirestore() {
     try { localStorage.setItem('sklad_crm', JSON.stringify({customers:customers,partners:partners})); } catch(e) {}
     if (tab === 'customers') renderCustomers();
     updateCrmFollowupBadge();
+    checkFollowupReminders();
   }, function(err) { console.error('CRM snapshot:', err); });
 }
 
@@ -8623,6 +8647,8 @@ function saveCrmToFirestore() {
 
 function recalcCustomerStats(customerId) {
   var ci = customers.findIndex(function(c){ return c.id === customerId; });
+  var _statArr = customers;
+  if(ci < 0) { ci = partners.findIndex(function(p){ return p.id === customerId; }); _statArr = partners; }
   if(ci < 0) return;
   var soldItems = items.filter(function(it){
     return it.linkedCustomerId === customerId && (it.saleState === 'waiting' || it.saleState === 'paid');
@@ -8632,7 +8658,7 @@ function recalcCustomerStats(customerId) {
   var dates = soldItems.map(function(it){ return it.saleDate; }).filter(Boolean).sort();
   var brands = {};
   soldItems.forEach(function(it){ if(it.brand) brands[it.brand] = (brands[it.brand]||0) + 1; });
-  customers[ci] = Object.assign({}, customers[ci], {
+  _statArr[ci] = Object.assign({}, _statArr[ci], {
     stats_orders_count: count,
     stats_total_spent: Math.round(totalSpent),
     stats_avg_order: count > 0 ? Math.round(totalSpent / count) : 0,
@@ -8656,20 +8682,83 @@ function updateCrmFollowupBadge() {
   badge.textContent = n;
 }
 
+function checkFollowupReminders() {
+  var shownKey = 'crm_followup_shown_' + new Date().toISOString().slice(0,10);
+  if (sessionStorage.getItem(shownKey)) return;
+  var today = new Date(); today.setHours(0,0,0,0);
+  var due = customers.filter(function(c) {
+    if (!c.followup_date || c.followup_status !== 'aktivni') return false;
+    var fd = new Date(c.followup_date); fd.setHours(0,0,0,0);
+    return fd <= today;
+  }).sort(function(a,b){ return (a.followup_date||'') < (b.followup_date||'') ? -1 : 1; });
+  if (!due.length) return;
+  sessionStorage.setItem(shownKey, '1');
+  var list = document.getElementById('followupReminderList');
+  if (!list) return;
+  list.innerHTML = due.map(function(c) {
+    var today2 = new Date(); today2.setHours(0,0,0,0);
+    var fd = new Date(c.followup_date); fd.setHours(0,0,0,0);
+    var diffDays = Math.round((today2-fd)/(1000*60*60*24));
+    var label = diffDays === 0 ? '<span style="color:var(--accent);font-size:10px;font-family:DM Mono,monospace;">dnes</span>'
+               : '<span style="color:var(--danger);font-size:10px;font-family:DM Mono,monospace;">+'+diffDays+'d</span>';
+    return '<div onclick="closeFollowupReminder();openCustomerDetail(\'' + c.id + '\')" '
+      + 'style="padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:flex-start;gap:10px;" '
+      + 'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'
+      + '<div style="flex:1;">'
+      + '<div style="font-weight:600;font-size:13px;">' + escHtml(c.name) + '</div>'
+      + (c.followup_note ? '<div style="font-size:11px;color:var(--muted);margin-top:2px;">' + escHtml(c.followup_note) + '</div>' : '')
+      + '</div>' + label + '</div>';
+  }).join('');
+  document.getElementById('moFollowupReminder').classList.add('open');
+}
+
+function closeFollowupReminder() {
+  var mo = document.getElementById('moFollowupReminder');
+  if (mo) mo.classList.remove('open');
+}
+
+function _crmUpdateModalForMode(mode) {
+  var isB2b = mode === 'b2b';
+  document.getElementById('newCustomerModalTitle').textContent = crmEditId
+    ? (isB2b ? 'Upravit partnera' : 'Upravit zákazníka')
+    : (isB2b ? 'Nový partner' : 'Nový zákazník');
+  var statusSel = document.getElementById('crmFldStatus');
+  if (statusSel) {
+    statusSel.innerHTML = isB2b
+      ? '<option value="aktivni">Aktivní</option><option value="neaktivni">Neaktivní</option><option value="rizikovy">Rizikový</option><option value="blacklist">Blacklist</option>'
+      : '<option value="bezny">Běžný</option><option value="potencialni">Potenciální</option><option value="vip">VIP</option><option value="rizikovy">Rizikový</option><option value="blacklist">Blacklist</option>';
+    if (statusSel._csSync) statusSel._csSync();
+  }
+  var sizeSec = document.getElementById('crmSizesSection');
+  if (sizeSec) sizeSec.style.display = isB2b ? 'none' : '';
+  var b2bSec = document.getElementById('crmB2bSection');
+  if (b2bSec) b2bSec.style.display = isB2b ? '' : 'none';
+  var saveBtn = document.getElementById('crmSaveBtn');
+  if (saveBtn) saveBtn.textContent = crmEditId
+    ? (isB2b ? 'Uložit partnera' : 'Uložit zákazníka')
+    : (isB2b ? 'Přidat partnera' : 'Přidat zákazníka');
+}
+
 function openNewCustomerModal() {
   crmEditId = null;
+  crmEditMode = crmMode;
   crmNewRating = 0;
   _crmContactIdx = 0;
-  document.getElementById('newCustomerModalTitle').textContent = 'Nový zákazník';
-  ['crmFldName','crmFldNoteQuick','crmFldShoeEu','crmFldTop','crmFldBottom','crmFldSizeNote','crmFldFollowupNote'].forEach(function(id){
+  _crmUpdateModalForMode(crmMode);
+  ['crmFldName','crmFldNoteQuick','crmFldShoeEu','crmFldTop','crmFldBottom','crmFldSizeNote','crmFldFollowupNote','crmFldIco','crmFldDic','crmFldWeb'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.value = '';
   });
-  document.getElementById('crmFldStatus').value = 'bezny';
+  document.getElementById('crmFldStatus').value = crmMode==='b2b' ? 'aktivni' : 'bezny';
   document.getElementById('crmFldFollowupDate').value = '';
   crmRenderStars(0);
   document.getElementById('crmContactRows').innerHTML = '';
   addContactRow('instagram','',true);
   document.getElementById('newCustomerModal').classList.add('open');
+  setTimeout(function(){
+    initAllCustomInputs();
+    var _st=document.getElementById('crmFldStatus'); if(_st&&_st._csSync) _st._csSync();
+    var _fd=document.getElementById('crmFldFollowupDate'); if(_fd&&_fd._cdpSync) _fd._cdpSync();
+  }, 30);
   setTimeout(function(){ var el=document.getElementById('crmFldName'); if(el) el.focus(); },80);
 }
 
@@ -8732,21 +8821,25 @@ function getCrmContacts() {
 
 function saveNewCustomer() {
   var name = (document.getElementById('crmFldName').value||'').trim();
-  if (!name) { showToast('Zadej jméno zákazníka.','err'); return; }
+  if (!name) { showToast('Zadej jméno '+(crmEditMode==='b2b'?'partnera':'zákazníka')+'.','err'); return; }
   var contacts = getCrmContacts();
   var followupDate = document.getElementById('crmFldFollowupDate').value || '';
-  var id = crmEditId || ('c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6));
+  var _arr = crmEditMode === 'b2b' ? partners : customers;
+  var id = crmEditId || ((crmEditMode==='b2b'?'p':'c')+Date.now().toString(36)+Math.random().toString(36).slice(2,6));
   var now = new Date().toISOString();
-  var existing = crmEditId ? customers.find(function(c){return c.id===crmEditId;}) : null;
+  var existing = crmEditId ? _arr.find(function(c){return c.id===crmEditId;}) : null;
   var customer = {
     id: id,
     createdAt: existing ? existing.createdAt : now,
     updatedAt: now,
     name: name,
-    status: document.getElementById('crmFldStatus').value || 'bezny',
+    status: document.getElementById('crmFldStatus').value || (crmEditMode==='b2b'?'aktivni':'bezny'),
     rating: crmNewRating,
     note_quick: (document.getElementById('crmFldNoteQuick').value||'').trim(),
     contacts: contacts,
+    ico: ((document.getElementById('crmFldIco')||{}).value||'').trim(),
+    dic: ((document.getElementById('crmFldDic')||{}).value||'').trim(),
+    web: ((document.getElementById('crmFldWeb')||{}).value||'').trim(),
     size_shoes_eu: (document.getElementById('crmFldShoeEu').value||'').trim(),
     size_clothing_top: (document.getElementById('crmFldTop').value||'').trim(),
     size_clothing_bottom: (document.getElementById('crmFldBottom').value||'').trim(),
@@ -8767,20 +8860,189 @@ function saveNewCustomer() {
     wishlist_items: existing ? existing.wishlist_items||[] : []
   };
   if (crmEditId) {
-    var i = customers.findIndex(function(c){return c.id===crmEditId;});
-    if (i>=0) customers[i] = customer; else customers.push(customer);
+    var i = _arr.findIndex(function(c){return c.id===crmEditId;});
+    if (i>=0) _arr[i] = customer; else _arr.push(customer);
   } else {
-    customers.push(customer);
+    _arr.push(customer);
   }
   saveCrmToFirestore();
   closeNewCustomerModal();
   renderCustomers();
   updateCrmFollowupBadge();
-  showToast(crmEditId ? 'Zákazník upraven.' : 'Zákazník přidán.');
+  showToast(crmEditId ? (crmEditMode==='b2b'?'Partner upraven.':'Zákazník upraven.') : (crmEditMode==='b2b'?'Partner přidán.':'Zákazník přidán.'));
 }
 
-function openOfferBuilder() {
-  showToast('Offer Builder — připravujeme...', '');
+var _obMode = 'customer';
+var _obSelected = new Set();
+var _obCustomerId = null;
+
+function openOfferBuilder(customerId) {
+  _obSelected.clear();
+  _obCustomerId = customerId || null;
+  _obMode = 'customer';
+  document.getElementById('obResults').innerHTML = '';
+  document.getElementById('obResultCount').textContent = '';
+  var copyBtn = document.getElementById('obCopyBtn');
+  if(copyBtn) copyBtn.disabled = true;
+  // reset params
+  ['obFilterSize','obFilterBudget','obFilterBrand'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('obCustomerSearch').value = '';
+  document.getElementById('obCustomerId').value = '';
+  document.getElementById('obCustomerInfo').innerHTML = '';
+  offerBuilderModeSwitch('customer');
+  if(customerId) {
+    var c = customers.find(function(x){return x.id===customerId;}) || partners.find(function(x){return x.id===customerId;});
+    if(c) { obSelectCustomer(c.id, c.name); }
+  }
+  document.getElementById('moOfferBuilder').classList.add('open');
+}
+
+function closeOfferBuilder() {
+  document.getElementById('moOfferBuilder').classList.remove('open');
+}
+
+function offerBuilderModeSwitch(mode) {
+  _obMode = mode;
+  document.getElementById('obModeA').classList.toggle('active', mode==='customer');
+  document.getElementById('obModeB').classList.toggle('active', mode==='manual');
+  document.getElementById('obCustomerPanel').style.display = mode==='customer' ? '' : 'none';
+}
+
+function obSearchCustomer(q) {
+  var drop = document.getElementById('obCustomerDrop');
+  if(!drop) return;
+  var list = customers.concat(partners);
+  var filtered = q ? list.filter(function(c){ return c.name.toLowerCase().includes(q.toLowerCase()); }) : list.slice(0,20);
+  if(!filtered.length){ drop.style.display='none'; return; }
+  drop.innerHTML = filtered.slice(0,20).map(function(c){
+    var sub = c.contacts&&c.contacts[0] ? '<span style="color:var(--muted);font-size:11px;margin-left:6px;">'+c.contacts[0].value+'</span>' : '';
+    return '<div class="ob-cust-opt" data-cid="'+c.id+'" data-cname="'+c.name.replace(/"/g,'&quot;')+'" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);">'+escHtml(c.name)+sub+'</div>';
+  }).join('');
+  drop.style.display='block';
+  drop.querySelectorAll('.ob-cust-opt').forEach(function(el){
+    el.addEventListener('mousedown', function(e){ e.preventDefault(); obSelectCustomer(el.dataset.cid, el.dataset.cname); });
+    el.addEventListener('mouseover', function(){ el.style.background='var(--surface3)'; });
+    el.addEventListener('mouseout', function(){ el.style.background=''; });
+  });
+}
+
+function obSelectCustomer(id, name) {
+  _obCustomerId = id;
+  document.getElementById('obCustomerId').value = id;
+  document.getElementById('obCustomerSearch').value = name;
+  var drop = document.getElementById('obCustomerDrop'); if(drop) drop.style.display='none';
+  var c = customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;});
+  var info = document.getElementById('obCustomerInfo');
+  if(!c || !info) return;
+  // Pre-fill filter fields
+  if(c.size_shoes_eu) { var el=document.getElementById('obFilterSize'); if(el) el.value=c.size_shoes_eu; }
+  var brandHint = (c.tags_likes||[]).join(', ');
+  if(brandHint) { var el2=document.getElementById('obFilterBrand'); if(el2 && !el2.value) el2.value=brandHint; }
+  // Show customer info box
+  var likes = (c.tags_likes||[]).map(function(t){ return '<span style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:2px 8px;font-size:10px;margin:2px;">'+escHtml(t)+'</span>'; }).join('');
+  info.innerHTML = '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;">'
+    +'<strong>'+escHtml(c.name)+'</strong>'
+    +(c.size_shoes_eu?'<span style="color:var(--muted);margin-left:10px;">Boty EU: <strong>'+escHtml(c.size_shoes_eu)+'</strong></span>':'')
+    +(likes?'<div style="margin-top:6px;">Líbí se: '+likes+'</div>':'')
+    +(c.note_quick?'<div style="margin-top:4px;color:var(--muted);font-style:italic;">'+escHtml(c.note_quick)+'</div>':'')
+    +'</div>';
+}
+
+function offerBuilderSearch() {
+  var size = (document.getElementById('obFilterSize').value||'').trim().toLowerCase();
+  var maxBudget = parseFloat(document.getElementById('obFilterBudget').value)||0;
+  var brandRaw = (document.getElementById('obFilterBrand').value||'').trim();
+  var brands = brandRaw ? brandRaw.split(/[,;]+/).map(function(b){return b.trim().toLowerCase();}).filter(Boolean) : [];
+  var stockItems = items.filter(function(it){
+    if (it.saleState && it.saleState !== 'stock') return false;
+    if (it.type === 'bulk') return false;
+    if (size) {
+      var s = (it.size||'').toLowerCase().replace(/eu\s*/i,'').trim();
+      if (!s.includes(size) && !size.includes(s)) return false;
+    }
+    if (maxBudget > 0) {
+      var bp = it.buyCurrency==='EUR' ? (it.buyPrice||0)*eurRate : (it.buyPrice||0);
+      if (bp > maxBudget) return false;
+    }
+    if (brands.length) {
+      var br = (it.brand||'').toLowerCase();
+      var match = brands.some(function(b){ return br.includes(b) || b.includes(br); });
+      if (!match) return false;
+    }
+    return true;
+  });
+  _obSelected.clear();
+  var cnt = document.getElementById('obResultCount');
+  if(cnt) cnt.textContent = stockItems.length ? stockItems.length+' položek na skladě' : 'Žádné položky';
+  var el = document.getElementById('obResults');
+  if(!el) return;
+  if(!stockItems.length){
+    el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;font-size:13px;">Žádné položky nesplňují kritéria.</div>';
+    return;
+  }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;">'
+    + stockItems.map(function(it){
+      var bp = it.buyCurrency==='EUR' ? (it.buyPrice||0)*eurRate : (it.buyPrice||0);
+      var img = it.imgUrl ? '<img src="'+it.imgUrl+'" style="width:100%;height:90px;object-fit:contain;border-radius:6px 6px 0 0;background:var(--surface2);">'
+        : '<div style="width:100%;height:90px;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--surface2);border-radius:6px 6px 0 0;">👟</div>';
+      return '<div id="ob-item-'+it.id+'" onclick="offerBuilderToggle(\''+it.id+'\')" style="border:2px solid var(--border);border-radius:8px;cursor:pointer;overflow:hidden;transition:border-color 0.15s;background:var(--surface1);">'
+        +img
+        +'<div style="padding:8px 10px;">'
+        +'<div style="font-size:11px;font-weight:700;line-height:1.3;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(it.name)+'</div>'
+        +(it.brand?'<div style="font-size:10px;color:var(--muted);">'+escHtml(it.brand)+(it.size?' · '+escHtml(it.size):'')+'</div>':'')
+        +'<div style="font-size:11px;font-weight:700;margin-top:4px;color:var(--accent);">'+czk(Math.round(bp))+'</div>'
+        +'</div></div>';
+    }).join('')
+    + '</div>';
+  var copyBtn = document.getElementById('obCopyBtn');
+  if(copyBtn) copyBtn.disabled = false;
+}
+
+function offerBuilderToggle(id) {
+  var card = document.getElementById('ob-item-'+id);
+  if(!card) return;
+  if(_obSelected.has(id)){
+    _obSelected.delete(id);
+    card.style.borderColor = 'var(--border)';
+    card.style.background = 'var(--surface1)';
+  } else {
+    _obSelected.add(id);
+    card.style.borderColor = 'var(--accent)';
+    card.style.background = 'var(--surface2)';
+  }
+  var copyBtn = document.getElementById('obCopyBtn');
+  if(copyBtn) copyBtn.textContent = _obSelected.size > 0 ? '📋 Kopírovat ('+_obSelected.size+')' : '📋 Kopírovat nabídku';
+}
+
+function offerBuilderCopy() {
+  var toExport = _obSelected.size > 0
+    ? items.filter(function(it){ return _obSelected.has(it.id); })
+    : items.filter(function(it){ return document.getElementById('ob-item-'+it.id); });
+  if(!toExport.length) { showToast('Nic není vybráno.','err'); return; }
+  var custName = '';
+  if(_obCustomerId) {
+    var c = customers.find(function(x){return x.id===_obCustomerId;}) || partners.find(function(x){return x.id===_obCustomerId;});
+    if(c) custName = c.name;
+  }
+  var lines = ['📦 Nabídka'+(custName?' pro '+custName:''), ''];
+  toExport.forEach(function(it, i){
+    var bp = it.buyCurrency==='EUR' ? (it.buyPrice||0)*eurRate : (it.buyPrice||0);
+    var line = (i+1)+'. '+it.name+(it.size?' ('+it.size+')':'')+(it.brand?' – '+it.brand:'');
+    lines.push(line);
+  });
+  lines.push('');
+  lines.push('Celkem: '+toExport.length+' ks');
+  var text = lines.join('\n');
+  if(navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function(){ showToast('Nabídka zkopírována!'); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('Nabídka zkopírována!');
+  }
 }
 
 function escHtml(s) {
@@ -9445,7 +9707,7 @@ function initNumberSteppers() {
 }
 function initAllCustomInputs() {
   // Custom selects - všechny v modal formuláři
-  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','filterListingStatus','filterListingPlatform','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp'].forEach(id => {
+  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','filterListingStatus','filterListingPlatform','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp','crmFldStatus','sBuyerType'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.tagName === 'SELECT') {
       // Naplň dopravce
@@ -9457,7 +9719,7 @@ function initAllCustomInputs() {
     }
   });
   // Date pickers
-  ['fBuyDate','fSaleDate','fPayoutDate','fHomeDate','sSaleDate','bsSaleDate'].forEach(id => {
+  ['fBuyDate','fSaleDate','fPayoutDate','fHomeDate','sSaleDate','bsSaleDate','crmFldFollowupDate'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.type === 'date') initCustomDatePicker(el);
   });
@@ -12383,7 +12645,7 @@ rebuildBrandTables();
       </div>
       <div id="crmContactRows"></div>
     </div>
-    <div class="fs">
+    <div class="fs" id="crmSizesSection">
       <div class="fs-title">Velikosti (volitelné)</div>
       <div class="fg">
         <div class="fi">
@@ -12417,7 +12679,15 @@ rebuildBrandTables();
         </div>
       </div>
     </div>
-    <button class="sub-btn" onclick="saveNewCustomer()">Uložit zákazníka</button>
+    <div class="fs" id="crmB2bSection" style="display:none;">
+      <div class="fs-title">Firemní údaje (volitelné)</div>
+      <div class="fg">
+        <div class="fi"><label>IČO</label><input type="text" id="crmFldIco" placeholder="12345678"></div>
+        <div class="fi"><label>DIČ</label><input type="text" id="crmFldDic" placeholder="CZ12345678"></div>
+        <div class="fi full"><label>Web / e-shop</label><input type="text" id="crmFldWeb" placeholder="https://..."></div>
+      </div>
+    </div>
+    <button class="sub-btn" id="crmSaveBtn" onclick="saveNewCustomer()">Uložit zákazníka</button>
   </div>
 </div>
 
@@ -12434,8 +12704,72 @@ rebuildBrandTables();
     </div>
     <div id="crmDetailContent" style="flex:1;overflow-y:auto;padding:18px 22px;min-height:280px;scrollbar-width:thin;scrollbar-color:rgba(200,255,0,0.3) transparent;"></div>
     <div style="padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <button class="icon-btn" onclick="openOfferBuilder(crmDetailId)" style="border-color:var(--accent);color:var(--accent);">&#128203; Offer</button>
       <button class="icon-btn" onclick="openEditCustomerModal(crmDetailId)">&#9998; Upravit</button>
       <button class="xb" onclick="closeCustomerDetail()">&#215;</button>
+    </div>
+  </div>
+</div>
+<!-- FOLLOWUP REMINDER POPUP -->
+<div class="mo" id="moFollowupReminder" style="z-index:10010;">
+  <div class="modal" style="max-width:480px;padding:0;border-radius:var(--radius);overflow:hidden;">
+    <div class="mh" style="padding:16px 20px;">
+      <div class="mt2" style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:18px;">&#128276;</span> Followupy dnes
+      </div>
+      <button class="xb" onclick="closeFollowupReminder()">&#215;</button>
+    </div>
+    <div id="followupReminderList" style="padding:4px 20px 8px;max-height:320px;overflow-y:auto;"></div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">
+      <button class="icon-btn" onclick="closeFollowupReminder()" style="font-size:12px;padding:6px 14px;">Zavřít</button>
+      <button class="icon-btn" onclick="closeFollowupReminder();switchTab('customers')" style="font-size:12px;padding:6px 14px;border-color:var(--accent);color:var(--accent);">Otevřít Zákazníci</button>
+    </div>
+  </div>
+</div>
+<!-- OFFER BUILDER MODAL -->
+<div class="mo" id="moOfferBuilder" style="z-index:10005;">
+  <div class="modal" style="max-width:700px;padding:0;display:flex;flex-direction:column;max-height:90vh;border-radius:var(--radius);overflow:hidden;">
+    <div class="mh" style="padding:14px 20px;flex-shrink:0;">
+      <div class="mt2">Offer Builder</div>
+      <button class="xb" onclick="closeOfferBuilder()">&#215;</button>
+    </div>
+    <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <button id="obModeA" class="crm-detail-tab active" onclick="offerBuilderModeSwitch('customer')" style="border-radius:0;">&#128100; Zákazník</button>
+      <button id="obModeB" class="crm-detail-tab" onclick="offerBuilderModeSwitch('manual')" style="border-radius:0;">&#9998; Manuální</button>
+    </div>
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);flex-shrink:0;">
+      <div id="obCustomerPanel">
+        <div style="position:relative;margin-bottom:10px;">
+          <input type="text" id="obCustomerSearch" placeholder="Vybrat zákazníka nebo partnera..." autocomplete="off" oninput="obSearchCustomer(this.value)" onfocus="obSearchCustomer(this.value)" onblur="setTimeout(function(){var d=document.getElementById('obCustomerDrop');if(d)d.style.display='none'},200)" style="width:100%;">
+          <div id="obCustomerDrop" style="position:absolute;top:calc(100% + 4px);left:0;right:0;display:none;z-index:9999;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);max-height:160px;overflow-y:auto;"></div>
+          <input type="hidden" id="obCustomerId">
+        </div>
+        <div id="obCustomerInfo"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        <div class="fi" style="flex:0 0 auto;min-width:120px;">
+          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);">Velikost boty (EU)</label>
+          <input type="text" id="obFilterSize" placeholder="42, 42.5..." style="margin-top:4px;">
+        </div>
+        <div class="fi" style="flex:0 0 auto;min-width:120px;">
+          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);">Max. nákup. cena (Kč)</label>
+          <input type="number" id="obFilterBudget" placeholder="5000" style="margin-top:4px;">
+        </div>
+        <div class="fi" style="flex:1;min-width:160px;">
+          <label style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);">Značka (oddělte čárkou)</label>
+          <input type="text" id="obFilterBrand" placeholder="Nike, Jordan, Adidas..." style="margin-top:4px;">
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:12px;">
+        <button class="icon-btn" onclick="offerBuilderSearch()" style="padding:7px 16px;">Filtrovat sklad &#8594;</button>
+        <span id="obResultCount" style="font-size:11px;color:var(--muted);"></span>
+        <span style="font-size:11px;color:var(--muted);">Klikni na položku pro výběr do nabídky</span>
+      </div>
+    </div>
+    <div id="obResults" style="flex:1;overflow-y:auto;padding:16px 20px;"></div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;">
+      <button class="icon-btn" onclick="closeOfferBuilder()">Zavřít</button>
+      <button class="icon-btn" id="obCopyBtn" onclick="offerBuilderCopy()" style="border-color:var(--accent);color:var(--accent);" disabled>&#128203; Kopírovat nabídku</button>
     </div>
   </div>
 </div>
