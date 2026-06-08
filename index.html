@@ -8554,32 +8554,31 @@ function _crmTabFollowup(c){
 
 function _crmTabHistory(c){
   var hist=(c.contact_history||[]).slice().reverse();
+  var total=(c.contact_history||[]).length;
   var tcol={nakup:'var(--accent)',prodej:'var(--accent)',poptavka:'#00aaff',followup:'var(--warning)',schuzka:'#cc88ff',reklamace:'#ff4444',jine:'var(--muted)'};
   var tlbl={nakup:'Nákup',prodej:'Prodej',poptavka:'Poptávka',followup:'Followup',schuzka:'Schůzka',reklamace:'Reklamace',jine:'Jiné'};
-  var rows=hist.map(function(h){
-    return '<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">'
-      +'<div style="flex-shrink:0;width:68px;font-size:10px;color:var(--muted);font-family:DM Mono,monospace;">'+new Date(h.date).toLocaleDateString('cs-CZ')+'</div>'
-      +'<div style="flex:1;">'
+  var rows=hist.map(function(h,ri){
+    var ai=total-1-ri;
+    var title=h.item_name?escHtml(h.item_name):(h.note?escHtml(h.note.slice(0,50)):'—');
+    var sub='';
+    if(h.price!==null&&h.price!==undefined&&h.price!=='') sub+='<span style="color:var(--accent);font-weight:600;">'+Number(h.price).toLocaleString('cs-CZ')+' Kč</span>';
+    if(h.tracking) sub+=(sub?' · ':'')+escHtml(h.tracking);
+    if(h.item_name&&h.note) sub+=(sub?' · ':'')+escHtml(h.note.slice(0,40));
+    return '<div onclick="openCrmHistDetail(\''+escHtml(c.id)+'\','+ai+')" style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background 0.12s;" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'
+      +'<div style="flex-shrink:0;width:62px;">'
+      +'<div style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;">'+new Date(h.date).toLocaleDateString('cs-CZ')+'</div>'
       +'<span style="font-size:9px;font-family:DM Mono,monospace;color:'+(tcol[h.type]||'var(--muted)')+';text-transform:uppercase;">'+(tlbl[h.type]||h.type)+'</span>'
-      +'<div style="font-size:13px;margin-top:2px;">'+escHtml(h.note||'')+'</div></div></div>';
+      +'</div>'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+title+'</div>'
+      +(sub?'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+sub+'</div>':'')
+      +'</div>'
+      +'<div style="flex-shrink:0;color:var(--muted);align-self:center;font-size:16px;">›</div>'
+      +'</div>';
   }).join('');
-  var selS='style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:12px;padding:6px 8px;outline:none;"';
-  var inpS='style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:12px;padding:6px 10px;outline:none;min-width:100px;"';
   return '<div>'+(rows||'<div style="color:var(--muted);font-size:13px;padding:8px 0;">Žádná historie.</div>')+'</div>'
-    +'<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">'
-    +'<span class="crm-sec-label">Přidat záznam</span>'
-    +'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">'
-    +'<select id="crmHistType" '+selS+'>'
-    +'<option value="nakup">Nákup</option>'
-    +'<option value="poptavka">Poptávka</option>'
-    +'<option value="followup">Followup</option>'
-    +'<option value="schuzka">Schůzka</option>'
-    +'<option value="reklamace">Reklamace</option>'
-    +'<option value="jine">Jiné</option>'
-    +'</select>'
-    +'<input type="text" id="crmHistNote" placeholder="Poznámka..." '+inpS+'>'
-    +'</div>'
-    +'<button class="icon-btn" style="width:100%;" onclick="crmAddHistory(\''+escHtml(c.id)+'\')">+ Přidat záznam</button></div>';
+    +'<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'
+    +'<button class="icon-btn" style="width:100%;" onclick="openCrmHistModal(\''+escHtml(c.id)+'\')">+ Přidat záznam</button></div>';
 }
 
 // Action handlers
@@ -8642,15 +8641,132 @@ function crmRemoveTag(id,type,tag){
   saveCrmToFirestore(); crmDetailTab('prefs');
 }
 
-function crmAddHistory(id){
-  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
-  var note=(document.getElementById('crmHistNote').value||'').trim();
-  var type=document.getElementById('crmHistType').value;
-  if(!note){showToast('Zadej poznámku.','err');return;}
+var _crmHistCid=null, _crmHistEditIdx=null;
+function _crmHistFillCatSelect(currentVal){
+  var el=document.getElementById('crmHMCategory'); if(!el) return;
+  var builtinCats=[['sneakers','Sneakers'],['obleceni','Oblečení'],['pokemon','Pokémon'],['lego','LEGO'],['hotwheels','Hot Wheels'],['alternate','Alternate'],['sberatelske','Sběratelské'],['jine','Jiné']];
+  var customCats=getCustomCats();
+  el.innerHTML=builtinCats.map(function(o){return '<option value="'+o[0]+'">'+o[1]+'</option>';}).join('')
+    +customCats.map(function(c){return '<option value="'+escHtml(c.key)+'">'+escHtml(c.label)+'</option>';}).join('');
+  if(currentVal&&el.querySelector('option[value="'+currentVal+'"]')) el.value=currentVal;
+  else el.value='sneakers';
+}
+function _openCrmHistModalFill(h){
+  document.getElementById('crmHMDate').value=h&&h.date?new Date(h.date).toISOString().slice(0,10):new Date().toISOString().slice(0,10);
+  document.getElementById('crmHMType').value=h&&h.type?h.type:'nakup';
+  _crmHistFillCatSelect(h&&h.category?h.category:'sneakers');
+  document.getElementById('crmHMItemName').value=h&&h.item_name?h.item_name:'';
+  document.getElementById('crmHMSize').value=h&&h.size?h.size:'';
+  document.getElementById('crmHMSku').value=h&&h.sku?h.sku:'';
+  document.getElementById('crmHMTracking').value=h&&h.tracking?h.tracking:'';
+  document.getElementById('crmHMPrice').value=h&&h.price!==null&&h.price!==undefined?h.price:'';
+  document.getElementById('crmHMPayment').value=h&&h.payment?h.payment:'hotove';
+  document.getElementById('crmHMStatus').value=h&&h.order_status?h.order_status:'doruceno';
+  document.getElementById('crmHMNote').value=h&&h.note?h.note:'';
+  crmHistModalToggleFields();
+  document.getElementById('moCrmHistEntry').classList.add('open');
+  var saveBtn=document.getElementById('crmHMSaveBtn');
+  if(saveBtn) saveBtn.textContent=_crmHistEditIdx!==null?'Uložit změny':'Uložit záznam';
+  ['crmHMType','crmHMCategory','crmHMPayment','crmHMStatus'].forEach(function(fid){var el=document.getElementById(fid);if(el&&el.tagName==='SELECT'){initCustomSelect(el);if(el._csSync)el._csSync();}});
+  var dp=document.getElementById('crmHMDate');if(dp){initCustomDatePicker(dp);if(dp._cdpSync)dp._cdpSync();}
+}
+function openCrmHistModal(cid){
+  _crmHistCid=cid; _crmHistEditIdx=null;
+  _openCrmHistModalFill(null);
+}
+function openCrmHistEdit(cid,idx){
+  _crmHistCid=cid; _crmHistEditIdx=idx;
+  var c=customers.find(function(x){return x.id===cid;})||partners.find(function(x){return x.id===cid;});
+  if(!c) return;
+  var h=(c.contact_history||[])[idx]; if(!h) return;
+  cm('moCrmHistDetail');
+  _openCrmHistModalFill(h);
+}
+function crmHistModalToggleFields(){
+  var t=document.getElementById('crmHMType')?document.getElementById('crmHMType').value:'nakup';
+  var el=document.getElementById('crmHMOrderFields');if(el)el.style.display=(t==='nakup'||t==='poptavka')?'':'none';
+}
+function crmHistSave(){
+  if(!_crmHistCid) return;
+  var c=customers.find(function(x){return x.id===_crmHistCid;})||partners.find(function(x){return x.id===_crmHistCid;});
+  if(!c) return;
+  var type=document.getElementById('crmHMType').value;
+  var dateVal=document.getElementById('crmHMDate').value;
+  var note=(document.getElementById('crmHMNote').value||'').trim();
+  var showOrder=type==='nakup'||type==='poptavka';
+  var pr=showOrder?document.getElementById('crmHMPrice').value:'';
+  var entry={
+    id:_crmHistEditIdx!==null?((c.contact_history[_crmHistEditIdx]&&c.contact_history[_crmHistEditIdx].id)||'h'+Date.now()):'h'+Date.now(),
+    date:dateVal?new Date(dateVal).toISOString():new Date().toISOString(),
+    type:type,note:note,sale_id:null
+  };
+  if(showOrder){
+    entry.item_name=(document.getElementById('crmHMItemName').value||'').trim();
+    entry.category=document.getElementById('crmHMCategory').value;
+    entry.size=(document.getElementById('crmHMSize').value||'').trim();
+    entry.sku=(document.getElementById('crmHMSku').value||'').trim();
+    entry.tracking=(document.getElementById('crmHMTracking').value||'').trim();
+    entry.price=pr?parseFloat(String(pr).replace(/\s/g,'').replace(',','.')):null;
+    entry.payment=document.getElementById('crmHMPayment').value;
+    entry.order_status=document.getElementById('crmHMStatus').value;
+  }
   c.contact_history=c.contact_history||[];
-  c.contact_history.push({date:new Date().toISOString(),type:type,note:note,sale_id:null});
+  if(_crmHistEditIdx!==null) c.contact_history[_crmHistEditIdx]=entry;
+  else c.contact_history.push(entry);
   c.updatedAt=new Date().toISOString();
-  saveCrmToFirestore(); crmDetailTab('history'); showToast('Záznam přidán.');
+  recalcCustomerStats(_crmHistCid);
+  cm('moCrmHistEntry');
+  crmDetailTab('history');
+  showToast(_crmHistEditIdx!==null?'Záznam upraven.':'Záznam přidán.');
+}
+function openCrmHistDetail(cid,idx){
+  var c=customers.find(function(x){return x.id===cid;})||partners.find(function(x){return x.id===cid;});
+  if(!c) return;
+  var h=(c.contact_history||[])[idx]; if(!h) return;
+  var tcol={nakup:'var(--accent)',prodej:'var(--accent)',poptavka:'#00aaff',followup:'var(--warning)',schuzka:'#cc88ff',reklamace:'#ff4444',jine:'var(--muted)'};
+  var tlbl={nakup:'Nákup',prodej:'Prodej',poptavka:'Poptávka',followup:'Followup',schuzka:'Schůzka',reklamace:'Reklamace',jine:'Jiné'};
+  var plbl={hotove:'Hotově',karta:'Kartou',prevod:'Převodem',dobirka:'Dobírkou',jine:'Jiné'};
+  var slbl={prijato:'Přijato',odeslano:'Odesláno',doruceno:'Doručeno',storno:'Storno'};
+  var scol={prijato:'var(--warning)',odeslano:'#00aaff',doruceno:'var(--accent)',storno:'var(--danger)'};
+  var allCats=[['sneakers','Sneakers'],['obleceni','Oblečení'],['pokemon','Pokémon'],['lego','LEGO'],['hotwheels','Hot Wheels'],['alternate','Alternate'],['sberatelske','Sběratelské'],['jine','Jiné']];
+  getCustomCats().forEach(function(c){allCats.push([c.key,c.label]);});
+  var catLbl=h.category?(allCats.find(function(o){return o[0]===h.category;})||[null,h.category])[1]:'';
+  function row(lbl,val){
+    if(val===null||val===undefined||val==='') return '';
+    return '<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">'
+      +'<div style="flex-shrink:0;width:110px;font-size:10px;color:var(--muted);font-family:DM Mono,monospace;text-transform:uppercase;padding-top:2px;">'+lbl+'</div>'
+      +'<div style="flex:1;font-size:13px;">'+val+'</div></div>';
+  }
+  var rows='';
+  rows+=row('Datum',new Date(h.date).toLocaleDateString('cs-CZ',{day:'2-digit',month:'2-digit',year:'numeric'}));
+  rows+=row('Typ','<span style="color:'+(tcol[h.type]||'var(--muted)')+';">'+(tlbl[h.type]||h.type)+'</span>');
+  if(h.item_name) rows+=row('Zboží','<strong>'+escHtml(h.item_name)+'</strong>');
+  if(catLbl) rows+=row('Kategorie',escHtml(catLbl));
+  if(h.size) rows+=row('Velikost',escHtml(h.size));
+  if(h.sku) rows+=row('SKU / Artikl','<span style="font-family:DM Mono,monospace;">'+escHtml(h.sku)+'</span>');
+  if(h.tracking) rows+=row('Sledovací č.','<span style="font-family:DM Mono,monospace;">'+escHtml(h.tracking)+'</span>');
+  if(h.price!==null&&h.price!==undefined) rows+=row('Cena','<span style="color:var(--accent);font-weight:700;font-family:Syne,sans-serif;">'+Number(h.price).toLocaleString('cs-CZ')+' Kč</span>');
+  if(h.payment) rows+=row('Platba',plbl[h.payment]||h.payment);
+  if(h.order_status) rows+=row('Stav','<span style="color:'+(scol[h.order_status]||'var(--muted)')+';">'+(slbl[h.order_status]||h.order_status)+'</span>');
+  if(h.note) rows+=row('Poznámka',escHtml(h.note));
+  var title=h.item_name?escHtml(h.item_name):(tlbl[h.type]||h.type);
+  document.getElementById('crmHDTitle').textContent=title;
+  document.getElementById('crmHDBody').innerHTML='<div style="padding:4px 0;">'+rows+'</div>'
+    +'<div style="margin-top:14px;display:flex;gap:8px;">'
+    +'<button class="sub-btn" style="flex:2;margin-top:0;" onclick="openCrmHistEdit(\''+escHtml(cid)+'\','+idx+')">Upravit</button>'
+    +'<button class="icon-btn" style="flex:1;border-color:var(--danger);color:var(--danger);" onclick="crmHistDelete(\''+escHtml(cid)+'\','+idx+')">Smazat</button></div>';
+  document.getElementById('moCrmHistDetail').classList.add('open');
+}
+function crmHistDelete(cid,idx){
+  if(!confirm('Smazat tento záznam?')) return;
+  var c=customers.find(function(x){return x.id===cid;})||partners.find(function(x){return x.id===cid;});
+  if(!c) return;
+  c.contact_history.splice(idx,1);
+  c.updatedAt=new Date().toISOString();
+  recalcCustomerStats(cid);
+  cm('moCrmHistDetail');
+  crmDetailTab('history');
+  showToast('Záznam smazán.');
 }
 
 function openEditCustomerModal(id){
@@ -8729,9 +8845,17 @@ function recalcCustomerStats(customerId) {
   });
   var totalSpent = soldItems.reduce(function(s, it){ return s + (it.sellPrice||0); }, 0);
   var count = soldItems.length;
-  var dates = soldItems.map(function(it){ return it.saleDate; }).filter(Boolean).sort();
+  var dates = soldItems.map(function(it){ return it.saleDate; }).filter(Boolean);
   var brands = {};
   soldItems.forEach(function(it){ if(it.brand) brands[it.brand] = (brands[it.brand]||0) + 1; });
+  // Include manual nakup history entries in stats
+  var histNakupy = (_statArr[ci].contact_history||[]).filter(function(h){ return h.type==='nakup'; });
+  histNakupy.forEach(function(h){
+    count++;
+    if(h.price) totalSpent += Number(h.price);
+    if(h.date) dates.push(h.date);
+  });
+  dates.sort();
   _statArr[ci] = Object.assign({}, _statArr[ci], {
     stats_orders_count: count,
     stats_total_spent: Math.round(totalSpent),
@@ -12877,5 +13001,83 @@ rebuildBrandTables();
     </div>
   </div>
 </div>
+
+<!-- CRM HISTORY ENTRY MODAL -->
+<div class="mo" id="moCrmHistEntry" onclick="if(event.target===this)cm('moCrmHistEntry')">
+<div class="modal" style="max-width:500px;">
+  <div class="mh">
+    <div class="mt2">Nový záznam</div>
+    <button class="xb" onclick="cm('moCrmHistEntry')">&#215;</button>
+  </div>
+  <div class="fs">
+    <div class="fg">
+      <div class="fi"><label>Typ záznamu</label>
+        <select id="crmHMType" onchange="crmHistModalToggleFields()">
+          <option value="nakup">Nákup</option>
+          <option value="poptavka">Poptávka</option>
+          <option value="followup">Followup</option>
+          <option value="schuzka">Schůzka</option>
+          <option value="reklamace">Reklamace</option>
+          <option value="jine">Jiné</option>
+        </select>
+      </div>
+      <div class="fi"><label>Datum</label><input type="date" id="crmHMDate"></div>
+    </div>
+  </div>
+  <div id="crmHMOrderFields">
+    <div class="fs">
+      <div class="fs-title">Zboží</div>
+      <div class="fg">
+        <div class="fi full"><label>Název zboží</label><input type="text" id="crmHMItemName" placeholder="Nike Air Max 90 White"></div>
+        <div class="fi"><label>Kategorie</label>
+          <select id="crmHMCategory"></select>
+        </div>
+        <div class="fi"><label>Velikost</label><input type="text" id="crmHMSize" placeholder="42, M, XL…"></div>
+        <div class="fi"><label>SKU / Artikl</label><input type="text" id="crmHMSku" placeholder="CW2288-111"></div>
+        <div class="fi full"><label>Sledovací číslo</label><input type="text" id="crmHMTracking" placeholder="CS1234567890CZ"></div>
+      </div>
+    </div>
+    <div class="fs">
+      <div class="fs-title">Platba &amp; stav</div>
+      <div class="fg">
+        <div class="fi"><label>Cena (Kč)</label><input type="number" id="crmHMPrice" placeholder="0" min="0"></div>
+        <div class="fi"><label>Způsob platby</label>
+          <select id="crmHMPayment">
+            <option value="hotove">Hotově</option>
+            <option value="karta">Kartou</option>
+            <option value="prevod">Převodem</option>
+            <option value="dobirka">Dobírkou</option>
+            <option value="jine">Jiné</option>
+          </select>
+        </div>
+        <div class="fi full"><label>Stav objednávky</label>
+          <select id="crmHMStatus">
+            <option value="doruceno">Doručeno</option>
+            <option value="odeslano">Odesláno</option>
+            <option value="prijato">Přijato</option>
+            <option value="storno">Storno</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fs" style="margin-bottom:0;">
+    <div class="fi full"><label>Poznámka</label><textarea id="crmHMNote" rows="3" placeholder="Volitelná poznámka…" style="resize:vertical;"></textarea></div>
+  </div>
+  <button id="crmHMSaveBtn" class="sub-btn" style="width:100%;margin-top:14px;" onclick="crmHistSave()">Uložit záznam</button>
+</div>
+</div>
+
+<!-- CRM HISTORY DETAIL MODAL -->
+<div class="mo" id="moCrmHistDetail" onclick="if(event.target===this)cm('moCrmHistDetail')">
+<div class="modal" style="max-width:460px;">
+  <div class="mh">
+    <div class="mt2" id="crmHDTitle">Detail záznamu</div>
+    <button class="xb" onclick="cm('moCrmHistDetail')">&#215;</button>
+  </div>
+  <div id="crmHDBody"></div>
+</div>
+</div>
+
 </body>
 </html>
