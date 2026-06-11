@@ -11921,6 +11921,8 @@ var EXP_COLS = [
   {id:'paymentMethod',label:'Způsob platby', tpls:['zaloha']},
   {id:'note',       label:'Poznámka',        tpls:['zaloha']},
   {id:'platforms',  label:'Platformy',       tpls:['zaloha']},
+  {id:'hasInvoice', label:'Faktura',         tpls:['zaloha']},
+  {id:'invoiceUrl', label:'Odkaz na fakturu',tpls:['zaloha']},
 ];
 
 var expFormat = 'csv';
@@ -12011,6 +12013,8 @@ function getCellValue(it, colId) {
     }
     case 'platforms': return (it.platforms||[]).join(', ');
     case 'qty': return (it.qty||1).toString();
+    case 'hasInvoice': return it.invoiceUrl ? 'Ano' : 'Ne';
+    case 'invoiceUrl': return it.invoiceUrl || '';
     default: return it[colId] != null ? String(it[colId]) : '';
   }
 }
@@ -12097,6 +12101,14 @@ function exportXlsx(expItems, cols) {
         var raw = getCellValue(it, col.id);
         if (raw.indexOf('-') === 0) cell.font = { name:'Calibri', size:10, bold:true, color:{argb:'FFCC0000'} };
         else if (raw.indexOf('+') === 0) cell.font = { name:'Calibri', size:10, bold:true, color:{argb:'FF2A8000'} };
+      } else if (col.id === 'hasInvoice') {
+        var hasInv = !!it.invoiceUrl;
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: hasInv ? 'FFD6FFEE' : 'FFFFE0E0'} };
+        cell.font = { name:'Calibri', size:10, bold:true, color:{argb: hasInv ? 'FF008855' : 'FFAA1100'} };
+        cell.alignment = { vertical:'middle', horizontal:'center' };
+      } else if (col.id === 'invoiceUrl' && it.invoiceUrl) {
+        cell.value = { text:'Otevřít fakturu', hyperlink: it.invoiceUrl };
+        cell.font = { name:'Calibri', size:10, color:{argb:'FF0563C1'}, underline:true };
       }
     });
   });
