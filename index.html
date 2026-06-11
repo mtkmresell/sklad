@@ -12089,7 +12089,13 @@ function exportPdf(expItems, cols) {
     });
     html += '</tr>';
   });
-  html += '</tbody></table></div>';
+  html += '</tbody></table></body></html>';
+  var w = window.open('', '_blank');
+  if (!w) { showToast('Prohlížeč zablokoval otevření okna pro export.', 'err'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  w.onload = function(){ w.focus(); w.print(); };
 }
 
 
