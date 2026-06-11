@@ -11943,6 +11943,7 @@ function setExportTemplate(tpl) {
 function setExportFormat(fmt) {
   expFormat = fmt;
   document.getElementById('expFmtCsv').classList.toggle('active', fmt==='csv');
+  document.getElementById('expFmtXlsx').classList.toggle('active', fmt==='xlsx');
   document.getElementById('expFmtPdf').classList.toggle('active', fmt==='pdf');
 }
 
@@ -12019,7 +12020,33 @@ function doExport() {
   if (!expItems.length) { showToast('Žádné položky k exportu.', 'err'); return; }
   if (!cols.length) { showToast('Vyber alespoň jeden sloupec.', 'err'); return; }
   if (expFormat === 'csv') exportCsv(expItems, cols);
+  else if (expFormat === 'xlsx') exportXlsx(expItems, cols);
   else exportPdf(expItems, cols);
+}
+
+var EXP_NUMERIC_COLS = ['qty','buyPrice','sellPrice','profit','roi'];
+
+function exportXlsx(expItems, cols) {
+  if (typeof XLSX === 'undefined') { showToast('Knihovna pro Excel se nenačetla.', 'err'); return; }
+  var data = [cols.map(function(c){ return c.label; })];
+  expItems.forEach(function(it) {
+    data.push(cols.map(function(col) {
+      var val = getCellValue(it, col.id);
+      if (EXP_NUMERIC_COLS.indexOf(col.id) !== -1 && val.indexOf('EUR') === -1) {
+        var num = parseFloat(val.replace(/[^\d.\-]/g, ''));
+        if (!isNaN(num) && val !== '') return num;
+      }
+      return val;
+    }));
+  });
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!autofilter'] = { ref: ws['!ref'] };
+  ws['!cols'] = cols.map(function(col) { return { wch: Math.max(col.label.length + 2, 12) }; });
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sklad');
+  var date = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'sklad-export-'+date+'.xlsx');
 }
 
 function exportCsv(expItems, cols) {
@@ -12492,6 +12519,7 @@ rebuildBrandTables();
       <div style="font-size:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;">Formát</div>
       <div style="display:flex;gap:6px;">
         <button class="exp-fmt-btn active" id="expFmtCsv" onclick="setExportFormat('csv')">CSV</button>
+        <button class="exp-fmt-btn" id="expFmtXlsx" onclick="setExportFormat('xlsx')">Excel</button>
         <button class="exp-fmt-btn" id="expFmtPdf" onclick="setExportFormat('pdf')">PDF</button>
       </div>
     </div>
