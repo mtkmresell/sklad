@@ -11906,6 +11906,7 @@ var EXP_COLS = [
   {id:'qty',        label:'Množství',        tpls:['zaloha']},
   {id:'buyPrice',   label:'Nákupní cena',    tpls:['zaloha']},
   {id:'buyCurrency',label:'Měna nákupu',     tpls:['zaloha']},
+  {id:'totalValue', label:'Hodnota celkem',  tpls:['zaloha']},
   {id:'buyDate',    label:'Datum nákupu',    tpls:['zaloha']},
   {id:'buyWhere',   label:'Kde koupeno',     tpls:['zaloha']},
   {id:'orderNum',   label:'Č. objednávky',   tpls:['zaloha']},
@@ -11997,8 +11998,9 @@ function getCellValue(it, colId) {
   switch(colId) {
     case 'category': return getCatLabel(it.category) || it.category || '';
     case 'condition': return it.condition || '';
-    case 'buyPrice': return it.buyPrice ? (it.buyCurrency==='EUR' ? it.buyPrice+' EUR' : it.buyPrice.toString()) : '';
-    case 'sellPrice': return it.sellPrice ? (it.sellCurrency==='EUR' ? (getSellOrig(it)||it.sellPrice)+' EUR' : it.sellPrice.toString()) : '';
+    case 'buyPrice': return it.buyPrice ? it.buyPrice.toString() : '';
+    case 'sellPrice': return it.sellPrice ? (it.sellCurrency==='EUR' ? (getSellOrig(it)||it.sellPrice).toString() : it.sellPrice.toString()) : '';
+    case 'totalValue': return it.buyPrice ? ((it.buyPrice||0)*(it.qty||1)).toString() : '';
     case 'profit': {
       var _p = _itemProfit(it);
       return it.sellPrice ? (_p>=0?'+':'')+Math.round(_p).toString() : '';
@@ -12029,7 +12031,14 @@ function doExport() {
   else exportPdf(expItems, cols);
 }
 
-var EXP_NUMERIC_COLS = ['qty','buyPrice','sellPrice','profit','roi'];
+var EXP_NUMERIC_COLS = ['qty','buyPrice','sellPrice','profit','roi','totalValue'];
+var EXP_SUM_COLS = ['qty','buyPrice','sellPrice','profit','totalValue'];
+
+function _expColLetter(n) {
+  var s = '';
+  while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
 
 // Barvy badge kategorií pro Excel (fill / font) — odpovídá PDF/aplikaci
 var EXP_CAT_COLORS = {
@@ -12076,7 +12085,7 @@ function exportXlsx(expItems, cols) {
   expItems.forEach(function(it, idx) {
     var rowVals = cols.map(function(col) {
       var val = getCellValue(it, col.id);
-      if (EXP_NUMERIC_COLS.indexOf(col.id) !== -1 && val.indexOf('EUR') === -1) {
+      if (EXP_NUMERIC_COLS.indexOf(col.id) !== -1) {
         var num = parseFloat(val.replace(/[^\d.\-]/g, ''));
         if (!isNaN(num) && val !== '') return num;
       }
@@ -12092,6 +12101,7 @@ function exportXlsx(expItems, cols) {
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:baseFill} };
       cell.border = { bottom:{ style:'thin', color:{argb:'FFE8E8E8'} } };
       cell.alignment = { vertical:'middle', horizontal: (EXP_NUMERIC_COLS.indexOf(col.id)!==-1 ? 'right' : 'left') };
+      if (EXP_SUM_COLS.indexOf(col.id) !== -1 && col.id !== 'qty') cell.numFmt = '#,##0.##';
       if (col.id === 'category') {
         var cc = EXP_CAT_COLORS[it.category] || EXP_CAT_COLORS.jine;
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:cc.fill} };
@@ -12112,6 +12122,31 @@ function exportXlsx(expItems, cols) {
       }
     });
   });
+
+  // Řádek se součty (SUBTOTAL — počítá jen viditelné/filtrované řádky)
+  var firstDataRow = 3;
+  var lastDataRow = 2 + expItems.length;
+  var hasSumCol = cols.some(function(c){ return EXP_SUM_COLS.indexOf(c.id) !== -1; });
+  if (hasSumCol) {
+    var totalRowVals = cols.map(function(col, i) {
+      if (i === 0) return 'CELKEM (po filtru)';
+      if (EXP_SUM_COLS.indexOf(col.id) !== -1) {
+        var letter = _expColLetter(i + 1);
+        return { formula: 'SUBTOTAL(109,' + letter + firstDataRow + ':' + letter + lastDataRow + ')' };
+      }
+      return '';
+    });
+    var totalRow = ws.addRow(totalRowVals);
+    totalRow.height = 20;
+    totalRow.eachCell(function(cell, colNum) {
+      var col = cols[colNum-1];
+      cell.font = { name:'Calibri', size:10, bold:true, color:{argb:'FF111111'} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFC8FF00'} };
+      cell.border = { top:{ style:'medium', color:{argb:'FF111111'} } };
+      cell.alignment = { vertical:'middle', horizontal: (EXP_NUMERIC_COLS.indexOf(col.id)!==-1 ? 'right' : 'left') };
+      if (EXP_SUM_COLS.indexOf(col.id) !== -1) cell.numFmt = '#,##0.##';
+    });
+  }
 
   // Šířky sloupců
   ws.columns.forEach(function(column, i) {
