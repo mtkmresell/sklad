@@ -1999,7 +1999,20 @@ function fbLoadFromCloud(callback) {
 }
 // ── AUTOMATICKÉ SNAPSHOTY ────────────────────────────────
 var SK_SNAP = 'sklad_v3_snapshots';
-var SNAP_COUNT = 3;
+var SNAP_COUNT = 5;
+
+// Záloha CLOUDOVÝCH dat předtím, než je přepíšeme lokálními — pojistka proti ztrátě
+// práce z jiného zařízení (snapshot jde do lokálního úložiště tohoto zařízení)
+function saveCloudSnapshot(data, label) {
+  var cloudItems = (data && data.items) || [];
+  if (!cloudItems.length) return;
+  try {
+    var snaps = getSnapshots();
+    snaps.unshift({ ts: new Date().toISOString(), label: label||'', count: cloudItems.length, data: JSON.parse(JSON.stringify(cloudItems)) });
+    if (snaps.length > SNAP_COUNT) snaps = snaps.slice(0, SNAP_COUNT);
+    localStorage.setItem(SK_SNAP, JSON.stringify(snaps));
+  } catch(e) { console.warn('saveCloudSnapshot error', e); }
+}
 
 function saveSnapshot(label) {
   if (!items || !items.length) return;
@@ -2918,6 +2931,15 @@ function bazosExpireCheck() {
     });
   });
   if (changed) { sv(); }
+}
+
+// Bezpečné spuštění expirace: u přihlášeného uživatele NESMÍ běžet před prvním cloud
+// snapshotem — sv() by posunulo lokální savedAt dopředu a stará data by přepsala cloud.
+var _bazosExpireDone = false;
+function bazosExpireCheckSafe() {
+  if (_bazosExpireDone) return;
+  _bazosExpireDone = true;
+  try { bazosExpireCheck(); } catch(e) { console.error('bazosExpire', e); }
 }
 
 function togglePlatItem(id, platform) {
@@ -9472,7 +9494,9 @@ window.renderItems = renderItems;
 function _init() {
   try{load();}catch(e){console.error('load',e);items=[...PRELOAD,...CSV_ITEMS].map(it=>({...it}));}
   if(!items || items.length===0){items=[...PRELOAD,...CSV_ITEMS].map(it=>({...it}));}
-  try{bazosExpireCheck();}catch(e){console.error('bazosExpire',e);}
+  // Bazoš expirace hned jen pokud nečekáme cloud session — jinak až po prvním snapshotu
+  if(!localStorage.getItem('sklad_v3_savedAt')){ bazosExpireCheckSafe(); }
+  else { setTimeout(function(){ if(!window._fbUser) bazosExpireCheckSafe(); }, 30000); } // pojistka jen pro odhlášené
   try{buildCatSelects();}catch(e){}
   try{buildPlatFilter();buildLocationFilter();buildSoldWhereFilter();buildListingPlatformFilter();}catch(e){}
   try{buildSizeFilter();buildBrandFilter();buildTagFilter();}catch(e){}
@@ -10273,6 +10297,7 @@ document.addEventListener('fb-auth', function(e) {
           } else {
             showOnboarding();
           }
+          setTimeout(bazosExpireCheckSafe, 1500);
         }
         return;
       }
@@ -10294,19 +10319,23 @@ document.addEventListener('fb-auth', function(e) {
           showToast('Data načtena z cloudu (' + items.length + ' položek).');
         } else if (isDirty && cloudTime <= localTime) {
           // Neuložené lokální změny (zavřeno před sync) a cloud není novější — nahraj lokální
+          saveCloudSnapshot(data, 'cloud před přepsáním');
           fbSaveToCloud();
         } else if (cloudTime > localTime) {
-          // Cloud je novější — použij cloud
-          if ((data.items||[]).length !== items.length) saveSnapshot('před sync');
+          // Cloud je novější — použij cloud (vždy se zálohou lokálních dat)
+          saveSnapshot('před sync');
           _applyCloudData(data);
           showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
         } else if (localTime > cloudTime + 30000) {
           // Lokální jsou výrazně novější (>30s) — nahraj do cloudu
           if (items.length > 0) {
+            saveCloudSnapshot(data, 'cloud před přepsáním');
             fbSaveToCloud();
           }
         }
         // Jinak jsou stejné — nic nedělej
+        // Cloud je srovnaný — teprve teď je bezpečné spustit auto-expiraci Bazoše
+        setTimeout(bazosExpireCheckSafe, 1500);
       } else {
         // Subsequent snapshot — přišla změna z jiného zařízení
         if (!_fbCloudReady) _fbCloudReady = true;
@@ -12728,7 +12757,7 @@ rebuildBrandTables();
   <!-- Automatické zálohy -->
   <div class="fs" style="margin-bottom:0;">
     <div class="fs-title">Automatické zálohy</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Před každou synchronizací z cloudu se automaticky uloží snapshot. Poslední 3 zálohy.</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Před každou synchronizací z cloudu se automaticky uloží snapshot. Posledních 5 záloh.</div>
     <div id="snapshotList"></div>
   </div>
 </div>
