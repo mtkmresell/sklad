@@ -1968,6 +1968,7 @@ document.addEventListener('visibilitychange', function() {
     var cloudTime = data.savedAt ? new Date(data.savedAt).getTime() : 0;
     var localTime = (localStorage.getItem(SK+'_savedAt') ? new Date(localStorage.getItem(SK+'_savedAt')).getTime() : 0);
     if (cloudTime > localTime) {
+      saveSnapshot('před sync');
       if (_applyCloudData(data)) showToast('Synchronizováno z cloudu.');
     }
   }).catch(function(e) { console.warn('visibilitychange sync check:', e); });
@@ -10311,29 +10312,32 @@ document.addEventListener('fb-auth', function(e) {
         _fbCloudReady = true;
         // Zruš jakýkoli pending sv() cloud timer
         if (_svCloudTimer) { clearTimeout(_svCloudTimer); _svCloudTimer = null; }
-        // První načtení — rozhodni zda použít cloud nebo lokální
+        // CLOUD JE JEDINÝ ZDROJ PRAVDY. Lokální data se při startu NIKDY automaticky
+        // nenahrávají do cloudu — jediná výjimka jsou neuložené lokální změny novější
+        // než cloud, a tam se ptáme uživatele (s pojistnými zálohami obou stran).
         var isDirty = !!localStorage.getItem(SK+'_dirty');
         if (!localSavedAt || items.length === 0) {
-          // Nové zařízení nebo prázdný stav — VŽDY načti z cloudu
+          // Nové zařízení nebo prázdný stav — načti z cloudu
           _applyCloudData(data);
           showToast('Data načtena z cloudu (' + items.length + ' položek).');
-        } else if (isDirty && cloudTime <= localTime) {
-          // Neuložené lokální změny (zavřeno před sync) a cloud není novější — nahraj lokální
-          saveCloudSnapshot(data, 'cloud před přepsáním');
-          fbSaveToCloud();
-        } else if (cloudTime > localTime) {
-          // Cloud je novější — použij cloud (vždy se zálohou lokálních dat)
+        } else if (data.savedAt && localSavedAt === data.savedAt) {
+          // Identický stav — nic nedělej
+        } else if (isDirty && localTime > cloudTime) {
+          // Lokální neuložené změny novější než cloud (zavřeno před dokončením sync)
+          // — jediný nejednoznačný případ, rozhodne uživatel
+          saveCloudSnapshot(data, 'cloud před rozhodnutím');
+          saveSnapshot('lokální před rozhodnutím');
+          var upload = confirm('Toto zařízení má neuložené změny, které nejsou v cloudu.\n\n'
+            + 'OK = nahrát změny z tohoto zařízení do cloudu\n'
+            + 'Zrušit = zahodit je a načíst data z cloudu\n\n'
+            + '(Obě verze jsou zálohované v Nastavení → Automatické zálohy.)');
+          if (upload) { fbSaveToCloud(); }
+          else { _applyCloudData(data); showToast('Data načtena z cloudu (' + items.length + ' položek).'); }
+        } else {
+          // Ve všech ostatních případech vyhrává cloud — se zálohou lokálních dat
           saveSnapshot('před sync');
-          _applyCloudData(data);
-          showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
-        } else if (localTime > cloudTime + 30000) {
-          // Lokální jsou výrazně novější (>30s) — nahraj do cloudu
-          if (items.length > 0) {
-            saveCloudSnapshot(data, 'cloud před přepsáním');
-            fbSaveToCloud();
-          }
+          if (_applyCloudData(data)) showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
         }
-        // Jinak jsou stejné — nic nedělej
         // Cloud je srovnaný — teprve teď je bezpečné spustit auto-expiraci Bazoše
         setTimeout(bazosExpireCheckSafe, 1500);
       } else {
