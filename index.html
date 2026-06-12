@@ -2241,11 +2241,6 @@ function initPlatDragDrop(){
   });
 }
 
-function removePlatItem(key,name){
-  if(!_tmpGroups) _tmpGroups=getPlatGroups();
-  _tmpGroups[key]=_tmpGroups[key].filter(p=>p!==name);
-  openPlatMgr(false); // re-render keeping tmp
-}
 function addPlatItem(key){
   if(!_tmpGroups) _tmpGroups=getPlatGroups();
   const inp=document.getElementById('pmg_inp_'+key); if(!inp) return;
@@ -3768,6 +3763,60 @@ function openDropdownsEditor() {
 
     modal.appendChild(section);
   });
+
+  // Sekce — vlastní kategorie (mazání)
+  var customCats = getCustomCats();
+  if (customCats.length) {
+    var catSection = document.createElement('div');
+    catSection.style.cssText = 'margin-top:28px;';
+    var catTitle = document.createElement('div');
+    catTitle.className = 'fs-title';
+    catTitle.textContent = 'Vlastní kategorie';
+    catSection.appendChild(catTitle);
+
+    var catList = document.createElement('div');
+    catList.style.cssText = 'display:flex;flex-direction:column;gap:5px;margin-bottom:10px;';
+    customCats.forEach(function(c) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;';
+
+      var lbl = document.createElement('span');
+      lbl.style.cssText = 'flex:1;font-size:13px;';
+      lbl.textContent = c.label;
+
+      var del = document.createElement('button');
+      del.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px;line-height:1;transition:color 0.15s;flex-shrink:0;';
+      del.textContent = '✕';
+      del.addEventListener('mouseover', function() { this.style.color = 'var(--danger)'; });
+      del.addEventListener('mouseout', function() { this.style.color = 'var(--muted)'; });
+      del.addEventListener('click', function() {
+        var cnt = items.filter(function(it){ return it.category === c.key; }).length;
+        var msg = cnt > 0
+          ? 'Kategorii "' + c.label + '" používá ' + cnt + ' položek. Smazáním kategorie se přesunou do "Jiné". Pokračovat?'
+          : 'Smazat kategorii "' + c.label + '"?';
+        if (!confirm(msg)) return;
+        if (cnt > 0) {
+          items.forEach(function(it){ if(it.category === c.key) it.category = 'jine'; });
+          sv(); renderStats(); renderItems();
+        }
+        removeCustomCat(c.key);
+        buildCatSelects();
+        row.remove();
+      });
+
+      row.appendChild(lbl);
+      row.appendChild(del);
+      catList.appendChild(row);
+    });
+    catSection.appendChild(catList);
+
+    var catInfo = document.createElement('div');
+    catInfo.style.cssText = 'font-size:11px;color:var(--muted2);';
+    catInfo.textContent = 'Novou vlastní kategorii přidáš ve formuláři položky volbou "+ Přidat vlastní…".';
+    catSection.appendChild(catInfo);
+
+    modal.appendChild(catSection);
+  }
 
   // Uložit
   var saveRow = document.createElement('div');
