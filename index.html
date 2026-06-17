@@ -1254,6 +1254,22 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       <div class="fi"><label>Datum prodeje</label><input type="date" id="fSaleDate"></div>
       <div class="fi hide-if-stock hide-if-waiting"><label>Datum vyplacení</label><input type="date" id="fPayoutDate"></div>
       <div class="fi hide-if-stock hide-if-waiting"><label>Způsob platby</label><select id="fPayoutMethod"></select></div>
+      <div class="fi full" id="fBuyerTypeRow">
+        <label>Typ kupujícího</label>
+        <select id="fBuyerType" onchange="sellBuyerTypeChange('f')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 10px;outline:none;">
+          <option value="anonymous">Anonymní</option>
+          <option value="b2c">B2C – zákazník</option>
+          <option value="b2b">B2B – partner</option>
+        </select>
+      </div>
+      <div class="fi full" id="fBuyerCustomerRow" style="display:none;">
+        <label>Zákazník</label>
+        <div style="position:relative;">
+          <input type="text" id="fBuyerSearch" placeholder="Hledat zákazníka..." autocomplete="off" oninput="sellSearchCustomer(this.value,'f')" onfocus="sellSearchCustomer(this.value,'f')" onblur="setTimeout(function(){var d=document.getElementById('fBuyerDrop');if(d)d.style.display='none'},200)" style="width:100%;">
+          <div id="fBuyerDrop" style="position:absolute;top:calc(100% + 4px);left:0;right:0;display:none;z-index:9999;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);max-height:150px;overflow-y:auto;"></div>
+          <input type="hidden" id="fBuyerCustomerId">
+        </div>
+      </div>
     </div>
   </div>
 
@@ -3495,20 +3511,22 @@ function getSoldWhereOptions() {
   return all;
 }
 
-function sellBuyerTypeChange(){
-  var bt = (document.getElementById('sBuyerType')||{}).value||'anonymous';
-  var row = document.getElementById('sBuyerCustomerRow');
+function sellBuyerTypeChange(prefix){
+  prefix = prefix || 's';
+  var bt = (document.getElementById(prefix+'BuyerType')||{}).value||'anonymous';
+  var row = document.getElementById(prefix+'BuyerCustomerRow');
   if(row) row.style.display = (bt==='b2c'||bt==='b2b') ? '' : 'none';
   if(bt==='anonymous'){
-    var bci = document.getElementById('sBuyerCustomerId'); if(bci) bci.value='';
-    var bcs = document.getElementById('sBuyerSearch'); if(bcs) bcs.value='';
+    var bci = document.getElementById(prefix+'BuyerCustomerId'); if(bci) bci.value='';
+    var bcs = document.getElementById(prefix+'BuyerSearch'); if(bcs) bcs.value='';
   }
 }
 
-function sellSearchCustomer(q){
-  var drop = document.getElementById('sBuyerDrop');
+function sellSearchCustomer(q, prefix){
+  prefix = prefix || 's';
+  var drop = document.getElementById(prefix+'BuyerDrop');
   if(!drop) return;
-  var bt = (document.getElementById('sBuyerType')||{}).value||'b2c';
+  var bt = (document.getElementById(prefix+'BuyerType')||{}).value||'b2c';
   var list = bt==='b2b' ? partners : customers;
   var qq = (q||'').trim();
   var filtered = qq ? list.filter(function(c){ return c.name.toLowerCase().includes(qq.toLowerCase()); }) : list.slice(0,20);
@@ -3527,7 +3545,7 @@ function sellSearchCustomer(q){
   drop.querySelectorAll('.sell-buyer-opt').forEach(function(el){
     el.addEventListener('mousedown', function(e){
       e.preventDefault();
-      sellSelectCustomer(el.dataset.cid, el.dataset.cname);
+      sellSelectCustomer(el.dataset.cid, el.dataset.cname, prefix);
     });
     el.addEventListener('mouseover', function(){ el.style.background='var(--surface3)'; });
     el.addEventListener('mouseout', function(){ el.style.background=''; });
@@ -3537,17 +3555,18 @@ function sellSearchCustomer(q){
     newEl.addEventListener('mousedown', function(e){
       e.preventDefault();
       var nid = _crmCreateMinimal(newEl.dataset.cname, bt==='b2b'?'b2b':'b2c');
-      if(nid) sellSelectCustomer(nid, newEl.dataset.cname);
+      if(nid) sellSelectCustomer(nid, newEl.dataset.cname, prefix);
     });
     newEl.addEventListener('mouseover', function(){ newEl.style.background='var(--surface3)'; });
     newEl.addEventListener('mouseout', function(){ newEl.style.background=''; });
   }
 }
 
-function sellSelectCustomer(id, name){
-  var bci = document.getElementById('sBuyerCustomerId'); if(bci) bci.value=id;
-  var bcs = document.getElementById('sBuyerSearch'); if(bcs) bcs.value=name;
-  var drop = document.getElementById('sBuyerDrop'); if(drop) drop.style.display='none';
+function sellSelectCustomer(id, name, prefix){
+  prefix = prefix || 's';
+  var bci = document.getElementById(prefix+'BuyerCustomerId'); if(bci) bci.value=id;
+  var bcs = document.getElementById(prefix+'BuyerSearch'); if(bcs) bcs.value=name;
+  var drop = document.getElementById(prefix+'BuyerDrop'); if(drop) drop.style.display='none';
 }
 
 function openSoldWhereDrop() {
@@ -4571,6 +4590,9 @@ function openAddModal(){
   document.getElementById('fStockxUrl').value=''; document.getElementById('fStockxUrl')._autoGenerated=false;
   document.getElementById('fImgUrl').value='';
   buildPlatGrid([]);
+  var _fBid0=document.getElementById('fBuyerCustomerId'); if(_fBid0) _fBid0.value='';
+  var _fBs0=document.getElementById('fBuyerSearch'); if(_fBs0) _fBs0.value='';
+  var _fBcr0=document.getElementById('fBuyerCustomerRow'); if(_fBcr0) _fBcr0.style.display='none';
   document.getElementById('moAdd').classList.add('open');
   var _moAddInner2 = document.querySelector('#moAdd .modal');
   if(_moAddInner2) _moAddInner2.scrollTop = 0;
@@ -4582,6 +4604,8 @@ function openAddModal(){
     if(fBC) { fBC.value = 'CZK'; if(fBC._csSync) fBC._csSync(); }
     var fSC2 = document.getElementById('fSellCurrency');
     if(fSC2) { fSC2.value = 'CZK'; if(fSC2._csSync) fSC2._csSync(); }
+    var fBt0 = document.getElementById('fBuyerType');
+    if(fBt0) { fBt0.value = 'anonymous'; if(fBt0._csSync) fBt0._csSync(); }
     // Přednastavit lokaci na Na cestě
     var fLoc = document.getElementById('fLocation');
     if(fLoc) { fLoc.value = 'Na cestě'; if(fLoc._csSync) fLoc._csSync(); }
@@ -4648,6 +4672,14 @@ function openEdit(id){
   const fSwEl=document.getElementById('fSoldWhere');if(fSwEl)fSwEl.value=it.soldWhere||'';
   document.getElementById('fSaleDate').value=it.saleDate||'';
   document.getElementById('fPayoutDate').value=it.payoutDate||'';
+  (function(){
+    var fBt=document.getElementById('fBuyerType');
+    var bt=it.buyerType||'anonymous';
+    if(fBt){ fBt.value=bt; if(fBt._csSync) fBt._csSync(); }
+    var fBcr=document.getElementById('fBuyerCustomerRow'); if(fBcr) fBcr.style.display=(bt==='b2c'||bt==='b2b')?'':'none';
+    var fBid=document.getElementById('fBuyerCustomerId'); if(fBid) fBid.value=it.linkedCustomerId||'';
+    var fBs=document.getElementById('fBuyerSearch'); if(fBs) fBs.value=it.linkedCustomerId?_crmNameById(it.linkedCustomerId):'';
+  })();
   // fPayoutMethod — init opts a nastav hodnotu
   (function(){
     var el = document.getElementById('fPayoutMethod'); if(!el) return;
@@ -4692,6 +4724,8 @@ function openEdit(id){
     if(fBC) { fBC.value = it.buyCurrency||'CZK'; if(fBC._csSync) fBC._csSync(); }
     var fSC2 = document.getElementById('fSellCurrency');
     if(fSC2) { fSC2.value = it.sellCurrency||'CZK'; if(fSC2._csSync) fSC2._csSync(); }
+    var fBt2 = document.getElementById('fBuyerType');
+    if(fBt2) { fBt2.value = it.buyerType||'anonymous'; if(fBt2._csSync) fBt2._csSync(); }
     // Taky sync fSell hodnotu znovu po initAllCustomInputs
     var _fSellEl = document.getElementById('fSell');
     if(_fSellEl && it.sellCurrency==='EUR') {
@@ -4753,6 +4787,8 @@ async function saveItem(){
   })(),targetCurrency:document.getElementById('fTargetCurrency')?.value||'CZK',saleState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); if(modalEl.classList.contains('modal-waiting')) return 'waiting'; if(modalEl.classList.contains('modal-paid')) return 'paid'; return 'stock'; })(),waitState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return modalEl.classList.contains('modal-waiting')?(document.getElementById('fWaitState')?.value||'sending'):undefined; })(),
     saleRef:document.getElementById('fSaleRef').value.trim(),soldWhere:document.getElementById('fSoldWhere')?.value?.trim()||'',saleDate:document.getElementById('fSaleDate').value,
     payoutDate:document.getElementById('fPayoutDate')?.value||undefined,payoutMethod:document.getElementById('fPayoutMethod')?.value||undefined,
+    buyerType:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return (modalEl.classList.contains('modal-waiting')||modalEl.classList.contains('modal-paid'))?(document.getElementById('fBuyerType')?.value||'anonymous'):undefined; })(),
+    linkedCustomerId:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return (modalEl.classList.contains('modal-waiting')||modalEl.classList.contains('modal-paid'))?(document.getElementById('fBuyerCustomerId')?.value||''):undefined; })(),
     homeDate:document.getElementById('fHomeDate')?.value||(getLocationValue()==='Doma'?new Date().toISOString().slice(0,10):undefined),
     actualSell:0,
     location:getLocationValue()||'Doma',
@@ -4781,6 +4817,7 @@ async function saveItem(){
       // Při úpravě — smaž starý klíč z cache
       var oldName = items[i].name;
       var oldSku = items[i].sku;
+      var _oldLinkedCustomerId = items[i].linkedCustomerId || '';
       var _cache = itemCacheGet();
       var oldKey = (oldSku ? 'sku:' + oldSku.trim().toLowerCase() : 'name:' + (oldName||'').trim().toLowerCase());
       var newKey = (d.sku ? 'sku:' + d.sku.trim().toLowerCase() : 'name:' + d.name.trim().toLowerCase());
@@ -4827,6 +4864,14 @@ async function saveItem(){
         _merged.trackingCarrier = items[i].trackingCarrier;
       }
       items[i] = _merged;
+      // Zákazník byl napojen/odpojen/změněn — přepočti statistiky obou stran
+      var _newLinkedCustomerId = items[i].linkedCustomerId || '';
+      if (_newLinkedCustomerId !== _oldLinkedCustomerId) {
+        if (_oldLinkedCustomerId) recalcCustomerStats(_oldLinkedCustomerId);
+        if (_newLinkedCustomerId) recalcCustomerStats(_newLinkedCustomerId);
+      } else if (_newLinkedCustomerId) {
+        recalcCustomerStats(_newLinkedCustomerId);
+      }
       // Přepočítej profit pro paid položky — použij historický kurz dle data prodeje
       if(items[i].saleState==='paid' && items[i].sellPrice) {
         var _itemRef = items[i];
@@ -4862,6 +4907,7 @@ async function saveItem(){
     for(var _qi=0; _qi<qty; _qi++){
       items.unshift({id:uid(),dateAdded:Date.now(),..._dNew});
     }
+    if (_dNew.linkedCustomerId) recalcCustomerStats(_dNew.linkedCustomerId);
   }
   // Propagace cílové ceny na stejné položky (jen při editaci a jen pokud je targetPrice vyplněna)
   if (editId && d.targetPrice) {
@@ -8809,10 +8855,10 @@ function _crmTabHistory(c){
   (c.contact_history||[]).forEach(function(h,oi){
     entries.push({ kind:'manual', t:_histTime(h.date), h:h, oi:oi });
   });
-  // 2) Automaticky napojené prodeje ze skladu (linkedCustomerId === c.id)
+  // 2) Automaticky napojené prodeje ze skladu (linkedCustomerId === c.id) – včetně vrácených/zrušených zpět na sklad
   items.forEach(function(it){
-    if(it.linkedCustomerId===c.id && (it.saleState==='waiting'||it.saleState==='paid')){
-      entries.push({ kind:'sale', t:_histTime(it.payoutDate||it.saleDate), it:it });
+    if(it.linkedCustomerId===c.id && (it.saleState==='waiting'||it.saleState==='paid'||it.saleState==='stock')){
+      entries.push({ kind:'sale', t:_histTime(it.payoutDate||it.saleDate||it.dateAdded), it:it });
     }
   });
   // Nejnovější první
@@ -8821,12 +8867,22 @@ function _crmTabHistory(c){
     if(e.kind==='sale'){
       var it=e.it;
       var dStr=e.t ? new Date(e.t).toLocaleDateString('cs-CZ') : '—';
-      var stateLbl=it.saleState==='paid' ? 'Prodáno' : 'Čeká';
+      var stateLbl, stateCol;
+      if(it.saleState==='paid'){ stateLbl='Prodáno'; stateCol='var(--accent)'; }
+      else if(it.saleState==='waiting'){ stateLbl='Čeká'; stateCol='var(--warning)'; }
+      else {
+        stateCol='#ff4444';
+        if(it.location==='Vráceno') stateLbl='Vráceno';
+        else if(it.location==='Zrušeno') stateLbl='Zrušeno';
+        else if(it.location==='Na cestě') stateLbl='Na cestě (návrat)';
+        else if(it.location==='Bude vráceno') stateLbl='Bude vráceno';
+        else stateLbl='Vráceno na sklad';
+      }
       var sub='';
       if(it.sellCurrency==='EUR'&&it.sellPriceOrig) sub+='<span style="color:var(--accent);font-weight:600;">'+Number(it.sellPriceOrig).toLocaleString('cs-CZ')+' €</span>';
       else if(it.sellPrice) sub+='<span style="color:var(--accent);font-weight:600;">'+Number(it.sellPrice).toLocaleString('cs-CZ')+' Kč</span>';
       if(it.soldWhere) sub+=(sub?' · ':'')+escHtml(it.soldWhere);
-      sub+=(sub?' · ':'')+'<span style="color:'+(it.saleState==='paid'?'var(--accent)':'var(--warning)')+';">'+stateLbl+'</span>';
+      sub+=(sub?' · ':'')+'<span style="color:'+stateCol+';">'+stateLbl+'</span>';
       return '<div onclick="openSaleFromCrm(\''+escHtml(it.id)+'\')" style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background 0.12s;" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'
         +'<div style="flex-shrink:0;width:62px;">'
         +'<div style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;">'+dStr+'</div>'
@@ -8868,7 +8924,8 @@ function openSaleFromCrm(itemId){
   if(!it){ showToast('Položka už neexistuje.','err'); return; }
   closeCustomerDetail();
   var hd=document.getElementById('moCrmHistDetail'); if(hd) hd.classList.remove('open');
-  switchTab(it.saleState==='paid'?'sold':'waiting');
+  var _tabMap={paid:'sold',waiting:'waiting',stock:'stock'};
+  switchTab(_tabMap[it.saleState]||'stock');
   openDetail(itemId);
 }
 
@@ -10283,7 +10340,7 @@ function initNumberSteppers() {
 }
 function initAllCustomInputs() {
   // Custom selects - všechny v modal formuláři
-  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','filterListingStatus','filterListingPlatform','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp','crmFldStatus','sBuyerType'].forEach(id => {
+  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','filterListingStatus','filterListingPlatform','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp','crmFldStatus','sBuyerType','fBuyerType'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.tagName === 'SELECT') {
       // Naplň dopravce
