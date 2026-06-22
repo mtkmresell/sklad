@@ -4135,6 +4135,17 @@ async function saveSell() {
   const profit = sp - buyInKc - extra;
   const roi = buyInKc > 0 ? parseFloat(((profit / buyInKc) * 100).toFixed(1)) : 0;
   const soldWherePlat = getSoldWhereValue();
+  // Vyřeš napojeného zákazníka: pokud je vybrán typ B2C/B2B a uživatel napsal jméno,
+  // ale nevybral z nabídky (prázdné id), vytvoř zákazníka automaticky z napsaného textu.
+  var _sBt = (document.getElementById('sBuyerType')?.value)||'anonymous';
+  var _sLinkedId = (document.getElementById('sBuyerCustomerId')?.value)||'';
+  if ((_sBt==='b2c'||_sBt==='b2b') && !_sLinkedId) {
+    var _typed = (document.getElementById('sBuyerSearch')?.value||'').trim();
+    if (_typed) {
+      _sLinkedId = _crmCreateMinimal(_typed, _sBt==='b2b'?'b2b':'b2c') || '';
+    }
+  }
+  if (_sBt==='anonymous') _sLinkedId = '';
   items[idx] = {
     ...it,
     saleState: 'waiting',
@@ -4150,8 +4161,8 @@ async function saveSell() {
     extraCosts: extra,
     profit: profit,
     roi: roi,
-    buyerType: (document.getElementById('sBuyerType')?.value)||'anonymous',
-    linkedCustomerId: (document.getElementById('sBuyerCustomerId')?.value)||'',
+    buyerType: _sBt,
+    linkedCustomerId: _sLinkedId,
     platforms: [],               // smaž platformy
   };
   // Odfajfkuj ostatním ve skupině platformu kde se prodalo
@@ -4800,7 +4811,18 @@ async function saveItem(){
     saleRef:document.getElementById('fSaleRef').value.trim(),soldWhere:document.getElementById('fSoldWhere')?.value?.trim()||'',saleDate:document.getElementById('fSaleDate').value,
     payoutDate:document.getElementById('fPayoutDate')?.value||undefined,payoutMethod:document.getElementById('fPayoutMethod')?.value||undefined,
     buyerType:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return (modalEl.classList.contains('modal-waiting')||modalEl.classList.contains('modal-paid'))?(document.getElementById('fBuyerType')?.value||'anonymous'):undefined; })(),
-    linkedCustomerId:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return (modalEl.classList.contains('modal-waiting')||modalEl.classList.contains('modal-paid'))?(document.getElementById('fBuyerCustomerId')?.value||''):undefined; })(),
+    linkedCustomerId:(function(){
+      var modalEl=document.querySelector('#moAdd .modal');
+      if(!(modalEl.classList.contains('modal-waiting')||modalEl.classList.contains('modal-paid'))) return undefined;
+      var bt=document.getElementById('fBuyerType')?.value||'anonymous';
+      if(bt==='anonymous') return '';
+      var lid=document.getElementById('fBuyerCustomerId')?.value||'';
+      if(!lid){
+        var typed=(document.getElementById('fBuyerSearch')?.value||'').trim();
+        if(typed) lid=_crmCreateMinimal(typed, bt==='b2b'?'b2b':'b2c')||'';
+      }
+      return lid;
+    })(),
     homeDate:document.getElementById('fHomeDate')?.value||(getLocationValue()==='Doma'?new Date().toISOString().slice(0,10):undefined),
     actualSell:0,
     location:getLocationValue()||'Doma',
