@@ -1887,6 +1887,11 @@ function _applyCloudData(data) {
   }
   if (data.steBrandOrder) { steBrandOrder = data.steBrandOrder; localStorage.setItem('ste_brand_order', JSON.stringify(steBrandOrder)); }
   if (data.steTables || data.steBrandOrder) rebuildBrandTables();
+  if (data.freqMaps) {
+    ['carrier_freq','soldWhere_freq','payoutCustom_freq'].forEach(function(k){
+      if (data.freqMaps[k]) localStorage.setItem(k, JSON.stringify(data.freqMaps[k]));
+    });
+  }
   // Načti historickou cache položek (uložena v stejném dokumentu)
   if (data.itemCache) {
     try {
@@ -1920,7 +1925,14 @@ function _buildCloudPayload() {
     savedAt: new Date().toISOString(),
     platGroups: (function(){ try { var v=localStorage.getItem('sklad_plat_groups_v1'); return v||null; } catch(e){ return null; } })(),
     steTables: (function(){ try { return JSON.stringify(steTables); } catch(e){ return null; } })(),
-    steBrandOrder: (function(){ try { return steBrandOrder.slice(); } catch(e){ return null; } })()
+    steBrandOrder: (function(){ try { return steBrandOrder.slice(); } catch(e){ return null; } })(),
+    freqMaps: (function(){
+      var out = {};
+      ['carrier_freq','soldWhere_freq','payoutCustom_freq'].forEach(function(k){
+        try { var v = localStorage.getItem(k); if (v) out[k] = JSON.parse(v); } catch(e){}
+      });
+      return out;
+    })()
   };
 }
 
