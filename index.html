@@ -1250,7 +1250,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       </select></div>
       <div class="fi"><label>Prodejní reference / č. prodeje</label><input type="text" id="fSaleRef" placeholder="ID prodeje"></div>
       
-      <div class="fi"><label>Kde prodáno</label><input type="text" id="fSoldWhere" placeholder="StockX, Vinted..."></div>
+      <div class="fi"><label>Kde prodáno</label><input type="text" id="fSoldWhere" placeholder="StockX, Vinted..." oninput="updateBuyerTypeVisibility('f')"></div>
       <div class="fi"><label>Datum prodeje</label><input type="date" id="fSaleDate"></div>
       <div class="fi hide-if-stock hide-if-waiting"><label>Datum vyplacení</label><input type="date" id="fPayoutDate"></div>
       <div class="fi hide-if-stock hide-if-waiting"><label>Způsob platby</label><select id="fPayoutMethod"></select></div>
@@ -3482,6 +3482,7 @@ function openSellModal(id) {
   if(_bcId) _bcId.value = isStock ? '' : (it.linkedCustomerId||'');
   var _bcSearch = document.getElementById('sBuyerSearch');
   if(_bcSearch){ var _lc=customers.find(function(c){return c.id===(isStock?'':(it.linkedCustomerId||''));}); _bcSearch.value=_lc?_lc.name:''; }
+  updateBuyerTypeVisibility('s');
   // Platba přijata přes — nastav input
   var sPM = document.getElementById('sPaymentMethod');
   if(sPM) {
@@ -3523,6 +3524,33 @@ function getSoldWhereOptions() {
   return all;
 }
 
+// True pokud daná hodnota "Kde prodáno" znamená přímý kontakt s kupujícím (lokální prodej / vlastní hodnota),
+// false pro platformy a velkoobchodní eshopy s komisí, kde prodejce kupujícího nezná.
+function _sellLocationNeedsBuyer(val){
+  val = (val||'').trim();
+  if(!val) return false;
+  var g = getPlatGroups();
+  if((g.local||[]).indexOf(val) !== -1) return true;
+  var known = (g.platforms||[]).concat(g.eshopy||[]);
+  if(known.indexOf(val) !== -1) return false;
+  return true; // neznámá/vlastní hodnota = lokální prodej s přímým kontaktem
+}
+// Zobrazí/skryje řádek "Typ kupujícího" (a navazující "Zákazník") dle pole "Kde prodáno" — nemaže žádná data
+function updateBuyerTypeVisibility(prefix){
+  prefix = prefix || 's';
+  var val = (document.getElementById(prefix+'SoldWhere')||{}).value || '';
+  var show = _sellLocationNeedsBuyer(val);
+  var row = document.getElementById(prefix+'BuyerTypeRow');
+  if(row) row.style.display = show ? '' : 'none';
+  var custRow = document.getElementById(prefix+'BuyerCustomerRow');
+  if(custRow){
+    if(!show){ custRow.style.display = 'none'; }
+    else {
+      var bt = (document.getElementById(prefix+'BuyerType')||{}).value || 'anonymous';
+      custRow.style.display = (bt==='b2c'||bt==='b2b') ? '' : 'none';
+    }
+  }
+}
 function sellBuyerTypeChange(prefix){
   prefix = prefix || 's';
   var bt = (document.getElementById(prefix+'BuyerType')||{}).value||'anonymous';
@@ -3608,11 +3636,16 @@ function renderSoldWhereDrop() {
         inp.style.cursor = 'text';
         closeSoldWhereDrop();
         inp.focus();
+        // Vlastní hodnota = vždy přímý kontakt s kupujícím, zobraz hned
+        var row=document.getElementById('sBuyerTypeRow'); if(row) row.style.display='';
+        var custRow=document.getElementById('sBuyerCustomerRow');
+        if(custRow){ var bt=(document.getElementById('sBuyerType')||{}).value||'anonymous'; custRow.style.display=(bt==='b2c'||bt==='b2b')?'':'none'; }
       } else {
         inp.value = opt;
         inp.setAttribute('readonly', '');
         inp.style.cursor = 'pointer';
         closeSoldWhereDrop();
+        updateBuyerTypeVisibility('s');
       }
     });
     drop.appendChild(el);
@@ -4702,6 +4735,7 @@ function openEdit(id){
     var fBcr=document.getElementById('fBuyerCustomerRow'); if(fBcr) fBcr.style.display=(bt==='b2c'||bt==='b2b')?'':'none';
     var fBid=document.getElementById('fBuyerCustomerId'); if(fBid) fBid.value=it.linkedCustomerId||'';
     var fBs=document.getElementById('fBuyerSearch'); if(fBs) fBs.value=it.linkedCustomerId?_crmNameById(it.linkedCustomerId):'';
+    updateBuyerTypeVisibility('f');
   })();
   // fPayoutMethod — init opts a nastav hodnotu
   (function(){
@@ -4749,6 +4783,7 @@ function openEdit(id){
     if(fSC2) { fSC2.value = it.sellCurrency||'CZK'; if(fSC2._csSync) fSC2._csSync(); }
     var fBt2 = document.getElementById('fBuyerType');
     if(fBt2) { fBt2.value = it.buyerType||'anonymous'; if(fBt2._csSync) fBt2._csSync(); }
+    updateBuyerTypeVisibility('f');
     // Taky sync fSell hodnotu znovu po initAllCustomInputs
     var _fSellEl = document.getElementById('fSell');
     if(_fSellEl && it.sellCurrency==='EUR') {
@@ -9980,7 +10015,7 @@ function initCustomSelect(selectEl) {
   selectEl._csInited = true;
   selectEl.style.display = 'none';
   const wrap = document.createElement('div');
-  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod','fDokladTyp'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency','_beC','crmHMPriceCur'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
+  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod','fDokladTyp','sBuyerType','fBuyerType'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency','_beC','crmHMPriceCur'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
   selectEl.parentNode.insertBefore(wrap, selectEl);
   wrap.appendChild(selectEl);
   const btn = document.createElement('div');
