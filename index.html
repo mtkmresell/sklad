@@ -1061,6 +1061,18 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       <option value="rizikovy">Rizikový</option>
       <option value="blacklist">Blacklist</option>
     </select>
+    <select id="crmVztahFilter" onchange="renderCustomers()">
+      <option value="">Všechny vztahy</option>
+      <option value="novy">Nový (1–2 nákupy)</option>
+      <option value="staly">Stálý (3+ nákupů)</option>
+    </select>
+    <select id="crmAktivitaFilter" onchange="renderCustomers()">
+      <option value="">Všechny aktivity</option>
+      <option value="aktivni">Aktivní</option>
+      <option value="vychladajici">Vychládající</option>
+      <option value="spici">Spící</option>
+      <option value="ztraceny">Ztracený</option>
+    </select>
     <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap;">
       <input type="checkbox" id="crmFollowupTodayFilter" onchange="renderCustomers()" style="accent-color:var(--accent);width:14px;height:14px;">
       🔔 Followup dnes
@@ -8619,6 +8631,13 @@ function crmSwitchMode(mode) {
       ? '<option value="">Všechny statusy</option><option value="vip">VIP</option><option value="bezny">Běžný</option><option value="potencialni">Potenciální</option><option value="rizikovy">Rizikový</option><option value="blacklist">Blacklist</option>'
       : '<option value="">Všechny statusy</option><option value="aktivni">Aktivní</option><option value="neaktivni">Neaktivní</option><option value="rizikovy">Rizikový</option><option value="blacklist">Blacklist</option>';
   }
+  // B2C tag filtry (vztah + aktivita) — jen v režimu zákazníků
+  var vf=document.getElementById('crmVztahFilter');
+  var af=document.getElementById('crmAktivitaFilter');
+  if(vf){ vf.style.display = mode==='b2c'?'':'none'; if(mode!=='b2c') vf.value=''; }
+  if(af){ af.style.display = mode==='b2c'?'':'none'; if(mode!=='b2c') af.value=''; }
+  // Přepočítej časově závislé tagy při vstupu do sekce zákazníků
+  if(mode==='b2c') refreshCrmActivityTags(true);
   renderCustomers();
 }
 
@@ -8628,6 +8647,8 @@ function renderCustomers() {
   var data = crmMode === 'b2c' ? customers : partners;
   var q = ((document.getElementById('crmSearch') || {}).value || '').toLowerCase().trim();
   var statusF = (document.getElementById('crmStatusFilter') || {}).value || '';
+  var vztahF = (document.getElementById('crmVztahFilter') || {}).value || '';
+  var aktivitaF = (document.getElementById('crmAktivitaFilter') || {}).value || '';
   var followupToday = !!(document.getElementById('crmFollowupTodayFilter') || {}).checked;
   var today = new Date(); today.setHours(0,0,0,0);
 
@@ -8638,6 +8659,11 @@ function renderCustomers() {
       if(hay.indexOf(q) === -1) return false;
     }
     if(statusF && c.status !== statusF) return false;
+    // B2C tag filtry (vztah + aktivita) — nezávislé, jen v režimu zákazníků
+    if(crmMode === 'b2c'){
+      if(vztahF && c.tag_vztah !== vztahF) return false;
+      if(aktivitaF && c.tag_aktivita !== aktivitaF) return false;
+    }
     if(followupToday) {
       if(!c.followup_date || c.followup_status !== 'aktivni') return false;
       var fd = new Date(c.followup_date); fd.setHours(0,0,0,0);
@@ -8661,6 +8687,18 @@ function renderCustomers() {
   list.innerHTML = filtered.map(renderCustomerCard).join('');
 }
 
+// Vrátí HTML štítku (vztah nebo aktivita) podle uložené hodnoty; '' pokud není
+function _crmTagBadge(val){
+  if(!val) return '';
+  var cfg={
+    novy:{l:'Nový',c:'#00aaff'}, staly:{l:'Stálý',c:'var(--accent)'},
+    aktivni:{l:'Aktivní',c:'var(--accent)'}, vychladajici:{l:'Vychládající',c:'var(--warning)'},
+    spici:{l:'Spící',c:'var(--muted)'}, ztraceny:{l:'Ztracený',c:'var(--danger)'}
+  };
+  var x=cfg[val]; if(!x) return '';
+  return '<span style="display:inline-block;font-size:9px;font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:0.4px;padding:2px 6px;border-radius:4px;color:'+x.c+';border:1px solid '+x.c+';">'+x.l+'</span>';
+}
+
 function renderCustomerCard(c) {
   var primary = (c.contacts||[]).find(function(ct){ return ct.primary; }) || (c.contacts||[])[0];
   var statusClass = {'vip':'cs-status-vip','bezny':'cs-status-bezny','potencialni':'cs-status-potencialni','rizikovy':'cs-status-rizikovy','blacklist':'cs-status-blacklist'};
@@ -8676,6 +8714,9 @@ function renderCustomerCard(c) {
     if(fd <= today) followupBadge = '<span class="followup-badge">🔔 FOLLOWUP</span>';
   }
   var contactLine = primary ? '<div style="font-size:11px;color:var(--muted);font-family:DM Mono,monospace;margin-bottom:7px;">' + (primary.type||'') + ': ' + escHtml(primary.value||'') + '</div>' : '';
+  // B2C štítky vztah + aktivita
+  var _tb = crmMode==='b2c' ? (_crmTagBadge(c.tag_vztah)+_crmTagBadge(c.tag_aktivita)) : '';
+  var tagsLine = _tb ? '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">'+_tb+'</div>' : '';
   return '<div class="customer-card" onclick="openCustomerDetail(\'' + c.id + '\')">' +
     '<div class="card-top">' +
       '<div style="flex:1;min-width:0;">' +
@@ -8686,6 +8727,7 @@ function renderCustomerCard(c) {
       '<div style="font-size:15px;flex-shrink:0;">' + stars + '</div>' +
     '</div>' +
     contactLine +
+    tagsLine +
     '<div style="display:flex;gap:12px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace;flex-wrap:wrap;">' +
       (c.size_shoes_eu ? '<span>👟 EU ' + escHtml(c.size_shoes_eu) + '</span>' : '') +
       '<span>📦 ' + (c.stats_orders_count||0) + ' obj.</span>' +
@@ -8809,7 +8851,21 @@ function _crmTabOverview(c){
         }).join('')
       + '</div>';
   }
-  return '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+brandsHtml
+  // B2C štítky vztah/aktivita + odvozené metriky (jen pro koncové zákazníky)
+  var isB2c = customers.some(function(x){ return x.id===c.id; });
+  var tagSection='';
+  if(isB2c){
+    var b1=_crmTagBadge(c.tag_vztah), b2=_crmTagBadge(c.tag_aktivita);
+    var extra=[];
+    if(c.dny_od_posledniho_nakupu!=null) extra.push(c.dny_od_posledniho_nakupu+' dní od posl. nákupu');
+    if(c.osobni_cyklus!=null) extra.push('cyklus ~'+Math.round(c.osobni_cyklus)+' dní');
+    if(b1||b2||extra.length){
+      tagSection='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;">'+b1+b2
+        +(extra.length?'<span style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;">'+extra.join(' · ')+'</span>':'')
+        +'</div>';
+    }
+  }
+  return tagSection+'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+brandsHtml
     +(c.note_special?'<div style="margin-top:14px;background:var(--surface2);border-radius:8px;padding:11px;font-size:13px;"><span class="crm-sec-label">Speciální poznámka</span>'+escHtml(c.note_special)+'</div>':'')
     +wishHtml;
 }
@@ -9025,6 +9081,8 @@ function _crmCreateMinimal(name, mode){
     tags_likes:[], tags_dislikes:[], auto_brands:{}, auto_categories:{},
     stats_orders_count:0, stats_total_spent:0, stats_avg_order:0,
     stats_first_purchase:null, stats_last_purchase:null,
+    posledni_nakup:null, pocet_nakupu:0, osobni_cyklus:null,
+    dny_od_posledniho_nakupu:null, tag_vztah:null, tag_aktivita:null,
     contact_history:[], wishlist_items:[]
   });
   saveCrmToFirestore();
@@ -9292,6 +9350,116 @@ function saveCrmToFirestore() {
   try { localStorage.setItem('sklad_crm', JSON.stringify({customers:customers,partners:partners,savedAt:savedAt})); } catch(e) {}
 }
 
+/* ══════════════════════════════════════
+   B2C automatické štítkování (vztah + aktivita)
+   — počítá se čistě synchronně z items + contact_history, bez sítě
+══════════════════════════════════════ */
+// Parsuje datum (ISO i DD.MM.YYYY) na UTC timestamp dne (stabilní napříč časovými zónami)
+function _crmDayTs(d){
+  if(!d) return null;
+  var s=String(d);
+  var iso=s.slice(0,10);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(iso)){ var p=iso.split('-'); return Date.UTC(+p[0],+p[1]-1,+p[2]); }
+  var q=s.split('.');
+  if(q.length===3){ return Date.UTC(parseInt(q[2],10), parseInt(q[1],10)-1, parseInt(q[0],10)); }
+  var t=new Date(s).getTime(); return isNaN(t)?null:t;
+}
+function _crmDayDiff(aIso,bIso){
+  var a=_crmDayTs(aIso), b=_crmDayTs(bIso);
+  if(a==null||b==null) return 0;
+  return Math.round((b-a)/86400000);
+}
+// Medián pole čísel (odolnější proti odlehlým hodnotám než průměr)
+function _crmMedian(arr){
+  if(!arr.length) return null;
+  var s=arr.slice().sort(function(x,y){ return x-y; });
+  var m=Math.floor(s.length/2);
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+// Spočítá vztah/aktivitu B2C zákazníka. Vrací objekt s poli k uložení (nemutuje).
+function _crmComputeTags(c){
+  var dates=[];      // data nákupů (jen ta s datem) pro výpočet cyklu/posledního nákupu
+  var linkedCount=0; // počet napojených prodejů (Čeká + Prodáno)
+  items.forEach(function(it){
+    if(it.linkedCustomerId===c.id && (it.saleState==='waiting'||it.saleState==='paid')){
+      linkedCount++;
+      if(it.saleDate) dates.push(String(it.saleDate).slice(0,10));
+    }
+  });
+  var histCount=0;   // ruční 'nakup' záznamy v historii
+  (c.contact_history||[]).forEach(function(h){
+    if(h.type==='nakup'){ histCount++; if(h.date) dates.push(String(h.date).slice(0,10)); }
+  });
+  var count=linkedCount+histCount; // celkový počet nákupů (shodné se stats_orders_count)
+  dates.sort(); // ISO 'YYYY-MM-DD' řadí lexikograficky = chronologicky
+  var last = dates.length ? dates[dates.length-1] : null;
+  // Osobní cyklus = medián mezer (ve dnech) mezi po sobě jdoucími nákupy; jen při 3+ nákupech
+  var cyc=null;
+  if(count>=3 && dates.length>=2){
+    var gaps=[];
+    for(var i=1;i<dates.length;i++){ gaps.push(_crmDayDiff(dates[i-1], dates[i])); }
+    cyc=_crmMedian(gaps);
+  }
+  // Dny od posledního nákupu (vůči dnešku)
+  var todayIso=new Date().toISOString().slice(0,10);
+  var days = last ? _crmDayDiff(last, todayIso) : null;
+  if(days!==null && days<0) days=0;
+  // Tag vztah (nezávislý na aktivitě)
+  var vztah = count>=3 ? 'staly' : (count>=1 ? 'novy' : null);
+  // Tag aktivita
+  var aktivita=null;
+  if(days!==null){
+    if(count>=3 && cyc && cyc>0){
+      // násobky osobního cyklu
+      if(days < 2*cyc) aktivita='aktivni';
+      else if(days < 3*cyc) aktivita='vychladajici';
+      else if(days < 4*cyc) aktivita='spici';
+      else aktivita='ztraceny';
+    } else {
+      // pevná globální pásma (méně než 3 nákupy nebo nelze spočítat cyklus)
+      if(days<=90) aktivita='aktivni';
+      else if(days<=180) aktivita='vychladajici';
+      else if(days<=365) aktivita='spici';
+      else aktivita='ztraceny';
+    }
+  }
+  return {
+    posledni_nakup: last,
+    pocet_nakupu: count,
+    osobni_cyklus: cyc,
+    dny_od_posledniho_nakupu: days,
+    tag_vztah: vztah,
+    tag_aktivita: aktivita
+  };
+}
+// Přepočítá tagy u VŠECH B2C zákazníků (časově závislé – běží při vstupu do sekce).
+// persist=true uloží do localStorage + tiše do cloudu, jen pokud se něco změnilo.
+function refreshCrmActivityTags(persist){
+  var changed=false;
+  for(var i=0;i<customers.length;i++){
+    var c=customers[i];
+    var t=_crmComputeTags(c);
+    if(c.tag_vztah!==t.tag_vztah || c.tag_aktivita!==t.tag_aktivita ||
+       c.dny_od_posledniho_nakupu!==t.dny_od_posledniho_nakupu ||
+       c.pocet_nakupu!==t.pocet_nakupu || c.posledni_nakup!==t.posledni_nakup ||
+       c.osobni_cyklus!==t.osobni_cyklus){
+      customers[i]=Object.assign({}, c, t);
+      changed=true;
+    }
+  }
+  if(changed && persist){
+    try{ localStorage.setItem('sklad_crm', JSON.stringify({customers:customers,partners:partners})); }catch(e){}
+    if(window._fbUser && window._fbDb && window._fbFns){
+      try{
+        var fns=window._fbFns;
+        var docRef=fns.doc(window._fbDb,'users',window._fbUser.uid,'crm','main');
+        fns.setDoc(docRef,{customers:customers,partners:partners,savedAt:new Date().toISOString()}).catch(function(){});
+      }catch(e){}
+    }
+  }
+  return changed;
+}
+
 async function recalcCustomerStats(customerId) {
   var ci = customers.findIndex(function(c){ return c.id === customerId; });
   var _statArr = customers;
@@ -9336,6 +9504,10 @@ async function recalcCustomerStats(customerId) {
     stats_last_purchase: dates[dates.length-1] || null,
     auto_brands: brands
   });
+  // B2C automatické štítkování (vztah + aktivita) — jen pro koncové zákazníky, ne partnery
+  if(_statArr === customers){
+    _statArr[ci] = Object.assign({}, _statArr[ci], _crmComputeTags(_statArr[ci]));
+  }
   saveCrmToFirestore();
 }
 
@@ -9526,9 +9698,20 @@ function saveNewCustomer() {
     stats_avg_order: existing ? existing.stats_avg_order||0 : 0,
     stats_first_purchase: existing ? existing.stats_first_purchase||null : null,
     stats_last_purchase: existing ? existing.stats_last_purchase||null : null,
+    // B2C automatické štítkování (přepočítá recalcCustomerStats / refreshCrmActivityTags)
+    posledni_nakup: existing ? (existing.posledni_nakup||null) : null,
+    pocet_nakupu: existing ? (existing.pocet_nakupu||0) : 0,
+    osobni_cyklus: existing ? (existing.osobni_cyklus!=null?existing.osobni_cyklus:null) : null,
+    dny_od_posledniho_nakupu: existing ? (existing.dny_od_posledniho_nakupu!=null?existing.dny_od_posledniho_nakupu:null) : null,
+    tag_vztah: existing ? (existing.tag_vztah||null) : null,
+    tag_aktivita: existing ? (existing.tag_aktivita||null) : null,
     contact_history: existing ? existing.contact_history||[] : [],
     wishlist_items: existing ? existing.wishlist_items||[] : []
   };
+  // B2C: rovnou přepočítej tagy podle aktuálních dat (pro nové i editované zákazníky)
+  if(crmEditMode!=='b2b'){
+    Object.assign(customer, _crmComputeTags(customer));
+  }
   if (crmEditId) {
     var i = _arr.findIndex(function(c){return c.id===crmEditId;});
     if (i>=0) _arr[i] = customer; else _arr.push(customer);
