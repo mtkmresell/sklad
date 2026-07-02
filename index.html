@@ -1826,6 +1826,256 @@ function setProfile(p){
   try{renderItems();}catch(e){console.error('renderItems',e);}
 }
 
+// ── RETAILEŘI & LIMIT IDENTIFIKOVANÉ OSOBY (§ 2a zákona o DPH) ──
+// Pořízení zboží z jiného členského státu EU nad 326 000 Kč bez DPH za kalendářní
+// rok → povinnost registrace jako identifikovaná osoba. Hlídá se jen podnikání.
+var RETAILERS_KEY='sklad_retailers_v1';
+var IO_LIMIT_KEY='sklad_io_limit_v1';
+var IO_LIMIT_DEFAULT=326000;
+function getRetailers(){
+  try{ var v=JSON.parse(localStorage.getItem(RETAILERS_KEY)||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; }
+}
+function saveRetailers(arr){
+  try{ localStorage.setItem(RETAILERS_KEY, JSON.stringify(arr)); }catch(e){}
+  _ioCloudSync();
+}
+function getIoLimit(){
+  var v=parseFloat(localStorage.getItem(IO_LIMIT_KEY));
+  return (isFinite(v)&&v>0)?v:IO_LIMIT_DEFAULT;
+}
+function setIoLimit(v){
+  v=parseFloat(v);
+  if(!isFinite(v)||v<=0) v=IO_LIMIT_DEFAULT;
+  try{ localStorage.setItem(IO_LIMIT_KEY, String(v)); }catch(e){}
+  _ioCloudSync();
+}
+function _ioCloudSync(){
+  if (window._fbUser && typeof fbSaveToCloud === 'function') {
+    if (_svCloudTimer) clearTimeout(_svCloudTimer);
+    _svCloudTimer = setTimeout(function(){ fbSaveToCloud(); }, 500);
+  }
+}
+var IO_ZONE_LABELS={eu:'EU mimo ČR', cz:'Česko', world:'Mimo EU'};
+function _ioRetailerLookup(){
+  var lookup={};
+  getRetailers().forEach(function(r){
+    var n=(r.name||'').trim().toLowerCase();
+    if(n) lookup[n]=r;
+    String(r.aliases||'').split(',').forEach(function(a){ a=a.trim().toLowerCase(); if(a) lookup[a]=r; });
+  });
+  return lookup;
+}
+// Součty nákupů podnikání za kalendářní rok (dle data nákupu).
+// Do limitu IO se počítá jen zóna EU, hodnota bez DPH dle sazby u retailera.
+function ioYearStats(year){
+  var lookup=_ioRetailerLookup();
+  var out={ year:year, net:0, gross:0, count:0, byRetailer:{}, unmatched:{} };
+  (items||[]).forEach(function(it){
+    if(it.type==='bulk') return;
+    if(isPersonal(it)) return;
+    var d=parseBuyDate(it);
+    if(!d||isNaN(d.getTime())||d.getFullYear()!==year) return;
+    var gross=(it.buyPrice||0)*(it.buyCurrency==='EUR'?(it.buyRateEur||eurRate||25):1)*(it.qty||1);
+    if(!gross) return;
+    var key=(it.buyWhere||'').trim().toLowerCase();
+    var r=key?lookup[key]:null;
+    if(r){
+      var b=out.byRetailer[r.id]||(out.byRetailer[r.id]={count:0,gross:0,net:0});
+      var net=gross/(1+(parseFloat(r.vatRate)||0)/100);
+      b.count+=(it.qty||1); b.gross+=gross; b.net+=net;
+      if(r.zone==='eu'){ out.net+=net; out.gross+=gross; out.count+=(it.qty||1); }
+    } else {
+      var label=(it.buyWhere||'').trim()||'(bez údaje Kde koupeno)';
+      var u=out.unmatched[label]||(out.unmatched[label]={count:0,gross:0});
+      u.count+=(it.qty||1); u.gross+=gross;
+    }
+  });
+  return out;
+}
+function _ioDistinctBuyWheres(){
+  var seen={};
+  (items||[]).forEach(function(it){
+    if(it.type==='bulk') return;
+    var w=(it.buyWhere||'').trim();
+    if(w) seen[w]=1;
+  });
+  return Object.keys(seen).sort(function(a,b){ return a.localeCompare(b,'cs'); });
+}
+function openRetailersMgr(){
+  var existing=document.getElementById('retailersMgrOv');
+  if(existing){ existing.remove(); return; }
+  var ov=document.createElement('div');
+  ov.id='retailersMgrOv';
+  ov.className='mo open';
+  ov.style.zIndex='1100';
+  function closeMgr(){ ov.remove(); document.removeEventListener('keydown',_escMgr); }
+  function _escMgr(e){ if(e.key==='Escape'&&!document.getElementById('retailerEditOv')) closeMgr(); }
+  document.addEventListener('keydown',_escMgr);
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeMgr(); });
+  document.body.appendChild(ov);
+
+  function render(){
+    var year=new Date().getFullYear();
+    var st=ioYearStats(year);
+    var stPrev=ioYearStats(year-1);
+    var limit=getIoLimit();
+    var pct=limit>0?st.net/limit*100:0;
+    var barColor=pct>=100?'var(--danger)':pct>=80?'var(--warning)':'var(--accent)';
+    var rets=getRetailers().slice().sort(function(a,b){
+      var ga=(st.byRetailer[a.id]||{}).gross||0, gb=(st.byRetailer[b.id]||{}).gross||0;
+      return gb-ga || (a.name||'').localeCompare(b.name||'','cs');
+    });
+    var h='<div class="modal" style="max-width:560px;max-height:88vh;">';
+    h+='<div class="mh"><div class="mt2">Retaileři &amp; EU limit</div><button class="xb" id="retMgrClose">✕</button></div>';
+    // Limit + progress
+    h+='<div class="fs"><div class="fs-title">Limit identifikované osoby — pořízení zboží z EU</div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px;">';
+    h+='<span style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+barColor+';">'+czk(st.net)+'</span>';
+    h+='<span style="font-size:12px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+Math.round(pct)+' % z '+czk(limit)+'</span>';
+    h+='</div>';
+    h+='<div style="height:8px;background:var(--surface2);border-radius:6px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:'+Math.min(100,Math.round(pct))+'%;background:'+barColor+';border-radius:6px;"></div></div>';
+    h+='<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-bottom:10px;">Nákupy z EU '+year+' bez DPH · '+st.count+' ks · loni ('+(year-1)+'): '+czk(stPrev.net)+'</div>';
+    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
+    h+='<span style="font-size:11px;color:var(--muted);white-space:nowrap;">Roční limit (Kč bez DPH):</span>';
+    h+='<input type="number" id="ioLimitInput" value="'+limit+'" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:6px 8px;outline:none;width:110px;">';
+    h+='</div>';
+    h+='<div class="info-box" style="margin-bottom:0;">Do limitu se počítají nákupy zboží z jiných států EU v podnikání, v hodnotě <strong>bez DPH</strong> (odečítá se sazba zadaná u retailera). Nákupy v ČR a dovoz mimo EU se nepočítají. Při překročení v daném roce vzniká povinnost registrace identifikované osoby do 15 dnů.</div>';
+    h+='</div>';
+    // Seznam retailerů
+    h+='<div class="fs"><div class="fs-title" style="display:flex;align-items:center;justify-content:space-between;">Retaileři <button class="icon-btn" id="retAddBtn" style="height:26px;font-size:11px;">+ Přidat</button></div>';
+    if(!rets.length){
+      h+='<div style="font-size:12px;color:var(--muted);padding:6px 0;">Zatím žádní retaileři. Přidej je tlačítkem výše nebo z nepřiřazených nákupů níže.</div>';
+    } else {
+      rets.forEach(function(r){
+        var b=st.byRetailer[r.id]||{count:0,gross:0,net:0};
+        var zoneCol=r.zone==='eu'?'var(--accent)':r.zone==='world'?'#00aaff':'var(--muted)';
+        h+='<div class="ret-row" data-rid="'+r.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:6px;" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">';
+        h+='<div style="flex:1;min-width:0;">';
+        h+='<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(r.name||'—')+(r.country?' <span style="color:var(--muted);font-weight:400;font-size:11px;">· '+escHtml(r.country)+'</span>':'')+'</div>';
+        h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;margin-top:2px;"><span style="color:'+zoneCol+';">'+(IO_ZONE_LABELS[r.zone]||r.zone)+'</span><span style="color:var(--muted2);"> · DPH '+(parseFloat(r.vatRate)||0)+' %'+(r.note?' · 📝':'')+'</span></div>';
+        h+='</div>';
+        h+='<div style="text-align:right;flex-shrink:0;">';
+        h+='<div style="font-size:12px;font-family:\'DM Mono\',monospace;color:'+(r.zone==='eu'?'var(--accent)':'var(--muted)')+';">'+(b.count?czk(r.zone==='eu'?b.net:b.gross):'—')+'</div>';
+        h+='<div style="font-size:9px;color:var(--muted2);font-family:\'DM Mono\',monospace;">'+(b.count?b.count+' ks '+year+(r.zone==='eu'?' bez DPH':''):'letos nic')+'</div>';
+        h+='</div>';
+        h+='</div>';
+      });
+    }
+    h+='</div>';
+    // Nepřiřazené nákupy
+    var unKeys=Object.keys(st.unmatched).sort(function(a,b){ return st.unmatched[b].gross-st.unmatched[a].gross; });
+    h+='<div class="fs" style="margin-bottom:0;"><div class="fs-title">Nepřiřazené nákupy '+year+'</div>';
+    if(!unKeys.length){
+      h+='<div style="font-size:12px;color:var(--muted);padding:4px 0;">Všechny letošní nákupy jsou přiřazené. 👍</div>';
+    } else {
+      h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Tyhle hodnoty z pole „Kde koupeno" zatím nemají retailera — nepočítají se do limitu. Klikni na + a zařaď je.</div>';
+      unKeys.slice(0,15).forEach(function(k){
+        var u=st.unmatched[k];
+        h+='<div style="display:flex;align-items:center;gap:10px;padding:5px 6px;border-bottom:1px solid var(--border);">';
+        h+='<div style="flex:1;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(k)+'</div>';
+        h+='<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;flex-shrink:0;">'+u.count+' ks · '+czk(u.gross)+'</div>';
+        h+='<button class="icon-btn ret-un-add" data-name="'+escHtml(k)+'" style="height:24px;width:24px;padding:0;font-size:13px;flex-shrink:0;">+</button>';
+        h+='</div>';
+      });
+      if(unKeys.length>15) h+='<div style="font-size:11px;color:var(--muted2);padding:5px 6px;">… a dalších '+(unKeys.length-15)+'</div>';
+    }
+    h+='</div>';
+    h+='</div>';
+    ov.innerHTML=h;
+    // Events
+    var closeBtn=document.getElementById('retMgrClose');
+    if(closeBtn) closeBtn.addEventListener('click',closeMgr);
+    var limInp=document.getElementById('ioLimitInput');
+    if(limInp) limInp.addEventListener('change',function(){ setIoLimit(this.value); render(); renderStats(); });
+    var addBtn=document.getElementById('retAddBtn');
+    if(addBtn) addBtn.addEventListener('click',function(){ openRetailerEdit(null,'',render); });
+    ov.querySelectorAll('.ret-row').forEach(function(el){
+      el.addEventListener('click',function(){ openRetailerEdit(el.dataset.rid,'',render); });
+    });
+    ov.querySelectorAll('.ret-un-add').forEach(function(el){
+      el.addEventListener('click',function(e){ e.stopPropagation(); openRetailerEdit(null,el.dataset.name,render); });
+    });
+  }
+  render();
+}
+function openRetailerEdit(rid, prefillName, onDone){
+  var rets=getRetailers();
+  var r=rid?rets.find(function(x){ return x.id===rid; }):null;
+  var isNew=!r;
+  var year=new Date().getFullYear();
+  var b=r?(ioYearStats(year).byRetailer[r.id]||{count:0,gross:0,net:0}):null;
+  var ov=document.createElement('div');
+  ov.id='retailerEditOv';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:1200;display:flex;align-items:center;justify-content:center;';
+  function closeEd(){ ov.remove(); document.removeEventListener('keydown',_escEd); }
+  function _escEd(e){ if(e.key==='Escape'){ e.stopPropagation(); closeEd(); } }
+  document.addEventListener('keydown',_escEd);
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeEd(); });
+  var datalist='<datalist id="retNameList">'+_ioDistinctBuyWheres().map(function(w){ return '<option value="'+escHtml(w)+'">'; }).join('')+'</datalist>';
+  var h='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:420px;max-height:88vh;overflow-y:auto;font-family:\'DM Sans\',sans-serif;">';
+  h+='<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;margin-bottom:4px;">'+(isNew?'Nový retailer':'Upravit retailera')+'</div>';
+  if(b&&b.count) h+='<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-bottom:12px;">'+year+': '+b.count+' ks · '+czk(b.gross)+' s DPH · '+czk(b.net)+' bez DPH</div>';
+  else h+='<div style="margin-bottom:12px;"></div>';
+  h+='<div class="fi" style="margin-bottom:10px;"><label>Název (musí odpovídat poli „Kde koupeno")</label><input type="text" id="retName" list="retNameList" value="'+escHtml(r?r.name||'':prefillName||'')+'">'+datalist+'</div>';
+  h+='<div class="fi" style="margin-bottom:10px;"><label>Aliasy — další psané varianty, oddělené čárkou</label><input type="text" id="retAliases" placeholder="např. Zalando.de, zalando" value="'+escHtml(r?r.aliases||'':'')+'"></div>';
+  h+='<div class="fi" style="margin-bottom:10px;"><label>Odkud prodává</label><select id="retZone">';
+  h+='<option value="eu"'+(!r||r.zone==='eu'?' selected':'')+'>EU mimo ČR — počítá se do limitu</option>';
+  h+='<option value="cz"'+(r&&r.zone==='cz'?' selected':'')+'>Česko — nepočítá se</option>';
+  h+='<option value="world"'+(r&&r.zone==='world'?' selected':'')+'>Mimo EU (dovoz) — nepočítá se</option>';
+  h+='</select></div>';
+  h+='<div style="display:flex;gap:10px;margin-bottom:10px;">';
+  h+='<div class="fi" style="flex:1;"><label>Země</label><input type="text" id="retCountry" placeholder="Německo…" value="'+escHtml(r?r.country||'':'')+'"></div>';
+  h+='<div class="fi" style="width:130px;"><label>DPH v ceně (%)</label><input type="number" id="retVat" step="0.1" min="0" value="'+(r?(parseFloat(r.vatRate)||0):21)+'"></div>';
+  h+='</div>';
+  h+='<div style="font-size:10px;color:var(--muted2);margin:-4px 0 10px;">E-shopy EU většinou účtují českou DPH 21 % (režim OSS). Kamenný nákup v zahraničí = tamní sazba. Faktura bez DPH (B2B) = 0 %.</div>';
+  h+='<div class="fi" style="margin-bottom:14px;"><label>Poznámka</label><textarea id="retNote" style="min-height:60px;">'+escHtml(r?r.note||'':'')+'</textarea></div>';
+  h+='<div style="display:flex;gap:8px;">';
+  h+='<button id="retSave" class="btn-pri" style="flex:2;">Uložit</button>';
+  if(!isNew) h+='<button id="retDelete" class="btn-sec" style="border-color:#ff444433;color:var(--danger);">Smazat</button>';
+  h+='<button id="retCancel" class="btn-sec">Zrušit</button>';
+  h+='</div>';
+  h+='</div>';
+  ov.innerHTML=h;
+  document.body.appendChild(ov);
+  var zoneSel=document.getElementById('retZone');
+  if(zoneSel&&typeof initCustomSelect==='function'){ initCustomSelect(zoneSel); if(zoneSel.parentNode&&zoneSel.parentNode.classList.contains('cs-wrap')) zoneSel.parentNode.classList.add('cs-fullwidth'); }
+  var nameInp=document.getElementById('retName');
+  if(nameInp&&isNew&&!prefillName) nameInp.focus();
+  document.getElementById('retCancel').addEventListener('click',closeEd);
+  document.getElementById('retSave').addEventListener('click',function(){
+    var name=(document.getElementById('retName').value||'').trim();
+    if(!name){ showToast('Vyplň název retailera.','err'); return; }
+    var dup=rets.find(function(x){ return x.id!==(r&&r.id) && (x.name||'').trim().toLowerCase()===name.toLowerCase(); });
+    if(dup){ showToast('Retailer „'+name+'" už existuje.','err'); return; }
+    var data={
+      id: r?r.id:uid(),
+      name: name,
+      aliases: (document.getElementById('retAliases').value||'').trim(),
+      zone: document.getElementById('retZone').value||'eu',
+      country: (document.getElementById('retCountry').value||'').trim(),
+      vatRate: parseFloat(document.getElementById('retVat').value)||0,
+      note: (document.getElementById('retNote').value||'').trim()
+    };
+    if(r){ var i=rets.findIndex(function(x){ return x.id===r.id; }); if(i!==-1) rets[i]=data; }
+    else rets.push(data);
+    saveRetailers(rets);
+    closeEd();
+    showToast(isNew?'Retailer „'+name+'" přidán.':'Retailer uložen.');
+    renderStats();
+    if(typeof onDone==='function') onDone();
+  });
+  var delBtn=document.getElementById('retDelete');
+  if(delBtn) delBtn.addEventListener('click',function(){
+    makeConfirmOverlay('Smazat retailera „'+escHtml(r.name||'')+'"?<br><span style="color:var(--muted);font-size:12px;">Nákupy zůstanou, jen se přestanou přiřazovat.</span>','Smazat','var(--danger)',function(){
+      saveRetailers(rets.filter(function(x){ return x.id!==r.id; }));
+      closeEd();
+      showToast('Retailer smazán.');
+      renderStats();
+      if(typeof onDone==='function') onDone();
+    });
+  });
+}
+
 const PRELOAD=[];
 
 const CSV_ITEMS=[];
@@ -1973,6 +2223,12 @@ function _applyCloudData(data) {
       if (data.freqMaps[k]) localStorage.setItem(k, JSON.stringify(data.freqMaps[k]));
     });
   }
+  if (Array.isArray(data.retailers)) {
+    try { localStorage.setItem(RETAILERS_KEY, JSON.stringify(data.retailers)); } catch(e) {}
+  }
+  if (data.ioLimit != null && isFinite(parseFloat(data.ioLimit))) {
+    try { localStorage.setItem(IO_LIMIT_KEY, String(data.ioLimit)); } catch(e) {}
+  }
   // Načti historickou cache položek (uložena v stejném dokumentu)
   if (data.itemCache) {
     try {
@@ -2013,7 +2269,9 @@ function _buildCloudPayload() {
         try { var v = localStorage.getItem(k); if (v) out[k] = JSON.parse(v); } catch(e){}
       });
       return out;
-    })()
+    })(),
+    retailers: (function(){ try { return getRetailers(); } catch(e){ return []; } })(),
+    ioLimit: (function(){ try { return getIoLimit(); } catch(e){ return null; } })()
   };
 }
 
@@ -2173,7 +2431,9 @@ function doJsonBackup() {
     version: 2,
     exported: new Date().toISOString(),
     items: items,
-    platGroups: (function(){ try{ return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); }catch(e){ return null; } })()
+    platGroups: (function(){ try{ return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); }catch(e){ return null; } })(),
+    retailers: getRetailers(),
+    ioLimit: getIoLimit()
   };
   var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   var url = URL.createObjectURL(blob);
@@ -2199,6 +2459,12 @@ function importJsonBackup(file) {
         // Obnovit skupiny platforem pokud jsou v záloze
         if (data.platGroups) {
           localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(data.platGroups));
+        }
+        if (Array.isArray(data.retailers)) {
+          try { localStorage.setItem(RETAILERS_KEY, JSON.stringify(data.retailers)); } catch(e) {}
+        }
+        if (data.ioLimit != null && isFinite(parseFloat(data.ioLimit))) {
+          try { localStorage.setItem(IO_LIMIT_KEY, String(data.ioLimit)); } catch(e) {}
         }
       }
       if (!imported || !imported.length) {
@@ -2759,6 +3025,18 @@ function renderStats(){
     '<div class="stat-card" data-action="nextsold" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;"><div class="stat-label">'+_curSoldLbl+'</div><div class="stat-value sv-yellow">'+_curSoldVal+'</div></div>'+
     '<div class="stat-card" data-action="nextprofit" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;min-width:175px;"><div class="stat-label">'+_curProfitLbl+'</div><div class="stat-value '+(_curProfitVal>=0?'sv-green':'sv-red')+'">'+czkSign(_curProfitVal)+'</div></div>'+
     '<div class="stat-card" data-action="nextrev" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;min-width:175px;max-width:175px;width:175px;"><div class="stat-label">'+_curRevLbl+'</div><div class="stat-value sv-orange">'+czk(_curRevVal)+'</div></div>'+
+    (activeProfile==='business'?(function(){
+      // Limit identifikované osoby — jen v profilu Podnikání
+      var _ioLimit=getIoLimit();
+      var _ioSt=ioYearStats(_ym_y);
+      var _ioPct=_ioLimit>0?_ioSt.net/_ioLimit*100:0;
+      var _ioCls=_ioPct>=100?'sv-red':_ioPct>=80?'sv-yellow':'sv-green';
+      return '<div class="stat-card" onclick="openRetailersMgr()" data-tip="Pořízení zboží z EU bez DPH — limit identifikované osoby. Klikni pro správu retailerů." style="cursor:pointer;min-width:175px;">'
+        +'<div class="stat-label">EU nákupy '+_ym_y+'</div>'
+        +'<div class="stat-value '+_ioCls+'">'+czk(_ioSt.net)+'</div>'
+        +'<div style="font-size:9px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:2px;">'+Math.round(_ioPct)+' % z '+czk(_ioLimit)+'</div>'
+        +'</div>';
+    })():'')+
     '';
   // Animuj stat karty jen jednou při prvním načtení stránky
   if(!window._statsAnimDone) {
@@ -10085,6 +10363,18 @@ function checkStartupNotifications() {
     msgs.push({ text: returned.length + (returned.length === 1 ? ' položka čeká' : ' položky čekají') + ' na vrácení peněz', type: 'warn' });
   }
 
+  // Limit identifikované osoby — EU nákupy podnikání (bez DPH)
+  try {
+    var _ioLim = getIoLimit();
+    var _ioNet = ioYearStats(new Date().getFullYear()).net;
+    var _ioPct = _ioLim > 0 ? _ioNet / _ioLim * 100 : 0;
+    if (_ioPct >= 100) {
+      msgs.push({ text: 'EU nákupy překročily limit identifikované osoby: ' + czk(_ioNet) + ' z ' + czk(_ioLim) + '!', type: 'err' });
+    } else if (_ioPct >= 90) {
+      msgs.push({ text: 'EU nákupy na ' + Math.round(_ioPct) + ' % limitu identifikované osoby (' + czk(_ioNet) + ' z ' + czk(_ioLim) + ')', type: 'warn' });
+    }
+  } catch(e) {}
+
   // Zobraz postupně — každá notifikace po 4s
   if (msgs.length > 0) {
     var TOAST_DURATION = 4000;
@@ -13244,6 +13534,7 @@ rebuildBrandTables();
       <button class="btn-sec" style="font-size:12px;" data-action="opencsvmodal" onclick="cm('moSettings')">Import</button>
       <button class="btn-sec" style="font-size:12px;" data-action="openexport" onclick="cm('moSettings')">Export</button>
       <button class="btn-sec" style="font-size:12px;" onclick="openDropdownsEditor()">Dropdowny</button>
+      <button class="btn-sec" style="font-size:12px;" onclick="cm('moSettings');openRetailersMgr()">Retaileři &amp; EU limit</button>
       <button class="btn-sec" style="font-size:12px;" id="btnRecalcRates" onclick="recalcAllRates()">Přepočítat kurzy ČNB</button>
     </div>
     <div id="recalcRatesStatus" style="display:none;font-size:11px;color:var(--muted);margin-top:8px;font-family:monospace;"></div>
