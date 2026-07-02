@@ -25,6 +25,24 @@
 .ib-flip { color:var(--accent); }
 .ib-hold { color:#00aaff; }
 .ib-forced_hold { color:var(--danger); }
+/* ── Profily (Podnikání / Osobní / Vše) ── */
+.prof-switch { display:flex; background:var(--surface2); border-radius:8px; padding:3px; gap:2px; flex-shrink:0; margin-right:auto; }
+.pf-btn { background:none; border:none; color:var(--muted); font-family:'DM Sans',sans-serif; font-size:11px; font-weight:600; padding:5px 10px; border-radius:6px; cursor:pointer; transition:all 0.2s; white-space:nowrap; }
+.pf-btn:hover:not(.active) { color:var(--text); }
+.pf-btn.active[data-prof="business"] { background:var(--accent); color:#000; }
+.pf-btn.active[data-prof="personal"] { background:var(--accent2); color:#000; }
+.pf-btn.active[data-prof="all"] { background:var(--text); color:#000; }
+.pfm-btn { background:var(--surface2); border:1px solid var(--border); color:var(--muted); font-family:'DM Sans',sans-serif; font-size:12px; padding:7px 14px; border-radius:var(--radius-sm); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+.pfm-btn:hover:not(.active) { border-color:#555; color:var(--text); }
+.pfm-btn.active[data-val="business"] { background:rgba(200,255,0,0.12); border-color:var(--accent); color:var(--accent); }
+.pfm-btn.active[data-val="personal"] { background:rgba(255,107,53,0.12); border-color:var(--accent2); color:var(--accent2); }
+.prof-badge { font-family:'DM Mono',monospace; font-size:9px; padding:2px 6px; border-radius:20px; background:#ff6b3518; color:#ff6b35; border:1px solid #ff6b3530; white-space:nowrap; }
+/* Na užších obrazovkách by se přepínač profilů překrýval s centrovanými taby — taby přejdou do toku a přepínač vedle nich */
+@media(max-width:1150px){
+  .header-tabs{ position:static; transform:none; order:3; pointer-events:auto; }
+  .prof-switch{ order:4; margin-right:0; }
+  .pf-btn{ padding:5px 22px; }
+}
 .sub-btn{width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:inherit;font-weight:600;font-size:14px;padding:12px;margin-top:14px;cursor:pointer;transition:opacity 0.2s;}.sub-btn:hover{opacity:0.85;}.csv-step{display:none;}.csv-step.active{display:block;}.info-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:13px;}.info-box strong{color:var(--text);}.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:28px 20px;text-align:center;cursor:pointer;transition:border-color 0.2s;}.upload-zone:hover{border-color:var(--accent);}.upload-zone p{color:var(--muted);font-size:13px;}.upload-zone .big2{font-size:30px;margin-bottom:7px;}.csv-table-wrap{overflow-x:auto;margin:10px 0;max-height:200px;overflow-y:auto;}table{width:100%;border-collapse:collapse;font-size:11px;}th{background:var(--surface2);color:var(--muted);font-family:monospace;font-size:9px;text-transform:uppercase;padding:5px 7px;text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0;}td{padding:4px 7px;border-bottom:1px solid var(--border);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}tr:hover td{background:var(--surface2);}.map-row{display:grid;grid-template-columns:1fr 16px 1fr;align-items:center;gap:7px;margin-bottom:7px;}.map-lbl{font-family:monospace;font-size:10px;color:var(--muted);background:var(--surface2);padding:5px 8px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.map-arr{color:var(--muted);font-size:11px;text-align:center;}.map-sel{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:11px;padding:5px 7px;outline:none;width:100%;}.btn-row{display:flex;gap:7px;margin-top:12px;}.btn-sec{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:13px;padding:10px;border-radius:var(--radius-sm);cursor:pointer;}.btn-pri{flex:2;background:var(--accent);color:#000;border:none;font-family:inherit;font-weight:600;font-size:13px;padding:10px;border-radius:var(--radius-sm);cursor:pointer;transition:opacity 0.2s;}.btn-pri:hover{opacity:0.82;}@media(max-width:600px){
 .fg{grid-template-columns:1fr;}
 .fi.full{grid-column:1;}
@@ -34,6 +52,8 @@
 .stat-value{font-size:15px;}
 .header-tabs{position:static;transform:none;order:3;width:100%;pointer-events:auto;}
 .tab-bar{width:100%;justify-content:center;}
+.prof-switch{order:4;width:100%;justify-content:center;}
+.pf-btn{flex:1;text-align:center;}
 .header-right{flex-shrink:0;}
 header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 .logo{flex:1;font-size:17px;}
@@ -1014,6 +1034,11 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 
 <header>
   <div class="logo">SKLAD<span>.</span></div>
+  <div class="prof-switch" id="profileSwitch">
+    <button class="pf-btn" data-prof="business" onclick="setProfile('business')" data-tip="Podnikatelský sklad">Podnikání</button>
+    <button class="pf-btn" data-prof="personal" onclick="setProfile('personal')" data-tip="Osobní sbírka">Osobní</button>
+    <button class="pf-btn" data-prof="all" onclick="setProfile('all')" data-tip="Vše dohromady (podnikání + osobní)">Vše</button>
+  </div>
   <div class="header-tabs">
     <div class="tab-bar">
       <button class="tab-btn" data-action="switchtab" data-tab="dashboard" id="btnTab_dashboard" onclick="switchTab('dashboard')">Přehled</button>
@@ -1168,6 +1193,14 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   <div class="mh">
     <div class="mt2" id="mTitle">Nová položka</div>
     
+  </div>
+
+  <div class="fs"><div class="fs-title">Profil</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;" id="profileBtns">
+      <button type="button" class="pfm-btn" data-val="business" onclick="setFProfile('business')">Podnikání</button>
+      <button type="button" class="pfm-btn" data-val="personal" onclick="setFProfile('personal')">Osobní</button>
+    </div>
+    <input type="hidden" id="fProfile">
   </div>
 
   <div class="fs"><div class="fs-title">Základní info</div>
@@ -1756,6 +1789,43 @@ function buildCatSelects() {
 const COND_L = {'DS':'DS','pouzite':'Použité','poskozene':'Poškozené','nove-stitky':'Nové','pouzite-dobre':'Použité','pouzite-horsi':'Použité'};
 
 var items=[], tab='stock', editId=null, csvData=[], csvHeaders=[], bulkSelected=new Set();
+
+// ── PROFILY (Podnikání / Osobní / Vše) ──
+// Položka bez pole personal = podnikání (zpětná kompatibilita se všemi staršími daty).
+var PROFILE_KEY='sklad_profile_v1';
+var activeProfile=(function(){
+  try{ var v=localStorage.getItem(PROFILE_KEY); if(v==='personal'||v==='all') return v; }catch(e){}
+  return 'business';
+})();
+function isPersonal(it){ return !!(it && it.personal); }
+function profMatch(it){
+  if(activeProfile==='all') return true;
+  return activeProfile==='personal' ? isPersonal(it) : !isPersonal(it);
+}
+function profBadge(it){
+  if(!isPersonal(it)) return '';
+  // V čistě osobním pohledu je štítek nadbytečný — kromě sekce Čeká, která je vždy společná
+  if(activeProfile==='personal' && tab!=='waiting') return '';
+  return '<span class="prof-badge">Osobní</span>';
+}
+function syncProfileUI(){
+  document.querySelectorAll('#profileSwitch .pf-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.prof===activeProfile);
+  });
+  var _logoDot=document.querySelector('.logo span');
+  if(_logoDot) _logoDot.style.color = activeProfile==='personal' ? 'var(--accent2)' : 'var(--accent)';
+}
+function setProfile(p){
+  if(p!=='business'&&p!=='personal'&&p!=='all') p='business';
+  if(p===activeProfile) return;
+  activeProfile=p;
+  try{ localStorage.setItem(PROFILE_KEY,p); }catch(e){}
+  syncProfileUI();
+  // Výběr hromadných akcí může obsahovat položky, které v novém profilu nejsou vidět
+  if(bulkSelected && bulkSelected.size){ bulkSelected.clear(); try{updateBulkBar();}catch(e){} }
+  try{renderStats();}catch(e){console.error('renderStats',e);}
+  try{renderItems();}catch(e){console.error('renderItems',e);}
+}
 
 const PRELOAD=[];
 
@@ -2437,10 +2507,11 @@ function renderDashboard() {
   var now = new Date();
   var CAT_N={sneakers:'Sneakers',obleceni:'Oblečení',pokemon:'Pokémon',lego:'LEGO',hotwheels:'Hot Wheels',alternate:'Alternate',sberatelske:'Sběratelské',jine:'Jiné'};
 
-  // Data
-  var stockItems = items.filter(function(it){ return (!it.saleState||it.saleState==='stock') && it.type!=='bulk'; });
-  var waitItems  = items.filter(function(it){ return it.saleState==='waiting'; });
-  var paidItems  = items.filter(function(it){ return it.saleState==='paid' && it.type!=='bulk'; });
+  // Data — dle aktivního profilu (Podnikání / Osobní / Vše)
+  var _profBase = items.filter(profMatch);
+  var stockItems = _profBase.filter(function(it){ return (!it.saleState||it.saleState==='stock') && it.type!=='bulk'; });
+  var waitItems  = _profBase.filter(function(it){ return it.saleState==='waiting'; });
+  var paidItems  = _profBase.filter(function(it){ return it.saleState==='paid' && it.type!=='bulk'; });
 
   var invCzk = stockItems.filter(function(it){ return it.buyCurrency!=='EUR'; }).reduce(function(s,it){ return s+(it.buyPrice||0)*(it.qty||1); },0);
   var invEur = stockItems.filter(function(it){ return it.buyCurrency==='EUR'; }).reduce(function(s,it){ return s+(it.buyPrice||0)*(it.qty||1); },0);
@@ -2666,6 +2737,8 @@ function getFiltered(){
     if(tab==='waiting') return it.saleState==='waiting' && !it.bulkId && it.type!=='bulk';
     if(tab==='sold') return it.saleState==='paid' && !it.bulkId && it.type!=='bulk';
   });
+  // Profil: Sklad a Prodáno se filtrují dle aktivního profilu; Čeká je záměrně vždy společné
+  if(tab==='stock'||tab==='sold') list=list.filter(profMatch);
   if(q) list=list.filter(it=>(it.name||'').toLowerCase().includes(q)||(it.sku||'').toLowerCase().includes(q)||(it.orderNum||'').toLowerCase().includes(q)||(it.saleRef||'').toLowerCase().includes(q)||(it.buyWhere||'').toLowerCase().includes(q));
   if(selectedCategories.size>0) list=list.filter(it=>selectedCategories.has(it.category||'jine'));
   if(selectedLocations.size>0) list=list.filter(it=>selectedLocations.has(it.location||'Doma'));
@@ -2737,9 +2810,10 @@ function _itemProfit(it) {
 
 function renderStats(){
   if (!items) return;
-  const si=items.filter(it=>it.saleState==='stock'||!it.saleState);
-  const wi=items.filter(it=>it.saleState==='waiting');
-  const pi=items.filter(it=>it.saleState==='paid');
+  const _profItems=items.filter(profMatch);
+  const si=_profItems.filter(it=>it.saleState==='stock'||!it.saleState);
+  const wi=_profItems.filter(it=>it.saleState==='waiting');
+  const pi=_profItems.filter(it=>it.saleState==='paid');
   const invItems=[...si,...wi];
   const invCzk=invItems.filter(it=>it.buyCurrency!=='EUR').reduce((s,it)=>s+(it.buyPrice||0)*(it.qty||1),0);
   const invTotal=Math.round(invCzk+invItems.filter(it=>it.buyCurrency==='EUR').reduce((s,it)=>s+(it.buyPrice||0)*(it.buyRateEur||eurRate)*(it.qty||1),0));
@@ -3102,7 +3176,7 @@ function renderItems(){
   var vtEl = document.querySelector('.view-toggle');
   if(vtEl) vtEl.style.display = (tab==='stock') ? '' : 'none';
   const effectiveView = (tab==='stock') ? viewMode : 'table';
-  var _fbKey = tab + '|' + _itemsVersion;
+  var _fbKey = tab + '|' + activeProfile + '|' + _itemsVersion;
   if (_fbKey !== window._lastFilterBuildKey) {
     window._lastFilterBuildKey = _fbKey;
     buildSizeFilter(); buildBrandFilter(); buildTagFilter(); buildCategoryFilter(); buildLocationFilter();
@@ -3197,7 +3271,7 @@ function tableHTML(list) {
       ${bulkMode?`<td class="bulk-cb-td" data-action="bulktoggle" data-id="${it.id}"><input type="checkbox" ${bulkSelected.has(it.id)?'checked':''} class="bulk-cb-input"></td>`:''}
       <td><span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></td>
       <td style="padding:4px 6px;">${tImgHtml}</td>
-      <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${tNameHtml}</td>
+      <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${tNameHtml}${profBadge(it)?' '+profBadge(it):''}</td>
       <td style="text-align:center">${tSkuHtml}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center;cursor:pointer;" data-action="sizeunit">${convertSize(it.size, it.name) || `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center">${COND_L[it.condition]||it.condition||'—'}</td>
@@ -3437,7 +3511,7 @@ function cardHTML(it){
     <div class="card-top"><div class="item-name">${nameHtml}</div><span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></div>
     ${metas.length?`<div class="card-meta">${metas.map(m=>m.type==='sku'?`<span class="mt" style="cursor:pointer" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${m.val}">${m.val}</span>`:`<span class="mt">${m.val}</span>`).join('')}</div>`:''}
     ${platHtml}${priceHtml}
-    <div class="sale-row"><div class="sd ${st[0]}"></div><div class="st">${st[1]}</div>${it.saleState==='waiting'?`<span style="margin-left:6px;">${waitStateBadge(it)}</span>`:''}${!customerMode&&it.stockIntent&&it.saleState==='stock'?'<span style="margin-left:6px;">'+intentBadge(it.stockIntent)+'</span>':''}</div>
+    <div class="sale-row"><div class="sd ${st[0]}"></div><div class="st">${st[1]}</div>${it.saleState==='waiting'?`<span style="margin-left:6px;">${waitStateBadge(it)}</span>`:''}${!customerMode&&it.stockIntent&&it.saleState==='stock'?'<span style="margin-left:6px;">'+intentBadge(it.stockIntent)+'</span>':''}${!customerMode&&profBadge(it)?'<span style="margin-left:6px;">'+profBadge(it)+'</span>':''}</div>
     ${extraHtml}${actions}
   </div>`;
 }
@@ -4629,6 +4703,7 @@ function openAddModal(){
   document.getElementById('fCat').value='sneakers';
   updateFieldsByCat('sneakers');
   setStockIntent('');
+  setFProfile('business');
   renderTagSuggestions();
   setFCondValue('DS');
   document.getElementById('fQty').value='1';
@@ -4708,6 +4783,7 @@ function openEdit(id){
   document.getElementById('fQty').value=it.qty||1;
   document.getElementById('fWhere').value=it.buyWhere||'';
   setStockIntent(it.stockIntent||'');
+  setFProfile(isPersonal(it)?'personal':'business');
   document.getElementById('fOrder').value=it.orderNum||'';
   (function(){
     var _dt=document.getElementById('fDokladTyp');
@@ -4846,6 +4922,7 @@ async function saveItem(){
     size:document.getElementById('fSize').value.trim(),sku:document.getElementById('fSku').value.trim(),
     buyDate:document.getElementById('fBuyDate').value,qty:editId?undefined:1,
     buyWhere:document.getElementById('fWhere').value.trim(),orderNum:document.getElementById('fOrder').value.trim(),stockIntent:document.getElementById('fStockIntent').value,
+    personal:(document.getElementById('fProfile')?.value==='personal'),
     dokladTyp:(document.getElementById('fDokladTyp')?.value||'id'),
     fpCislo:(document.getElementById('fDokladTyp')?.value==='fp'?document.getElementById('fFpCislo')?.value||'':''),
     dokladCislo:(document.getElementById('fDokladTyp')?.value==='ks'?document.getElementById('fDokladCislo')?.value.trim()||'':''),
@@ -4911,6 +4988,12 @@ async function saveItem(){
       var _dClean = {};
       Object.keys(d).forEach(function(k){ if(d[k] !== undefined) _dClean[k] = d[k]; });
       var _merged = {...items[i],..._dClean};
+      // Přesun mezi profily — tichý log pro případnou evidenci (vidět jen v detailu)
+      if (!!items[i].personal !== !!_merged.personal) {
+        var _plog = (items[i].profileLog||[]).slice();
+        _plog.push({ date: new Date().toISOString().slice(0,10), to: _merged.personal ? 'personal' : 'business' });
+        _merged.profileLog = _plog;
+      }
       // Přepočet prodejní ceny pro EUR položky
       if (_merged.saleState !== 'stock' && _merged.sellCurrency === 'EUR') {
         var _erSell = _merged.payoutRateEur || _merged.profitRateEur || eurRate || 25;
@@ -5471,6 +5554,14 @@ function intentBadge(intent) {
   var cls = { flip:"ib-flip", hold:"ib-hold", forced_hold:"ib-forced_hold" };
   return '<span class="intent-badge ' + (cls[intent]||"") + '">' + (labels[intent]||intent.toUpperCase()) + "</span>";
 }
+function setFProfile(val) {
+  if (val !== 'personal') val = 'business';
+  var inp = document.getElementById('fProfile');
+  if (inp) inp.value = val;
+  document.querySelectorAll('#profileBtns .pfm-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.val === val);
+  });
+}
 function pNum(s){if(!s)return 0;return parseFloat(String(s).replace(/\s/g,'').replace(/[^\d,.\-]/g,'').replace(',','.'))||0;}
 
 // Normalizuje datum z různých formátů na ISO yyyy-mm-dd
@@ -5943,6 +6034,8 @@ function openDetail(id) {
   const sellPriceStr = it.sellPrice ? (it.sellCurrency==='EUR' ? getSellOrig(it)+' €' : czk(it.sellPrice)) : '—';
   const rows = [
     ['Typ', getCatLabel(it.category)||it.category],
+    ['Profil', isPersonal(it) ? '<span class="prof-badge">Osobní</span>' : 'Podnikání', false],
+    ...(it.profileLog && it.profileLog.length ? [['Přesuny profilu', it.profileLog.map(function(l){ return fmtDate(l.date)+' → '+(l.to==='personal'?'Osobní':'Podnikání'); }).join('<br>'), false]] : []),
     ['SKU', it.sku||'—', !!(it.sku)],
     ['Stav', COND_L[it.condition]||it.condition||'—'],
     ...(catHasSize(it.category)||it.size ? [['Velikost', sizeStr||'—']] : []),
@@ -5984,7 +6077,7 @@ function openDetail(id) {
     ...(it.invoiceUrl ? [['Faktura', '<a href="'+it.invoiceUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
-  var secBase = ['Typ','SKU','Stav','Velikost'];
+  var secBase = ['Typ','Profil','Přesuny profilu','SKU','Stav','Velikost'];
   var secBuy  = ['Nákupní cena','Datum nákupu','Kde koupeno','Číslo objednávky','Od koho (vykup)'];
   var secStock= ['Sklad','Na skladě','Cílová cena','Strategie','Sledování zásilky'];
   var secSell = ['Prodejní cena','Zisk','Datum prodeje','Datum vyplacení','Kde prodáno','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
@@ -6119,7 +6212,7 @@ function openMissingListings() {
 
   function render(selPlat) {
     var stockItems = items.filter(function(it){
-      return (it.saleState === 'stock' || !it.saleState) && !it.bulkId && it.type !== 'bulk';
+      return (it.saleState === 'stock' || !it.saleState) && !it.bulkId && it.type !== 'bulk' && profMatch(it);
     });
     // Filtruj dle povolených kategorií platformy (prázdné = vše)
     if (selPlat) {
@@ -6779,6 +6872,7 @@ document.addEventListener('click', function(e) {
   if (action === 'bulkdelete') { bulkDelete(); return; }
   if (action === 'bulkchangeloc') { bulkChangeLoc(); return; }
   if (action === 'bulktags') { bulkEditTags(); return; }
+  if (action === 'bulkprofile') { bulkChangeProfile(); return; }
   if (action === 'bulkprodat') { openBulkSellModal(); return; }
   if (action === 'bulkreturnwait') { bulkReturnWaiting(); return; }
   if (action === 'savebulksell') { saveBulkSell(); return; }
@@ -6971,7 +7065,7 @@ function buildSizeFilter() {
   const drop = document.getElementById('sizeFilterDrop');
   if (!drop) return;
   const allSizes = new Set();
-  items.filter(it => it.saleState === 'stock' || !it.saleState).forEach(it => {
+  items.filter(it => (it.saleState === 'stock' || !it.saleState) && profMatch(it)).forEach(it => {
     if (it.size) {
       const eu = it.size.split(/ \/ US/i)[0].trim();
       if (eu) allSizes.add(eu);
@@ -7041,7 +7135,7 @@ function buildBrandFilter() {
   const drop = document.getElementById('brandFilterDrop');
   if (!drop) return;
   // Jen značky které se vyskytují v aktuálním skladu
-  const stockItems = items.filter(it => it.saleState === 'stock' || !it.saleState);
+  const stockItems = items.filter(it => (it.saleState === 'stock' || !it.saleState) && profMatch(it));
   const foundBrands = new Set();
   stockItems.forEach(it => {
     var b = detectBrand(it.name);
@@ -7066,6 +7160,7 @@ function buildTagFilter() {
   var drop = document.getElementById('tagFilterDrop');
   if (!drop) return;
   var visItems = items.filter(function(it){ return it.saleState===tab||(tab==='stock'&&(!it.saleState||it.saleState==='stock')); });
+  if(tab!=='waiting') visItems = visItems.filter(profMatch);
   var foundTags = new Set();
   visItems.forEach(function(it){ (it.tags||[]).forEach(function(t){ foundTags.add(t); }); });
   if (foundTags.size === 0) { if(wrap) wrap.style.display='none'; return; }
@@ -7092,6 +7187,7 @@ function buildCategoryFilter() {
     if (tab === 'stock') return it.saleState === 'stock' || !it.saleState;
     return it.saleState === tab;
   });
+  if(tab!=='waiting') visItems = visItems.filter(profMatch);
   var foundCats = [...new Set(visItems.map(function(it){ return it.category || 'jine'; }))];
   [...selectedCategories].forEach(function(c){ if (!foundCats.includes(c)) selectedCategories.delete(c); });
   drop.innerHTML = foundCats.sort(function(a,b){ return (CAT_LABELS[a]||a).localeCompare(CAT_LABELS[b]||b,'cs'); })
@@ -7108,7 +7204,7 @@ var selectedLocations = new Set();
 function buildLocationFilter() {
   var drop = document.getElementById('locFilterDrop');
   if (!drop) return;
-  var stockItems = items.filter(function(it){ return it.saleState === 'stock' || !it.saleState; });
+  var stockItems = items.filter(function(it){ return (it.saleState === 'stock' || !it.saleState) && profMatch(it); });
   var locs = [...new Set(stockItems.map(function(it){ return it.location || 'Doma'; }))].sort(function(a,b){ return a.localeCompare(b,'cs'); });
   [...selectedLocations].forEach(function(l){ if (!locs.includes(l)) selectedLocations.delete(l); });
   drop.innerHTML = locs.map(function(l){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+l+'" '+(selectedLocations.has(l)?'checked':'')+' onchange="toggleLocationFilter(\''+l+'\',this.checked)"> '+l+'</label>'; }).join('');
@@ -7376,6 +7472,55 @@ function bulkChangeLoc(){
       bulkClear();
     });
   }
+  if(cancelBtn) {
+    cancelBtn.addEventListener('mouseenter', function(){ this.style.borderColor='#555'; this.style.color='var(--text)'; });
+    cancelBtn.addEventListener('mouseleave', function(){ this.style.borderColor='var(--border)'; this.style.color='var(--muted)'; });
+    cancelBtn.addEventListener('click', function(){ overlay.remove(); });
+  }
+}
+
+function bulkChangeProfile(){
+  if(bulkSelected.size===0) return;
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+  overlay.innerHTML =
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:360px;font-family:\'DM Sans\',sans-serif;">' +
+      '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;margin-bottom:6px;">Přesunout profil ('+bulkSelected.size+' ks)</div>' +
+      '<div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Vybrané položky se přesunou do zvoleného profilu.</div>' +
+      '<div style="display:flex;gap:6px;">' +
+        '<button id="bulkProfBiz" class="pfm-btn" style="flex:1;">Podnikání</button>' +
+        '<button id="bulkProfPers" class="pfm-btn" style="flex:1;">Osobní</button>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;margin-top:18px;">' +
+        '<button id="bulkProfCancel" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:var(--radius-sm);padding:10px 16px;font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.15s;">Zrušit</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  function applyProfile(toPersonal) {
+    var touched = 0;
+    var _today = new Date().toISOString().slice(0,10);
+    bulkSelected.forEach(function(id){
+      var it = items.find(function(x){ return x.id===id; });
+      if(!it) return;
+      if(!!it.personal !== toPersonal) {
+        it.personal = toPersonal;
+        var _plog = (it.profileLog||[]).slice();
+        _plog.push({ date: _today, to: toPersonal ? 'personal' : 'business' });
+        it.profileLog = _plog;
+        touched++;
+      }
+    });
+    sv(); renderStats(); renderItems();
+    overlay.remove();
+    showToast(touched + ' položek přesunuto do profilu „' + (toPersonal?'Osobní':'Podnikání') + '".');
+    bulkClear();
+  }
+  var bizBtn = document.getElementById('bulkProfBiz');
+  var persBtn = document.getElementById('bulkProfPers');
+  var cancelBtn = document.getElementById('bulkProfCancel');
+  if(bizBtn) bizBtn.addEventListener('click', function(){ applyProfile(false); });
+  if(persBtn) persBtn.addEventListener('click', function(){ applyProfile(true); });
   if(cancelBtn) {
     cancelBtn.addEventListener('mouseenter', function(){ this.style.borderColor='#555'; this.style.color='var(--text)'; });
     cancelBtn.addEventListener('mouseleave', function(){ this.style.borderColor='var(--border)'; this.style.color='var(--muted)'; });
@@ -7656,6 +7801,8 @@ function saveBulkSell() {
     saleRef: saleRef,
     itemIds: bulkSellIds.slice(),
     itemPrices: itemPrices,
+    // Balík je osobní jen pokud jsou osobní všechny jeho položky
+    personal: selItems.length > 0 && selItems.every(function(it){ return !!it.personal; }),
     dateAdded: new Date().toISOString()
   };
 
@@ -9008,6 +9155,7 @@ function _crmTabHistory(c){
       else if(it.sellPrice) sub+='<span style="color:var(--accent);font-weight:600;">'+Number(it.sellPrice).toLocaleString('cs-CZ')+' Kč</span>';
       if(it.soldWhere) sub+=(sub?' · ':'')+escHtml(it.soldWhere);
       sub+=(sub?' · ':'')+'<span style="color:'+stateCol+';">'+stateLbl+'</span>';
+      if(isPersonal(it)) sub+=' · <span class="prof-badge">Osobní</span>';
       return '<div onclick="openSaleFromCrm(\''+escHtml(it.id)+'\')" style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background 0.12s;" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'
         +'<div style="flex-shrink:0;width:62px;">'
         +'<div style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;">'+dStr+'</div>'
@@ -10018,6 +10166,7 @@ function _init() {
   try{buildPlatFilter();buildLocationFilter();buildSoldWhereFilter();buildListingPlatformFilter();}catch(e){}
   try{buildSizeFilter();buildBrandFilter();buildTagFilter();}catch(e){}
   try{ if(localStorage.getItem('mobileSimpleView')==='1'){ document.body.classList.add('mobile-simple'); var btn=document.getElementById('btnMobileSimple'); if(btn){btn.style.color='var(--accent)';btn.style.borderColor='var(--accent)';btn.style.background='rgba(200,255,0,0.08)';} } }catch(e){}
+  try{syncProfileUI();}catch(e){}
   try{renderStats();}catch(e){console.error('renderStats',e);}
   try{renderItems();}catch(e){console.error('renderItems',e);}
   try{attachListeners();}catch(e){}
@@ -11354,9 +11503,9 @@ function initCumChart() {
 }
 
 function getSoldItems(){
-  // Vrátí paid items BEZ bulk children + přidá bulk záznamy
-  var regular = items.filter(function(it){ return it.saleState==='paid' && !it.bulkId && it.type!=='bulk'; });
-  var bulkRecs = items.filter(function(it){ return it.type==='bulk' && it.saleState==='paid'; });
+  // Vrátí paid items BEZ bulk children + přidá bulk záznamy — dle aktivního profilu
+  var regular = items.filter(function(it){ return it.saleState==='paid' && !it.bulkId && it.type!=='bulk' && profMatch(it); });
+  var bulkRecs = items.filter(function(it){ return it.type==='bulk' && it.saleState==='paid' && profMatch(it); });
   return regular.concat(bulkRecs);
 }
 
@@ -11540,7 +11689,7 @@ function renderSoldView(){
         var bpc=bProfit>0?'var(--accent)':bProfit<0?'var(--danger)':'var(--muted)';
         html+='<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+'" onclick="toggleBulkExpand(\''+it.id+'\')" style="border-bottom:1px solid rgba(255,255,255,0.04);">';
         html+='<td style="padding:6px 8px;"><span class="bulk-folder-icon'+(isExp?' open':'')+'" style="font-size:10px;color:var(--muted);margin-right:5px;">▶</span><span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:1px 5px;font-family:monospace;">BULK</span></td>';
-        html+='<td style="padding:6px 8px;font-size:13px;font-weight:700;font-family:\'Syne\',sans-serif;">'+it.name+'</td>';
+        html+='<td style="padding:6px 8px;font-size:13px;font-weight:700;font-family:\'Syne\',sans-serif;">'+it.name+(profBadge(it)?' '+profBadge(it):'')+'</td>';
         html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+children.length+' ks</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">—</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);">'+czk(it.totalBuyPrice||0)+'</td>';
@@ -11584,7 +11733,7 @@ function renderSoldView(){
       var ss=it.sellPrice?(sc==='EUR'?getSellOrig(it)+' €':czk(it.sellPrice)):'—';
       html+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" data-action="detail" data-id="'+it.id+'" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">';
       html+='<td style="padding:6px 8px;"><span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span></td>';
-      html+='<td style="padding:6px 8px;font-size:13px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(it.stockxUrl?'<a href="'+buildStockxUrlWithSize(it.stockxUrl,it.name,it.size)+'" target="_blank" class="stockx-link" onclick="event.stopPropagation()">'+it.name+'</a>':it.name)+'</td>';
+      html+='<td style="padding:6px 8px;font-size:13px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(it.stockxUrl?'<a href="'+buildStockxUrlWithSize(it.stockxUrl,it.name,it.size)+'" target="_blank" class="stockx-link" onclick="event.stopPropagation()">'+it.name+'</a>':it.name)+(profBadge(it)?' '+profBadge(it):'')+'</td>';
       html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(it.sku||'—')+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);cursor:pointer;" data-action="sizeunit">'+convertSize(it.size,it.name)+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);">'+bs+'</td>';
@@ -11613,7 +11762,7 @@ function renderStockAnalytics() {
   // Filtr kategorie
   var saFilterCat = window._saFilterCat || '';
 
-  var allSi = items.filter(function(it){ return (it.saleState==='stock'||!it.saleState) && !it.bulkId; });
+  var allSi = items.filter(function(it){ return (it.saleState==='stock'||!it.saleState) && !it.bulkId && profMatch(it); });
   var si = saFilterCat ? allSi.filter(function(it){ return (it.category||'jine')===saFilterCat; }) : allSi;
   var now = Date.now();
   function buyKc(it){ var er=it.buyCurrency==='EUR'?(it.buyRateEur||eurRate):1; return (it.buyPrice||0)*er*(it.qty||1); }
@@ -12413,8 +12562,8 @@ function _soldDateParts(it) {
 }
 
 function getAnalyticsItems() {
-  var regular = items.filter(function(it){ return it.saleState==='paid' && !it.bulkId && it.type!=='bulk'; });
-  var bulkRecs = items.filter(function(it){ return it.type==='bulk' && it.saleState==='paid'; });
+  var regular = items.filter(function(it){ return it.saleState==='paid' && !it.bulkId && it.type!=='bulk' && profMatch(it); });
+  var bulkRecs = items.filter(function(it){ return it.type==='bulk' && it.saleState==='paid' && profMatch(it); });
   var all = regular.concat(bulkRecs);
   var now = new Date();
   if (analyticsPeriod === 'all') return all;
@@ -12484,6 +12633,7 @@ var EXP_COLS = [
   {id:'note',       label:'Poznámka',        tpls:['zaloha']},
   {id:'platforms',  label:'Platformy',       tpls:['zaloha']},
   {id:'tags',       label:'Štítky',          tpls:['zaloha']},
+  {id:'profile',    label:'Profil',          tpls:[]},
   {id:'hasInvoice', label:'Faktura',         tpls:['komisni','zaloha','prodeje']},
   {id:'invoiceUrl', label:'Odkaz na fakturu',tpls:['zaloha','prodeje']},
 ];
@@ -12540,6 +12690,7 @@ function getExpItems() {
   var secWait  = document.getElementById('expSecWaiting');
   var secSold  = document.getElementById('expSecSold');
   items.forEach(function(it) {
+    if (!profMatch(it)) return; // export respektuje aktivní profil (Vše = všechno)
     var st = it.saleState || 'stock';
     if (st==='stock' && secStock && secStock.checked) list.push(it);
     else if (st==='waiting' && secWait && secWait.checked) list.push(it);
@@ -12577,6 +12728,7 @@ function getCellValue(it, colId) {
     }
     case 'platforms': return (it.platforms||[]).join(', ');
     case 'tags': return (it.tags||[]).join(', ');
+    case 'profile': return isPersonal(it) ? 'Osobní' : 'Podnikání';
     case 'qty': return (it.qty||1).toString();
     case 'hasInvoice': return it.invoiceUrl ? 'Ano' : 'Ne';
     case 'invoiceUrl': return it.invoiceUrl || '';
@@ -13427,6 +13579,7 @@ rebuildBrandTables();
   <button data-action="bulkdelete" class="bulk-btn bulk-btn-del">Smazat vybrané</button>
   <button data-action="bulkchangeloc" class="bulk-btn bulk-btn-sec" id="btnBulkChangeLoc">Změnit lokaci</button>
   <button data-action="bulktags" class="bulk-btn bulk-btn-sec" id="btnBulkTags">Štítky</button>
+  <button data-action="bulkprofile" class="bulk-btn bulk-btn-sec" id="btnBulkProfile">Přesunout profil</button>
   <button data-action="bulkprodat" class="bulk-btn bulk-btn-sec" id="btnBulkProdat" style="border-color:var(--accent);color:var(--accent);">Prodat bulk</button>
   <button data-action="bulkreturnwait" class="bulk-btn bulk-btn-sec" id="btnBulkReturnWait" style="border-color:#ff9900;color:#ff9900;">Vrátit vybrané</button>
   <button data-action="bulkselectall" class="bulk-btn bulk-btn-sec">Vybrat vše</button>
