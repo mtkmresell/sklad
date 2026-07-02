@@ -1041,12 +1041,11 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   </div>
   <div class="header-tabs">
     <div class="tab-bar">
-      <button class="tab-btn" data-action="switchtab" data-tab="dashboard" id="btnTab_dashboard" onclick="switchTab('dashboard')">Přehled</button>
       <button class="tab-btn active" data-action="switchtab" data-tab="stock" id="btnTab_stock" onclick="switchTab('stock')">Na skladě</button>
       <button class="tab-btn" data-action="switchtab" data-tab="waiting" id="btnTab_waiting" onclick="switchTab('waiting')">Čeká</button>
       <button class="tab-btn" data-action="switchtab" data-tab="sold" id="btnTab_sold" onclick="switchTab('sold')">Prodáno</button>
-      <button class="tab-btn" data-action="switchtab" data-tab="wishlist" id="btnTab_wishlist" onclick="switchTab('wishlist')">Wishlist</button>
       <button class="tab-btn" data-action="switchtab" data-tab="customers" id="btnTab_customers" onclick="switchTab('customers')">Zákazníci<span id="crmFollowupBadge" class="crm-nav-badge" style="display:none;"></span></button>
+      <button class="tab-btn" data-action="switchtab" data-tab="wishlist" id="btnTab_wishlist" onclick="switchTab('wishlist')">Wishlist</button>
     </div>
   </div>
   <div class="header-right">
@@ -2419,7 +2418,7 @@ function buildListingPlatformFilter(){
 function switchTab(t){
   tab=t;
   if(t!=='stock') stockViewMode='table';
-  document.querySelectorAll('.tab-btn').forEach((b,i)=>b.classList.toggle('active',['dashboard','stock','waiting','sold','wishlist','customers'][i]===t));
+  document.querySelectorAll('.tab-bar .tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
   var _crmSec = document.getElementById('customersSection');
   var _statsBar = document.getElementById('statsBarWrap');
   var _filtersBar = document.querySelector('.filters');
@@ -2481,182 +2480,17 @@ function switchTab(t){
     setTimeout(function(){ grid.classList.remove('tab-switch'); }, 400);
   }
   var bulkBtn = document.getElementById('btnBulkMode');
-  if (bulkBtn) bulkBtn.style.display = (t === 'sold' || t === 'dashboard') ? 'none' : '';
+  if (bulkBtn) bulkBtn.style.display = (t === 'sold') ? 'none' : '';
   var btnCM = document.getElementById('btnCustomerMode');
   if (btnCM) btnCM.style.display = (t === 'stock' && viewMode === 'grid') ? 'inline-flex' : 'none';
   var btnAdd = document.getElementById('btnAdd');
-  if (btnAdd) btnAdd.style.display = (t === 'dashboard' || t === 'wishlist') ? 'none' : '';
-  // Dashboard: skryj stats-bar a filters, ukaž jen grid
+  if (btnAdd) btnAdd.style.display = (t === 'wishlist') ? 'none' : '';
+  // Při přepnutí tabu vždy znovu ukaž panely (mohly být schované scroll-hide efektem)
   var statsBarWrap = document.getElementById('statsBarWrap');
   var filtersBar = document.querySelector('.filters');
-  var isDash = t === 'dashboard';
-  if (statsBarWrap) statsBarWrap.classList.toggle('hide-panel', isDash);
-  if (filtersBar) filtersBar.classList.toggle('hide-panel', isDash);
-  var btnCalc = document.getElementById('btnCalc');
-  if (btnCalc) btnCalc.style.display = isDash ? 'none' : '';
-  if (isDash) { renderDashboard(); return; }
+  if (statsBarWrap) statsBarWrap.classList.remove('hide-panel');
+  if (filtersBar) filtersBar.classList.remove('hide-panel');
   if (t === 'wishlist') { renderWishlist(); return; }
-}
-
-function renderDashboard() {
-  var grid = document.getElementById('itemsGrid');
-  if (!grid) return;
-  grid.removeAttribute('class');
-  grid.style.cssText = 'padding:18px;';
-
-  var now = new Date();
-  var CAT_N={sneakers:'Sneakers',obleceni:'Oblečení',pokemon:'Pokémon',lego:'LEGO',hotwheels:'Hot Wheels',alternate:'Alternate',sberatelske:'Sběratelské',jine:'Jiné'};
-
-  // Data — dle aktivního profilu (Podnikání / Osobní / Vše)
-  var _profBase = items.filter(profMatch);
-  var stockItems = _profBase.filter(function(it){ return (!it.saleState||it.saleState==='stock') && it.type!=='bulk'; });
-  var waitItems  = _profBase.filter(function(it){ return it.saleState==='waiting'; });
-  var paidItems  = _profBase.filter(function(it){ return it.saleState==='paid' && it.type!=='bulk'; });
-
-  var invCzk = stockItems.filter(function(it){ return it.buyCurrency!=='EUR'; }).reduce(function(s,it){ return s+(it.buyPrice||0)*(it.qty||1); },0);
-  var invEur = stockItems.filter(function(it){ return it.buyCurrency==='EUR'; }).reduce(function(s,it){ return s+(it.buyPrice||0)*(it.qty||1); },0);
-  var invTotal = Math.round(invCzk + invEur*eurRate);
-
-  var pendingRev = waitItems.reduce(function(s,it){
-    var er=it.profitRateEur||eurRate||25;
-    return s+(it.sellCurrency==='EUR'?(it.sellPriceOrig||it.sellPrice||0)*er:(it.sellPrice||0));
-  },0);
-
-  var ym = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  var MONTHS=['Ledna','Února','Března','Dubna','Května','Června','Července','Srpna','Září','Října','Listopadu','Prosince'];
-  var MONTHS_NOM=['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
-  var thisMonthItems = paidItems.filter(function(it){
-    var d=it.payoutDate||it.saleDate||''; if(!d) return false;
-    var p=d.split('.'); if(p.length===3) return p[2]+'-'+p[1].padStart(2,'0')===ym; return d.slice(0,7)===ym;
-  });
-  var thisMonthProfit = thisMonthItems.reduce(function(s,it){ return s+_itemProfit(it); },0);
-  var totalProfit = paidItems.reduce(function(s,it){ return s+_itemProfit(it); },0);
-
-  // Stagnující (>60 dní ve skladu)
-  var stagnant = stockItems.filter(function(it){
-    var d=parseBuyDate(it); if(!d||isNaN(d)) return false;
-    return (now-d)/(86400000) > 60;
-  }).sort(function(a,b){ return (parseBuyDate(a)||now)-(parseBuyDate(b)||now); }).slice(0,5);
-
-  // Nejdéle čekající — řadíme od nejstaršího data prodeje (saleDate)
-  function _parseSaleDate(it) {
-    var sd=it.saleDate||''; if(!sd) return null;
-    if(/^\d{4}-\d{2}-\d{2}$/.test(sd)) return new Date(sd+'T00:00:00');
-    var p=sd.split('.'); if(p.length===3) return new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));
-    return null;
-  }
-  var longWait = waitItems.slice().sort(function(a,b){
-    return (_parseSaleDate(a)||new Date(a.dateAdded||0))-(_parseSaleDate(b)||new Date(b.dateAdded||0));
-  }).slice(0,5);
-
-  // Naposledy přidané
-  var recentStock = stockItems.slice().sort(function(a,b){
-    return new Date(b.dateAdded||0)-new Date(a.dateAdded||0);
-  }).slice(0,5);
-
-  var h='';
-  h+='<div style="font-family:\'Syne\',sans-serif;font-size:18px;font-weight:800;margin-bottom:18px;">Přehled</div>';
-
-  // Stat karty
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:24px;">';
-  var cards=[
-    {l:'Ve skladu',v:stockItems.length+' ks',sub:invTotal.toLocaleString('cs')+' Kč',c:'var(--text)'},
-    {l:'Čeká na payout',v:waitItems.length+' ks',sub:Math.round(pendingRev).toLocaleString('cs')+' Kč',c:'var(--warning)'},
-    {l:MONTHS[now.getMonth()]+' — zisk',v:(thisMonthProfit>=0?'+':'')+Math.round(thisMonthProfit).toLocaleString('cs')+' Kč',sub:thisMonthItems.length+' prodejů',c:thisMonthProfit>=0?'var(--accent)':'var(--danger)'},
-    {l:'Celkový zisk',v:(totalProfit>=0?'+':'')+Math.round(totalProfit).toLocaleString('cs')+' Kč',sub:paidItems.length+' prodaných celkem',c:totalProfit>=0?'var(--accent)':'var(--danger)'}
-  ];
-  cards.forEach(function(c){
-    h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:default;">';
-    h+='<div style="font-size:9px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);margin-bottom:8px;">'+c.l+'</div>';
-    h+='<div style="font-family:\'Syne\',sans-serif;font-size:18px;font-weight:700;color:'+c.c+';margin-bottom:3px;">'+c.v+'</div>';
-    h+='<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+c.sub+'</div>';
-    h+='</div>';
-  });
-  h+='</div>';
-
-  // Dvousloupcový layout
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">';
-
-  // Stagnující ve skladu
-  h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
-  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--warning);margin-bottom:12px;">Nejdéle ve skladu</div>';
-  if (stagnant.length===0) {
-    h+='<div style="font-size:12px;color:var(--muted);">Žádné položky starší 60 dní.</div>';
-  } else {
-    stagnant.forEach(function(it){
-      var days=Math.floor((now-parseBuyDate(it))/86400000);
-      var bp=(it.buyCurrency==='EUR'?(it.buyPrice||0)*eurRate:(it.buyPrice||0));
-      h+='<div onclick="switchTab(\'stock\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
-      h+='<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+it.name+'</div>';
-      h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(CAT_N[it.category]||it.category||'—')+(it.size?' · '+it.size:'')+'</div></div>';
-      h+='<div style="text-align:right;flex-shrink:0;"><div style="font-size:12px;color:var(--warning);font-family:\'DM Mono\',monospace;">'+days+' dní</div>';
-      h+='<div style="font-size:10px;color:var(--muted);">'+Math.round(bp).toLocaleString('cs')+' Kč</div></div>';
-      h+='</div>';
-    });
-  }
-  h+='</div>';
-
-  // Čeká nejdéle
-  h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
-  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">Čeká nejdéle na payout</div>';
-  if (longWait.length===0) {
-    h+='<div style="font-size:12px;color:var(--muted);">Nic nečeká na payout.</div>';
-  } else {
-    var WS_LABEL={sending:'Odesílání',sent:'Odesláno',payout:'Čeká na payout',completed:'Dokončeno'};
-    longWait.forEach(function(it){
-      var d=_parseSaleDate(it);
-      var days=d?Math.floor((now-d)/86400000):null;
-      var sp=(it.sellCurrency==='EUR'?(it.sellPriceOrig||it.sellPrice||0)*eurRate:(it.sellPrice||0));
-      h+='<div onclick="switchTab(\'waiting\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
-      h+='<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+it.name+'</div>';
-      h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(it.soldWhere||'—')+(it.waitState?' · '+(WS_LABEL[it.waitState]||it.waitState):'')+'</div></div>';
-      h+='<div style="text-align:right;flex-shrink:0;"><div style="font-size:12px;color:var(--accent);font-family:\'DM Mono\',monospace;">'+(sp?Math.round(sp).toLocaleString('cs')+' Kč':'—')+'</div>';
-      h+='<div style="font-size:10px;color:var(--muted);">'+(days!==null?days+' dní':'—')+'</div></div>';
-      h+='</div>';
-    });
-  }
-  h+='</div>';
-
-  // Naposledy přidané
-  h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
-  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:12px;">Naposledy přidané</div>';
-  if (recentStock.length===0) {
-    h+='<div style="font-size:12px;color:var(--muted);">Sklad je prázdný.</div>';
-  } else {
-    recentStock.forEach(function(it){
-      var bp=(it.buyCurrency==='EUR'?(it.buyPrice||0)*eurRate:(it.buyPrice||0));
-      var d=it.dateAdded?new Date(it.dateAdded):null;
-      var days=d?Math.floor((now-d)/86400000):null;
-      h+='<div onclick="switchTab(\'stock\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
-      h+='<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+it.name+'</div>';
-      h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(CAT_N[it.category]||it.category||'—')+(it.size?' · '+it.size:'')+'</div></div>';
-      h+='<div style="text-align:right;flex-shrink:0;"><div style="font-size:12px;font-family:\'DM Mono\',monospace;">'+Math.round(bp).toLocaleString('cs')+' Kč</div>';
-      h+='<div style="font-size:10px;color:var(--muted);">'+(days!==null?'před '+days+' dny':'—')+'</div></div>';
-      h+='</div>';
-    });
-  }
-  h+='</div>';
-
-  // Tento měsíc — top prodeje
-  var topMonth = thisMonthItems.slice().sort(function(a,b){return _itemProfit(b)-_itemProfit(a);}).slice(0,5);
-  h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">';
-  h+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">Top prodeje — '+MONTHS_NOM[now.getMonth()]+'</div>';
-  if (topMonth.length===0) {
-    h+='<div style="font-size:12px;color:var(--muted);">Tento měsíc zatím žádné prodeje.</div>';
-  } else {
-    topMonth.forEach(function(it){
-      var p=_itemProfit(it);
-      h+='<div onclick="switchTab(\'sold\')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.opacity=\'0.7\'" onmouseout="this.style.opacity=\'1\'">';
-      h+='<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+it.name+'</div>';
-      h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(it.soldWhere||'—')+(it.size?' · '+it.size:'')+'</div></div>';
-      h+='<div style="font-size:13px;color:'+(p>=0?'var(--accent)':'var(--danger)')+';font-family:\'Syne\',sans-serif;font-weight:700;flex-shrink:0;">'+(p>=0?'+':'')+Math.round(p).toLocaleString('cs')+' Kč</div>';
-      h+='</div>';
-    });
-  }
-  h+='</div>';
-
-  h+='</div>'; // close grid
-  grid.innerHTML = h;
 }
 
 // Custom tooltip systém — reaguje jen na data-tip atribut
@@ -3149,7 +2983,6 @@ function waitStateBadge(it) {
 }
 
 function renderItems(){
-  if(tab==='dashboard'){renderDashboard();return;}
   if(tab==='wishlist'){renderWishlist();return;}
   if(tab==='sold'){renderSoldView();renderStats();return;}
   if(tab==='stock' && stockViewMode==='analytics'){
@@ -10812,11 +10645,11 @@ document.addEventListener('keydown', function(e) {
       });
       if (modals.length) { var top = modals[modals.length-1]; if (top.id) cm(top.id); }
       break;
-    case '`': if (!openModal) { e.preventDefault(); switchTab('dashboard'); } break;
     case '1': if (!openModal) { e.preventDefault(); switchTab('stock'); } break;
     case '2': if (!openModal) { e.preventDefault(); switchTab('waiting'); } break;
     case '3': if (!openModal) { e.preventDefault(); switchTab('sold'); } break;
-    case '4': if (!openModal) { e.preventDefault(); switchTab('wishlist'); } break;
+    case '4': if (!openModal) { e.preventDefault(); switchTab('customers'); } break;
+    case '5': if (!openModal) { e.preventDefault(); switchTab('wishlist'); } break;
     case 's': case 'S':
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
@@ -13638,12 +13471,12 @@ rebuildBrandTables();
       if (st > 40  && slack > 80)  statsBar.classList.add('hide-panel');
       if (st > 100 && slack > 80) filtersEl.classList.add('hide-panel');
     } else {
-      if (tab !== 'dashboard' && filtersEl.classList.contains('hide-panel')) {
+      if (filtersEl.classList.contains('hide-panel')) {
         filtersEl.classList.add('is-animating');
         filtersEl.classList.remove('hide-panel');
         setTimeout(function() { filtersEl.classList.remove('is-animating'); }, 320);
       }
-      if (tab !== 'dashboard' && st < 40 && statsBar.classList.contains('hide-panel')) {
+      if (st < 40 && statsBar.classList.contains('hide-panel')) {
         statsBar.classList.remove('hide-panel');
       }
     }
