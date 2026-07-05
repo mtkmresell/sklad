@@ -2810,6 +2810,35 @@ function switchTab(t){
   }, true);
 })();
 
+// ── iOS: externí odkazy otevírat v plném Safari ──
+// Aplikace uložená na ploše iPhonu (od iOS 16.4) běží jako samostatná web-app a externí
+// odkazy by se otevíraly ve vestavěném prohlížeči. Schéma x-safari-https:// (iOS 17+)
+// je pošle rovnou do Safari. Mimo iOS / mimo režim web-app se nic nemění.
+(function(){
+  var isStandalone = ('standalone' in navigator) && navigator.standalone === true;
+  var m = navigator.userAgent.match(/OS (\d+)_/);
+  var iosMajor = m ? parseInt(m[1], 10) : 0;
+  if (!isStandalone || iosMajor < 17) return;
+  function toSafariUrl(url){
+    return url.replace(/^https:\/\//i, 'x-safari-https://').replace(/^http:\/\//i, 'x-safari-http://');
+  }
+  // window.open — pokrývá i inline handlery (např. DPD tracking)
+  var _origOpen = window.open;
+  window.open = function(url, target, feats){
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) { location.href = toSafariUrl(url); return null; }
+    return _origOpen.apply(window, arguments);
+  };
+  // Kliky na <a href="http(s)://…"> — capture fáze, inline onclick (kopírování čísel apod.) proběhne dál
+  document.addEventListener('click', function(e){
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (!/^https?:\/\//i.test(href)) return;
+    e.preventDefault();
+    location.href = toSafariUrl(href);
+  }, true);
+})();
+
 function animStatCard(action, dir) {
   var _selMap = {
     'nextcat': '.stat-card-warehouse',
@@ -3726,6 +3755,8 @@ function getSoldWhereOptions() {
 function _sellLocationNeedsBuyer(val){
   val = (val||'').trim();
   if(!val) return false;
+  // Cardmarket: přes zprávy jde s kupujícím domluvit prodej napřímo → zákazník se eviduje i tady
+  if(val.toLowerCase().indexOf('cardmarket') !== -1) return true;
   var g = getPlatGroups();
   if((g.local||[]).indexOf(val) !== -1) return true;
   var known = (g.platforms||[]).concat(g.eshopy||[]);
