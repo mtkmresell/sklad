@@ -4493,15 +4493,39 @@ const CARRIERS = {
   'DPD': 'https://www.dpdgroup.com/cz/mydpd/my-parcels/sending?parcelNumber='
 };
 
+// UPS sledování nefunguje s mezerami v čísle (na štítku jsou, v URL vadí) — u UPS je odstraňujeme
+function sanitizeTrackNum(num, carrier) {
+  if ((carrier||'').trim().toUpperCase() === 'UPS') return (num||'').replace(/\s+/g, '');
+  return num;
+}
+// Živé blokování mezer v inputu sledovacího čísla, když je dopravce UPS (zachovává pozici kurzoru)
+function stripUpsSpacesInInput(numInput, carrier) {
+  if (!numInput || (carrier||'').trim().toUpperCase() !== 'UPS') return;
+  if (!/\s/.test(numInput.value)) return;
+  var pos = numInput.selectionStart || 0;
+  var newPos = numInput.value.slice(0, pos).replace(/\s+/g, '').length;
+  numInput.value = numInput.value.replace(/\s+/g, '');
+  try { numInput.setSelectionRange(newPos, newPos); } catch(e) {}
+}
+function bindUpsNoSpaces(numInput, carrierSelect) {
+  if (!numInput || !carrierSelect || numInput._upsBound) return;
+  numInput._upsBound = true;
+  numInput.addEventListener('input', function(){ stripUpsSpacesInInput(numInput, carrierSelect.value); });
+  carrierSelect.addEventListener('change', function(){ stripUpsSpacesInInput(numInput, carrierSelect.value); });
+}
+
 function autoUpdateTrackingUrl() {
-  var num = (document.getElementById('fTrackNum')||{}).value?.trim();
+  var fTN = document.getElementById('fTrackNum');
   var carrier = (document.getElementById('fTrackCarrier')||{}).value;
+  // UPS: mezery ve sledovacím čísle rovnou odstraň (platí při psaní i při přepnutí dopravce)
+  stripUpsSpacesInInput(fTN, carrier);
   // Vždy vymaž manuální URL — URL se přepočítá při uložení z čísla a dopravce
   var fTU = document.getElementById('fTrackUrl');
   if (fTU) fTU.value = '';
 }
 
 function buildTrackingUrl(num, carrier) {
+  num = sanitizeTrackNum(num, carrier);
   if (!num || !carrier || !CARRIERS[carrier]) return undefined;
   var tmpl = CARRIERS[carrier];
   return tmpl.includes('{num}') ? tmpl.replace('{num}', encodeURIComponent(num)) : tmpl + encodeURIComponent(num);
@@ -4544,6 +4568,7 @@ function openTrackingModal(id) {
   if (carrierSelectEl.parentNode && carrierSelectEl.parentNode.classList.contains('cs-wrap')) {
     carrierSelectEl.parentNode.classList.add('cs-wide');
   }
+  bindUpsNoSpaces(overlay.querySelector('#_trkNum'), carrierSelectEl);
   const trkCancel = overlay.querySelector('#_trkCancel');
   const trkOk = overlay.querySelector('#_trkOk');
   trkCancel.onmouseenter = () => { trkCancel.style.background='var(--surface2)'; trkCancel.style.color='var(--text)'; };
@@ -4552,9 +4577,9 @@ function openTrackingModal(id) {
   trkOk.onmouseleave = () => { trkOk.style.opacity='1'; };
   trkCancel.onclick = () => _closeTracking();
   overlay.querySelector('#_trkOk').onclick = () => {
-    const num = overlay.querySelector('#_trkNum').value.trim();
-    if(!num){ overlay.querySelector('#_trkErr').style.display=''; return; }
     const carrier = overlay.querySelector('#_trkCarrier').value;
+    const num = sanitizeTrackNum(overlay.querySelector('#_trkNum').value.trim(), carrier);
+    if(!num){ overlay.querySelector('#_trkErr').style.display=''; return; }
     const trackUrl = CARRIERS[carrier].includes('{num}') ? CARRIERS[carrier].replace('{num}', encodeURIComponent(num)) : CARRIERS[carrier]+encodeURIComponent(num);
     const idx2 = items.findIndex(i=>i.id===id);
     if(idx2 !== -1){ items[idx2].trackingNum=num; items[idx2].trackingCarrier=carrier; items[idx2].trackingUrl=trackUrl; }
@@ -4601,11 +4626,12 @@ function openBulkTrackingModal(bulkId) {
   if (carrierSelectEl.parentNode && carrierSelectEl.parentNode.classList.contains('cs-wrap')) {
     carrierSelectEl.parentNode.classList.add('cs-wide');
   }
+  bindUpsNoSpaces(overlay.querySelector('#_trkNum'), carrierSelectEl);
   overlay.querySelector('#_trkCancel').onclick = _close;
   overlay.querySelector('#_trkOk').onclick = function() {
-    var num = overlay.querySelector('#_trkNum').value.trim();
-    if (!num) { overlay.querySelector('#_trkErr').style.display = ''; return; }
     var carrier = overlay.querySelector('#_trkCarrier').value;
+    var num = sanitizeTrackNum(overlay.querySelector('#_trkNum').value.trim(), carrier);
+    if (!num) { overlay.querySelector('#_trkErr').style.display = ''; return; }
     var trackUrl = CARRIERS[carrier] ? (CARRIERS[carrier].includes('{num}') ? CARRIERS[carrier].replace('{num}', encodeURIComponent(num)) : CARRIERS[carrier]+encodeURIComponent(num)) : '';
     var cf = JSON.parse(localStorage.getItem('carrier_freq')||'{}'); cf[carrier]=(cf[carrier]||0)+1; localStorage.setItem('carrier_freq',JSON.stringify(cf));
     // Ulož tracking na bulk record i na všechny děti
@@ -5105,6 +5131,8 @@ async function saveItem(){
       if(num && carrier) return buildTrackingUrl(num, carrier) || undefined;
       return undefined;
     })()};
+  // UPS: mezery ve sledovacím čísle pryč (pojistka i pro starší uložená čísla)
+  if (d.trackingNum) d.trackingNum = sanitizeTrackNum(d.trackingNum, d.trackingCarrier);
   // Fetch buyRateEur — kurz ČNB pro datum nákupu
   if(d.buyCurrency==='EUR' && d.buyDate && d.buyPrice){
     var _bRate=await fetchRateForDate(d.buyDate);
@@ -5152,8 +5180,8 @@ async function saveItem(){
       }
       // Tracking URL — čti přímo z polí (ne z d kde může být undefined)
       var _manualUrl = (document.getElementById('fTrackUrl')||{}).value?.trim();
-      var _numField = (document.getElementById('fTrackNum')||{}).value?.trim();
       var _carrierField = (document.getElementById('fTrackCarrier')||{}).value;
+      var _numField = sanitizeTrackNum((document.getElementById('fTrackNum')||{}).value?.trim(), _carrierField);
       var _trackingWrapVisible = (function(){ var tw=document.getElementById('fTrackingWrap'); return tw && tw.style.display!=='none'; })();
       if (_manualUrl) {
         _merged.trackingUrl = _manualUrl;
@@ -8063,6 +8091,7 @@ function openBulkEditModal(bulkId) {
       '<button onclick="this.closest(\'[style*=fixed]\').remove()" style="background:var(--surface2);border:none;color:var(--muted);width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;">×</button></div>' +
       body + footer;
     ov.appendChild(box);
+    bindUpsNoSpaces(box.querySelector('#_beTrkNum'), box.querySelector('#_beTrkCarrier'));
     // Custom select pro měnu
     var curSel = box.querySelector('#_beC');
     if (curSel) initCustomSelect(curSel);
@@ -8175,8 +8204,8 @@ function openBulkEditModal(bulkId) {
         items[idx].waitState = selectedWs;
         getBulkItems(bulkId).forEach(function(ch){ var ci=items.findIndex(function(x){return x.id===ch.id;}); if(ci!==-1) items[ci].waitState=selectedWs; });
       }
-      var newTrkNum = box.querySelector('#_beTrkNum').value.trim();
       var newTrkCarrier = box.querySelector('#_beTrkCarrier').value.trim();
+      var newTrkNum = sanitizeTrackNum(box.querySelector('#_beTrkNum').value.trim(), newTrkCarrier);
       if (newTrkNum) {
         var trkUrl = CARRIERS[newTrkCarrier] ? (CARRIERS[newTrkCarrier].includes('{num}') ? CARRIERS[newTrkCarrier].replace('{num}', encodeURIComponent(newTrkNum)) : CARRIERS[newTrkCarrier]+encodeURIComponent(newTrkNum)) : '';
         items[idx].trackingNum = newTrkNum; items[idx].trackingCarrier = newTrkCarrier; items[idx].trackingUrl = trkUrl||items[idx].trackingUrl;
