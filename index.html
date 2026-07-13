@@ -3971,18 +3971,24 @@ function openDropdownsEditor() {
       label: 'Sklad (umístění)',
       getOpts: function() { return getLocOptions(); },
       saveOpts: saveLocOptions,
-      defaults: function() { return [...LOC_OPTS_DEFAULT]; }
+      defaults: function() { return [...LOC_OPTS_DEFAULT]; },
+      // Pole na položkách nesoucí tuto hodnotu — přejmenování se propíše sem
+      itemFields: ['location']
     },
     {
       key: 'payment',
       label: 'Payout na',
       getOpts: function() { return getPaymentOpts(); },
       saveOpts: savePaymentOpts,
-      defaults: function() { return [...PAYMENT_OPTS_DEFAULT]; }
+      defaults: function() { return [...PAYMENT_OPTS_DEFAULT]; },
+      // Způsob platby se v historii dat ukládá pod oběma názvy polí
+      itemFields: ['payoutMethod', 'paymentMethod']
     }
   ];
 
-  var state = configs.map(function(cfg) { return cfg.getOpts().slice(); });
+  // Každá položka drží orig (původní název při otevření) a val (aktuální).
+  // orig===null → nově přidaná. Rozdíl orig vs val = přejmenování → propíše se do položek.
+  var state = configs.map(function(cfg) { return cfg.getOpts().map(function(o) { return { orig: o, val: o }; }); });
 
   var ov = document.createElement('div');
   ov.className = 'mo open';
@@ -4042,8 +4048,8 @@ function openDropdownsEditor() {
       return function() {
         var i = document.getElementById('_de_inp_' + ci_);
         var val = i.value.trim();
-        if(!val || state[ci_].includes(val)) { i.focus(); return; }
-        state[ci_].push(val);
+        if(!val || state[ci_].some(function(e){ return e.val.toLowerCase() === val.toLowerCase(); })) { i.focus(); return; }
+        state[ci_].push({ orig: null, val: val }); // nová položka — bez propsání do dat
         i.value = '';
         renderSection(ci_);
         i.focus();
@@ -4064,7 +4070,7 @@ function openDropdownsEditor() {
     resetBtn.addEventListener('click', (function(ci_) {
       return function() {
         if(!confirm('Obnovit výchozí hodnoty pro "' + configs[ci_].label + '"?')) return;
-        state[ci_] = configs[ci_].defaults();
+        state[ci_] = configs[ci_].defaults().map(function(o){ return { orig: o, val: o }; });
         renderSection(ci_);
       };
     })(ci));
@@ -4135,7 +4141,25 @@ function openDropdownsEditor() {
   saveBtn.style.cssText = 'width:100%;padding:11px;font-size:14px;';
   saveBtn.textContent = 'Uložit vše';
   saveBtn.addEventListener('click', function() {
-    configs.forEach(function(cfg, ci) { cfg.saveOpts(state[ci]); });
+    var totalRenamed = 0;
+    configs.forEach(function(cfg, ci) {
+      // Přejmenování = položka, které se změnil val oproti orig (a orig existoval)
+      var renames = state[ci].filter(function(e){ return e.orig !== null && e.orig !== e.val; });
+      renames.forEach(function(r) {
+        (items || []).forEach(function(it) {
+          cfg.itemFields.forEach(function(field) {
+            if (it[field] === r.orig) { it[field] = r.val; totalRenamed++; }
+          });
+        });
+      });
+      // Ulož nový seznam názvů (val). Smazané položky se do dat nepropisují — hodnota tam zůstane.
+      cfg.saveOpts(state[ci].map(function(e){ return e.val; }));
+    });
+    if (totalRenamed > 0) {
+      sv(); renderStats(); renderItems();
+      try { buildLocationFilter(); } catch(e) {}
+      showToast('Přejmenování promítnuto do ' + totalRenamed + ' záznamů.');
+    }
     ov.remove();
     openSettings();
   });
@@ -4154,7 +4178,7 @@ function openDropdownsEditor() {
     var list = document.getElementById('_de_list_' + ci);
     if(!list) return;
     list.innerHTML = '';
-    state[ci].forEach(function(opt, i) {
+    state[ci].forEach(function(entry, i) {
       var row = document.createElement('div');
       row.draggable = false;
       row.dataset.ci = ci;
@@ -4170,29 +4194,29 @@ function openDropdownsEditor() {
 
       var lbl = document.createElement('input');
       lbl.type = 'text';
-      lbl.value = opt;
+      lbl.value = entry.val;
       lbl.title = 'Klikni pro přejmenování';
       lbl.style.cssText = 'flex:1;min-width:0;font-size:13px;background:none;border:1px solid transparent;border-radius:4px;color:var(--text);font-family:inherit;padding:3px 6px;outline:none;cursor:text;transition:border-color 0.15s,background 0.15s;';
-      var lastValid = opt;
+      var lastValid = entry.val;
       lbl.addEventListener('mousedown', function() { row.draggable = false; });
       lbl.addEventListener('mouseenter', function() { if(document.activeElement !== this) this.style.borderColor = 'var(--border)'; });
       lbl.addEventListener('mouseleave', function() { if(document.activeElement !== this) this.style.borderColor = 'transparent'; });
       lbl.addEventListener('focus', function() { this.style.borderColor = 'var(--accent)'; this.style.background = 'var(--surface)'; this.select(); });
-      lbl.addEventListener('input', function() { state[ci][i] = this.value; });
+      lbl.addEventListener('input', function() { state[ci][i].val = this.value; });
       lbl.addEventListener('keydown', function(e) {
         e.stopPropagation();
         if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-        else if (e.key === 'Escape') { this.value = lastValid; state[ci][i] = lastValid; this.blur(); }
+        else if (e.key === 'Escape') { this.value = lastValid; state[ci][i].val = lastValid; this.blur(); }
       });
       lbl.addEventListener('blur', function() {
         this.style.borderColor = 'transparent'; this.style.background = 'none';
         var v = this.value.trim();
-        var dup = state[ci].some(function(o, idx) { return idx !== i && String(o).toLowerCase() === v.toLowerCase(); });
+        var dup = state[ci].some(function(o, idx) { return idx !== i && o.val.toLowerCase() === v.toLowerCase(); });
         if (!v || dup) {
           if (v && dup) showToast('Možnost „' + v + '" už existuje.', 'err');
-          this.value = lastValid; state[ci][i] = lastValid;
+          this.value = lastValid; state[ci][i].val = lastValid;
         } else {
-          this.value = v; state[ci][i] = v; lastValid = v;
+          this.value = v; state[ci][i].val = v; lastValid = v;
         }
       });
 
