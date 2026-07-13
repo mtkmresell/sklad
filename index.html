@@ -4156,18 +4156,45 @@ function openDropdownsEditor() {
     list.innerHTML = '';
     state[ci].forEach(function(opt, i) {
       var row = document.createElement('div');
-      row.draggable = true;
+      row.draggable = false;
       row.dataset.ci = ci;
       row.dataset.i = i;
-      row.style.cssText = 'display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;cursor:grab;user-select:none;transition:opacity 0.15s,border-color 0.15s;';
+      row.style.cssText = 'display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;cursor:default;transition:opacity 0.15s,border-color 0.15s;';
 
       var handle = document.createElement('span');
       handle.textContent = '⠿';
-      handle.style.cssText = 'color:var(--muted2);font-size:13px;flex-shrink:0;';
+      handle.title = 'Přetáhni pro změnu pořadí';
+      handle.style.cssText = 'color:var(--muted2);font-size:13px;flex-shrink:0;cursor:grab;';
+      // Přetahovat lze jen za úchyt — jinak by nešlo kliknout do textu a přepsat ho
+      handle.addEventListener('mousedown', function() { row.draggable = true; });
 
-      var lbl = document.createElement('span');
-      lbl.style.cssText = 'flex:1;font-size:13px;';
-      lbl.textContent = opt;
+      var lbl = document.createElement('input');
+      lbl.type = 'text';
+      lbl.value = opt;
+      lbl.title = 'Klikni pro přejmenování';
+      lbl.style.cssText = 'flex:1;min-width:0;font-size:13px;background:none;border:1px solid transparent;border-radius:4px;color:var(--text);font-family:inherit;padding:3px 6px;outline:none;cursor:text;transition:border-color 0.15s,background 0.15s;';
+      var lastValid = opt;
+      lbl.addEventListener('mousedown', function() { row.draggable = false; });
+      lbl.addEventListener('mouseenter', function() { if(document.activeElement !== this) this.style.borderColor = 'var(--border)'; });
+      lbl.addEventListener('mouseleave', function() { if(document.activeElement !== this) this.style.borderColor = 'transparent'; });
+      lbl.addEventListener('focus', function() { this.style.borderColor = 'var(--accent)'; this.style.background = 'var(--surface)'; this.select(); });
+      lbl.addEventListener('input', function() { state[ci][i] = this.value; });
+      lbl.addEventListener('keydown', function(e) {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+        else if (e.key === 'Escape') { this.value = lastValid; state[ci][i] = lastValid; this.blur(); }
+      });
+      lbl.addEventListener('blur', function() {
+        this.style.borderColor = 'transparent'; this.style.background = 'none';
+        var v = this.value.trim();
+        var dup = state[ci].some(function(o, idx) { return idx !== i && String(o).toLowerCase() === v.toLowerCase(); });
+        if (!v || dup) {
+          if (v && dup) showToast('Možnost „' + v + '" už existuje.', 'err');
+          this.value = lastValid; state[ci][i] = lastValid;
+        } else {
+          this.value = v; state[ci][i] = v; lastValid = v;
+        }
+      });
 
       var del = document.createElement('button');
       del.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px;line-height:1;transition:color 0.15s;flex-shrink:0;';
@@ -4187,6 +4214,7 @@ function openDropdownsEditor() {
       });
       row.addEventListener('dragend', function() {
         row.style.opacity = '1';
+        row.draggable = false;
         list.querySelectorAll('[data-drop]').forEach(function(r) { r.style.borderColor = 'var(--border)'; delete r.dataset.drop; });
       });
       row.addEventListener('dragover', function(e) {
