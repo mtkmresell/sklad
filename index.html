@@ -37,6 +37,9 @@
 .pfm-btn.active[data-val="business"] { background:rgba(200,255,0,0.12); border-color:var(--accent); color:var(--accent); }
 .pfm-btn.active[data-val="personal"] { background:rgba(255,107,53,0.12); border-color:var(--accent2); color:var(--accent2); }
 .prof-badge { font-family:'DM Mono',monospace; font-size:9px; padding:2px 6px; border-radius:20px; background:#ff6b3518; color:#ff6b35; border:1px solid #ff6b3530; white-space:nowrap; }
+/* Otevřená kalkulačka marže: nákupní ceny v seznamu jsou klikatelné (předvyplní kalkulačku) */
+.calc-open .td-buy, .calc-open .pv-buy { cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+.calc-open .td-buy:hover, .calc-open .pv-buy:hover { color:var(--accent) !important; }
 /* Na užších obrazovkách by se přepínač profilů překrýval s centrovanými taby — taby přejdou do toku a přepínač vedle nich */
 @media(max-width:1150px){
   .header-tabs{ position:static; transform:none; order:3; pointer-events:auto; }
@@ -7030,6 +7033,28 @@ document.addEventListener('mouseout', function(e) {
 document.addEventListener('click', function(e) {
   try {
   if (e.target.tagName === 'A' && e.target.href) { return; }
+  // Kalkulačka marže otevřená: klik na nákupní cenu položky ji předvyplní (včetně měny)
+  var _calcEl = document.getElementById('moCalc');
+  if (_calcEl && _calcEl.style.display !== 'none') {
+    var _buyCell = e.target.closest('.td-buy, .pv-buy');
+    if (_buyCell) {
+      var _cIdEl = _buyCell.closest('[data-id]');
+      var _cIt = _cIdEl ? items.find(function(x){ return x.id === _cIdEl.dataset.id; }) : null;
+      if (_cIt && _cIt.buyPrice) {
+        var _cCur = _cIt.buyCurrency === 'EUR' ? 'EUR' : 'CZK';
+        var _cbi = document.getElementById('calcBuy');
+        if (_cbi) _cbi.value = _cIt.buyPrice;
+        var _cbc = document.getElementById('calcBuyCur');
+        if (_cbc) { _cbc.value = _cCur; if (_cbc._csSync) _cbc._csSync(); }
+        calcMargin();
+        // Rovnou fokus na prodejní cenu — stačí doplnit a je výsledek
+        var _csi = document.getElementById('calcSell');
+        if (_csi) { _csi.focus(); _csi.select(); }
+        showToast('Nákup ' + _cIt.buyPrice + ' ' + (_cCur === 'EUR' ? '€' : 'Kč') + ' vložen do kalkulačky.');
+        return;
+      }
+    }
+  }
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   e.stopPropagation();
@@ -10505,6 +10530,8 @@ function toggleCalc() {
   if (!el) return;
   var isOpen = el.style.display !== 'none';
   el.style.display = isOpen ? 'none' : 'block';
+  // Zvýrazni klikatelné nákupní ceny v seznamu (viz CSS .calc-open)
+  document.body.classList.toggle('calc-open', !isOpen);
   var btn = document.getElementById('btnCalc');
   if (btn) btn.classList.toggle('active', !isOpen);
   if (!isOpen) {
