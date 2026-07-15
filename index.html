@@ -1619,6 +1619,8 @@ function getCustomCats() {
 }
 function saveCustomCats(arr) {
   try { localStorage.setItem(SK_CUSTOM_CATS, JSON.stringify(arr)); } catch(e){}
+  // Definice kategorií patří do cloudu — jinak se na jiných zařízeních zobrazují surové klíče
+  try { _ioCloudSync(); } catch(e){}
 }
 function getCustomCat(key) {
   return getCustomCats().find(function(c){ return c.key === key; }) || null;
@@ -1634,7 +1636,34 @@ function getCustomCatColor(key) {
 function getCatLabel(cat) {
   if(CAT_L_BUILTIN[cat]) return CAT_L_BUILTIN[cat];
   var custom = getCustomCat(cat);
-  return custom ? custom.label : cat;
+  if (custom) return custom.label;
+  // Chybějící definice vlastní kategorie (jiné zařízení / smazané úložiště):
+  // odvoď čitelný název z klíče, ať se nikdy nezobrazí surové custom_xxx_123
+  if (typeof cat === 'string' && cat.indexOf('custom_') === 0) {
+    var m = cat.match(/^custom_(.+?)_\d+$/);
+    if (m) return m[1].split('_').map(function(w){ return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+  }
+  return cat;
+}
+
+// Samoopravná funkce: doplní chybějící definice vlastních kategorií podle klíčů
+// použitých na položkách (po ztrátě localStorage, odhlášení nebo na jiném zařízení)
+function healCustomCats() {
+  var cats = getCustomCats();
+  var known = {};
+  cats.forEach(function(c){ known[c.key] = 1; });
+  var added = 0;
+  (items || []).forEach(function(it) {
+    var k = it.category;
+    if (!k || known[k] || CAT_L_BUILTIN[k] || String(k).indexOf('custom_') !== 0) return;
+    cats.push({ key: k, label: getCatLabel(k) });
+    known[k] = 1; added++;
+  });
+  if (added) {
+    saveCustomCats(cats);
+    try { buildCatSelects(); } catch(e) {}
+  }
+  return added;
 }
 var CAT_L = new Proxy({}, {
   get: function(t, cat) { return getCatLabel(cat); }
@@ -2232,6 +2261,13 @@ function _applyCloudData(data) {
   if (data.ioLimit != null && isFinite(parseFloat(data.ioLimit))) {
     try { localStorage.setItem(IO_LIMIT_KEY, String(data.ioLimit)); } catch(e) {}
   }
+  // Vlastní kategorie z cloudu (prázdný seznam nepřepisuje lokální — ochrana proti výmazu)
+  if (Array.isArray(data.customCats) && data.customCats.length) {
+    try { localStorage.setItem(SK_CUSTOM_CATS, JSON.stringify(data.customCats)); } catch(e) {}
+    try { buildCatSelects(); } catch(e) {}
+  }
+  // Doplň definice kategorií chybějící pro klíče použité na položkách
+  try { healCustomCats(); } catch(e) {}
   // Načti historickou cache položek (uložena v stejném dokumentu)
   if (data.itemCache) {
     try {
@@ -2274,7 +2310,8 @@ function _buildCloudPayload() {
       return out;
     })(),
     retailers: (function(){ try { return getRetailers(); } catch(e){ return []; } })(),
-    ioLimit: (function(){ try { return getIoLimit(); } catch(e){ return null; } })()
+    ioLimit: (function(){ try { return getIoLimit(); } catch(e){ return null; } })(),
+    customCats: (function(){ try { return getCustomCats(); } catch(e){ return []; } })()
   };
 }
 
@@ -2436,7 +2473,8 @@ function doJsonBackup() {
     items: items,
     platGroups: (function(){ try{ return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); }catch(e){ return null; } })(),
     retailers: getRetailers(),
-    ioLimit: getIoLimit()
+    ioLimit: getIoLimit(),
+    customCats: getCustomCats()
   };
   var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   var url = URL.createObjectURL(blob);
@@ -2468,6 +2506,10 @@ function importJsonBackup(file) {
         }
         if (data.ioLimit != null && isFinite(parseFloat(data.ioLimit))) {
           try { localStorage.setItem(IO_LIMIT_KEY, String(data.ioLimit)); } catch(e) {}
+        }
+        if (Array.isArray(data.customCats) && data.customCats.length) {
+          try { localStorage.setItem(SK_CUSTOM_CATS, JSON.stringify(data.customCats)); } catch(e) {}
+          try { buildCatSelects(); } catch(e) {}
         }
       }
       if (!imported || !imported.length) {
@@ -10407,6 +10449,7 @@ window.renderItems = renderItems;
 function _init() {
   try{load();}catch(e){console.error('load',e);items=[...PRELOAD,...CSV_ITEMS].map(it=>({...it}));}
   if(!items || items.length===0){items=[...PRELOAD,...CSV_ITEMS].map(it=>({...it}));}
+  try{healCustomCats();}catch(e){}
   // Bazoš expirace hned jen pokud nečekáme cloud session — jinak až po prvním snapshotu
   if(!localStorage.getItem('sklad_v3_savedAt')){ bazosExpireCheckSafe(); }
   else { setTimeout(function(){ if(!window._fbUser) bazosExpireCheckSafe(); }, 30000); } // pojistka jen pro odhlášené
