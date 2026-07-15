@@ -10076,6 +10076,14 @@ function addContactRow(type, value, isPrimary) {
     + '<input type="radio" name="crmPrimary" value="'+idx+'"'+(isPrimary?' checked':'')+' style="accent-color:var(--accent);"> hlavní</label>'
     + '<button type="button" onclick="removeCrmContactRow('+idx+')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0 4px;line-height:1;" title="Odebrat">\xd7</button>';
   container.appendChild(row);
+  // Nativní select nahraď stylovaným custom selectem (jako všude jinde v aplikaci)
+  var typeSel = row.querySelector('select');
+  if (typeSel && typeof initCustomSelect === 'function') {
+    initCustomSelect(typeSel);
+    if (typeSel.parentNode && typeSel.parentNode.classList.contains('cs-wrap')) {
+      typeSel.parentNode.classList.add('cs-fullwidth');
+    }
+  }
 }
 
 function removeCrmContactRow(idx) {
