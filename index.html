@@ -2762,9 +2762,9 @@ function switchTab(t){
   // Tlačítko Analytika skladu: jen na Stock tabu
   var btnSA = document.getElementById('btnStockAnalytics');
   if(btnSA) btnSA.style.display = (t==='stock') ? '' : 'none';
-  // Prodáno tab: skryj search, category, brand, size filtry (má vlastní)
+  // Prodáno tab: skryj category, brand, size filtry (má vlastní); search zůstává i pro Prodáno
   var hideForSold = t==='sold';
-  if(fsearch) fsearch.style.display = hideForSold ? 'none' : '';
+  if(fsearch) fsearch.style.display = '';
   setVis(fcat, !hideForSold);
   if(fbrand) fbrand.style.display = hideForSold ? 'none' : '';
   if(fsize) fsize.style.display = hideForSold ? 'none' : '';
@@ -11900,6 +11900,7 @@ function renderSoldView(){
   if(!grid)return;
   var soldAll=getSoldItems();
   var soldWhereFilter=document.getElementById('filterSoldWhere')?.value||'';
+  var soldQ=(document.getElementById('searchInput')?.value||'').trim().toLowerCase();
   var sold=soldAll.filter(function(it){
     var d=it.payoutDate||it.saleDate||'';
     var _yr='', _mo='';
@@ -11907,6 +11908,12 @@ function renderSoldView(){
     if(soldYearFilter!=='all'&&_yr!==soldYearFilter)return false;
     if(soldMonthFilter!=='all'&&_mo!==soldMonthFilter)return false;
     if(soldWhereFilter&&(it.soldWhere||'')!==soldWhereFilter)return false;
+    if(soldQ){
+      var _hit=[it.name,it.sku,it.orderNum,it.saleRef,it.soldWhere,it.buyWhere].some(function(v){ return (v||'').toLowerCase().includes(soldQ); });
+      // Bulk balík: prohledej i názvy a SKU položek uvnitř
+      if(!_hit && it.type==='bulk') _hit=getBulkItems(it.id).some(function(ch){ return (ch.name||'').toLowerCase().includes(soldQ)||(ch.sku||'').toLowerCase().includes(soldQ); });
+      if(!_hit) return false;
+    }
     return true;
   });
   if(!soldAll.length){grid.innerHTML='';empty.style.display='';return;}
@@ -11916,9 +11923,11 @@ function renderSoldView(){
     var p=d.split('.'); return p.length===3?p[2]:d.substring(0,4);
   }).filter(Boolean))].sort(function(a,b){return b-a;});
   var stats=calcSoldStats(sold);
-  // Viditelnost filtru míst
+  // Viditelnost filtru míst a vyhledávání (v analytice se skrývají)
   var _fswEl=document.getElementById('filterSoldWhere');
   if(_fswEl){var _fswWrapEl=_fswEl.closest('.cs-wrap')||_fswEl;_fswWrapEl.style.display=soldViewMode==='analytics'?'none':'';}
+  var _srchWrapEl=document.querySelector('.search-wrap');
+  if(_srchWrapEl) _srchWrapEl.style.display=soldViewMode==='analytics'?'none':'';
   if(soldViewMode==='analytics'){
     grid.innerHTML=renderSoldAnalytics(sold,soldAll,stats,years);setTimeout(function(){
     animateCountUp();initCumChart();initAnDragDrop();
