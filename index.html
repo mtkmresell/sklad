@@ -84,6 +84,8 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 .ta-btn.t-sell:hover{background:var(--accent);color:#000;border-color:var(--accent);}
 .ta-btn.t-del:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
 .crm-section{padding:0 18px 80px;}
+/* Sekce zákazníků scrolluje sama (body má overflow-y:hidden, jinak by seznam nešel posunout) */
+#customersSection{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(200,255,0,0.4) var(--surface2);}
 .crm-top-bar{display:flex;align-items:center;gap:10px;padding:13px 18px 0;flex-wrap:wrap;}
 .crm-filters{padding:10px 18px 6px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
 .crm-mode-bar{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;}
@@ -9619,6 +9621,30 @@ function crmLookupProduct(sku, name) {
   return null;
 }
 
+// Rozpozná dvojí/rozsahovou velikost v kartě zákazníka (42/43, 42-43, "42 nebo 43", "M L")
+function _crmSizeIsMulti(v){
+  v=(v||'').trim();
+  if(!v) return false;
+  if(/[\/,;]|(^|\s)(nebo|or|a)(\s|$)/i.test(v)) return true;
+  if(/\d\s*-\s*\d/.test(v)) return true; // rozsah pomlčkou mezi čísly
+  var nums=v.match(/\d+(?:[.,]\d+)?/g);
+  if(nums && nums.length>=2) return true;
+  var parts=v.split(/\s+/).filter(Boolean);
+  if(parts.length>=2 && parts.every(function(p){return /^[a-z]{1,3}$/i.test(p);})) return true;
+  return false;
+}
+// Velikost bere z KARTY ZÁKAZNÍKA (ne z produktu) dle kategorie zboží
+function _crmCustomerSize(cust, category){
+  if(!cust) return '';
+  if(category==='sneakers') return (cust.size_shoes_eu||'').trim();
+  if(category==='obleceni'){
+    var top=(cust.size_clothing_top||'').trim();
+    var bot=(cust.size_clothing_bottom||'').trim();
+    if(top && bot) return ''; // dvě různé míry (vrchní+spodní) → nejednoznačné, nevyplňuj
+    return top || bot || '';
+  }
+  return ''; // ostatní kategorie nemají velikost
+}
 // Po zadání SKU / názvu doplní zbývající údaje z archivu (jen prázdná pole nepřepisuje).
 var _crmHistCatAuto = true;
 function crmAutoFillHist(source) {
@@ -9633,12 +9659,18 @@ function crmAutoFillHist(source) {
   if (!m) return;
   if (nameEl && !name && m.name) nameEl.value = m.name;
   if (skuEl && !sku && m.sku) skuEl.value = m.sku;
-  var sizeEl = document.getElementById('crmHMSize');
-  if (sizeEl && !sizeEl.value.trim() && m.size) sizeEl.value = m.size;
   var catSel = document.getElementById('crmHMCategory');
+  var catForSize = m.category || (catSel ? catSel.value : '');
   if (catSel && m.category && _crmHistCatAuto && catSel.querySelector('option[value="'+m.category+'"]')) {
     catSel.value = m.category;
     if (catSel._csSync) catSel._csSync();
+  }
+  // Velikost z karty zákazníka; dvojí velikost v kartě → nevyplní se
+  var sizeEl = document.getElementById('crmHMSize');
+  if (sizeEl && !sizeEl.value.trim()) {
+    var cust = (window.customers||[]).find(function(x){return x.id===_crmHistCid;}) || (window.partners||[]).find(function(x){return x.id===_crmHistCid;});
+    var custSize = _crmCustomerSize(cust, catForSize);
+    if (custSize && !_crmSizeIsMulti(custSize)) sizeEl.value = custSize;
   }
 }
 
