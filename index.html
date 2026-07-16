@@ -9589,6 +9589,59 @@ function crmRemoveTag(id,type,tag){
 }
 
 var _crmHistCid=null, _crmHistEditIdx=null;
+// Najde produkt v archivu (živé/historické položky + cache) podle SKU nebo názvu.
+// Vrací nejnovější přesnou shodu, nebo null když v archivu nic není.
+function crmLookupProduct(sku, name) {
+  function _nn(s){ return (s||'').toLowerCase().trim().replace(/\s+/g,' ').normalize('NFD').replace(/[̀-ͯ]/g,''); }
+  function _recency(it){ return it && it.dateAdded ? new Date(it.dateAdded).getTime() : 0; }
+  var allItems = (window.items||[]).concat(window.PRELOAD||[]).concat(window.CSV_ITEMS||[])
+    .filter(function(it){ return it && it.type!=='bulk'; });
+  var match = null;
+  if (sku) {
+    var skuN = sku.trim().toLowerCase();
+    var bySku = allItems.filter(function(it){ return it.sku && it.sku.trim().toLowerCase()===skuN; });
+    if (bySku.length) match = bySku.sort(function(a,b){ return _recency(b)-_recency(a); })[0];
+  }
+  if (!match && name) {
+    var nn = _nn(name);
+    var byName = allItems.filter(function(it){ return it.name && _nn(it.name)===nn; });
+    if (byName.length) match = byName.sort(function(a,b){ return _recency(b)-_recency(a); })[0];
+  }
+  if (match) return { name: match.name, sku: match.sku||'', category: match.category||'', size: match.size||'' };
+  // Fallback — historická cache (drží name↔sku i pro dávno smazané položky; bez kategorie/velikosti)
+  try {
+    var cache = itemCacheGet();
+    var c = null;
+    if (sku)  c = cache['sku:' + sku.trim().toLowerCase()];
+    if (!c && name) c = cache['name:' + name.trim().toLowerCase()];
+    if (c) return { name: c.name||'', sku: c.sku||'', category: '', size: '' };
+  } catch(e){}
+  return null;
+}
+
+// Po zadání SKU / názvu doplní zbývající údaje z archivu (jen prázdná pole nepřepisuje).
+var _crmHistCatAuto = true;
+function crmAutoFillHist(source) {
+  var skuEl = document.getElementById('crmHMSku');
+  var nameEl = document.getElementById('crmHMItemName');
+  var sku = skuEl ? skuEl.value.trim() : '';
+  var name = nameEl ? nameEl.value.trim() : '';
+  if (source==='sku' && !sku) return;
+  if (source==='name' && !name) return;
+  // Podle toho, kam uživatel píše — nepřepisuj právě editované pole
+  var m = crmLookupProduct(source==='sku' ? sku : '', source==='name' ? name : '');
+  if (!m) return;
+  if (nameEl && !name && m.name) nameEl.value = m.name;
+  if (skuEl && !sku && m.sku) skuEl.value = m.sku;
+  var sizeEl = document.getElementById('crmHMSize');
+  if (sizeEl && !sizeEl.value.trim() && m.size) sizeEl.value = m.size;
+  var catSel = document.getElementById('crmHMCategory');
+  if (catSel && m.category && _crmHistCatAuto && catSel.querySelector('option[value="'+m.category+'"]')) {
+    catSel.value = m.category;
+    if (catSel._csSync) catSel._csSync();
+  }
+}
+
 function _crmHistFillCatSelect(currentVal){
   var el=document.getElementById('crmHMCategory'); if(!el) return;
   var builtinCats=[['sneakers','Sneakers'],['obleceni','Oblečení'],['pokemon','Pokémon'],['lego','LEGO'],['hotwheels','Hot Wheels'],['alternate','Alternate'],['sberatelske','Sběratelské'],['jine','Jiné']];
@@ -9617,6 +9670,10 @@ function _openCrmHistModalFill(h){
   if(saveBtn) saveBtn.textContent=_crmHistEditIdx!==null?'Uložit změny':'Uložit záznam';
   ['crmHMType','crmHMCategory','crmHMPayment','crmHMStatus','crmHMPriceCur'].forEach(function(fid){var el=document.getElementById(fid);if(el&&el.tagName==='SELECT'){initCustomSelect(el);if(el._csSync)el._csSync();}});
   var dp=document.getElementById('crmHMDate');if(dp){initCustomDatePicker(dp);if(dp._cdpSync)dp._cdpSync();}
+  // Našeptávání z archivu: u nového záznamu smí přepsat výchozí kategorii, u editace ne (ctí uloženou)
+  _crmHistCatAuto = !h;
+  var _catSel=document.getElementById('crmHMCategory');
+  if(_catSel && !_catSel._crmAutoBound){ _catSel._crmAutoBound=true; _catSel.addEventListener('change', function(){ _crmHistCatAuto=false; }); }
 }
 function openCrmHistModal(cid){
   _crmHistCid=cid; _crmHistEditIdx=null;
@@ -14353,12 +14410,12 @@ rebuildBrandTables();
     <div class="fs">
       <div class="fs-title">Zboží</div>
       <div class="fg">
-        <div class="fi full"><label>Název zboží</label><input type="text" id="crmHMItemName" placeholder="Nike Air Max 90 White"></div>
+        <div class="fi full"><label>Název zboží</label><input type="text" id="crmHMItemName" placeholder="Nike Air Max 90 White" oninput="crmAutoFillHist('name')"></div>
         <div class="fi"><label>Kategorie</label>
           <select id="crmHMCategory"></select>
         </div>
         <div class="fi"><label>Velikost</label><input type="text" id="crmHMSize" placeholder="42, M, XL…"></div>
-        <div class="fi"><label>SKU / Artikl</label><input type="text" id="crmHMSku" placeholder="CW2288-111"></div>
+        <div class="fi"><label>SKU / Artikl</label><input type="text" id="crmHMSku" placeholder="CW2288-111" oninput="crmAutoFillHist('sku')"></div>
         <div class="fi full"><label>Sledovací číslo</label><input type="text" id="crmHMTracking" placeholder="CS1234567890CZ"></div>
       </div>
     </div>
