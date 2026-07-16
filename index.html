@@ -9211,7 +9211,9 @@ function _renderCrmDetailHeader(c) {
     +'<div><span class="cs-status '+(scls[c.status]||'cs-status-bezny')+'">'+(slbl[c.status]||c.status||'—')+'</span>'
     +'<span style="font-family:Syne,sans-serif;font-size:19px;font-weight:800;margin-left:6px;">'+escHtml(c.name)+'</span>'
     +'<span style="font-size:16px;margin-left:8px;">'+stars+'</span></div>'
-    +'<button class="xb" onclick="closeCustomerDetail()">&#215;</button></div>'
+    +'<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">'
+    +'<button class="xb" data-tip="Smazat zákazníka" onclick="deleteCustomer(\''+escHtml(c.id)+'\')" onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'\'">&#128465;</button>'
+    +'<button class="xb" onclick="closeCustomerDetail()">&#215;</button></div></div>'
     +(primary?'<div style="font-size:12px;color:var(--muted);margin-top:5px;">'+escHtml(primary.type)+': <strong>'+escHtml(primary.value)+'</strong></div>':'')
     +(c.note_quick?'<div style="font-size:12px;color:var(--muted);margin-top:4px;font-style:italic;">'+escHtml(c.note_quick)+'</div>':'')
     +fup;
@@ -9304,8 +9306,12 @@ function _crmTabOverview(c){
         +'</div>';
     }
   }
+  // Delší poznámka pro kontext — editovatelná přímo v detailu
+  var noteHtml='<div style="margin-top:16px;"><span class="crm-sec-label">Poznámka (detail)</span>'
+    +'<textarea id="crmDetailNote" placeholder="Delší kontext k zákazníkovi — vše, co se nevejde do krátké poznámky na kartě…" style="width:100%;min-height:90px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;padding:9px 11px;outline:none;resize:vertical;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'">'+escHtml(c.note_special||'')+'</textarea>'
+    +'<button class="icon-btn" style="margin-top:8px;" onclick="crmSaveDetailNote(\''+escHtml(c.id)+'\')">Uložit poznámku</button></div>';
   return tagSection+'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+brandsHtml
-    +(c.note_special?'<div style="margin-top:14px;background:var(--surface2);border-radius:8px;padding:11px;font-size:13px;"><span class="crm-sec-label">Speciální poznámka</span>'+escHtml(c.note_special)+'</div>':'')
+    +noteHtml
     +wishHtml;
 }
 
@@ -9531,6 +9537,42 @@ function _crmCreateMinimal(name, mode){
   return id;
 }
 // Action handlers
+// Uloží delší poznámku z detailu (pole note_special)
+function crmSaveDetailNote(id){
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
+  var el=document.getElementById('crmDetailNote'); if(!el) return;
+  c.note_special=(el.value||'').trim();
+  c.updatedAt=new Date().toISOString();
+  saveCrmToFirestore(); showToast('Poznámka uložena.');
+}
+
+// Smaže kartu zákazníka/partnera. Napojené prodeje zůstávají, jen se odpojí.
+function deleteCustomer(id){
+  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
+  var isB2c=customers.some(function(x){return x.id===id;});
+  var linked=(items||[]).filter(function(it){return it.linkedCustomerId===id;}).length;
+  var histCnt=(c.contact_history||[]).length;
+  var detail=[];
+  if(linked) detail.push(linked+' napojených prodejů se odpojí (položky zůstanou)');
+  if(histCnt) detail.push(histCnt+' záznamů historie se smaže');
+  makeConfirmOverlay(
+    'Smazat '+(isB2c?'zákazníka':'partnera')+' „'+escHtml(c.name)+'"?'
+    +'<br><span style="color:var(--muted);font-size:12px;">'+(detail.length?detail.join(', ')+'. ':'')+'Akce je nevratná.</span>',
+    'Smazat', 'var(--danger)', function(){
+      if(linked){
+        items.forEach(function(it){ if(it.linkedCustomerId===id) it.linkedCustomerId=''; });
+        sv();
+      }
+      customers=customers.filter(function(x){return x.id!==id;});
+      partners=partners.filter(function(x){return x.id!==id;});
+      saveCrmToFirestore();
+      closeCustomerDetail();
+      renderCustomers();
+      try{ updateCrmFollowupBadge(); }catch(e){}
+      showToast((isB2c?'Zákazník':'Partner')+' „'+c.name+'" smazán.');
+    });
+}
+
 function crmSaveBehavior(id){
   var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   c.payment_reliability=document.getElementById('crmBPayRel').value;
