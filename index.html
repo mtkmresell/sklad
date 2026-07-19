@@ -2268,6 +2268,13 @@ function _applyCloudData(data) {
     try { localStorage.setItem(SK_CUSTOM_CATS, JSON.stringify(data.customCats)); } catch(e) {}
     try { buildCatSelects(); } catch(e) {}
   }
+  // Seznamy dropdownů (Payout na / Sklad umístění) — prázdný seznam nepřepisuje lokální
+  if (Array.isArray(data.paymentOpts) && data.paymentOpts.length) {
+    try { localStorage.setItem(SK_PAYMENT_OPTS, JSON.stringify(data.paymentOpts)); } catch(e) {}
+  }
+  if (Array.isArray(data.locOpts) && data.locOpts.length) {
+    try { localStorage.setItem(SK_LOC_OPTS, JSON.stringify(data.locOpts)); } catch(e) {}
+  }
   // Doplň definice kategorií chybějící pro klíče použité na položkách
   try { healCustomCats(); } catch(e) {}
   // Načti historickou cache položek (uložena v stejném dokumentu)
@@ -2313,7 +2320,10 @@ function _buildCloudPayload() {
     })(),
     retailers: (function(){ try { return getRetailers(); } catch(e){ return []; } })(),
     ioLimit: (function(){ try { return getIoLimit(); } catch(e){ return null; } })(),
-    customCats: (function(){ try { return getCustomCats(); } catch(e){ return []; } })()
+    customCats: (function(){ try { return getCustomCats(); } catch(e){ return []; } })(),
+    // Jen explicitně uložené seznamy — jinak by čerstvé zařízení přepsalo cloud výchozími hodnotami
+    paymentOpts: (function(){ try { var v = localStorage.getItem(SK_PAYMENT_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })(),
+    locOpts: (function(){ try { var v = localStorage.getItem(SK_LOC_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })()
   };
 }
 
@@ -2476,7 +2486,9 @@ function doJsonBackup() {
     platGroups: (function(){ try{ return JSON.parse(localStorage.getItem('sklad_plat_groups_v1')||'null'); }catch(e){ return null; } })(),
     retailers: getRetailers(),
     ioLimit: getIoLimit(),
-    customCats: getCustomCats()
+    customCats: getCustomCats(),
+    paymentOpts: (function(){ try { var v = localStorage.getItem(SK_PAYMENT_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })(),
+    locOpts: (function(){ try { var v = localStorage.getItem(SK_LOC_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })()
   };
   var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   var url = URL.createObjectURL(blob);
@@ -2512,6 +2524,12 @@ function importJsonBackup(file) {
         if (Array.isArray(data.customCats) && data.customCats.length) {
           try { localStorage.setItem(SK_CUSTOM_CATS, JSON.stringify(data.customCats)); } catch(e) {}
           try { buildCatSelects(); } catch(e) {}
+        }
+        if (Array.isArray(data.paymentOpts) && data.paymentOpts.length) {
+          try { localStorage.setItem(SK_PAYMENT_OPTS, JSON.stringify(data.paymentOpts)); } catch(e) {}
+        }
+        if (Array.isArray(data.locOpts) && data.locOpts.length) {
+          try { localStorage.setItem(SK_LOC_OPTS, JSON.stringify(data.locOpts)); } catch(e) {}
         }
       }
       if (!imported || !imported.length) {
@@ -3947,6 +3965,7 @@ function getPaymentOpts() {
 }
 function savePaymentOpts(arr) {
   try { localStorage.setItem(SK_PAYMENT_OPTS, JSON.stringify(arr)); } catch(e){}
+  try { _ioCloudSync(); } catch(e){}
 }
 
 function openPaymentDrop() {
@@ -4850,6 +4869,7 @@ function getLocOptions() {
 }
 function saveLocOptions(arr) {
   try { localStorage.setItem(SK_LOC_OPTS, JSON.stringify(arr)); } catch(e){}
+  try { _ioCloudSync(); } catch(e){}
 }
 
 function openLocDrop() {
