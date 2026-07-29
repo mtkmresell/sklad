@@ -3121,8 +3121,9 @@ function renderStats(){
     '<div class="stat-card" data-action="nextsold" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;"><div class="stat-label">'+_curSoldLbl+'</div><div class="stat-value sv-yellow">'+_curSoldVal+'</div></div>'+
     '<div class="stat-card" data-action="nextprofit" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;min-width:175px;"><div class="stat-label">'+_curProfitLbl+'</div><div class="stat-value '+(_curProfitVal>=0?'sv-green':'sv-red')+'">'+czkSign(_curProfitVal)+'</div></div>'+
     '<div class="stat-card" data-action="nextrev" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;min-width:175px;max-width:175px;width:175px;"><div class="stat-label">'+_curRevLbl+'</div><div class="stat-value sv-orange">'+czk(_curRevVal)+'</div></div>'+
-    (activeProfile==='business'?(function(){
-      // Limit identifikované osoby — jen v profilu Podnikání
+    (activeProfile!=='personal'?(function(){
+      // Limit identifikované osoby — v Podnikání i ve Vše (v Osobní ne).
+      // ioYearStats počítá vždy jen podnikatelské nákupy, takže číslo je stejné v obou profilech.
       var _ioLimit=getIoLimit();
       var _ioSt=ioYearStats(_ym_y);
       var _ioPct=_ioLimit>0?_ioSt.net/_ioLimit*100:0;
