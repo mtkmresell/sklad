@@ -9220,6 +9220,7 @@ function openCustomerDetail(id) {
 }
 
 function closeCustomerDetail() {
+  try { crmFlushDetailNote(); } catch(e) {}
   document.getElementById('customerDetailModal').classList.remove('open');
   crmDetailId = null;
 }
@@ -9336,10 +9337,10 @@ function _crmTabOverview(c){
         +'</div>';
     }
   }
-  // Delší poznámka pro kontext — editovatelná přímo v detailu
+  // Delší poznámka pro kontext — edituje se přímo tady, ukládá se sama (bez tlačítka)
   var noteHtml='<div style="margin-top:16px;"><span class="crm-sec-label">Poznámka (detail)</span>'
-    +'<textarea id="crmDetailNote" placeholder="Delší kontext k zákazníkovi — vše, co se nevejde do krátké poznámky na kartě…" style="width:100%;min-height:90px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;padding:9px 11px;outline:none;resize:vertical;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'">'+escHtml(c.note_special||'')+'</textarea>'
-    +'<button class="icon-btn" style="margin-top:8px;" onclick="crmSaveDetailNote(\''+escHtml(c.id)+'\')">Uložit poznámku</button></div>';
+    +'<textarea id="crmDetailNote" oninput="crmSaveDetailNote(\''+escHtml(c.id)+'\')" placeholder="Delší kontext k zákazníkovi — vše, co se nevejde do krátké poznámky na kartě…" style="width:100%;min-height:90px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;padding:9px 11px;outline:none;resize:vertical;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'">'+escHtml(c.note_special||'')+'</textarea>'
+    +'<div id="crmDetailNoteHint" style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;margin-top:5px;height:13px;">Ukládá se automaticky</div></div>';
   return tagSection+'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+brandsHtml
     +noteHtml
     +wishHtml;
@@ -9567,14 +9568,31 @@ function _crmCreateMinimal(name, mode){
   return id;
 }
 // Action handlers
-// Uloží delší poznámku z detailu (pole note_special)
+// Uloží delší poznámku z detailu (pole note_special). Volá se při psaní —
+// do paměti hned, zápis do úložiště/cloudu se sdruží, ať se nespamuje Firestore.
+var _crmNoteSaveTimer=null;
 function crmSaveDetailNote(id){
   var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   var el=document.getElementById('crmDetailNote'); if(!el) return;
   c.note_special=(el.value||'').trim();
   c.updatedAt=new Date().toISOString();
-  saveCrmToFirestore(); showToast('Poznámka uložena.');
+  var hint=document.getElementById('crmDetailNoteHint');
+  if(hint) hint.textContent='Ukládá se…';
+  if(_crmNoteSaveTimer) clearTimeout(_crmNoteSaveTimer);
+  _crmNoteSaveTimer=setTimeout(function(){
+    _crmNoteSaveTimer=null;
+    saveCrmToFirestore(true);
+    var h=document.getElementById('crmDetailNoteHint');
+    if(h) h.textContent='Uloženo';
+  }, 600);
 }
+// Dopiš rozepsanou poznámku dřív, než se detail zavře nebo se odejde ze stránky
+function crmFlushDetailNote(){
+  if(!_crmNoteSaveTimer) return;
+  clearTimeout(_crmNoteSaveTimer); _crmNoteSaveTimer=null;
+  saveCrmToFirestore(true);
+}
+window.addEventListener('beforeunload', crmFlushDetailNote);
 
 // Smaže kartu zákazníka/partnera. Napojené prodeje zůstávají, jen se odpojí.
 function deleteCustomer(id){
@@ -9892,6 +9910,7 @@ function openEditCustomerModal(id){
   document.getElementById('crmFldName').value=c.name||'';
   document.getElementById('crmFldStatus').value=c.status||(_editMode==='b2b'?'aktivni':'bezny');
   document.getElementById('crmFldNoteQuick').value=c.note_quick||'';
+  var _nsp=document.getElementById('crmFldNoteSpecial'); if(_nsp) _nsp.value=c.note_special||'';
   document.getElementById('crmFldShoeEu').value=c.size_shoes_eu||'';
   document.getElementById('crmFldTop').value=c.size_clothing_top||'';
   document.getElementById('crmFldBottom').value=c.size_clothing_bottom||'';
@@ -9938,15 +9957,17 @@ function loadCrmFromFirestore() {
   }, function(err) { console.error('CRM snapshot:', err); showToast('CRM sync chyba: '+(err.message||err),'err'); });
 }
 
-function saveCrmToFirestore() {
+// silent = ulož bez hlášky (používá automatické ukládání poznámky při psaní)
+function saveCrmToFirestore(silent) {
+  var savedAt = new Date().toISOString();
+  // Lokálně ulož vždy — i bez přihlášení, jinak by se změny ztratily při načtení stránky
+  try { localStorage.setItem('sklad_crm', JSON.stringify({customers:customers,partners:partners,savedAt:savedAt})); } catch(e) {}
   if (!window._fbUser || !window._fbDb || !window._fbFns) return;
   var fns = window._fbFns;
-  var savedAt = new Date().toISOString();
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'crm', 'main');
   fns.setDoc(docRef, {customers:customers, partners:partners, savedAt:savedAt})
-    .then(function(){ showToast('CRM uloženo do cloudu ✓'); })
+    .then(function(){ if(!silent) showToast('CRM uloženo do cloudu ✓'); })
     .catch(function(e){ showToast('Chyba ukládání CRM: '+(e.message||e),'err'); });
-  try { localStorage.setItem('sklad_crm', JSON.stringify({customers:customers,partners:partners,savedAt:savedAt})); } catch(e) {}
 }
 
 /* ══════════════════════════════════════
@@ -10186,7 +10207,7 @@ function openNewCustomerModal() {
   crmNewRating = 0;
   _crmContactIdx = 0;
   _crmUpdateModalForMode(crmMode);
-  ['crmFldName','crmFldNoteQuick','crmFldShoeEu','crmFldTop','crmFldBottom','crmFldSizeNote','crmFldFollowupNote','crmFldIco','crmFldDic','crmFldWeb'].forEach(function(id){
+  ['crmFldName','crmFldNoteQuick','crmFldNoteSpecial','crmFldShoeEu','crmFldTop','crmFldBottom','crmFldSizeNote','crmFldFollowupNote','crmFldIco','crmFldDic','crmFldWeb'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.value = '';
   });
   document.getElementById('crmFldStatus').value = crmMode==='b2b' ? 'aktivni' : 'bezny';
@@ -10277,7 +10298,8 @@ function saveNewCustomer() {
   var id = crmEditId || ((crmEditMode==='b2b'?'p':'c')+Date.now().toString(36)+Math.random().toString(36).slice(2,6));
   var now = new Date().toISOString();
   var existing = crmEditId ? _arr.find(function(c){return c.id===crmEditId;}) : null;
-  var customer = {
+  // Základ z původního záznamu — jinak by úprava zahodila vše, co níže není vyjmenované
+  var customer = Object.assign({}, existing || {}, {
     id: id,
     createdAt: existing ? existing.createdAt : now,
     updatedAt: now,
@@ -10285,6 +10307,7 @@ function saveNewCustomer() {
     status: document.getElementById('crmFldStatus').value || (crmEditMode==='b2b'?'aktivni':'bezny'),
     rating: crmNewRating,
     note_quick: (document.getElementById('crmFldNoteQuick').value||'').trim(),
+    note_special: ((document.getElementById('crmFldNoteSpecial')||{}).value||'').trim(),
     contacts: contacts,
     ico: ((document.getElementById('crmFldIco')||{}).value||'').trim(),
     dic: ((document.getElementById('crmFldDic')||{}).value||'').trim(),
@@ -10314,7 +10337,7 @@ function saveNewCustomer() {
     tag_aktivita: existing ? (existing.tag_aktivita||null) : null,
     contact_history: existing ? existing.contact_history||[] : [],
     wishlist_items: existing ? existing.wishlist_items||[] : []
-  };
+  });
   // B2C: rovnou přepočítej tagy podle aktuálních dat (pro nové i editované zákazníky)
   if(crmEditMode!=='b2b'){
     Object.assign(customer, _crmComputeTags(customer));
@@ -14349,6 +14372,10 @@ rebuildBrandTables();
         <div class="fi full">
           <label>Krátká poznámka (viditelná na kartě)</label>
           <input type="text" id="crmFldNoteQuick" placeholder="Čeká na Panda Dunk, platí hotově...">
+        </div>
+        <div class="fi full">
+          <label>Poznámka (detail)</label>
+          <textarea id="crmFldNoteSpecial" rows="4" placeholder="Delší kontext k zákazníkovi — vše, co se nevejde do krátké poznámky…" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;padding:9px 11px;outline:none;resize:vertical;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
         </div>
       </div>
     </div>
