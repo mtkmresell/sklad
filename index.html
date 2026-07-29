@@ -9220,7 +9220,6 @@ function openCustomerDetail(id) {
 }
 
 function closeCustomerDetail() {
-  try { crmFlushDetailNote(); } catch(e) {}
   document.getElementById('customerDetailModal').classList.remove('open');
   crmDetailId = null;
 }
@@ -9337,10 +9336,11 @@ function _crmTabOverview(c){
         +'</div>';
     }
   }
-  // Delší poznámka pro kontext — edituje se přímo tady, ukládá se sama (bez tlačítka)
-  var noteHtml='<div style="margin-top:16px;"><span class="crm-sec-label">Poznámka (detail)</span>'
-    +'<textarea id="crmDetailNote" oninput="crmSaveDetailNote(\''+escHtml(c.id)+'\')" placeholder="Delší kontext k zákazníkovi — vše, co se nevejde do krátké poznámky na kartě…" style="width:100%;min-height:90px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;padding:9px 11px;outline:none;resize:vertical;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor=\'var(--accent)\'" onblur="this.style.borderColor=\'var(--border)\'">'+escHtml(c.note_special||'')+'</textarea>'
-    +'<div id="crmDetailNoteHint" style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;margin-top:5px;height:13px;">Ukládá se automaticky</div></div>';
+  // Delší poznámka pro kontext — jen zobrazení, píše se v okně Upravit
+  var noteHtml=(c.note_special||'').trim()
+    ? '<div style="margin-top:16px;"><span class="crm-sec-label">Poznámka (detail)</span>'
+      +'<div id="crmDetailNote" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;line-height:1.5;padding:9px 11px;white-space:pre-wrap;overflow-wrap:anywhere;">'+escHtml(c.note_special)+'</div></div>'
+    : '';
   return tagSection+'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+brandsHtml
     +noteHtml
     +wishHtml;
@@ -9568,32 +9568,6 @@ function _crmCreateMinimal(name, mode){
   return id;
 }
 // Action handlers
-// Uloží delší poznámku z detailu (pole note_special). Volá se při psaní —
-// do paměti hned, zápis do úložiště/cloudu se sdruží, ať se nespamuje Firestore.
-var _crmNoteSaveTimer=null;
-function crmSaveDetailNote(id){
-  var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
-  var el=document.getElementById('crmDetailNote'); if(!el) return;
-  c.note_special=(el.value||'').trim();
-  c.updatedAt=new Date().toISOString();
-  var hint=document.getElementById('crmDetailNoteHint');
-  if(hint) hint.textContent='Ukládá se…';
-  if(_crmNoteSaveTimer) clearTimeout(_crmNoteSaveTimer);
-  _crmNoteSaveTimer=setTimeout(function(){
-    _crmNoteSaveTimer=null;
-    saveCrmToFirestore(true);
-    var h=document.getElementById('crmDetailNoteHint');
-    if(h) h.textContent='Uloženo';
-  }, 600);
-}
-// Dopiš rozepsanou poznámku dřív, než se detail zavře nebo se odejde ze stránky
-function crmFlushDetailNote(){
-  if(!_crmNoteSaveTimer) return;
-  clearTimeout(_crmNoteSaveTimer); _crmNoteSaveTimer=null;
-  saveCrmToFirestore(true);
-}
-window.addEventListener('beforeunload', crmFlushDetailNote);
-
 // Smaže kartu zákazníka/partnera. Napojené prodeje zůstávají, jen se odpojí.
 function deleteCustomer(id){
   var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
@@ -9957,8 +9931,7 @@ function loadCrmFromFirestore() {
   }, function(err) { console.error('CRM snapshot:', err); showToast('CRM sync chyba: '+(err.message||err),'err'); });
 }
 
-// silent = ulož bez hlášky (používá automatické ukládání poznámky při psaní)
-function saveCrmToFirestore(silent) {
+function saveCrmToFirestore() {
   var savedAt = new Date().toISOString();
   // Lokálně ulož vždy — i bez přihlášení, jinak by se změny ztratily při načtení stránky
   try { localStorage.setItem('sklad_crm', JSON.stringify({customers:customers,partners:partners,savedAt:savedAt})); } catch(e) {}
@@ -9966,7 +9939,7 @@ function saveCrmToFirestore(silent) {
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'crm', 'main');
   fns.setDoc(docRef, {customers:customers, partners:partners, savedAt:savedAt})
-    .then(function(){ if(!silent) showToast('CRM uloženo do cloudu ✓'); })
+    .then(function(){ showToast('CRM uloženo do cloudu ✓'); })
     .catch(function(e){ showToast('Chyba ukládání CRM: '+(e.message||e),'err'); });
 }
 
