@@ -3128,10 +3128,10 @@ function renderStats(){
       var _ioSt=ioYearStats(_ym_y);
       var _ioPct=_ioLimit>0?_ioSt.net/_ioLimit*100:0;
       var _ioCls=_ioPct>=100?'sv-red':_ioPct>=80?'sv-yellow':'sv-green';
-      return '<div class="stat-card" onclick="openRetailersMgr()" data-tip="Pořízení zboží z EU bez DPH — limit identifikované osoby. Klikni pro správu retailerů." style="cursor:pointer;min-width:175px;">'
+      // Procenta jen v tooltipu — třetí řádek by kartu zvýšil a rozhodil celý panel
+      return '<div class="stat-card" onclick="openRetailersMgr()" data-tip="Pořízení zboží z EU bez DPH — '+Math.round(_ioPct)+' % z limitu identifikované osoby ('+czk(_ioLimit)+'). Klikni pro správu retailerů." style="cursor:pointer;min-width:175px;">'
         +'<div class="stat-label">EU nákupy '+_ym_y+'</div>'
         +'<div class="stat-value '+_ioCls+'">'+czk(_ioSt.net)+'</div>'
-        +'<div style="font-size:9px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:2px;">'+Math.round(_ioPct)+' % z '+czk(_ioLimit)+'</div>'
         +'</div>';
     })():'')+
     '';
