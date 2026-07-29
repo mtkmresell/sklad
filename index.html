@@ -83,7 +83,9 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 .ta-btn:hover { border-color:var(--accent); color:var(--accent); transform:translateY(-1px); box-shadow:0 2px 8px rgba(200,255,0,0.15); }
 .ta-btn.t-sell:hover{background:var(--accent);color:#000;border-color:var(--accent);}
 .ta-btn.t-del:hover{background:var(--danger);color:#fff;border-color:var(--danger);}
-.crm-section{padding:0 18px 80px;}
+/* Zákazníci jako karty v mřížce (stejný princip jako karty položek) */
+.crm-section{padding:0 18px 80px;display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:11px;align-content:start;}
+.crm-section .empty-state{grid-column:1/-1;}
 /* Sekce zákazníků scrolluje sama (body má overflow-y:hidden, jinak by seznam nešel posunout) */
 #customersSection{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(200,255,0,0.4) var(--surface2);}
 .crm-top-bar{display:flex;align-items:center;gap:10px;padding:13px 18px 0;flex-wrap:wrap;}
@@ -91,7 +93,10 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 /* Filtry zákazníků používají custom select — tlačítko se roztáhne dle textu (delší popisky typu "Nový (1–2 nákupy)") */
 .crm-filters .cs-btn{width:auto;min-width:132px;}
 .crm-mode-bar{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;}
-.customer-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color 0.2s,transform 0.15s;margin-bottom:10px;}
+.customer-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color 0.2s,transform 0.15s;display:flex;flex-direction:column;min-width:0;}
+/* Dlouhá jména se v úzké kartě zalomí místo přetečení */
+.customer-card .cc-name{font-family:Syne,sans-serif;font-size:14px;font-weight:700;overflow-wrap:anywhere;}
+.customer-card .cc-stats{margin-top:auto;padding-top:2px;}
 .customer-card:hover{border-color:#3a3a3a;transform:translateY(-1px);}
 .cs-status{font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid;margin-right:6px;}
 .cs-status-vip{background:#c8ff0018;color:#c8ff00;border-color:#c8ff0030;}
@@ -1080,7 +1085,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <button class="add-btn" id="crmAddBtn" onclick="openNewCustomerModal()">+ Nový zákazník</button>
   </div>
   <div class="crm-filters">
-    <div class="search-wrap" style="min-width:200px;flex:1;max-width:400px;">
+    <div class="search-wrap" style="min-width:200px;flex:1;">
       <span class="si" style="font-size:13px;opacity:0.5;font-family:monospace;font-weight:700;">⌕</span>
       <input type="text" id="crmSearch" placeholder="Hledat zákazníka, Instagram, email..." oninput="renderCustomers()">
     </div>
@@ -9177,7 +9182,7 @@ function renderCustomerCard(c) {
     var fd = new Date(c.followup_date); fd.setHours(0,0,0,0);
     if(fd <= today) followupBadge = '<span class="followup-badge">🔔 FOLLOWUP</span>';
   }
-  var contactLine = primary ? '<div style="font-size:11px;color:var(--muted);font-family:DM Mono,monospace;margin-bottom:7px;">' + (primary.type||'') + ': ' + escHtml(primary.value||'') + '</div>' : '';
+  var contactLine = primary ? '<div style="font-size:11px;color:var(--muted);font-family:DM Mono,monospace;margin-bottom:7px;overflow-wrap:anywhere;">' + (primary.type||'') + ': ' + escHtml(primary.value||'') + '</div>' : '';
   // B2C štítky vztah + aktivita
   var _tb = crmMode==='b2c' ? (_crmTagBadge(c.tag_vztah)+_crmTagBadge(c.tag_aktivita)) : '';
   var tagsLine = _tb ? '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">'+_tb+'</div>' : '';
@@ -9185,14 +9190,14 @@ function renderCustomerCard(c) {
     '<div class="card-top">' +
       '<div style="flex:1;min-width:0;">' +
         '<span class="cs-status ' + sc + '">' + sl + '</span>' +
-        '<span style="font-family:Syne,sans-serif;font-size:14px;font-weight:700;">' + escHtml(c.name||'—') + '</span>' +
+        '<span class="cc-name">' + escHtml(c.name||'—') + '</span>' +
         followupBadge +
       '</div>' +
-      '<div style="font-size:15px;flex-shrink:0;">' + stars + '</div>' +
+      '<div style="font-size:15px;flex-shrink:0;white-space:nowrap;">' + stars + '</div>' +
     '</div>' +
     contactLine +
     tagsLine +
-    '<div style="display:flex;gap:12px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace;flex-wrap:wrap;">' +
+    '<div class="cc-stats" style="display:flex;gap:12px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace;flex-wrap:wrap;">' +
       (c.size_shoes_eu ? '<span>👟 EU ' + escHtml(c.size_shoes_eu) + '</span>' : '') +
       '<span>📦 ' + (c.stats_orders_count||0) + ' obj.</span>' +
       '<span>💰 ' + (c.stats_total_spent||0).toLocaleString('cs-CZ') + ' Kč</span>' +
