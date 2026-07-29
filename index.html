@@ -88,6 +88,8 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 #customersSection{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(200,255,0,0.4) var(--surface2);}
 .crm-top-bar{display:flex;align-items:center;gap:10px;padding:13px 18px 0;flex-wrap:wrap;}
 .crm-filters{padding:10px 18px 6px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+/* Filtry zákazníků používají custom select — tlačítko se roztáhne dle textu (delší popisky typu "Nový (1–2 nákupy)") */
+.crm-filters .cs-btn{width:auto;min-width:132px;}
 .crm-mode-bar{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;}
 .customer-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color 0.2s,transform 0.15s;margin-bottom:10px;}
 .customer-card:hover{border-color:#3a3a3a;transform:translateY(-1px);}
@@ -9089,12 +9091,14 @@ function crmSwitchMode(mode) {
     sf.innerHTML = mode === 'b2c'
       ? '<option value="">Všechny statusy</option><option value="vip">VIP</option><option value="bezny">Běžný</option><option value="potencialni">Potenciální</option><option value="rizikovy">Rizikový</option><option value="blacklist">Blacklist</option>'
       : '<option value="">Všechny statusy</option><option value="aktivni">Aktivní</option><option value="neaktivni">Neaktivní</option><option value="rizikovy">Rizikový</option><option value="blacklist">Blacklist</option>';
+    if(sf._csSync) sf._csSync();
   }
   // B2C tag filtry (vztah + aktivita) — jen v režimu zákazníků
   var vf=document.getElementById('crmVztahFilter');
   var af=document.getElementById('crmAktivitaFilter');
-  if(vf){ vf.style.display = mode==='b2c'?'':'none'; if(mode!=='b2c') vf.value=''; }
-  if(af){ af.style.display = mode==='b2c'?'':'none'; if(mode!=='b2c') af.value=''; }
+  // Skrývá se obal custom selectu (samotný <select> je vždy display:none)
+  if(vf){ (vf.closest('.cs-wrap')||vf).style.display = mode==='b2c'?'':'none'; if(mode!=='b2c'){ vf.value=''; if(vf._csSync) vf._csSync(); } }
+  if(af){ (af.closest('.cs-wrap')||af).style.display = mode==='b2c'?'':'none'; if(mode!=='b2c'){ af.value=''; if(af._csSync) af._csSync(); } }
   // Přepočítej časově závislé tagy při vstupu do sekce zákazníků
   if(mode==='b2c') refreshCrmActivityTags(true);
   renderCustomers();
@@ -11205,7 +11209,7 @@ function initNumberSteppers() {
 }
 function initAllCustomInputs() {
   // Custom selects - všechny v modal formuláři
-  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','filterListingStatus','filterListingPlatform','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp','crmFldStatus','sBuyerType','fBuyerType'].forEach(id => {
+  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','filterListingStatus','filterListingPlatform','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp','crmFldStatus','sBuyerType','fBuyerType','crmStatusFilter','crmVztahFilter','crmAktivitaFilter'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.tagName === 'SELECT') {
       // Naplň dopravce
