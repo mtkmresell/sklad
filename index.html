@@ -93,6 +93,13 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 /* Filtry zákazníků používají custom select — tlačítko se roztáhne dle textu (delší popisky typu "Nový (1–2 nákupy)") */
 .crm-filters .cs-btn{width:auto;min-width:132px;}
 .crm-mode-bar{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;}
+/* Kontakty v detailu — hlavní zvýrazněný, hodnoty proklikávací */
+.crm-contact-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);border-radius:var(--radius-sm);}
+.crm-contact-row.is-primary{background:rgba(200,255,0,0.05);border-left:2px solid var(--accent);}
+.crm-contact-link{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);transition:color 0.15s,border-color 0.15s;}
+.crm-contact-link:hover{color:var(--accent);border-bottom-color:var(--accent);}
+/* Nebezpečná akce v patičce detailu (mazání zákazníka) */
+.crm-danger-btn:hover{border-color:var(--danger)!important;color:var(--danger)!important;}
 .customer-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color 0.2s,transform 0.15s;display:flex;flex-direction:column;min-width:0;}
 /* Dlouhá jména se v úzké kartě zalomí místo přetečení */
 .customer-card .cc-name{font-family:Syne,sans-serif;font-size:14px;font-weight:700;overflow-wrap:anywhere;}
@@ -9227,7 +9234,6 @@ function closeCustomerDetail() {
 function _renderCrmDetailHeader(c) {
   var scls = {vip:'cs-status-vip',bezny:'cs-status-bezny',potencialni:'cs-status-potencialni',rizikovy:'cs-status-rizikovy',blacklist:'cs-status-blacklist'};
   var slbl = {vip:'VIP',bezny:'Běžný',potencialni:'Potenciální',rizikový:'Rizikový',blacklist:'Blacklist'};
-  var primary = (c.contacts||[]).find(function(ct){return ct.primary;}) || (c.contacts||[])[0];
   var stars = '';
   for(var i=1;i<=5;i++) stars+='<span style="color:'+(i<=(c.rating||0)?'#c8ff00':'var(--border)')+'">&#9733;</span>';
   var today=new Date(); today.setHours(0,0,0,0);
@@ -9236,16 +9242,27 @@ function _renderCrmDetailHeader(c) {
     var fd=new Date(c.followup_date); fd.setHours(0,0,0,0);
     if(fd<=today) fup='<div style="background:#ff444415;border:1px solid #ff444430;border-radius:6px;padding:7px 12px;font-size:12px;color:var(--danger);margin-top:8px;">&#128276; Followup: '+escHtml(c.followup_note||'—')+'</div>';
   }
+  // Pod jménem: štítky vztah/aktivita + dny od posl. nákupu (hlavní kontakt je v záložce Kontakty)
+  var isB2c = customers.some(function(x){ return x.id===c.id; });
+  var infoLine='';
+  if(isB2c){
+    var b1=_crmTagBadge(c.tag_vztah), b2=_crmTagBadge(c.tag_aktivita);
+    var extra=[];
+    if(c.dny_od_posledniho_nakupu!=null) extra.push(c.dny_od_posledniho_nakupu+' dní od posl. nákupu');
+    if(c.osobni_cyklus!=null) extra.push('cyklus ~'+Math.round(c.osobni_cyklus)+' dní');
+    if(b1||b2||extra.length){
+      infoLine='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px;">'+b1+b2
+        +(extra.length?'<span style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;">'+extra.join(' · ')+'</span>':'')
+        +'</div>';
+    }
+  }
   document.getElementById('crmDetailHeader').innerHTML =
-    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
-    +'<div><span class="cs-status '+(scls[c.status]||'cs-status-bezny')+'">'+(slbl[c.status]||c.status||'—')+'</span>'
-    +'<span style="font-family:Syne,sans-serif;font-size:19px;font-weight:800;margin-left:6px;">'+escHtml(c.name)+'</span>'
-    +'<span style="font-size:16px;margin-left:8px;">'+stars+'</span></div>'
-    +'<div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">'
-    +'<button class="xb" data-tip="Smazat zákazníka" onclick="deleteCustomer(\''+escHtml(c.id)+'\')" onmouseover="this.style.color=\'var(--danger)\'" onmouseout="this.style.color=\'\'">&#128465;</button>'
-    +'<button class="xb" onclick="closeCustomerDetail()">&#215;</button></div></div>'
-    +(primary?'<div style="font-size:12px;color:var(--muted);margin-top:5px;">'+escHtml(primary.type)+': <strong>'+escHtml(primary.value)+'</strong></div>':'')
-    +(c.note_quick?'<div style="font-size:12px;color:var(--muted);margin-top:4px;font-style:italic;">'+escHtml(c.note_quick)+'</div>':'')
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+    +'<span class="cs-status '+(scls[c.status]||'cs-status-bezny')+'">'+(slbl[c.status]||c.status||'—')+'</span>'
+    +'<span style="font-family:Syne,sans-serif;font-size:19px;font-weight:800;">'+escHtml(c.name)+'</span>'
+    +'<span style="font-size:16px;">'+stars+'</span></div>'
+    +infoLine
+    +(c.note_quick?'<div style="font-size:12px;color:var(--muted);margin-top:6px;font-style:italic;">'+escHtml(c.note_quick)+'</div>':'')
     +fup;
 }
 
@@ -9265,7 +9282,10 @@ function crmDetailTab(tabName) {
     case 'behavior':  el.innerHTML=_crmTabBehavior(c);
       setTimeout(function(){
         ['crmBPayRel','crmBDeliv','crmBHaggle','crmBInvoice'].forEach(function(id){
-          var s=document.getElementById(id); if(s&&s.tagName==='SELECT') initCustomSelect(s);
+          var s=document.getElementById(id); if(!s||s.tagName!=='SELECT') return;
+          initCustomSelect(s);
+          // Roztáhni na celou šířku buňky (cs-wide, ne cs-fullwidth — ta skrývá šipku)
+          var w=s.closest('.cs-wrap'); if(w) w.classList.add('cs-wide');
         });
       }, 0); break;
     case 'followup':  el.innerHTML=_crmTabFollowup(c);
@@ -9322,40 +9342,54 @@ function _crmTabOverview(c){
         }).join('')
       + '</div>';
   }
-  // B2C štítky vztah/aktivita + odvozené metriky (jen pro koncové zákazníky)
-  var isB2c = customers.some(function(x){ return x.id===c.id; });
-  var tagSection='';
-  if(isB2c){
-    var b1=_crmTagBadge(c.tag_vztah), b2=_crmTagBadge(c.tag_aktivita);
-    var extra=[];
-    if(c.dny_od_posledniho_nakupu!=null) extra.push(c.dny_od_posledniho_nakupu+' dní od posl. nákupu');
-    if(c.osobni_cyklus!=null) extra.push('cyklus ~'+Math.round(c.osobni_cyklus)+' dní');
-    if(b1||b2||extra.length){
-      tagSection='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;">'+b1+b2
-        +(extra.length?'<span style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;">'+extra.join(' · ')+'</span>':'')
-        +'</div>';
-    }
-  }
   // Delší poznámka pro kontext — jen zobrazení, píše se v okně Upravit
   var noteHtml=(c.note_special||'').trim()
     ? '<div style="margin-top:16px;"><span class="crm-sec-label">Poznámka (detail)</span>'
       +'<div id="crmDetailNote" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;line-height:1.5;padding:9px 11px;white-space:pre-wrap;overflow-wrap:anywhere;">'+escHtml(c.note_special)+'</div></div>'
     : '';
-  return tagSection+'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+brandsHtml
+  return '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+brandsHtml
     +noteHtml
     +wishHtml;
 }
 
+// Odkaz na kontakt podle typu — '' když se nedá nikam prokliknout (osobně, jiné…)
+function _crmContactUrl(type, value){
+  var v=(value||'').trim();
+  if(!v) return '';
+  // Vložená celá adresa má přednost před odhadem podle typu
+  if(/^https?:\/\//i.test(v)) return v;
+  var handle=v.replace(/^@/,'').trim();
+  var digits=v.replace(/[^\d+]/g,'');
+  var q=encodeURIComponent(v);
+  switch((type||'').toLowerCase()){
+    case 'instagram': return 'https://www.instagram.com/'+encodeURIComponent(handle)+'/';
+    case 'facebook':
+      // Jméno s mezerou není uživatelské jméno → hledání, jinak rovnou profil
+      return /\s/.test(handle)
+        ? 'https://www.facebook.com/search/top?q='+q
+        : 'https://www.facebook.com/'+encodeURIComponent(handle);
+    case 'vinted': return 'https://www.vinted.cz/member/general/search?search_text='+encodeURIComponent(handle);
+    case 'bazos': return 'https://www.bazos.cz/search.php?hledat='+q;
+    case 'whatsapp': return digits ? 'https://wa.me/'+digits.replace(/^\+/,'') : '';
+    case 'email': return /@/.test(v) ? 'mailto:'+v : '';
+    case 'telefon': return digits ? 'tel:'+digits : '';
+    default: return '';
+  }
+}
+
 function _crmTabContacts(c){
   var rows=(c.contacts||[]).map(function(ct){
-    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">'
+    var url=_crmContactUrl(ct.type, ct.value);
+    var val=url
+      ? '<a href="'+escHtml(url)+'" target="_blank" rel="noopener" class="crm-contact-link">'+escHtml(ct.value)+'</a>'
+      : escHtml(ct.value);
+    return '<div class="crm-contact-row'+(ct.primary?' is-primary':'')+'">'
       +'<span style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;width:80px;flex-shrink:0;">'+escHtml(ct.type)+'</span>'
-      +'<span style="flex:1;font-size:13px;">'+escHtml(ct.value)+'</span>'
-      +(ct.primary?'<span style="font-size:9px;color:var(--accent);font-family:DM Mono,monospace;border:1px solid var(--accent);border-radius:3px;padding:1px 5px;">hlavní</span>':'')
+      +'<span style="flex:1;font-size:13px;min-width:0;overflow-wrap:anywhere;">'+val+'</span>'
+      +(ct.primary?'<span style="font-size:9px;color:var(--accent);font-family:DM Mono,monospace;border:1px solid var(--accent);border-radius:3px;padding:1px 5px;flex-shrink:0;">hlavní</span>':'')
       +'</div>';
   }).join('');
-  return '<div>'+(rows||'<div style="color:var(--muted);font-size:13px;padding:8px 0;">Žádné kontakty.</div>')+'</div>'
-    +'<button class="icon-btn" style="margin-top:12px;" onclick="openEditCustomerModal(\''+escHtml(c.id)+'\')">&#9998; Upravit kontakty</button>';
+  return '<div>'+(rows||'<div style="color:var(--muted);font-size:13px;padding:8px 0;">Žádné kontakty.</div>')+'</div>';
 }
 
 function _crmTabPrefs(c){
@@ -9389,6 +9423,11 @@ function _crmTabPrefs(c){
     +'<button class="icon-btn" '+btnS+' onclick="crmAddTag(\''+escHtml(c.id)+'\',\'dislikes\')">+ Přidat</button></div>';
 }
 
+// Název dopravce → stabilní hodnota do uloženého záznamu ('Česká pošta' → 'ceska-posta')
+function _crmSlug(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/\s+/g,'-');
+}
+
 function _crmTabBehavior(c){
   var sty='style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:7px 10px;outline:none;width:100%;"';
   var mkSel=function(id,opts,cur){
@@ -9396,7 +9435,10 @@ function _crmTabBehavior(c){
       +opts.map(function(o){return '<option value="'+o.v+'"'+(o.v===cur?' selected':'')+'>'+o.l+'</option>';}).join('')+'</select>';
   };
   var pOpts=[{v:'ihned',l:'Platí ihned'},{v:'pomaly',l:'Platí pomalu'},{v:'problemovy',l:'Problémový'}];
-  var dOpts=[{v:'osobne',l:'Osobně'},{v:'zasilkovna',l:'Zásilkovna'},{v:'ppl',l:'PPL'},{v:'jine',l:'Jiné'}];
+  // Doručení: osobní předání + všichni dopravci z nastavení sledování (stejný seznam jako u zásilek)
+  var dOpts=[{v:'osobne',l:'Osobně'}]
+    .concat(Object.keys(CARRIERS).map(function(name){ return {v:_crmSlug(name), l:name}; }))
+    .concat([{v:'jine',l:'Jiné'}]);
   var hOpts=[{v:'nikdy',l:'Nikdy'},{v:'obcas',l:'Občas'},{v:'vzdy',l:'Vždy'}];
   return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">'
     +'<div class="fi"><label style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;text-transform:uppercase;display:block;margin-bottom:4px;">Platební spolehlivost</label>'+mkSel('crmBPayRel',pOpts,c.payment_reliability||'ihned')+'</div>'
@@ -14405,7 +14447,7 @@ rebuildBrandTables();
   </div>
 </div>
 
-<div class="mo" id="customerDetailModal">
+<div class="mo" id="customerDetailModal" onclick="if(event.target===this)closeCustomerDetail()">
   <div class="modal" style="max-width:660px;padding:0;overflow:hidden;display:flex;flex-direction:column;max-height:88vh;">
     <div id="crmDetailHeader" style="padding:18px 22px 14px;border-bottom:1px solid var(--border);flex-shrink:0;"></div>
     <div style="display:flex;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:none;">
@@ -14417,10 +14459,11 @@ rebuildBrandTables();
       <button class="crm-detail-tab" data-tab="history" onclick="crmDetailTab('history')">Historie</button>
     </div>
     <div id="crmDetailContent" style="flex:1;overflow-y:auto;padding:18px 22px;min-height:280px;scrollbar-width:thin;scrollbar-color:rgba(200,255,0,0.3) transparent;"></div>
-    <div style="padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
-      <button class="icon-btn" onclick="openOfferBuilder(crmDetailId)" style="border-color:var(--accent);color:var(--accent);">&#128203; Offer</button>
-      <button class="icon-btn" onclick="openEditCustomerModal(crmDetailId)">&#9998; Upravit</button>
-      <button class="xb" onclick="closeCustomerDetail()">&#215;</button>
+    <div style="padding:12px 22px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+      <button class="icon-btn" onclick="openOfferBuilder(crmDetailId)" style="border-color:var(--accent);color:var(--accent);">Nabídka</button>
+      <button class="icon-btn" onclick="openEditCustomerModal(crmDetailId)">Upravit</button>
+      <div style="flex:1;"></div>
+      <button class="icon-btn crm-danger-btn" onclick="deleteCustomer(crmDetailId)">Smazat</button>
     </div>
   </div>
 </div>
