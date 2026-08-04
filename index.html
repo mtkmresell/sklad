@@ -5354,12 +5354,6 @@ async function saveItem(){
       if (_merged.targetCurrency !== 'EUR' || !_merged.targetPrice) {
         delete _merged.targetPriceEur; delete _merged.targetRateEur;
       }
-      // Přesun mezi profily — tichý log pro případnou evidenci (vidět jen v detailu)
-      if (!!items[i].personal !== !!_merged.personal) {
-        var _plog = (items[i].profileLog||[]).slice();
-        _plog.push({ date: new Date().toISOString().slice(0,10), to: _merged.personal ? 'personal' : 'business' });
-        _merged.profileLog = _plog;
-      }
       // Přepočet prodejní ceny pro EUR položky
       if (_merged.saleState !== 'stock' && _merged.sellCurrency === 'EUR') {
         var _erSell = _merged.payoutRateEur || _merged.profitRateEur || eurRate || 25;
@@ -6403,7 +6397,6 @@ function openDetail(id) {
   const rows = [
     ['Typ', getCatLabel(it.category)||it.category],
     ['Profil', isPersonal(it) ? '<span class="prof-badge">Osobní</span>' : 'Podnikání', false],
-    ...(it.profileLog && it.profileLog.length ? [['Přesuny profilu', it.profileLog.map(function(l){ return fmtDate(l.date)+' → '+(l.to==='personal'?'Osobní':'Podnikání'); }).join('<br>'), false]] : []),
     ['SKU', it.sku||'—', !!(it.sku)],
     ['Stav', COND_L[it.condition]||it.condition||'—'],
     ...(catHasSize(it.category)||it.size ? [['Velikost', sizeStr||'—']] : []),
@@ -6445,7 +6438,7 @@ function openDetail(id) {
     ...(it.invoiceUrl ? [['Faktura', '<a href="'+it.invoiceUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
-  var secBase = ['Typ','Profil','Přesuny profilu','SKU','Stav','Velikost'];
+  var secBase = ['Typ','Profil','SKU','Stav','Velikost'];
   var secBuy  = ['Nákupní cena','Datum nákupu','Kde koupeno','Číslo objednávky','Od koho (vykup)'];
   var secStock= ['Sklad','Na skladě','Cílová cena','Strategie','Sledování zásilky'];
   var secSell = ['Prodejní cena','Zisk','Datum prodeje','Datum vyplacení','Kde prodáno','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
@@ -7889,15 +7882,11 @@ function bulkChangeProfile(){
   document.body.appendChild(overlay);
   function applyProfile(toPersonal) {
     var touched = 0;
-    var _today = new Date().toISOString().slice(0,10);
     bulkSelected.forEach(function(id){
       var it = items.find(function(x){ return x.id===id; });
       if(!it) return;
       if(!!it.personal !== toPersonal) {
         it.personal = toPersonal;
-        var _plog = (it.profileLog||[]).slice();
-        _plog.push({ date: _today, to: toPersonal ? 'personal' : 'business' });
-        it.profileLog = _plog;
         touched++;
       }
     });
