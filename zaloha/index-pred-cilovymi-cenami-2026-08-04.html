@@ -2296,8 +2296,6 @@ function _applyCloudData(data) {
   }
   // Doplň definice kategorií chybějící pro klíče použité na položkách
   try { healCustomCats(); } catch(e) {}
-  // Dopočítej původní eurové cílové ceny u záznamů uložených před opravou
-  try { healTargetPricesEur(); } catch(e) {}
   // Načti historickou cache položek (uložena v stejném dokumentu)
   if (data.itemCache) {
     try {
@@ -4437,43 +4435,6 @@ async function fetchRateForDate(dateStr) {
   return eurRate || 25;
 }
 
-/* ── Cílová cena v EUR ──────────────────────────────────────────────
-   targetPrice je vždy v Kč. U položek zadaných v eurech si pamatujeme i
-   původní částku (targetPriceEur) — jinak by se zpětný přepočet dělal
-   aktuálním kurzem a zadaných 300 € by se každý den zobrazovalo jinak. */
-function targetEur(it){
-  if (!it || !it.targetPrice) return '';
-  if (it.targetPriceEur != null) return it.targetPriceEur;
-  // Starý záznam bez uložené částky — odhad dnešním kurzem (může být o kus vedle)
-  var r = eurRate || 25;
-  return Math.round(it.targetPrice / r * 100) / 100;
-}
-
-// Jednorázově dopočítá targetPriceEur u položek uložených před touto opravou.
-// Referenční kurz bereme z položky (ČNB kurz k datu nákupu) — je blíž době zadání
-// než dnešní. Na celá eura zaokrouhlíme jen tehdy, když z toho vyjde věrohodný
-// kurz; jinak uložíme přesnou hodnotu na haléře, ať aspoň přestane plavat.
-function healTargetPricesEur(){
-  var changed = 0;
-  (items||[]).forEach(function(it){
-    if (!it || it.type === 'bulk') return;
-    if (it.targetCurrency !== 'EUR' || !it.targetPrice) return;
-    if (it.targetPriceEur != null) return;
-    var ref = it.buyRateEur || eurRate || 25;
-    var whole = Math.round(it.targetPrice / ref);
-    var implied = whole > 0 ? it.targetPrice / whole : 0;
-    if (whole > 0 && Math.abs(implied - ref) / ref <= 0.05) {
-      it.targetPriceEur = whole;          // zadané celé euro
-      it.targetRateEur  = implied;        // kurz, který k uložené koruně sedí
-    } else {
-      it.targetPriceEur = Math.round(it.targetPrice / ref * 100) / 100;
-      it.targetRateEur  = ref;
-    }
-    changed++;
-  });
-  return changed;
-}
-
 async function recalcAllRates() {
   var btn = document.getElementById('btnRecalcRates');
   var status = document.getElementById('recalcRatesStatus');
@@ -5152,8 +5113,8 @@ function openEdit(id){
   if(fTP) {
     // Zobraz v původní měně pokud ji máme
     var _tc = it.targetCurrency || 'CZK';
-    if(_tc === 'EUR' && it.targetPrice) {
-      fTP.value = targetEur(it);
+    if(_tc === 'EUR' && it.targetPrice && eurRate) {
+      fTP.value = Math.round(it.targetPrice / eurRate * 100) / 100;
     } else {
       fTP.value = it.targetPrice || '';
     }
@@ -5277,20 +5238,7 @@ async function saveItem(){
     var tc=document.getElementById('fTargetCurrency')?.value||'CZK';
     if(!tp) return null;
     return tc==='EUR' ? Math.round(tp*eurRate) : tp;
-  })(),
-    // Zadaná částka v EUR + kurz, kterým se přepočetla. Bez toho by se zpětný přepočet
-    // z korun počítal dnešním kurzem a zadaných 300 € by se každý den zobrazovalo jinak.
-    targetPriceEur:(function(){
-    var tp=parseFloat(document.getElementById('fTargetPrice')?.value)||null;
-    var tc=document.getElementById('fTargetCurrency')?.value||'CZK';
-    return (tp && tc==='EUR') ? tp : undefined;
-  })(),
-    targetRateEur:(function(){
-    var tp=parseFloat(document.getElementById('fTargetPrice')?.value)||null;
-    var tc=document.getElementById('fTargetCurrency')?.value||'CZK';
-    return (tp && tc==='EUR') ? eurRate : undefined;
-  })(),
-    targetCurrency:document.getElementById('fTargetCurrency')?.value||'CZK',saleState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); if(modalEl.classList.contains('modal-waiting')) return 'waiting'; if(modalEl.classList.contains('modal-paid')) return 'paid'; return 'stock'; })(),waitState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return modalEl.classList.contains('modal-waiting')?(document.getElementById('fWaitState')?.value||'sending'):undefined; })(),
+  })(),targetCurrency:document.getElementById('fTargetCurrency')?.value||'CZK',saleState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); if(modalEl.classList.contains('modal-waiting')) return 'waiting'; if(modalEl.classList.contains('modal-paid')) return 'paid'; return 'stock'; })(),waitState:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return modalEl.classList.contains('modal-waiting')?(document.getElementById('fWaitState')?.value||'sending'):undefined; })(),
     saleRef:document.getElementById('fSaleRef').value.trim(),soldWhere:document.getElementById('fSoldWhere')?.value?.trim()||'',saleDate:document.getElementById('fSaleDate').value,
     payoutDate:document.getElementById('fPayoutDate')?.value||undefined,payoutMethod:document.getElementById('fPayoutMethod')?.value||undefined,
     buyerType:(function(){ var modalEl=document.querySelector('#moAdd .modal'); return (modalEl.classList.contains('modal-waiting')||modalEl.classList.contains('modal-paid'))?(document.getElementById('fBuyerType')?.value||'anonymous'):undefined; })(),
@@ -5349,11 +5297,6 @@ async function saveItem(){
       var _dClean = {};
       Object.keys(d).forEach(function(k){ if(d[k] !== undefined) _dClean[k] = d[k]; });
       var _merged = {...items[i],..._dClean};
-      // Přepnutí cílové ceny na Kč (nebo její smazání) musí zahodit i pamatovanou
-      // eurovou částku — undefined se z d odstraňuje, takže by tu jinak zůstala viset
-      if (_merged.targetCurrency !== 'EUR' || !_merged.targetPrice) {
-        delete _merged.targetPriceEur; delete _merged.targetRateEur;
-      }
       // Přesun mezi profily — tichý log pro případnou evidenci (vidět jen v detailu)
       if (!!items[i].personal !== !!_merged.personal) {
         var _plog = (items[i].profileLog||[]).slice();
@@ -5468,8 +5411,6 @@ async function saveItem(){
       if (_match) {
         it.targetPrice    = d.targetPrice;
         it.targetCurrency = d.targetCurrency;
-        it.targetPriceEur = d.targetPriceEur;
-        it.targetRateEur  = d.targetRateEur;
         _propagated++;
       }
     });
@@ -6415,7 +6356,7 @@ function openDetail(id) {
     ...(!isPaid ? [
       [((['Na cestě','Bude vráceno','Vráceno','Zrušeno'].includes(it.location)) ? 'Stav' : 'Sklad'), it.location||'Doma'],
       ...(daysStr ? [['Na skladě', daysStr, false]] : []),
-      ...(!isWaiting && it.targetPrice ? [['Cílová cena', (it.targetCurrency==='EUR'?targetEur(it)+' €':czk(it.targetPrice)), false]] : []),
+      ...(!isWaiting && it.targetPrice ? [['Cílová cena', (it.targetCurrency==='EUR'?(Math.round(it.targetPrice/eurRate*100)/100)+' €':czk(it.targetPrice)), false]] : []),
       ...(!isWaiting && it.stockIntent ? [['Strategie', intentBadge(it.stockIntent), false]] : []),
       ...(trackingHtml ? [['Sledování zásilky', trackingHtml, false]] : []),
       ...bazosRows,
@@ -10745,9 +10686,6 @@ function _init() {
   try{load();}catch(e){console.error('load',e);items=[...PRELOAD,...CSV_ITEMS].map(it=>({...it}));}
   if(!items || items.length===0){items=[...PRELOAD,...CSV_ITEMS].map(it=>({...it}));}
   try{healCustomCats();}catch(e){}
-  // Zapiš jen lokálně — sv() by nastavilo příznak „lokální data jsou novější"
-  // a mohlo tak při startu přebít čerstvější kopii z cloudu
-  try{ if(healTargetPricesEur()) localStorage.setItem(SK, JSON.stringify(items)); }catch(e){}
   // Bazoš expirace hned jen pokud nečekáme cloud session — jinak až po prvním snapshotu
   if(!localStorage.getItem('sklad_v3_savedAt')){ bazosExpireCheckSafe(); }
   else { setTimeout(function(){ if(!window._fbUser) bazosExpireCheckSafe(); }, 30000); } // pojistka jen pro odhlášené
