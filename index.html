@@ -1860,6 +1860,15 @@ function profBadge(it){
   if(activeProfile==='personal' && tab!=='waiting') return '';
   return '<span class="prof-badge">Osobní</span>';
 }
+// Jednorázový úklid: zbytek po zrušené evidenci přesunů mezi profily.
+// Nic to už nezapisuje ani nečte, tak ať to nezabírá místo v každé synchronizaci.
+function stripProfileLogs(){
+  var cleaned = 0;
+  (items||[]).forEach(function(it){
+    if (it && it.profileLog !== undefined) { delete it.profileLog; cleaned++; }
+  });
+  return cleaned;
+}
 function syncProfileUI(){
   document.querySelectorAll('#profileSwitch .pf-btn').forEach(function(b){
     b.classList.toggle('active', b.dataset.prof===activeProfile);
@@ -2298,6 +2307,8 @@ function _applyCloudData(data) {
   try { healCustomCats(); } catch(e) {}
   // Dopočítej původní eurové cílové ceny u záznamů uložených před opravou
   try { healTargetPricesEur(); } catch(e) {}
+  // Ukliď zbytky po zrušené evidenci přesunů mezi profily
+  try { stripProfileLogs(); } catch(e) {}
   // Načti historickou cache položek (uložena v stejném dokumentu)
   if (data.itemCache) {
     try {
@@ -10736,7 +10747,11 @@ function _init() {
   try{healCustomCats();}catch(e){}
   // Zapiš jen lokálně — sv() by nastavilo příznak „lokální data jsou novější"
   // a mohlo tak při startu přebít čerstvější kopii z cloudu
-  try{ if(healTargetPricesEur()) localStorage.setItem(SK, JSON.stringify(items)); }catch(e){}
+  try{
+    var _fixed = healTargetPricesEur();
+    var _stripped = stripProfileLogs();
+    if(_fixed || _stripped) localStorage.setItem(SK, JSON.stringify(items));
+  }catch(e){}
   // Bazoš expirace hned jen pokud nečekáme cloud session — jinak až po prvním snapshotu
   if(!localStorage.getItem('sklad_v3_savedAt')){ bazosExpireCheckSafe(); }
   else { setTimeout(function(){ if(!window._fbUser) bazosExpireCheckSafe(); }, 30000); } // pojistka jen pro odhlášené
