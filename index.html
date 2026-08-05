@@ -2607,7 +2607,12 @@ function getPlatGroups(){
   try{const s=localStorage.getItem(SK_GROUPS);if(s){var g=JSON.parse(s);if(!g.platCategories)g.platCategories={};return g;}}catch(e){}
   return getDefaultGroups();
 }
-function savePlatGroupsData(g){localStorage.setItem(SK_GROUPS,JSON.stringify(g));}
+function savePlatGroupsData(g){
+  localStorage.setItem(SK_GROUPS,JSON.stringify(g));
+  // Bez tohohle by změna zůstala jen v prohlížeči a první snapshot z cloudu
+  // (který nese starý seznam) by ji přepsal zpátky
+  try { _ioCloudSync(); } catch(e){}
+}
 
 // Vrátí true pokud platforma přijímá danou kategorii
 function platAcceptsCategory(platName, category, groups) {
