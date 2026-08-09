@@ -4686,6 +4686,19 @@ const CARRIERS = {
   'DPD': 'https://www.dpdgroup.com/cz/mydpd/my-parcels/sending?parcelNumber='
 };
 
+// Skladové stavy, u kterých má smysl evidovat sledování zásilky
+function locNeedsTracking(loc){
+  return ['Na cestě','Vráceno','Bude vráceno','Zrušeno'].indexOf(loc || 'Doma') !== -1;
+}
+// Zásilka dorazila (stav Doma apod.) — zahoď údaje o sledování, jinak by naskočily
+// zpátky, až se položka později přepne třeba na Vráceno
+function clearTracking(it){
+  if(!it) return false;
+  if(it.trackingNum === undefined && it.trackingCarrier === undefined && it.trackingUrl === undefined) return false;
+  delete it.trackingNum; delete it.trackingCarrier; delete it.trackingUrl;
+  return true;
+}
+
 // UPS sledování nefunguje s mezerami v čísle (na štítku jsou, v URL vadí) — u UPS je odstraňujeme
 function sanitizeTrackNum(num, carrier) {
   if ((carrier||'').trim().toUpperCase() === 'UPS') return (num||'').replace(/\s+/g, '');
@@ -5397,12 +5410,19 @@ async function saveItem(){
         _merged.trackingNum = _numField;
         _merged.trackingCarrier = _carrierField;
       }
-      // Pokud tracking sekce skrytá (paid) — zachovej původní hodnoty
       if (!_trackingWrapVisible) {
-        _merged.trackingUrl = items[i].trackingUrl;
-        _merged.trackingNum = items[i].trackingNum;
-        _merged.trackingCarrier = items[i].trackingCarrier;
+        if (_merged.saleState === 'stock' && !locNeedsTracking(_merged.location)) {
+          // Skryté proto, že zásilka dorazila (Doma) — sledování už neplatí, zahoď ho
+          clearTracking(_merged);
+        } else {
+          // Skryté kvůli prodeji (paid) — sledování zásilky si ponech
+          _merged.trackingUrl = items[i].trackingUrl;
+          _merged.trackingNum = items[i].trackingNum;
+          _merged.trackingCarrier = items[i].trackingCarrier;
+        }
       }
+      // Samotný dopravce bez čísla i bez vlastní URL je jen předvolba selectu — neukládej ho
+      if (!_merged.trackingNum && !_merged.trackingUrl) delete _merged.trackingCarrier;
       items[i] = _merged;
       // Zákazník byl napojen/odpojen/změněn — přepočti statistiky obou stran
       var _newLinkedCustomerId = items[i].linkedCustomerId || '';
@@ -7869,6 +7889,7 @@ function bulkChangeLoc(){
         if(it) {
           it.location = newLoc;
           if(newLoc === 'Doma' && !it.homeDate) it.homeDate = _bulkToday;
+          if(it.saleState === 'stock' && !locNeedsTracking(newLoc)) clearTracking(it);
         }
       });
       sv(); renderItems(); buildLocationFilter();
@@ -11291,8 +11312,7 @@ function updateWaitStateVisibility() {
   var fws = document.getElementById('fWaitState');
   var fLoc = document.getElementById('fLocation');
   var loc = fLoc ? fLoc.value : '';
-  var locNeedsTracking = loc === 'Na cestě' || loc === 'Vráceno' || loc === 'Bude vráceno' || loc === 'Zrušeno';
-  if (tw) tw.style.display = ((isStock && locNeedsTracking) || (isWaiting && fws && fws.value === 'sent')) ? '' : 'none';
+  if (tw) tw.style.display = ((isStock && locNeedsTracking(loc)) || (isWaiting && fws && fws.value === 'sent')) ? '' : 'none';
   var hdWrap = document.getElementById('fHomeDateWrap');
   if (hdWrap) hdWrap.style.display = (loc === 'Doma') ? '' : 'none';
 }
