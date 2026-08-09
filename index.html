@@ -9477,6 +9477,7 @@ function _crmContactUrl(type, value){
         : 'https://www.facebook.com/'+encodeURIComponent(handle);
     case 'vinted': return 'https://www.vinted.cz/member/general/search?search_text='+encodeURIComponent(handle);
     case 'bazos': return 'https://www.bazos.cz/search.php?hledat='+q;
+    case 'cardmarket': return 'https://www.cardmarket.com/en/Pokemon/Users/'+encodeURIComponent(handle);
     case 'whatsapp': return digits ? 'https://wa.me/'+digits.replace(/^\+/,'') : '';
     // e-mail a telefon se neotevírají — klik je zkopíruje (viz _crmCopyContact)
     default: return '';
@@ -10394,7 +10395,7 @@ function addContactRow(type, value, isPrimary) {
   var row = document.createElement('div');
   row.id = 'crmCRow_' + idx;
   row.style.cssText = 'display:grid;grid-template-columns:120px 1fr auto auto;gap:6px;margin-bottom:6px;align-items:center;';
-  var types = ['instagram','email','telefon','whatsapp','vinted','facebook','bazos','osobne','jine'];
+  var types = ['instagram','email','telefon','whatsapp','vinted','facebook','bazos','cardmarket','osobne','jine'];
   var opts = types.map(function(t){ return '<option value="'+t+'"'+(t===type?' selected':'')+'>'+t+'</option>'; }).join('');
   var inputStyle = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;width:100%;';
   var selStyle = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 6px;outline:none;';
