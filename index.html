@@ -896,6 +896,33 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   animation: tabFade 0.18s ease both;
 }
 
+/* 10b. Karty zákazníků a wishlistu — stejné odhalení při scrollu jako karty položek */
+.customer-card,
+.wish-card {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.customer-card.card-visible,
+.wish-card.card-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* Mazání karty zákazníka — vyjede stejně jako karta položky */
+.customer-card.deleting {
+  animation: cardDelete 0.35s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+  pointer-events: none; overflow: hidden;
+}
+/* Detail zákazníka — přepnutí záložky prolne obsah jako hlavní taby */
+#crmDetailContent.tab-content-anim { animation: tabFade 0.18s ease both; }
+/* Dlaždice statistik v detailu zákazníka — vysunou se jako stat karty v hlavičce */
+.crm-stat.anim-once {
+  animation: statIn 0.25s cubic-bezier(0.34, 1.1, 0.64, 1) both;
+}
+/* Řádky kontaktů — nájezd zleva jako řádky tabulky */
+.crm-contact-row.row-anim {
+  animation: rowIn 0.18s ease both;
+}
+
 /* 11. Notifikace / toast — vsune se zprava */
 @keyframes toastIn {
   from { transform: translateX(120%); opacity: 0; }
@@ -3443,25 +3470,29 @@ function renderItems(){
   } else {
     grid.className = 'items-grid';
     grid.innerHTML = list.map(cardHTML).join('');
-    // Scroll animace přes IntersectionObserver
-    var cards = grid.querySelectorAll('.item-card');
-    if('IntersectionObserver' in window) {
-      var io = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-          if(entry.isIntersecting) {
-            entry.target.classList.add('card-visible');
-            io.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0, rootMargin: '200px 0px' });
-      cards.forEach(function(card, i) {
-        card.dataset.cardIdx = i;
-        io.observe(card);
-      });
-    } else {
-      cards.forEach(function(c){ c.classList.add('card-visible'); });
-    }
+    revealCards(grid.querySelectorAll('.item-card'));
   }
+}
+
+// Odhalení karet při scrollu — sdílí položky, zákazníci i wishlist, ať se chovají stejně
+function revealCards(cards) {
+  if (!cards || !cards.length) return;
+  if (!('IntersectionObserver' in window)) {
+    cards.forEach(function(c){ c.classList.add('card-visible'); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('card-visible');
+        io.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0, rootMargin: '200px 0px' });
+  cards.forEach(function(card, i) {
+    card.dataset.cardIdx = i;
+    io.observe(card);
+  });
 }
 
 
@@ -6813,7 +6844,7 @@ function renderWishlist() {
     wishItems.forEach(function(w) {
       var prioColor = w.priority==='high'?'var(--danger)':w.priority==='medium'?'var(--warning)':'var(--muted)';
       var prioLabel = w.priority==='high'?'Vysoká':w.priority==='medium'?'Střední':'Nízká';
-      h+='<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid '+prioColor+';border-radius:var(--radius);padding:14px;">';
+      h+='<div class="wish-card" style="background:var(--surface);border:1px solid var(--border);border-left:3px solid '+prioColor+';border-radius:var(--radius);padding:14px;">';
       h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">';
       h+='<div style="font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;line-height:1.3;">'+w.name+'</div>';
       h+='<span style="font-size:9px;font-family:\'DM Mono\',monospace;padding:2px 6px;border-radius:3px;white-space:nowrap;color:'+prioColor+';border:1px solid;border-color:'+prioColor+'30;background:'+prioColor+'12;flex-shrink:0;">'+prioLabel+'</span>';
@@ -6845,6 +6876,7 @@ function renderWishlist() {
     h+='</div>';
   }
   grid.innerHTML = h;
+  revealCards(grid.querySelectorAll('.wish-card'));
 }
 
 function openWishModal(editWishId) {
@@ -9307,6 +9339,7 @@ function renderCustomers() {
   }
 
   list.innerHTML = filtered.map(renderCustomerCard).join('');
+  revealCards(list.querySelectorAll('.customer-card'));
 }
 
 // Vrátí HTML štítku (vztah nebo aktivita) podle uložené hodnoty; '' pokud není
@@ -9339,7 +9372,7 @@ function renderCustomerCard(c) {
   // B2C štítky vztah + aktivita
   var _tb = crmMode==='b2c' ? (_crmTagBadge(c.tag_vztah)+_crmTagBadge(c.tag_aktivita)) : '';
   var tagsLine = _tb ? '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">'+_tb+'</div>' : '';
-  return '<div class="customer-card" onclick="openCustomerDetail(\'' + c.id + '\')">' +
+  return '<div class="customer-card" data-cid="' + escHtml(c.id) + '" onclick="openCustomerDetail(\'' + c.id + '\')">' +
     '<div class="card-top">' +
       '<div style="flex:1;min-width:0;">' +
         '<span class="cs-status ' + sc + '">' + sl + '</span>' +
@@ -9424,6 +9457,11 @@ function crmDetailTab(tabName) {
   if(!c) return;
   var el = document.getElementById('crmDetailContent');
   if(!el) return;
+  // Prolnutí obsahu jako u hlavních tabů — třídu je nutné sundat a znovu nasadit,
+  // jinak by se animace při druhém přepnutí nespustila
+  el.classList.remove('tab-content-anim');
+  void el.offsetWidth;
+  el.classList.add('tab-content-anim');
   switch(tabName){
     case 'overview':  el.innerHTML=_crmTabOverview(c); break;
     case 'contacts':  el.innerHTML=_crmTabContacts(c); break;
@@ -9458,8 +9496,9 @@ function _crmTabOverview(c){
     {l:'Poslední',v:c.stats_last_purchase?new Date(c.stats_last_purchase).toLocaleDateString('cs-CZ'):'—'},
     {l:'Oboj. hodnota',v:(c.stats_total_spent||0)>0?((c.stats_total_spent||0).toLocaleString('cs-CZ')+' Kč'):'—'}
   ];
-  var statsHtml=stats.map(function(s){
-    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">'
+  var statsHtml=stats.map(function(s,si){
+    // Postupné vysunutí jako u stat karet v hlavičce (krok 50 ms)
+    return '<div class="crm-stat anim-once" style="animation-delay:'+(si*50)+'ms;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">'
       +'<div style="font-size:8px;color:var(--muted);font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:0.6px;">'+s.l+'</div>'
       +'<div style="font-size:14px;font-weight:700;font-family:Syne,sans-serif;margin-top:3px;">'+s.v+'</div></div>';
   }).join('');
@@ -9547,7 +9586,7 @@ function crmCopyContact(el){
 }
 
 function _crmTabContacts(c){
-  var rows=(c.contacts||[]).map(function(ct){
+  var rows=(c.contacts||[]).map(function(ct,ri){
     var url=_crmContactUrl(ct.type, ct.value);
     var val;
     if(url){
@@ -9557,7 +9596,8 @@ function _crmTabContacts(c){
     } else {
       val=escHtml(ct.value);
     }
-    return '<div class="crm-contact-row'+(ct.primary?' is-primary':'')+'">'
+    // Nájezd řádků po 20 ms, stejně jako u řádků tabulky položek
+    return '<div class="crm-contact-row row-anim'+(ct.primary?' is-primary':'')+'" style="animation-delay:'+(ri*20)+'ms;">'
       +'<span style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;width:80px;flex-shrink:0;">'+escHtml(ct.type)+'</span>'
       +'<span style="flex:1;font-size:13px;min-width:0;overflow-wrap:anywhere;">'+val+'</span>'
       +(ct.primary?'<span style="font-size:9px;color:var(--accent);font-family:DM Mono,monospace;border:1px solid var(--accent);border-radius:3px;padding:1px 5px;flex-shrink:0;">hlavní</span>':'')
@@ -9797,17 +9837,23 @@ function deleteCustomer(id){
     'Smazat '+(isB2c?'zákazníka':'partnera')+' „'+escHtml(c.name)+'"?'
     +'<br><span style="color:var(--muted);font-size:12px;">'+(detail.length?detail.join(', ')+'. ':'')+'Akce je nevratná.</span>',
     'Smazat', 'var(--danger)', function(){
-      if(linked){
-        items.forEach(function(it){ if(it.linkedCustomerId===id) it.linkedCustomerId=''; });
-        sv();
+      function apply(){
+        if(linked){
+          items.forEach(function(it){ if(it.linkedCustomerId===id) it.linkedCustomerId=''; });
+          sv();
+        }
+        customers=customers.filter(function(x){return x.id!==id;});
+        partners=partners.filter(function(x){return x.id!==id;});
+        saveCrmToFirestore();
+        renderCustomers();
+        try{ updateCrmFollowupBadge(); }catch(e){}
+        showToast((isB2c?'Zákazník':'Partner')+' „'+c.name+'" smazán.');
       }
-      customers=customers.filter(function(x){return x.id!==id;});
-      partners=partners.filter(function(x){return x.id!==id;});
-      saveCrmToFirestore();
       closeCustomerDetail();
-      renderCustomers();
-      try{ updateCrmFollowupBadge(); }catch(e){}
-      showToast((isB2c?'Zákazník':'Partner')+' „'+c.name+'" smazán.');
+      // Karta odjede stejně jako karta položky, teprve pak se seznam překreslí
+      var card = document.querySelector('.customer-card[data-cid="'+id+'"]');
+      if(card){ card.classList.add('deleting'); setTimeout(apply, 340); }
+      else apply();
     });
 }
 
@@ -12559,7 +12605,9 @@ function renderStockAnalytics() {
     var dur=Math.round(angle/Math.PI/2*600+200);
     pieHtml+='<path d="M100,100 L'+x1.toFixed(1)+','+y1.toFixed(1)+' A100,100 0 '+large+',1 '+x2.toFixed(1)+','+y2.toFixed(1)+' Z" fill="'+d.c+'" opacity="0" style="transform-origin:100px 100px;">'+
       '<animate attributeName="opacity" from="0" to="0.9" begin="'+pieDelay+'ms" dur="'+dur+'ms" fill="freeze"/>'+
-      '<animateTransform attributeName="transform" type="scale" from="0" to="1" begin="'+pieDelay+'ms" dur="'+dur+'ms" calcMode="spline" keySplines="0.34 1.56 0.64 1" fill="freeze"/>'+
+      // Pružné doskočení přes mezikrok — keySplines v SMIL povoluje jen 0–1,
+      // takže přestřel z CSS easingu (1.56) se sem musí přenést hodnotami
+      '<animateTransform attributeName="transform" type="scale" values="0;1.06;1" keyTimes="0;0.72;1" begin="'+pieDelay+'ms" dur="'+dur+'ms" calcMode="spline" keySplines="0.34 0.8 0.64 1;0.4 0 0.2 1" fill="freeze"/>'+
       '</path>';
     pieDelay+=Math.round(dur*0.6);
   });
