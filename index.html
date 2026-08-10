@@ -2336,6 +2336,13 @@ function _applyCloudData(data) {
   if (Array.isArray(data.locOpts) && data.locOpts.length) {
     try { localStorage.setItem(SK_LOC_OPTS, JSON.stringify(data.locOpts)); } catch(e) {}
   }
+  // Wishlist — prázdný seznam z cloudu nepřepisuje lokální
+  if (Array.isArray(data.wishlist) && data.wishlist.length) {
+    try {
+      localStorage.setItem(SK_WISH, JSON.stringify(data.wishlist));
+      wishItems = data.wishlist;
+    } catch(e) {}
+  }
   // Doplň definice kategorií chybějící pro klíče použité na položkách
   try { healCustomCats(); } catch(e) {}
   // Dopočítej původní eurové cílové ceny u záznamů uložených před opravou
@@ -2388,7 +2395,8 @@ function _buildCloudPayload() {
     customCats: (function(){ try { return getCustomCats(); } catch(e){ return []; } })(),
     // Jen explicitně uložené seznamy — jinak by čerstvé zařízení přepsalo cloud výchozími hodnotami
     paymentOpts: (function(){ try { var v = localStorage.getItem(SK_PAYMENT_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })(),
-    locOpts: (function(){ try { var v = localStorage.getItem(SK_LOC_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })()
+    locOpts: (function(){ try { var v = localStorage.getItem(SK_LOC_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })(),
+    wishlist: (function(){ try { var v = localStorage.getItem(SK_WISH); return v ? JSON.parse(v) : []; } catch(e){ return []; } })()
   };
 }
 
@@ -2553,7 +2561,8 @@ function doJsonBackup() {
     ioLimit: getIoLimit(),
     customCats: getCustomCats(),
     paymentOpts: (function(){ try { var v = localStorage.getItem(SK_PAYMENT_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })(),
-    locOpts: (function(){ try { var v = localStorage.getItem(SK_LOC_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })()
+    locOpts: (function(){ try { var v = localStorage.getItem(SK_LOC_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })(),
+    wishlist: (function(){ try { var v = localStorage.getItem(SK_WISH); return v ? JSON.parse(v) : []; } catch(e){ return []; } })()
   };
   var blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
   var url = URL.createObjectURL(blob);
@@ -2595,6 +2604,9 @@ function importJsonBackup(file) {
         }
         if (Array.isArray(data.locOpts) && data.locOpts.length) {
           try { localStorage.setItem(SK_LOC_OPTS, JSON.stringify(data.locOpts)); } catch(e) {}
+        }
+        if (Array.isArray(data.wishlist) && data.wishlist.length) {
+          try { localStorage.setItem(SK_WISH, JSON.stringify(data.wishlist)); wishItems = data.wishlist; } catch(e) {}
         }
       }
       if (!imported || !imported.length) {
@@ -6312,6 +6324,33 @@ function openImgModal(id) {
   document.getElementById('moImg').classList.add('open');
 }
 
+// Fotky se ukládají přímo do položky, a ta jde celá do jednoho cloudového dokumentu
+// s limitem 1 MiB. Neupravená fotka z mobilu (2 MB) ten limit sama přeteče a rozbije
+// ukládání do cloudu úplně — proto ji před uložením zmenšíme a překódujeme.
+var IMG_MAX_PX = 1000;      // delší strana
+var IMG_QUALITY = 0.72;     // JPEG kvalita
+
+function shrinkImage(dataUrl, cb) {
+  var img = new Image();
+  img.onload = function(){
+    try {
+      var w = img.naturalWidth, h = img.naturalHeight;
+      var scale = Math.min(1, IMG_MAX_PX / Math.max(w, h));
+      var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+      var cv = document.createElement('canvas');
+      cv.width = cw; cv.height = ch;
+      var cx = cv.getContext('2d');
+      // JPEG neumí průhlednost — bílé pozadí místo černé plochy u PNG
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, cw, ch);
+      cx.drawImage(img, 0, 0, cw, ch);
+      var out = cv.toDataURL('image/jpeg', IMG_QUALITY);
+      cb(out.length < dataUrl.length ? out : dataUrl, cw, ch);
+    } catch(e) { cb(dataUrl, 0, 0); }
+  };
+  img.onerror = function(){ cb(dataUrl, 0, 0); };
+  img.src = dataUrl;
+}
+
 function handleImgFile(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -6320,10 +6359,19 @@ function handleImgFile(e) {
   const reader = new FileReader();
   reader.onload = ev => {
     const base64 = ev.target.result;
-    showImgPreview(base64);
-    const iui=document.getElementById('imgUrlInput');if(iui)iui.value='';
-    status.textContent = 'Fotka připravena — klikni Uložit';
-    document.getElementById('imgPreview').dataset.pending = base64;
+    status.textContent = '⏳ Zmenšuji fotku...';
+    shrinkImage(base64, function(small, w, h){
+      // Ani po zmenšení nesmí fotka utopit cloudový dokument
+      if (small.length > 400 * 1024) {
+        status.textContent = 'Fotka je i po zmenšení moc velká — zkus jinou nebo vlož odkaz.';
+        return;
+      }
+      showImgPreview(small);
+      const iui = document.getElementById('imgUrlInput'); if (iui) iui.value = '';
+      var kb = Math.round(small.length / 1024);
+      status.textContent = 'Fotka připravena (' + (w ? w + '×' + h + ', ' : '') + kb + ' kB) — klikni Uložit';
+      document.getElementById('imgPreview').dataset.pending = small;
+    });
   };
   reader.readAsDataURL(file);
 }
@@ -6816,6 +6864,8 @@ function loadWishlist() {
 }
 function saveWishlist() {
   try { localStorage.setItem(SK_WISH, JSON.stringify(wishItems)); } catch(e){}
+  // Bez tohohle by wishlist žil jen v prohlížeči a při odhlášení se smazal
+  try { _ioCloudSync(); } catch(e){}
 }
 function wishUid() { return 'w'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 
