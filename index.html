@@ -12491,7 +12491,7 @@ function renderStockAnalytics() {
   var buyByMonth = {};
   var buyCntByMonth = {};
   var now12 = new Date(); now12.setMonth(now12.getMonth()-11); now12.setDate(1);
-  allSi.forEach(function(it){
+  si.forEach(function(it){
     var d = parseBuyDate(it);
     if(!d || d < now12) return;
     var key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
