@@ -93,6 +93,10 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 /* Filtry zákazníků používají custom select — tlačítko se roztáhne dle textu (delší popisky typu "Nový (1–2 nákupy)") */
 .crm-filters .cs-btn{width:auto;min-width:132px;}
 .crm-mode-bar{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;}
+/* Hlavičky tabulky Per platforma — klikací řazení */
+.an-plat-th{color:var(--muted2);cursor:pointer;user-select:none;white-space:nowrap;transition:color 0.15s;}
+.an-plat-th:hover{color:var(--text);}
+.an-plat-th.active{color:var(--accent);}
 /* Tlačítka nástrojů v Nastavení — všechna stejně široká i vysoká bez ohledu na délku popisku */
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;}
 .tool-grid .btn-sec{font-size:12px;min-height:46px;display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.3;}
@@ -7235,6 +7239,18 @@ document.addEventListener('click', function(e) {
       }
     }
   }
+  // Řazení tabulky Per platforma kliknutím na hlavičku sloupce
+  var _platTh = e.target.closest('[data-plat-sort]');
+  if (_platTh) {
+    var _k = _platTh.dataset.platSort;
+    var _cur = window._anPlatSort || {key:'profit', dir:'desc'};
+    // Stejný sloupec podruhé otočí směr, jiný začne svým výchozím
+    window._anPlatSort = (_cur.key === _k)
+      ? {key:_k, dir: _cur.dir==='asc' ? 'desc' : 'asc'}
+      : {key:_k, dir: _platTh.dataset.platDir || 'desc'};
+    renderSoldView();
+    return;
+  }
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   e.stopPropagation();
@@ -13075,12 +13091,39 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
       var rv=it.type==='bulk'?(it.sellPrice||0):(it.sellCurrency==='EUR'?getSellOrig(it)*er:(it.sellPrice||0));
       pm[w].count++;pm[w].profit+=p;pm[w].cost+=bp;pm[w].rev+=rv;
     });
-    var rows=Object.entries(pm).sort(function(a,b){return b[1].profit-a[1].profit;});
+    // Řazení dle kliknutého sloupce (výchozí zisk sestupně)
+    var _ps = window._anPlatSort || {key:'profit', dir:'desc'};
+    var _cols = [
+      {key:'name',   label:'Platforma', dir:'asc'},
+      {key:'count',  label:'Prodeje',   dir:'desc'},
+      {key:'rev',    label:'Tržby',     dir:'desc'},
+      {key:'profit', label:'Zisk',      dir:'desc'},
+      {key:'roi',    label:'ROI',       dir:'desc'}
+    ];
+    function _platVal(e, key){
+      var d = e[1];
+      if(key==='name') return (e[0]||'').toLowerCase();
+      if(key==='roi')  return d.cost>0 ? d.profit/d.cost*100 : -Infinity; // platformy bez nákladu až na konec
+      return d[key]||0;
+    }
+    var rows=Object.entries(pm).sort(function(a,b){
+      var va=_platVal(a,_ps.key), vb=_platVal(b,_ps.key);
+      var cmp = typeof va==='string' ? va.localeCompare(vb,'cs') : (va-vb);
+      if(cmp===0) cmp = b[1].profit-a[1].profit;   // stabilní druhotné řazení
+      return _ps.dir==='asc' ? cmp : -cmp;
+    });
     if(!rows.length)return;
     html+='<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;">';
     html+='<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">Per platforma</div>';
     html+='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-    html+='<thead><tr style="border-bottom:1px solid var(--border);">'+['Platforma','Prodejů','Tržby','Zisk','ROI'].map(function(h,i){return '<th style="padding:5px 8px;text-align:'+(i===0?'left':'center')+';font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;">'+h+'</th>';}).join('')+'</tr></thead><tbody>';
+    html+='<thead><tr style="border-bottom:1px solid var(--border);">'+_cols.map(function(c,i){
+      var active = _ps.key===c.key;
+      var arrow = active ? (_ps.dir==='asc'?' ▲':' ▼') : '';
+      return '<th class="an-plat-th'+(active?' active':'')+'" data-plat-sort="'+c.key+'" data-plat-dir="'+c.dir+'"'
+        +' data-tip="Klikni pro seřazení"'
+        +' style="padding:5px 8px;text-align:'+(i===0?'left':'center')+';font-family:\'DM Mono\',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1px;">'
+        +c.label+arrow+'</th>';
+    }).join('')+'</tr></thead><tbody>';
     rows.forEach(function(e){
       var w=e[0],d=e[1];
       var roi=d.cost>0?Math.round(d.profit/d.cost*100):null;
