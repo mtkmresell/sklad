@@ -108,7 +108,9 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 .customer-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color 0.2s,transform 0.15s;display:flex;flex-direction:column;min-width:0;}
 /* Dlouhá jména se v úzké kartě zalomí místo přetečení */
 .customer-card .cc-name{font-family:Syne,sans-serif;font-size:14px;font-weight:700;overflow-wrap:anywhere;}
-.customer-card .cc-stats{margin-top:auto;padding-top:2px;}
+/* Poznámka + souhrn drží u dna karty, souhrn je vždy poslední řádek */
+.customer-card .cc-foot{margin-top:auto;padding-top:2px;}
+.customer-card .cc-note{font-size:11px;color:var(--muted);font-style:italic;margin-bottom:6px;overflow-wrap:anywhere;}
 .customer-card:hover{border-color:#3a3a3a;transform:translateY(-1px);}
 .cs-status{font-family:'DM Mono',monospace;font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid;margin-right:6px;}
 .cs-status-vip{background:#c8ff0018;color:#c8ff00;border-color:#c8ff0030;}
@@ -9332,12 +9334,15 @@ function renderCustomerCard(c) {
     '</div>' +
     contactLine +
     tagsLine +
-    '<div class="cc-stats" style="display:flex;gap:12px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace;flex-wrap:wrap;">' +
-      (c.size_shoes_eu ? '<span>👟 EU ' + escHtml(c.size_shoes_eu) + '</span>' : '') +
-      '<span>📦 ' + (c.stats_orders_count||0) + ' obj.</span>' +
-      '<span>💰 ' + (c.stats_total_spent||0).toLocaleString('cs-CZ') + ' Kč</span>' +
+    // Poznámka nad souhrnem — souhrn tak sedí na dně karty stejně u všech zákazníků
+    '<div class="cc-foot">' +
+      (c.note_quick ? '<div class="cc-note">' + escHtml(c.note_quick) + '</div>' : '') +
+      '<div class="cc-stats" style="display:flex;gap:12px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace;flex-wrap:wrap;">' +
+        (c.size_shoes_eu ? '<span>👟 EU ' + escHtml(c.size_shoes_eu) + '</span>' : '') +
+        '<span>📦 ' + (c.stats_orders_count||0) + ' obj.</span>' +
+        '<span>💰 ' + (c.stats_total_spent||0).toLocaleString('cs-CZ') + ' Kč</span>' +
+      '</div>' +
     '</div>' +
-    (c.note_quick ? '<div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic;">' + escHtml(c.note_quick) + '</div>' : '') +
   '</div>';
 }
 
