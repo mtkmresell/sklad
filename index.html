@@ -12000,12 +12000,16 @@ document.addEventListener('fb-auth', function(e) {
         return;
       }
       var data = snap.data();
+      // Načtení archivů může chvíli trvat; kdyby mezitím dorazil další snapshot,
+      // ať se první kolo (a případný dotaz uživateli) nespustí dvakrát
+      var jePrvni = _firstSnapshot;
+      _firstSnapshot = false;
       // Archivy si dotáhneme dřív, než se cokoli rozhodne — rozhodovací logika
       // níž zůstává beze změny, jen dostane kompletní seznam položek
       _withArchives(data, function(archiveItems) {
       if (archiveItems === null) {
         // Archivy nedostupné — nesaháme na lokální data, zkusí se to při dalším snapshotu
-        if (_firstSnapshot) { _firstSnapshot = false; _fbCloudReady = true; }
+        if (jePrvni) _fbCloudReady = true;
         var d0 = document.getElementById('fbStatusDot');
         if (d0) d0.className = 'fb-status fb-error';
         showToast('Archiv prodejů se nepodařilo načíst — data zůstala lokální.', 'err');
@@ -12015,8 +12019,7 @@ document.addEventListener('fb-auth', function(e) {
       var localSavedAt = localStorage.getItem(SK+'_savedAt');
       var localTime = localSavedAt ? new Date(localSavedAt).getTime() : 0;
 
-      if (_firstSnapshot) {
-        _firstSnapshot = false;
+      if (jePrvni) {
         _fbCloudReady = true;
         // Zruš jakýkoli pending sv() cloud timer
         if (_svCloudTimer) { clearTimeout(_svCloudTimer); _svCloudTimer = null; }
