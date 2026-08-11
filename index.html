@@ -1044,7 +1044,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, deleteUser }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { initializeFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, getDocs, query, where }
+  import { initializeFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, getDocs, query, where, writeBatch }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const FIREBASE_CONFIG = {
@@ -1067,7 +1067,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     // Exportuj na window pro přístup z hlavního scriptu
     window._fbAuth = auth;
     window._fbDb = db;
-    window._fbFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteUser, collection, getDocs, query, where };
+    window._fbFns = { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteUser, collection, getDocs, query, where, writeBatch };
     window._fbReady = true;
 
     // Sleduj přihlašovací stav
@@ -2255,6 +2255,160 @@ function sv(){
   }
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ROZDĚLENÍ CLOUDU NA HLAVNÍ DOKUMENT + ROČNÍ ARCHIVY
+
+   Firestore má tvrdý limit 1 MiB na dokument. Všechno v jednom dokumentu
+   znamenalo strop kolem 1 100 položek. Prodané položky se proto ukládají
+   do samostatných dokumentů podle roku payoutu:
+
+     sklad/data        — sklad, čeká, nastavení  (mění se pořád)
+     sklad/sold_2025   — prodeje 2025            (po uzavření roku se nemění)
+     sklad/cache       — našeptávač produktů     (jen přibývá)
+
+   Hlavní dokument zůstává jediným rozhodčím při řešení konfliktů — nese
+   savedAt a archivy se zapisují ve stejné dávce, takže jsou s ním vždy
+   konzistentní.
+
+   Během přechodu se do hlavního dokumentu zapisuje i kompletní seznam
+   (pole items), takže starší verze aplikace funguje dál a je kam couvnout.
+   Při načtení se obě podoby porovnají; když nesouhlasí, použije se ten
+   kompletní seznam. Až bude ověřeno, přepne se CLOUD_LEGACY_MIRROR na
+   false a rezerva se naplno projeví.
+══════════════════════════════════════════════════════════════════════ */
+var CLOUD_LEGACY_MIRROR = true;   // zapisovat i kompletní seznam (přechodné období)
+
+// Do kterého archivu položka patří — null znamená hlavní dokument
+function _itemArchiveYear(it) {
+  if (!it || it.saleState !== 'paid') return null;
+  var d = it.payoutDate || it.saleDate || '';
+  var y = String(d).slice(0, 4);
+  return /^(19|20)\d{2}$/.test(y) ? y : null;   // bez použitelného data raději do hlavního
+}
+
+// Rozdělí seznam na hlavní část a archivy podle roku
+function _splitItems(list) {
+  var main = [], byYear = {};
+  (list || []).forEach(function(it) {
+    var y = _itemArchiveYear(it);
+    if (y) (byYear[y] = byYear[y] || []).push(it);
+    else main.push(it);
+  });
+  return { main: main, byYear: byYear };
+}
+
+// Krátký otisk obsahu — abychom přepisovali jen archivy, které se opravdu změnily
+function _hashStr(s) {
+  var h = 5381;
+  for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return String(h);
+}
+var _archiveHashes = {};      // rok → otisk obsahu, který zrovna držíme
+var _archiveStamps = {};      // rok → savedAt archivu, který zrovna držíme
+var _archiveCache = null;     // rok → položky
+
+function _archiveDocRef(fns, year) {
+  return fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'sold_' + year);
+}
+
+// Načte archivy. Hlavní dokument nese u každého roku razítko posledního zápisu,
+// takže se z cloudu tahají jen roky, které se od minula opravdu změnily.
+function _withArchives(data, cb) {
+  var years = Array.isArray(data && data.archiveYears) ? data.archiveYears : null;
+  if (!years || !years.length) { cb([]); return; }
+  var stamps = (data && data.archiveStamps) || {};
+  var cache = _archiveCache || {};
+  var need = years.filter(function(y) {
+    return !cache[y] || !stamps[y] || _archiveStamps[y] !== stamps[y];
+  });
+  if (!need.length) {
+    cb([].concat.apply([], years.map(function(y){ return cache[y] || []; })));
+    return;
+  }
+  if (!window._fbUser || !window._fbDb || !window._fbFns) { cb(null); return; }
+  var fns = window._fbFns;
+  Promise.all(need.map(function(y) {
+    return fns.getDoc(_archiveDocRef(fns, y))
+      .then(function(s){ return { y: y, items: (s.exists() && s.data().items) || [], stamp: (s.exists() && s.data().savedAt) || '' }; })
+      .catch(function(){ return { y: y, items: null }; });   // null = načtení selhalo
+  })).then(function(res) {
+    if (res.some(function(r){ return r.items === null; })) { cb(null); return; }  // radši nic než půlku
+    res.forEach(function(r) {
+      cache[r.y] = r.items;
+      _archiveHashes[r.y] = _hashStr(JSON.stringify(r.items));
+      _archiveStamps[r.y] = r.stamp;
+    });
+    _archiveCache = cache;
+    cb([].concat.apply([], years.map(function(y){ return cache[y] || []; })));
+  }).catch(function(e){ console.error('načtení archivů:', e); cb(null); });
+}
+
+// Složí kompletní seznam položek z hlavního dokumentu a archivů.
+// Vrací null, když si obě podoby odporují — volající pak sáhne po záloze.
+function _mergeCloudItems(data, archiveItems) {
+  var legacy = Array.isArray(data.items) ? data.items : [];
+  if (!Array.isArray(data.archiveYears)) return legacy;              // starý formát
+  if (archiveItems === null) return legacy.length ? legacy : null;   // archivy nedostupné
+  // Split zapsaný jiným (starším) klientem už neplatí
+  if (data.splitSavedAt && data.savedAt && data.splitSavedAt !== data.savedAt) return legacy;
+  var merged = (Array.isArray(data.itemsStock) ? data.itemsStock : []).concat(archiveItems);
+  if (legacy.length && merged.length !== legacy.length) {
+    console.warn('Rozdělení nesouhlasí s kompletním seznamem:', merged.length, 'vs', legacy.length, '— použit kompletní seznam.');
+    return legacy;
+  }
+  return merged;
+}
+
+// Přidá do dávky jen archivy, jejichž obsah se od posledního zápisu změnil,
+// a smaže dokumenty roků, které se vyprázdnily. Do payloadu doplní razítka
+// jednotlivých roků — musí se proto volat ještě před batch.set hlavního dokumentu.
+// Vrací, co se zapisovalo, aby se stav zapamatoval až po úspěšném commitu.
+function _stageArchives(fns, batch, payload) {
+  var split = _currentSplit();
+  var years = Object.keys(split.byYear).sort();
+  var hashes = {}, stamps = {}, changed = [], removed = [];
+  years.forEach(function(y) {
+    var h = _hashStr(JSON.stringify(split.byYear[y]));
+    hashes[y] = h;
+    if (_archiveHashes[y] !== h || !_archiveStamps[y]) {
+      batch.set(_archiveDocRef(fns, y), { year: y, items: split.byYear[y], savedAt: payload.savedAt });
+      stamps[y] = payload.savedAt;
+      changed.push(y);
+    } else {
+      stamps[y] = _archiveStamps[y];   // beze změny — razítko zůstává
+    }
+  });
+  Object.keys(_archiveHashes).forEach(function(y) {
+    if (years.indexOf(y) === -1) { batch.delete(_archiveDocRef(fns, y)); removed.push(y); }
+  });
+  payload.archiveYears = years;
+  payload.archiveStamps = stamps;
+  return { hashes: hashes, stamps: stamps, changed: changed, removed: removed, byYear: split.byYear };
+}
+
+// Pravidla Firestore můžou mít povolený jen dokument „data". Pak dávka s archivy
+// spadne na oprávnění — a my se vrátíme ke starému způsobu (všechno v jednom
+// dokumentu). Aplikace tím funguje dál, jen bez úspory místa.
+var _archivesBlocked = false;
+function _isPermissionError(e) {
+  return !!e && (e.code === 'permission-denied' || /permission|insufficient/i.test(e.message || ''));
+}
+// Payload pro starý způsob — kompletní seznam a žádné stopy po rozdělení
+function _legacyPayload(payload) {
+  var p = Object.assign({}, payload);
+  p.items = (payload.items && payload.items.length) ? payload.items : _stripUndefined(items);
+  delete p.itemsStock; delete p.archiveYears; delete p.archiveStamps; delete p.splitSavedAt;
+  return p;
+}
+
+// Zapamatuje si stav archivů — až když dávka opravdu prošla
+function _commitArchiveState(written) {
+  if (!written) return;
+  _archiveHashes = written.hashes;
+  _archiveStamps = written.stamps;
+  _archiveCache = written.byYear;
+}
+
 var _fbCloudReady = false; // true až po prvním onSnapshot
 var _fbSaveCallId = 0;
 var _lastOwnSavedAt = null; // savedAt string našeho posledního cloudu — ignorujeme vlastní snapshot
@@ -2271,34 +2425,51 @@ function fbSaveToCloud() {
   var payload = _buildCloudPayload();
   var ts = payload.savedAt;
   // Timeout 10s — Firestore ve offline stavu nechá promise viset navždy
-  var writeTimeout = new Promise(function(_, reject) {
-    setTimeout(function() { reject(new Error('timeout')); }, 10000);
-  });
-  Promise.race([fns.setDoc(docRef, payload), writeTimeout])
-    .then(function(){
-      localStorage.setItem(SK+'_savedAt', ts);
-      localStorage.removeItem(SK+'_dirty');
-      _lastOwnSavedAt = ts;
-      if (callId === _fbSaveCallId) {
-        if (dot) dot.className = 'fb-status fb-online';
-      }
-    })
+  function withTimeout(p) {
+    return Promise.race([p, new Promise(function(_, reject) {
+      setTimeout(function() { reject(new Error('timeout')); }, 10000);
+    })]);
+  }
+  function done(written) {
+    localStorage.setItem(SK+'_savedAt', ts);
+    localStorage.removeItem(SK+'_dirty');
+    _lastOwnSavedAt = ts;
+    _commitArchiveState(written);
+    if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-online';
+  }
+  function failed(e) {
+    if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-error';
+    console.error('fbSaveToCloud chyba:', e);
+    showToast(e.message === 'timeout' ? 'Cloud nedostupný – data jsou uložena lokálně.' : 'Chyba uložení do cloudu!', 'err');
+  }
+  // Starý způsob — všechno v jednom dokumentu (když pravidla archivy nepustí)
+  function saveLegacy() {
+    withTimeout(fns.setDoc(docRef, _legacyPayload(payload))).then(function(){ done(null); }).catch(failed);
+  }
+  if (_archivesBlocked) { saveLegacy(); return; }
+  // Hlavní dokument a změněné archivy jdou v jedné dávce — buď projde všechno, nebo nic,
+  // takže se položka nemůže ztratit mezi dokumenty
+  var batch = fns.writeBatch(window._fbDb);
+  var written = _stageArchives(fns, batch, payload);   // doplní payload.archiveStamps
+  batch.set(docRef, payload);
+  withTimeout(batch.commit())
+    .then(function(){ done(written); })
     .catch(function(e){
-      if (callId === _fbSaveCallId) {
-        if (dot) dot.className = 'fb-status fb-error';
+      if (_isPermissionError(e)) {
+        _archivesBlocked = true;
+        console.warn('Archivy nejsou povolené pravidly Firestore — ukládám postaru do jednoho dokumentu.');
+        saveLegacy();
+        return;
       }
-      console.error('fbSaveToCloud chyba:', e);
-      if (e.message === 'timeout') {
-        showToast('Cloud nedostupný – data jsou uložena lokálně.', 'err');
-      } else {
-        showToast('Chyba uložení do cloudu!', 'err');
-      }
+      failed(e);
     });
 }
 
-function _applyCloudData(data) {
-  var cloudItems = data.items || [];
-  if (!cloudItems.length) return false;
+// archiveItems: položky z ročních archivů (pole), null když se je nepodařilo načíst.
+// Když se vynechá, použije se jen hlavní dokument — volající by měl projít přes _withArchives.
+function _applyCloudData(data, archiveItems) {
+  var cloudItems = _mergeCloudItems(data, archiveItems === undefined ? [] : archiveItems);
+  if (!cloudItems || !cloudItems.length) return false;
   items = cloudItems;
   localStorage.setItem(SK, JSON.stringify(items));
   if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
@@ -2349,37 +2520,43 @@ function _applyCloudData(data) {
   try { healTargetPricesEur(); } catch(e) {}
   // Ukliď zbytky po zrušené evidenci přesunů mezi profily
   try { stripProfileLogs(); } catch(e) {}
-  // Načti historickou cache položek (uložena v stejném dokumentu)
-  if (data.itemCache) {
-    try {
-      var cloudCache = JSON.parse(data.itemCache);
-      var localCache = itemCacheGet();
-      var merged = Object.assign({}, localCache, cloudCache);
-      localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(merged));
-    } catch(e) {}
-  } else {
-    // Žádná cache v cloudu — jednorázově migruj ze stávajících Prodáno položek
-    _migrateItemCacheFromSold();
-  }
+  // Historická cache položek — vlastní dokument, s ohledem na starý formát
+  try { _syncItemCache(data.itemCache); } catch(e) {}
   _itemsVersion++; window._lastFilterBuildKey = null;
   renderStats(); renderItems();
   return true;
 }
 
-function _buildCloudPayload() {
-  function stripUndefined(obj) {
-    if (Array.isArray(obj)) return obj.map(stripUndefined);
-    if (obj && typeof obj === 'object') {
-      var out = {};
-      Object.keys(obj).forEach(function(k) { if (obj[k] !== undefined) out[k] = stripUndefined(obj[k]); });
-      return out;
-    }
-    return obj;
+function _stripUndefined(obj) {
+  if (Array.isArray(obj)) return obj.map(_stripUndefined);
+  if (obj && typeof obj === 'object') {
+    var out = {};
+    Object.keys(obj).forEach(function(k) { if (obj[k] !== undefined) out[k] = _stripUndefined(obj[k]); });
+    return out;
   }
+  return obj;
+}
+
+// Rozdělení pro právě ukládaná data — počítá se z jednoho zdroje, ať se hlavní
+// dokument a archivy nemůžou rozejít
+function _currentSplit() {
+  return _splitItems(_stripUndefined(items));
+}
+
+function _buildCloudPayload() {
   savePanelToMemory(steCurrentBrand);
+  var split = _currentSplit();
+  var years = Object.keys(split.byYear).sort();
+  var ts = new Date().toISOString();
   return {
-    items: stripUndefined(items),
-    savedAt: new Date().toISOString(),
+    // Kompletní seznam pro starší verze aplikace a jako kontrola proti rozdělení.
+    // Po ověření se vypne přes CLOUD_LEGACY_MIRROR a dokument se tím zmenší.
+    items: CLOUD_LEGACY_MIRROR ? split.main.concat([].concat.apply([], years.map(function(y){ return split.byYear[y]; }))) : [],
+    itemsStock: split.main,
+    archiveYears: years,
+    archiveStamps: {},      // doplní _stageArchives (razítko poslední změny u každého roku)
+    splitSavedAt: ts,
+    savedAt: ts,
     platGroups: (function(){ try { var v=localStorage.getItem('sklad_plat_groups_v1'); return v||null; } catch(e){ return null; } })(),
     steTables: (function(){ try { return JSON.stringify(steTables); } catch(e){ return null; } })(),
     steBrandOrder: (function(){ try { return steBrandOrder.slice(); } catch(e){ return null; } })(),
@@ -2407,22 +2584,46 @@ function fbForceUploadToCloud() {
   var dot = document.getElementById('fbStatusDot');
   if (dot) dot.className = 'fb-status fb-saving';
   var payload = _buildCloudPayload();
-  var writeTimeout = new Promise(function(_, reject) {
-    setTimeout(function() { reject(new Error('timeout')); }, 10000);
-  });
-  Promise.race([fns.setDoc(docRef, payload), writeTimeout])
-    .then(function() {
-      localStorage.setItem(SK+'_savedAt', payload.savedAt);
-      localStorage.removeItem(SK+'_dirty');
-      _lastOwnSavedAt = payload.savedAt;
-      _fbCloudReady = true;
-      if (dot) dot.className = 'fb-status fb-online';
-      showToast('Data nahrána do cloudu (' + items.length + ' položek).');
-    })
+  // Ruční nahrání přepíše i všechny archivy, ať se nespoléhá na otisky.
+  // Roky si ale pamatujeme dál, aby se ty zrušené pořád měly podle čeho smazat.
+  Object.keys(_archiveHashes).forEach(function(y){ _archiveHashes[y] = '!'; });
+  _archiveStamps = {};
+  function withTimeout(p) {
+    return Promise.race([p, new Promise(function(_, reject) {
+      setTimeout(function() { reject(new Error('timeout')); }, 10000);
+    })]);
+  }
+  function done(written) {
+    localStorage.setItem(SK+'_savedAt', payload.savedAt);
+    localStorage.removeItem(SK+'_dirty');
+    _lastOwnSavedAt = payload.savedAt;
+    _commitArchiveState(written);
+    _fbCloudReady = true;
+    if (dot) dot.className = 'fb-status fb-online';
+    showToast('Data nahrána do cloudu (' + items.length + ' položek).');
+  }
+  function failed(e) {
+    if (dot) dot.className = 'fb-status fb-error';
+    showToast(e.message === 'timeout' ? 'Cloud nedostupný – zkus to znovu.' : ('Chyba nahrávání: ' + (e.message || e)), 'err');
+    console.error('fbForceUploadToCloud:', e);
+  }
+  function saveLegacy() {
+    withTimeout(fns.setDoc(docRef, _legacyPayload(payload))).then(function(){ done(null); }).catch(failed);
+  }
+  if (_archivesBlocked) { saveLegacy(); return; }
+  var batch = fns.writeBatch(window._fbDb);
+  var written = _stageArchives(fns, batch, payload);   // doplní payload.archiveStamps
+  batch.set(docRef, payload);
+  withTimeout(batch.commit())
+    .then(function() { done(written); })
     .catch(function(e) {
-      if (dot) dot.className = 'fb-status fb-error';
-      showToast(e.message === 'timeout' ? 'Cloud nedostupný – zkus to znovu.' : ('Chyba nahrávání: ' + (e.message || e)), 'err');
-      console.error('fbForceUploadToCloud:', e);
+      if (_isPermissionError(e)) {
+        _archivesBlocked = true;
+        console.warn('Archivy nejsou povolené pravidly Firestore — ukládám postaru do jednoho dokumentu.');
+        saveLegacy();
+        return;
+      }
+      failed(e);
     });
 }
 
@@ -2434,9 +2635,14 @@ function fbForceLoadFromCloud() {
   if (dot) dot.className = 'fb-status fb-saving';
   fns.getDoc(docRef).then(function(snap) {
     if (!snap.exists()) { showToast('V cloudu nejsou žádná data.', 'err'); return; }
-    var loaded = _applyCloudData(snap.data());
-    if (dot) dot.className = 'fb-status fb-online';
-    showToast(loaded ? 'Data načtena z cloudu (' + items.length + ' položek).' : 'V cloudu jsou prázdná data.', loaded ? '' : 'err');
+    var data = snap.data();
+    _archiveStamps = {};   // ruční stažení jde vždy pro čerstvé archivy
+    _withArchives(data, function(arch) {
+      if (arch === null) { if (dot) dot.className = 'fb-status fb-error'; showToast('Archivy se nepodařilo načíst — zkus to znovu.', 'err'); return; }
+      var loaded = _applyCloudData(data, arch);
+      if (dot) dot.className = 'fb-status fb-online';
+      showToast(loaded ? 'Data načtena z cloudu (' + items.length + ' položek).' : 'V cloudu jsou prázdná data.', loaded ? '' : 'err');
+    });
   }).catch(function(e) {
     if (dot) dot.className = 'fb-status fb-error';
     showToast('Chyba načtení z cloudu: ' + (e.message || e), 'err');
@@ -2460,8 +2666,11 @@ document.addEventListener('visibilitychange', function() {
     var cloudTime = data.savedAt ? new Date(data.savedAt).getTime() : 0;
     var localTime = (localStorage.getItem(SK+'_savedAt') ? new Date(localStorage.getItem(SK+'_savedAt')).getTime() : 0);
     if (cloudTime > localTime) {
-      saveSnapshot('před sync');
-      if (_applyCloudData(data)) showToast('Synchronizováno z cloudu.');
+      _withArchives(data, function(arch) {
+        if (arch === null) return;   // archivy nedostupné — necháme lokální data být
+        saveSnapshot('před sync');
+        if (_applyCloudData(data, arch)) showToast('Synchronizováno z cloudu.');
+      });
     }
   }).catch(function(e) { console.warn('visibilitychange sync check:', e); });
 });
@@ -2496,8 +2705,9 @@ var SNAP_COUNT = 5;
 
 // Záloha CLOUDOVÝCH dat předtím, než je přepíšeme lokálními — pojistka proti ztrátě
 // práce z jiného zařízení (snapshot jde do lokálního úložiště tohoto zařízení)
-function saveCloudSnapshot(data, label) {
-  var cloudItems = (data && data.items) || [];
+// cloudItems = kompletní seznam z cloudu (hlavní dokument + archivy), ne surový dokument
+function saveCloudSnapshot(cloudItems, label) {
+  cloudItems = cloudItems || [];
   if (!cloudItems.length) return;
   try {
     var snaps = getSnapshots();
@@ -9054,20 +9264,51 @@ function itemCacheSet(name, data) {
   try { localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(cache)); } catch(e) {}
 }
 
-// Ulož cache do Firestore — merge do sklad/data (stejný dokument = žádné permission issues)
+// Ulož cache do vlastního dokumentu (sklad/cache). Dřív ležela v hlavním dokumentu,
+// kde jednak ukrajovala z limitu 1 MiB, jednak ji každé běžné uložení přepsalo.
 function fbSaveItemCache() {
   if (!window._fbUser || !window._fbDb || !window._fbFns) return;
   var fns = window._fbFns;
-  var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
-  var payload = { itemCache: JSON.stringify(itemCacheGet()) };
+  var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'cache');
+  var payload = { cache: JSON.stringify(itemCacheGet()), savedAt: new Date().toISOString() };
   var writeTimeout = new Promise(function(_, reject) {
     setTimeout(function() { reject(new Error('timeout')); }, 10000);
   });
-  Promise.race([fns.setDoc(docRef, payload, { merge: true }), writeTimeout])
+  Promise.race([fns.setDoc(docRef, payload), writeTimeout])
     .catch(function(e) { console.error('fbSaveItemCache:', e); });
 }
 
-// fbLoadItemCache je nyní součástí _applyCloudData — načte se při každém syncu dat
+// Načtení cache — jednou za relaci, protože do ní se jen přidává.
+// legacyField = pole itemCache ze starého formátu hlavního dokumentu.
+var _itemCacheSynced = false;
+function _syncItemCache(legacyField) {
+  if (_itemCacheSynced) return;
+  _itemCacheSynced = true;
+  function mergeIn(cloudCache) {
+    if (!cloudCache) return;
+    try {
+      localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(Object.assign({}, itemCacheGet(), cloudCache)));
+    } catch(e) {}
+  }
+  function fromLegacy() {
+    if (!legacyField) { _migrateItemCacheFromSold(); return; }
+    try { mergeIn(JSON.parse(legacyField)); } catch(e) {}
+    fbSaveItemCache();   // přesun do vlastního dokumentu
+  }
+  if (!window._fbUser || !window._fbDb || !window._fbFns) { fromLegacy(); return; }
+  var fns = window._fbFns;
+  fns.getDoc(fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'cache'))
+    .then(function(snap) {
+      if (!snap.exists() || !snap.data().cache) { fromLegacy(); return; }
+      try { mergeIn(JSON.parse(snap.data().cache)); } catch(e) {}
+      if (legacyField) { try { mergeIn(JSON.parse(legacyField)); } catch(e) {} }   // zbytek ze starého formátu
+    })
+    .catch(function(e) {
+      console.warn('načtení cache našeptávače:', e);
+      // Pravidla vlastní dokument nepustí — zůstaň u starého formátu, jinak zkus znovu
+      if (_isPermissionError(e)) fromLegacy(); else _itemCacheSynced = false;
+    });
+}
 
 // Jednorázová migrace: přidej do cache všechny aktuálně Prodáno položky
 function _migrateItemCacheFromSold() {
@@ -11725,6 +11966,9 @@ document.addEventListener('fb-auth', function(e) {
   // Odhlášení — zruš listener a vyčisti data
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
   _fbCloudReady = false;
+  // Zapomeň stav archivů i cache, ať se nepřenese mezi účty
+  _archiveHashes = {}; _archiveStamps = {}; _archiveCache = null;
+  _archivesBlocked = false; _itemCacheSynced = false;
 
   if (!(e.detail && e.detail.user)) {
     clearSkladLocalStorage();
@@ -11756,6 +12000,17 @@ document.addEventListener('fb-auth', function(e) {
         return;
       }
       var data = snap.data();
+      // Archivy si dotáhneme dřív, než se cokoli rozhodne — rozhodovací logika
+      // níž zůstává beze změny, jen dostane kompletní seznam položek
+      _withArchives(data, function(archiveItems) {
+      if (archiveItems === null) {
+        // Archivy nedostupné — nesaháme na lokální data, zkusí se to při dalším snapshotu
+        if (_firstSnapshot) { _firstSnapshot = false; _fbCloudReady = true; }
+        var d0 = document.getElementById('fbStatusDot');
+        if (d0) d0.className = 'fb-status fb-error';
+        showToast('Archiv prodejů se nepodařilo načíst — data zůstala lokální.', 'err');
+        return;
+      }
       var cloudTime = data.savedAt ? new Date(data.savedAt).getTime() : 0;
       var localSavedAt = localStorage.getItem(SK+'_savedAt');
       var localTime = localSavedAt ? new Date(localSavedAt).getTime() : 0;
@@ -11771,25 +12026,25 @@ document.addEventListener('fb-auth', function(e) {
         var isDirty = !!localStorage.getItem(SK+'_dirty');
         if (!localSavedAt || items.length === 0) {
           // Nové zařízení nebo prázdný stav — načti z cloudu
-          _applyCloudData(data);
+          _applyCloudData(data, archiveItems);
           showToast('Data načtena z cloudu (' + items.length + ' položek).');
         } else if (data.savedAt && localSavedAt === data.savedAt) {
           // Identický stav — nic nedělej
         } else if (isDirty && localTime > cloudTime) {
           // Lokální neuložené změny novější než cloud (zavřeno před dokončením sync)
           // — jediný nejednoznačný případ, rozhodne uživatel
-          saveCloudSnapshot(data, 'cloud před rozhodnutím');
+          saveCloudSnapshot(_mergeCloudItems(data, archiveItems) || [], 'cloud před rozhodnutím');
           saveSnapshot('lokální před rozhodnutím');
           var upload = confirm('Toto zařízení má neuložené změny, které nejsou v cloudu.\n\n'
             + 'OK = nahrát změny z tohoto zařízení do cloudu\n'
             + 'Zrušit = zahodit je a načíst data z cloudu\n\n'
             + '(Obě verze jsou zálohované v Nastavení → Automatické zálohy.)');
           if (upload) { fbSaveToCloud(); }
-          else { _applyCloudData(data); showToast('Data načtena z cloudu (' + items.length + ' položek).'); }
+          else { _applyCloudData(data, archiveItems); showToast('Data načtena z cloudu (' + items.length + ' položek).'); }
         } else {
           // Ve všech ostatních případech vyhrává cloud — se zálohou lokálních dat
           saveSnapshot('před sync');
-          if (_applyCloudData(data)) showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
+          if (_applyCloudData(data, archiveItems)) showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
         }
         // Cloud je srovnaný — teprve teď je bezpečné spustit auto-expiraci Bazoše
         setTimeout(bazosExpireCheckSafe, 1500);
@@ -11799,9 +12054,10 @@ document.addEventListener('fb-auth', function(e) {
         // Ignoruj pokud jsme to MY sami právě uložili (stejný savedAt string)
         var isOwnSave = _lastOwnSavedAt && data.savedAt === _lastOwnSavedAt;
         if (!isOwnSave && cloudTime > localTime + 500) {
-          if (_applyCloudData(data)) showToast('Synchronizováno.');
+          if (_applyCloudData(data, archiveItems)) showToast('Synchronizováno.');
         }
       }
+      });
     }, function(err) {
       console.error('onSnapshot chyba:', err);
       var dot = document.getElementById('fbStatusDot');
@@ -11961,8 +12217,23 @@ function deleteAccount() {
     function() {
       var fns = window._fbFns;
       if (!fns || !window._fbDb) return;
-      var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
-      fns.deleteDoc(docRef)
+      var uid = window._fbUser.uid;
+      // Smaž celou kolekci sklad (data, roční archivy, cache) i CRM — ať nic nezůstane
+      fns.getDocs(fns.collection(window._fbDb, 'users', uid, 'sklad'))
+        .then(function(snap) {
+          var batch = fns.writeBatch(window._fbDb);
+          snap.forEach(function(d) { batch.delete(d.ref); });
+          batch.delete(fns.doc(window._fbDb, 'users', uid, 'crm', 'main'));
+          return batch.commit();
+        })
+        .catch(function(e) {
+          // Pravidla nedovolí projít kolekci — smaž aspoň známé dokumenty
+          console.warn('hromadné mazání selhalo, mažu po jednom:', e);
+          return Promise.all([
+            fns.deleteDoc(fns.doc(window._fbDb, 'users', uid, 'sklad', 'data')).catch(function(){}),
+            fns.deleteDoc(fns.doc(window._fbDb, 'users', uid, 'crm', 'main')).catch(function(){}),
+          ]);
+        })
         .then(function() { return fns.deleteUser(window._fbUser); })
         .then(function() {
           clearSkladLocalStorage();
