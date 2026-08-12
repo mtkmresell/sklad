@@ -2270,13 +2270,13 @@ function sv(){
    savedAt a archivy se zapisují ve stejné dávce, takže jsou s ním vždy
    konzistentní.
 
-   Během přechodu se do hlavního dokumentu zapisuje i kompletní seznam
-   (pole items), takže starší verze aplikace funguje dál a je kam couvnout.
-   Při načtení se obě podoby porovnají; když nesouhlasí, použije se ten
-   kompletní seznam. Až bude ověřeno, přepne se CLOUD_LEGACY_MIRROR na
-   false a rezerva se naplno projeví.
+   Po dobu přechodu se do hlavního dokumentu zapisoval i kompletní seznam
+   (pole items) jako pojistka. Ta je po ověření v provozu vypnutá — teprve
+   tím se úspora místa naplno projeví. Čtecí strana kompletní seznam pořád
+   umí: dokumenty ze starého formátu i ze starší verze aplikace se načtou
+   beze změny a při prvním uložení se převedou na rozdělení.
 ══════════════════════════════════════════════════════════════════════ */
-var CLOUD_LEGACY_MIRROR = true;   // zapisovat i kompletní seznam (přechodné období)
+var CLOUD_LEGACY_MIRROR = false;  // kompletní seznam už se nezdvojuje
 
 // Do kterého archivu položka patří — null znamená hlavní dokument
 function _itemArchiveYear(it) {
