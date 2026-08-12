@@ -11,13 +11,19 @@ jen přes GitHub API (workflow „pages build and deployment", id `256573624`), 
 
 ```
 index.html     celá aplikace — 15 400 řádků, 86 % JS, 7 % CSS, 8 % HTML
+fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repozitáře
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
-Externě se načítá jen Firebase SDK a fonty. **Nezaváděj build ani balíčkovač** —
+Externě se načítá jen Firebase SDK. **Nezaváděj build ani balíčkovač** —
 bezstavové nasazení a offline provoz jsou záměr, ne opomenutí.
+
+**Fonty se neberou z Googlu.** Leží ve `fonty/` a jsou zapojené přes `@font-face`
+s relativní cestou. Bylo to kvůli tomu, že se na jednom zařízení načetly a na jiném
+ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz na
+`fonts.googleapis.com` — hlídá to `test-fonts.js`.
 
 ## Pravidla
 
