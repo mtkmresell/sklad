@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sklad</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MCA4MCI+PHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiByeD0iMTYiIGZpbGw9IiNjOGZmMDAiLz48dGV4dCB4PSI0MCIgeT0iNDAiIGZvbnQtZmFtaWx5PSJBcmlhbCBCbGFjayxzYW5zLXNlcmlmIiBmb250LXNpemU9IjUwIiBmb250LXdlaWdodD0iOTAwIiBmaWxsPSIjMGYwZjBmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0iY2VudHJhbCI+UzwvdGV4dD48L3N2Zz4=">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500;600&display=block" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
@@ -2087,6 +2089,54 @@ function ioYearStats(year){
   });
   return out;
 }
+// Odhad, kam se letos dojde s limitem identifikované osoby.
+// Tempo se počítá z už uplynulé části roku; dokud dat není dost, radši nic netvrdíme.
+function ioForecast(year){
+  var st=ioYearStats(year), limit=getIoLimit(), dnes=new Date();
+  var zacatek=new Date(year,0,1), konec=new Date(year,11,31);
+  var celkem=Math.round((konec-zacatek)/864e5)+1;
+  var out={ net:st.net, limit:limit, celkem:celkem, dost:false, prekrocen:st.net>=limit&&limit>0 };
+  if(dnes.getFullYear()!==year){ out.uplynulo=celkem; return out; }
+  out.uplynulo=Math.round((dnes-zacatek)/864e5)+1;
+  // Pod 30 dnů roku je odhad z jednoho nákupu nesmysl
+  if(out.uplynulo<30||st.net<=0||limit<=0) return out;
+  out.dost=true;
+  out.tempo=st.net/out.uplynulo;                       // Kč denně
+  out.odhadRoku=out.tempo*celkem;
+  out.zbyva=Math.max(0,limit-st.net);
+  if(!out.prekrocen&&out.tempo>0){
+    var dnu=out.zbyva/out.tempo;
+    out.dnuDoLimitu=dnu;
+    if(dnu<=celkem-out.uplynulo) out.datum=new Date(dnes.getTime()+dnu*864e5);
+  }
+  return out;
+}
+
+// Věta pod ukazatelem limitu — co z tempa plyne
+function ioForecastHtml(year){
+  var f=ioForecast(year);
+  var barva, text;
+  if(f.prekrocen){
+    barva='var(--danger)';
+    text='Limit je překročený o <strong>'+czk(f.net-f.limit)+'</strong>. Registrace identifikované osoby je povinná do 15 dnů od překročení.';
+  } else if(!f.dost){
+    barva='var(--muted)';
+    text=f.uplynulo<30
+      ? 'Na odhad je zatím málo dat — počítá se až po prvním měsíci roku.'
+      : 'Zatím žádné nákupy z EU v tomto roce.';
+  } else if(f.datum){
+    barva='var(--warning)';
+    text='Při současném tempu ('+czk(Math.round(f.tempo*30))+' měsíčně) narazíš na limit kolem <strong>'
+      +f.datum.toLocaleDateString('cs',{day:'numeric',month:'long'})+'</strong> — za '+Math.round(f.dnuDoLimitu)+' dnů.';
+  } else {
+    barva='var(--accent)';
+    text='Při současném tempu ('+czk(Math.round(f.tempo*30))+' měsíčně) skončíš letos kolem <strong>'
+      +czk(Math.round(f.odhadRoku))+'</strong>, tedy na '+Math.round(f.odhadRoku/f.limit*100)+' % limitu. Zbývá '+czk(f.zbyva)+'.';
+  }
+  var h='<div style="font-size:12px;color:'+barva+';line-height:1.5;margin-bottom:10px;">'+text+'</div>';
+  return h;
+}
+
 function _ioDistinctBuyWheres(){
   var seen={};
   (items||[]).forEach(function(it){
@@ -2128,7 +2178,14 @@ function openRetailersMgr(){
     h+='<span style="font-family:\'Syne\',sans-serif;font-size:20px;font-weight:800;color:'+barColor+';">'+czk(st.net)+'</span>';
     h+='<span style="font-size:12px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+Math.round(pct)+' % z '+czk(limit)+'</span>';
     h+='</div>';
-    h+='<div style="height:8px;background:var(--surface2);border-radius:6px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:'+Math.min(100,Math.round(pct))+'%;background:'+barColor+';border-radius:6px;"></div></div>';
+    // Pruh s ryskou, kam podle tempa dojdeš do konce roku
+    var _fc=ioForecast(year);
+    var _rys=(_fc.dost&&!_fc.prekrocen&&limit>0)?Math.min(99.5,_fc.odhadRoku/limit*100):null;
+    h+='<div style="position:relative;height:8px;background:var(--surface2);border-radius:6px;margin-bottom:8px;">';
+    h+='<div style="position:absolute;inset:0;overflow:hidden;border-radius:6px;"><div style="height:100%;width:'+Math.min(100,Math.round(pct))+'%;background:'+barColor+';"></div></div>';
+    if(_rys!==null&&_rys>pct+1) h+='<div title="Odhad na konec roku" style="position:absolute;top:-3px;bottom:-3px;left:'+_rys.toFixed(1)+'%;width:2px;background:var(--text);opacity:0.55;border-radius:2px;"></div>';
+    h+='</div>';
+    h+=ioForecastHtml(year);
     h+='<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-bottom:10px;">Nákupy z EU '+year+' bez DPH · '+st.count+' ks · loni ('+(year-1)+'): '+czk(stPrev.net)+'</div>';
     h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">';
     h+='<span style="font-size:11px;color:var(--muted);white-space:nowrap;">Roční limit (Kč bez DPH):</span>';
@@ -3559,7 +3616,15 @@ function renderStats(){
       var _ioPct=_ioLimit>0?_ioSt.net/_ioLimit*100:0;
       var _ioCls=_ioPct>=100?'sv-red':_ioPct>=80?'sv-yellow':'sv-green';
       // Procenta jen v tooltipu — třetí řádek by kartu zvýšil a rozhodil celý panel
-      return '<div class="stat-card" onclick="openRetailersMgr()" data-tip="Pořízení zboží z EU bez DPH — '+Math.round(_ioPct)+' % z limitu identifikované osoby ('+czk(_ioLimit)+'). Klikni pro správu retailerů." style="cursor:pointer;min-width:175px;">'
+      var _ioFc=ioForecast(_ym_y);
+      var _ioTip='Pořízení zboží z EU bez DPH — '+Math.round(_ioPct)+' % z limitu identifikované osoby ('+czk(_ioLimit)+').';
+      if(_ioFc.prekrocen) _ioTip+=' Limit je překročený.';
+      else if(_ioFc.datum) _ioTip+=' Při současném tempu na něj narazíš kolem '+_ioFc.datum.toLocaleDateString('cs',{day:'numeric',month:'long'})+'.';
+      else if(_ioFc.dost) _ioTip+=' Odhad na konec roku: '+czk(Math.round(_ioFc.odhadRoku))+'.';
+      _ioTip+=' Klikni pro správu retailerů.';
+      // Blíží-li se odhad limitu, obarvi kartu varovně i když je zatím pod 80 %
+      if(_ioFc.datum&&_ioCls==='sv-green') _ioCls='sv-yellow';
+      return '<div class="stat-card" onclick="openRetailersMgr()" data-tip="'+_ioTip+'" style="cursor:pointer;min-width:175px;">'
         +'<div class="stat-label">EU nákupy '+_ym_y+'</div>'
         +'<div class="stat-value '+_ioCls+'">'+czk(_ioSt.net)+'</div>'
         +'</div>';
@@ -4793,6 +4858,77 @@ async function fetchRateForDate(dateStr) {
   return eurRate || 25;
 }
 
+/* ── HISTORIE CEN U POLOŽKY ────────────────────────────────────────
+   U položky se pamatuje, jak se u ní vyvíjela cílová cena a za kolik
+   se nakonec prodala. Ukáže, jestli se systematicky střílí vysoko
+   a o kolik se pak slevuje.
+
+   Záznam: { d: 'YYYY-MM-DD', p: cena v Kč, e: částka v € (jen u eur),
+             s: 1 u skutečného prodeje }
+   Drží se maximálně 20 posledních záznamů, ať položka nebobtná.
+   ─────────────────────────────────────────────────────────────── */
+var PRICE_LOG_MAX = 20;
+
+function _dnesISO(){ return new Date().toISOString().slice(0,10); }
+
+// Zapíše cenu, jen když se opravdu liší od poslední zapsané
+function logPrice(it, cena, mena, castkaOrig, jePrpodej){
+  if(!it) return false;
+  var p = Math.round((parseFloat(cena)||0)*100)/100;
+  if(!p || p<=0) return false;
+  var log = Array.isArray(it.priceLog) ? it.priceLog : [];
+  var posl = log[log.length-1];
+  // Stejná cena i typ záznamu podruhé nemá smysl
+  if(posl && Math.abs(posl.p-p)<0.01 && !!posl.s === !!jePrpodej) return false;
+  var z = { d:_dnesISO(), p:p };
+  if(mena==='EUR' && castkaOrig) z.e = Math.round(parseFloat(castkaOrig)*100)/100;
+  if(jePrpodej) z.s = 1;
+  log.push(z);
+  if(log.length>PRICE_LOG_MAX) log = log.slice(log.length-PRICE_LOG_MAX);
+  it.priceLog = log;
+  return true;
+}
+
+// Souhrn pro zobrazení: první cena, poslední, prodejní a o kolik se slevilo
+function priceLogSummary(it){
+  var log = (it && Array.isArray(it.priceLog)) ? it.priceLog : [];
+  if(!log.length) return null;
+  var prvni = log[0];
+  var prodej = null;
+  for(var i=log.length-1;i>=0;i--){ if(log[i].s){ prodej = log[i]; break; } }
+  var posledniCil = null;
+  for(var j=log.length-1;j>=0;j--){ if(!log[j].s){ posledniCil = log[j]; break; } }
+  var konec = prodej || posledniCil;
+  var out = { log:log, prvni:prvni, posledniCil:posledniCil, prodej:prodej, zmen:log.length };
+  if(konec && prvni && prvni.p>0 && konec!==prvni){
+    out.rozdil = konec.p - prvni.p;
+    out.procent = out.rozdil/prvni.p*100;
+  }
+  return out;
+}
+
+// Řádek do detailu položky — posloupnost cen a o kolik se slevilo
+function priceLogHtml(it){
+  var sum = priceLogSummary(it);
+  if(!sum || sum.zmen<2) return '';
+  var casti = sum.log.map(function(z,i){
+    var txt = z.e ? (z.e+' €') : czk(z.p);
+    var barva = z.s ? 'var(--accent)' : 'var(--text)';
+    var titulek = fmtDate(z.d) + (z.s ? ' · prodáno' : ' · cílová cena');
+    return '<span title="'+titulek+'" style="color:'+barva+';white-space:nowrap;">'+txt+'</span>'
+      + (i<sum.log.length-1 ? '<span style="color:var(--muted2);margin:0 5px;">→</span>' : '');
+  }).join('');
+  var h = '<div style="font-family:\'DM Mono\',monospace;font-size:11px;line-height:1.9;">'+casti+'</div>';
+  if(sum.rozdil){
+    var dolu = sum.rozdil<0;
+    h += '<div style="font-size:11px;color:'+(dolu?'var(--warning)':'var(--accent)')+';margin-top:2px;">'
+      + (dolu?'Sleveno o ':'Zdraženo o ') + czk(Math.abs(Math.round(sum.rozdil)))
+      + ' (' + (dolu?'−':'+') + Math.abs(Math.round(sum.procent)) + ' %)'
+      + (sum.prodej?' oproti první cílové ceně':'') + '</div>';
+  }
+  return h;
+}
+
 /* ── Cílová cena v EUR ──────────────────────────────────────────────
    targetPrice je vždy v Kč. U položek zadaných v eurech si pamatujeme i
    původní částku (targetPriceEur) — jinak by se zpětný přepočet dělal
@@ -4967,6 +5103,8 @@ async function saveSell() {
     });
   }
   trackSoldWhereFreq(soldWherePlat);
+  // Historie cen — skutečná prodejní cena uzavírá vývoj
+  logPrice(items[idx], sp, spOrigCur, spOrigCur === 'EUR' ? spOrig : null, true);
   sv(); renderStats(); renderItems(); cm('moSell');
   if (items[idx] && items[idx].linkedCustomerId) recalcCustomerStats(items[idx].linkedCustomerId);
   if (items[idx] && items[idx].waitState === 'sent' && !items[idx].trackingNum) {
@@ -5785,6 +5923,21 @@ async function saveItem(){
       items.unshift({id:uid(),dateAdded:Date.now(),..._dNew});
     }
     if (_dNew.linkedCustomerId) recalcCustomerStats(_dNew.linkedCustomerId);
+  }
+  // Historie cen — zaznamenej změnu cílové ceny
+  if (editId) {
+    var _plIt = items.find(function(x){ return x.id === editId; });
+    if (_plIt && _plIt.targetPrice) {
+      logPrice(_plIt, _plIt.targetPrice, _plIt.targetCurrency,
+        _plIt.targetCurrency === 'EUR' ? targetEur(_plIt) : null, false);
+    }
+  } else {
+    // Nová položka rovnou s cílovou cenou
+    var _plNew = items[items.length - 1];
+    if (_plNew && _plNew.targetPrice) {
+      logPrice(_plNew, _plNew.targetPrice, _plNew.targetCurrency,
+        _plNew.targetCurrency === 'EUR' ? targetEur(_plNew) : null, false);
+    }
   }
   // Propagace cílové ceny na stejné položky (jen při editaci a jen pokud je targetPrice vyplněna)
   if (editId && d.targetPrice) {
@@ -6807,6 +6960,7 @@ function openDetail(id) {
       [((['Na cestě','Bude vráceno','Vráceno','Zrušeno'].includes(it.location)) ? 'Stav' : 'Sklad'), it.location||'Doma'],
       ...(daysStr ? [['Na skladě', daysStr, false]] : []),
       ...(!isWaiting && it.targetPrice ? [['Cílová cena', (it.targetCurrency==='EUR'?targetEur(it)+' €':czk(it.targetPrice)), false]] : []),
+      ...(priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
       ...(!isWaiting && it.stockIntent ? [['Strategie', intentBadge(it.stockIntent), false]] : []),
       ...(trackingHtml ? [['Sledování zásilky', trackingHtml, false]] : []),
       ...bazosRows,
@@ -6817,6 +6971,7 @@ function openDetail(id) {
       ['Datum prodeje', fmtDate(it.saleDate)||'—'],
       ['Datum vyplacení', fmtDate(it.payoutDate||it.saleDate)||'—'],
       ['Kde prodáno', it.soldWhere||'—'],
+      ...(priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
       ['Číslo obj. prodeje', it.saleRef||'—', !!(it.saleRef)],
       ...(it.linkedCustomerId && _crmNameById(it.linkedCustomerId) ? [['Zákazník', '<span style="color:var(--accent);cursor:pointer;" onclick="openCustomerFromItem(\''+it.linkedCustomerId+'\')">'+escHtml(_crmNameById(it.linkedCustomerId))+' ›</span>', false]] : []),
       ['Způsob platby', it.paymentMethod||'—'],
@@ -6838,8 +6993,8 @@ function openDetail(id) {
   // Rozdělení řádků do sekcí
   var secBase = ['Typ','Profil','SKU','Stav','Velikost'];
   var secBuy  = ['Nákupní cena','Datum nákupu','Kde koupeno','Číslo objednávky','Od koho (vykup)'];
-  var secStock= ['Sklad','Na skladě','Cílová cena','Strategie','Sledování zásilky'];
-  var secSell = ['Prodejní cena','Zisk','Datum prodeje','Datum vyplacení','Kde prodáno','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
+  var secStock= ['Sklad','Na skladě','Cílová cena','Vývoj ceny','Strategie','Sledování zásilky'];
+  var secSell = ['Prodejní cena','Zisk','Datum prodeje','Datum vyplacení','Kde prodáno','Vývoj ceny','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
   var secNote = ['Poznámka'];
   var secInvoice = ['Faktura'];
   // Bazos rows jsou dynamické — přidej je do sekce skladu
