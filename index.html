@@ -5629,17 +5629,9 @@ async function saveItem(){
   if(editId){
     const i=items.findIndex(x=>x.id===editId);
     if(i!==-1){
-      // Při úpravě — smaž starý klíč z cache
-      var oldName = items[i].name;
-      var oldSku = items[i].sku;
+      // Podoba před úpravou — podle ní se pak uklidí neplatné klíče v našeptávači
+      var _cachePrev = { id: items[i].id, name: items[i].name, sku: items[i].sku };
       var _oldLinkedCustomerId = items[i].linkedCustomerId || '';
-      var _cache = itemCacheGet();
-      var oldKey = (oldSku ? 'sku:' + oldSku.trim().toLowerCase() : 'name:' + (oldName||'').trim().toLowerCase());
-      var newKey = (d.sku ? 'sku:' + d.sku.trim().toLowerCase() : 'name:' + d.name.trim().toLowerCase());
-      if (oldKey !== newKey) {
-        delete _cache[oldKey];
-        try { localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(_cache)); } catch(e) {}
-      }
       // Merge
       // Odeber undefined hodnoty z d aby nepřepisovaly existující data
       var _dClean = {};
@@ -5794,10 +5786,13 @@ async function saveItem(){
     }
   }
   // Ulož do historického cache každou položku — ať se název, SKU a obrázek
-  // našeptají i u věcí, které se nikdy neprodaly a už byly ze skladu smazané
+  // našeptají i u věcí, které se nikdy neprodaly a už byly ze skladu smazané.
+  // Uložení je bráno jako pravda, takže se tím opraví i dřív zapamatovaný omyl.
   if (d.name) {
-    itemCacheSet(d.name, { sku: d.sku, stockxUrl: d.stockxUrl || '', imgUrl: d.imgUrl });
-    fbSaveItemCache();
+    itemCacheSync({
+      id: editId || null, name: d.name, sku: d.sku,
+      stockxUrl: d.stockxUrl || '', imgUrl: d.imgUrl,
+    }, _cachePrev || null);
   }
   showToast(editId ? 'Položka upravena' : (qty>1 ? qty+'× položka přidána' : 'Položka přidána'));
 }
@@ -9258,19 +9253,150 @@ var ITEM_CACHE_KEY = 'sklad_item_cache_v2';
 function itemCacheGet() {
   try { return JSON.parse(localStorage.getItem(ITEM_CACHE_KEY) || '{}'); } catch(e) { return {}; }
 }
+function itemCacheSave(cache) {
+  try { localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(cache)); } catch(e) {}
+}
+
+// Testovací položky do našeptávače nepatří. Bere se název začínající na „test" —
+// tedy test, test 1, test-2, test123 i testovací bota. „Testarossa" projde.
+function isTestItemName(name) {
+  var n = String(name || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return !!n && /^test(?:ov\w*)?(?:[^a-z]|$)/.test(n);
+}
+
+function _cacheKeys(it) {
+  var out = [];
+  if (!it) return out;
+  if (it.name) out.push('name:' + String(it.name).trim().toLowerCase());
+  if (it.sku)  out.push('sku:'  + String(it.sku).trim().toLowerCase());
+  return out;
+}
+
+// Drží ten klíč ještě nějaká jiná položka? Pak ho nesmíme uklidit.
+function _keyUsedByOther(key, exceptId) {
+  return (items || []).some(function(it) {
+    return it && it.id !== exceptId && _cacheKeys(it).indexOf(key) !== -1;
+  });
+}
+
+// Zapíše aktuální podobu položky do našeptávače a uklidí po té předchozí.
+// Uložení položky je bráno jako pravda — přepíše i dřív zapamatované odkazy,
+// takže oprava SKU, názvu, obrázku i odkazu se do našeptávače promítne.
+// prev = položka před úpravou (null u nové).
+function itemCacheSync(cur, prev) {
+  var cache = itemCacheGet(), zmena = false;
+  var nove = isTestItemName(cur && cur.name) ? [] : _cacheKeys(cur);
+  // Klíče, které po úpravě už neplatí (změněné SKU, přejmenování, testovací název)
+  _cacheKeys(prev).concat(_cacheKeys(cur)).forEach(function(k) {
+    if (nove.indexOf(k) !== -1) return;
+    if (_keyUsedByOther(k, cur && cur.id)) return;
+    if (cache[k]) { delete cache[k]; zmena = true; }
+  });
+  if (nove.length) {
+    var entry = { name: String(cur.name).trim() };
+    if (cur.sku)       entry.sku       = cur.sku;
+    if (cur.stockxUrl) entry.stockxUrl = cur.stockxUrl;
+    if (cur.imgUrl)    entry.imgUrl    = cur.imgUrl;
+    var json = JSON.stringify(entry);
+    nove.forEach(function(k) {
+      if (JSON.stringify(cache[k]) !== json) { cache[k] = JSON.parse(json); zmena = true; }
+    });
+  }
+  if (zmena) { itemCacheSave(cache); fbSaveItemCache(); }
+  return zmena;
+}
+
+// Zpětně kompatibilní obálka (bulk výplata, změna stavu u čekajících)
 function itemCacheSet(name, data) {
   if (!name) return;
+  itemCacheSync(Object.assign({}, data, { name: name }), null);
+}
+
+// Vyhodí z našeptávače testovací záznamy. Vrací kolik jich zmizelo.
+function purgeTestEntriesFromCache() {
+  var cache = itemCacheGet(), pryc = 0;
+  Object.keys(cache).forEach(function(k) {
+    var jmeno = (cache[k] && cache[k].name) || (k.indexOf('name:') === 0 ? k.slice(5) : '');
+    if (isTestItemName(jmeno)) { delete cache[k]; pryc++; }
+  });
+  if (pryc) { itemCacheSave(cache); fbSaveItemCache(); }
+  return pryc;
+}
+
+// ── SPRÁVA NAŠEPTÁVAČE ────────────────────────────────────
+// Jeden záznam je pod dvěma klíči (podle názvu i podle SKU) — pro výpis je
+// sloučíme zpátky do jednoho řádku, ať to odpovídá tomu, co uživatel zadal.
+function itemCacheRecords() {
+  var cache = itemCacheGet(), podle = {};
+  Object.keys(cache).forEach(function(k) {
+    var e = cache[k] || {};
+    var id = (e.sku ? 'sku:' + String(e.sku).trim().toLowerCase() : k);
+    if (!podle[id]) podle[id] = { name: e.name || k.replace(/^name:/, ''), sku: e.sku || '',
+      stockxUrl: e.stockxUrl || '', imgUrl: e.imgUrl || '', keys: [] };
+    podle[id].keys.push(k);
+  });
+  return Object.keys(podle).map(function(id){ return podle[id]; })
+    .sort(function(a, b){ return a.name.localeCompare(b.name, 'cs'); });
+}
+
+function itemCacheDeleteRecord(keysJson) {
   var cache = itemCacheGet();
-  var skuKey  = data.sku ? 'sku:' + data.sku.trim().toLowerCase() : null;
-  var nameKey = 'name:' + name.trim().toLowerCase();
-  var entry = (skuKey && cache[skuKey]) || cache[nameKey] || {};
-  if (data.sku)       entry.sku       = data.sku;
-  if (data.stockxUrl) entry.stockxUrl = data.stockxUrl;
-  if (data.imgUrl)    entry.imgUrl    = data.imgUrl;
-  entry.name = name.trim();
-  if (skuKey)  cache[skuKey]  = entry;
-  cache[nameKey] = entry;
-  try { localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(cache)); } catch(e) {}
+  JSON.parse(keysJson).forEach(function(k){ delete cache[k]; });
+  itemCacheSave(cache); fbSaveItemCache();
+  renderItemCacheList();
+}
+
+function openItemCacheMgr() {
+  var ov = document.createElement('div');
+  ov.id = 'itemCacheMgr';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  ov.addEventListener('click', function(e){ if (e.target === ov) ov.remove(); });
+  ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:92%;max-width:720px;max-height:84vh;display:flex;flex-direction:column;font-family:\'DM Sans\',sans-serif;">'
+    + '<div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;margin-bottom:4px;">Databáze našeptávače</div>'
+    + '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Názvy, SKU, obrázky a odkazy zapamatované z položek — i těch, které už ve skladu nejsou.</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">'
+      + '<input id="icSearch" placeholder="Hledat název nebo SKU…" oninput="renderItemCacheList()" style="flex:1;min-width:180px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:13px;">'
+      + '<button class="btn-sec" style="font-size:12px;" onclick="var n=purgeTestEntriesFromCache();renderItemCacheList();showToast(n?(\'Odstraněno \'+n+\' testovacích záznamů.\'):\'Žádné testovací záznamy.\');">Vyčistit testovací</button>'
+      + '<button class="btn-sec" style="font-size:12px;" onclick="var n=repairItemCache();if(n)fbSaveItemCache();renderItemCacheList();showToast(n?(\'Doplněno \'+n+\' záznamů.\'):\'Není co doplnit.\');">Doplnit z položek a záloh</button>'
+    + '</div>'
+    + '<div id="icList" style="overflow-y:auto;flex:1;"></div>'
+  + '</div>';
+  document.body.appendChild(ov);
+  renderItemCacheList();
+}
+
+function _icEsc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+function renderItemCacheList() {
+  var box = document.getElementById('icList');
+  if (!box) return;
+  var q = ((document.getElementById('icSearch') || {}).value || '').trim().toLowerCase();
+  var vse = itemCacheRecords();
+  var list = q ? vse.filter(function(r){
+    return (r.name || '').toLowerCase().indexOf(q) !== -1 || (r.sku || '').toLowerCase().indexOf(q) !== -1;
+  }) : vse;
+  if (!list.length) {
+    box.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:16px 0;text-align:center;">'
+      + (vse.length ? 'Nic neodpovídá hledání.' : 'Databáze je zatím prázdná.') + '</div>';
+    return;
+  }
+  box.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">'
+      + list.length + ' z ' + vse.length + ' záznamů</div>'
+    + list.map(function(r, i) {
+    return '<div class="ic-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);animation:rowIn 0.2s ease both;animation-delay:' + Math.min(i * 0.02, 0.3) + 's;">'
+      + (r.imgUrl ? '<img src="' + _icEsc(r.imgUrl) + '" style="width:38px;height:38px;object-fit:contain;border-radius:5px;background:var(--bg);flex-shrink:0;" onerror="this.style.visibility=\'hidden\'">'
+                  : '<div style="width:38px;height:38px;flex-shrink:0;"></div>')
+      + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _icEsc(r.name) + '</div>'
+        + '<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;">' + (_icEsc(r.sku) || '—') + (r.stockxUrl ? ' · odkaz' : '') + '</div>'
+      + '</div>'
+      + '<button onclick=\'itemCacheDeleteRecord(' + JSON.stringify(JSON.stringify(r.keys)).replace(/'/g, "&#39;") + ')\' style="background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:5px;cursor:pointer;font-family:inherit;flex-shrink:0;">Smazat</button>'
+    + '</div>';
+  }).join('');
 }
 
 // Ulož cache do vlastního dokumentu (sklad/cache). Dřív ležela v hlavním dokumentu,
@@ -9298,7 +9424,7 @@ function learnItemsIntoCache(list) {
   if (!list || !list.length) return 0;
   var cache = itemCacheGet(), pridano = 0;
   list.forEach(function(it) {
-    if (!it || !it.name) return;
+    if (!it || !it.name || isTestItemName(it.name)) return;
     var nameKey = 'name:' + String(it.name).trim().toLowerCase();
     var skuKey  = it.sku ? 'sku:' + String(it.sku).trim().toLowerCase() : null;
     var entry = (skuKey && cache[skuKey]) || cache[nameKey] || {};
@@ -9311,7 +9437,7 @@ function learnItemsIntoCache(list) {
     if (skuKey) cache[skuKey] = entry;
     cache[nameKey] = entry;
   });
-  if (pridano) { try { localStorage.setItem(ITEM_CACHE_KEY, JSON.stringify(cache)); } catch(e) {} }
+  if (pridano) itemCacheSave(cache);
   return pridano;
 }
 
@@ -9335,20 +9461,24 @@ function _applyItemCacheDoc(cacheDoc, legacyField) {
   }
   var prvni = !_itemCacheLoaded;
   _itemCacheLoaded = true;
-  mergeIn(cacheDoc && cacheDoc.cache);
+  var zCloudu = cacheDoc && cacheDoc.cache;
+  // Cloudová podoba se bere jako celek, ne jako doplněk — jinak by se smazaný
+  // (třeba chybný) záznam vrátil z lokální kopie zpátky
+  if (zCloudu) { try { itemCacheSave(JSON.parse(zCloudu)); } catch(e) { mergeIn(zCloudu); } }
   var pribylo = 0;
   if (prvni) {
     mergeIn(legacyField);         // zbytek ze starého formátu, kde byl v hlavním dokumentu
     // Jednorázová oprava — dřív se do našeptávače ukládaly jen prodané položky,
-    // takže všechno ostatní v něm chybí
-    if (!localStorage.getItem(ITEM_CACHE_REPAIR_KEY)) {
+    // takže všechno ostatní v něm chybí; zároveň vyhoď testovací záznamy
+    if (localStorage.getItem(ITEM_CACHE_REPAIR_KEY) !== '2') {
       pribylo += repairItemCache();
-      try { localStorage.setItem(ITEM_CACHE_REPAIR_KEY, '1'); } catch(e) {}
+      pribylo += purgeTestEntriesFromCache();
+      try { localStorage.setItem(ITEM_CACHE_REPAIR_KEY, '2'); } catch(e) {}
     }
   }
   // Pochytej i položky, které přišly z jiného zařízení
   pribylo += learnItemsIntoCache(items);
-  if (pribylo || (prvni && (legacyField || !(cacheDoc && cacheDoc.cache)))) fbSaveItemCache();
+  if (pribylo || (prvni && (legacyField || !zCloudu))) fbSaveItemCache();
 }
 
 function autoFillFromHistory(nameLC, skuLC) {
@@ -14546,6 +14676,7 @@ rebuildBrandTables();
       <button class="btn-sec" onclick="openDropdownsEditor()">Dropdowny</button>
       <button class="btn-sec" onclick="cm('moSettings');openRetailersMgr()">Retaileři &amp; EU limit</button>
       <button class="btn-sec" id="btnRecalcRates" onclick="recalcAllRates()">Přepočítat kurzy ČNB</button>
+      <button class="btn-sec" onclick="cm('moSettings');openItemCacheMgr()">Databáze našeptávače</button>
     </div>
     <div id="recalcRatesStatus" style="display:none;font-size:11px;color:var(--muted);margin-top:8px;font-family:monospace;"></div>
   </div>
