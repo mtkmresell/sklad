@@ -91,6 +91,9 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | limit identifikované osoby | `RETAILEŘI & LIMIT` |
 | animace | `ANIMACE` (v CSS) |
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
+| cashflow z payoutů | `CASHFLOW Z PAYOUTŮ` |
+| prodejní doklad | `PRODEJNÍ DOKLAD` |
+| historie cen položky | `HISTORIE CEN U POLOŽKY` |
 
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
 `openDropdownsEditor`, `saveItem`, `renderStockAnalytics`, `tableHTML`, `openBulkEditModal`.
@@ -99,7 +102,7 @@ Medián je 12 řádků — soubor je velký, ale ne zanesený.
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 22 souborů
+node test/run.js              # kontrola syntaxe + všech 27 souborů
 node test/run.js archive      # jen vybrané
 ```
 

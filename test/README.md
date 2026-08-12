@@ -68,6 +68,8 @@ výpadků sítě a souběhu dvou zařízení. Pomocné funkce, které dává k d
 | `test-iolimit.js` | predikce překročení limitu identifikované osoby |
 | `test-pricelog.js` | historie cen u položky |
 | `test-fonts.js` | fonty se berou lokálně, ne z Googlu |
+| `test-cashflow.js` | cashflow z payoutů, rychlost platforem |
+| `test-saledoc.js` | prodejní doklad a údaje prodávajícího |
 | `test-platsync.js`, `test-platmgr.js` | platformy a jejich skupiny |
 | `test-target.js`, `test-target2.js` | cílové ceny v eurech a kurzy |
 | `test-tracking.js` | sledování zásilek při změnách stavu |
