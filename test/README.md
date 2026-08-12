@@ -49,7 +49,7 @@ výpadků sítě a souběhu dvou zařízení. Pomocné funkce, které dává k d
 | `window.__load()` | načtení z cloudu přesně jako to dělá posluchač kolekce |
 | `window.__doc(name)` | kopie dokumentu (skutečný Firestore taky vrací kopie) |
 | `window.__emitSnapshot()` | vyvolá snímek kolekce u přihlášeného posluchače |
-| `window.__resetDevice()` | zapomene stav archivů — jako čerstvé zařízení |
+| `window.__resetDevice()` | zapomene stav archivů a fotek — jako čerstvé zařízení |
 | `window.__failWrites` | `true` = každý zápis selže (test výpadku sítě) |
 | `window.__commits`, `window.__lastBatch` | co a kolikrát se zapsalo |
 
@@ -62,6 +62,8 @@ výpadků sítě a souběhu dvou zařízení. Pomocné funkce, které dává k d
 | `test-listener.js` | posluchač kolekce — přihlášení, souběh zařízení, chybějící archiv |
 | `test-cache.js` | databáze našeptávače — opravy záznamů, testovací položky, správa |
 | `test-photo-wish.js` | zmenšování fotek, synchronizace wishlistu |
+| `test-photos.js` | vlastní fotky ve vlastních dokumentech |
+| `test-syncsettings.js` | jeden seznam synchronizovaných nastavení |
 | `test-platsync.js`, `test-platmgr.js` | platformy a jejich skupiny |
 | `test-target.js`, `test-target2.js` | cílové ceny v eurech a kurzy |
 | `test-tracking.js` | sledování zásilek při změnách stavu |

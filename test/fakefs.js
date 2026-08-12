@@ -97,8 +97,9 @@ module.exports = function installFakeFirestore() {
     var c = _collectCloud(window.__snapshot());
     if (!c) return null;
     _rememberArchives(c.byYear);
+    _rememberPhotos(c.photos);
     _cloudIncomplete = c.archiveItems === null && !(c.data.items && c.data.items.length);
-    var ok = _cloudIncomplete ? false : _applyCloudData(c.data, c.archiveItems);
+    var ok = _cloudIncomplete ? false : _applyCloudData(c.data, c.archiveItems, c.photos);
     try { _applyItemCacheDoc(c.cache, c.data.itemCache); } catch(e) {}
     return { ok: ok, pocet: items.length, neuplne: _cloudIncomplete, chybi: c.missing, archivy: c.archiveItems };
   };

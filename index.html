@@ -2397,6 +2397,80 @@ function _splitItems(list) {
   return { main: main, byYear: byYear };
 }
 
+/* ── VLASTNÍ FOTKY ─────────────────────────────────────────────────────
+   Fotka nahraná z telefonu se ukládá přímo do položky jako base64. I po
+   zmenšení má kolem 65 kB, takže se jich do hlavního dokumentu vejde jen
+   asi čtrnáct. Do cloudu proto jdou ve vlastních dokumentech (jeden na
+   položku) a v položce zůstane jen značka hasPhoto.
+
+   Lokálně i v JSON záloze zůstává fotka v položce jako dřív, takže
+   vykreslování ani export se nemění.
+   ─────────────────────────────────────────────────────────────────── */
+var _photoHashes = {};   // id položky → otisk fotky, kterou máme uloženou v cloudu
+
+function _isPhotoData(v) { return typeof v === 'string' && v.slice(0, 5) === 'data:'; }
+function _photoDocRef(fns, id) {
+  return fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'photo_' + id);
+}
+
+// Vytáhne fotky z položek. Vrací upravené kopie — originály nechává být.
+function _photoSplit(list) {
+  var photos = {};
+  var out = (list || []).map(function(it) {
+    if (!it || !_isPhotoData(it.imgUrl)) return it;
+    photos[it.id] = it.imgUrl;
+    var kopie = Object.assign({}, it);
+    delete kopie.imgUrl;
+    kopie.hasPhoto = 1;
+    return kopie;
+  });
+  return { items: out, photos: photos };
+}
+
+// Vrátí fotky do položek po načtení. Když fotka nedorazila, značka zůstane,
+// aby se při dalším uložení nesmazala z cloudu.
+function _photoAttach(list, photos) {
+  (list || []).forEach(function(it) {
+    if (!it || !it.hasPhoto) return;
+    var f = photos && photos[it.id];
+    if (f) { it.imgUrl = f; delete it.hasPhoto; }
+  });
+  return list;
+}
+
+function _rememberPhotos(photos) {
+  _photoHashes = {};
+  Object.keys(photos || {}).forEach(function(id) { _photoHashes[id] = _hashStr(photos[id]); });
+}
+
+// Přidá do dávky jen fotky, které se změnily, a smaže ty, co už nikam nepatří
+function _stagePhotos(fns, batch, savedAt, photos) {
+  var hashes = {}, changed = [], removed = [];
+  Object.keys(photos).forEach(function(id) {
+    var h = _hashStr(photos[id]);
+    hashes[id] = h;
+    if (_photoHashes[id] !== h) {
+      batch.set(_photoDocRef(fns, id), { itemId: id, data: photos[id], savedAt: savedAt });
+      changed.push(id);
+    }
+  });
+  // Položky, které fotku mají, ale zrovna ji nedržíme — na ty nesaháme
+  var nenacteno = {};
+  (items || []).forEach(function(it) {
+    if (it && it.hasPhoto && !_isPhotoData(it.imgUrl)) nenacteno[it.id] = 1;
+  });
+  Object.keys(_photoHashes).forEach(function(id) {
+    if (hashes[id] || nenacteno[id]) return;
+    batch.delete(_photoDocRef(fns, id));
+    removed.push(id);
+  });
+  return { hashes: hashes, changed: changed, removed: removed };
+}
+
+function _commitPhotoState(written) {
+  if (written) _photoHashes = written.hashes;
+}
+
 // Krátký otisk obsahu — abychom přepisovali jen archivy, které se opravdu změnily
 function _hashStr(s) {
   var h = 5381;
@@ -2419,18 +2493,19 @@ function _skladCollection(fns) {
 // žádné dotahování jednotlivých dokumentů, které na mobilu se slabým
 // připojením selhávalo a shodilo tím celou synchronizaci.
 function _collectCloud(snap) {
-  var data = null, byYear = {}, cacheDoc = null;
+  var data = null, byYear = {}, cacheDoc = null, photos = {};
   snap.forEach(function(d) {
     var id = d.id;
     if (id === 'data') data = d.data();
     else if (id.indexOf('sold_') === 0) byYear[id.slice(5)] = d.data().items || [];
+    else if (id.indexOf('photo_') === 0) photos[id.slice(6)] = d.data().data || '';
     else if (id === 'cache') cacheDoc = d.data();
   });
   if (!data) return null;
   var years = Array.isArray(data.archiveYears) ? data.archiveYears : [];
   var chybi = years.filter(function(y) { return !byYear[y]; });
   return {
-    data: data, byYear: byYear, cache: cacheDoc, missing: chybi,
+    data: data, byYear: byYear, cache: cacheDoc, photos: photos, missing: chybi,
     // null = některý archiv chybí; volající pak sáhne po kompletním seznamu
     archiveItems: chybi.length ? null : [].concat.apply([], years.map(function(y){ return byYear[y]; })),
   };
@@ -2488,7 +2563,8 @@ function _stageArchives(fns, batch, payload) {
     if (years.indexOf(y) === -1) { batch.delete(_archiveDocRef(fns, y)); removed.push(y); }
   });
   payload.archiveYears = years;
-  return { hashes: hashes, changed: changed, removed: removed, byYear: split.byYear };
+  var fotky = _stagePhotos(fns, batch, payload.savedAt, split.photos);
+  return { hashes: hashes, changed: changed, removed: removed, byYear: split.byYear, photos: fotky };
 }
 
 // Pravidla Firestore můžou mít povolený jen dokument „data". Pak dávka s archivy
@@ -2511,6 +2587,7 @@ function _commitArchiveState(written) {
   if (!written) return;
   _archiveHashes = written.hashes;
   _archiveCache = written.byYear;
+  _commitPhotoState(written.photos);
 }
 
 var _fbCloudReady = false; // true až po prvním onSnapshot
@@ -2579,10 +2656,10 @@ function fbSaveToCloud() {
 
 // archiveItems: položky z ročních archivů (pole), null když se je nepodařilo načíst.
 // Když se vynechá, použije se jen hlavní dokument — volající by měl projít přes _collectCloud.
-function _applyCloudData(data, archiveItems) {
+function _applyCloudData(data, archiveItems, photos) {
   var cloudItems = _mergeCloudItems(data, archiveItems === undefined ? [] : archiveItems);
   if (!cloudItems || !cloudItems.length) return false;
-  items = cloudItems;
+  items = _photoAttach(cloudItems, photos);
   localStorage.setItem(SK, JSON.stringify(items));
   if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
   localStorage.removeItem(SK+'_dirty');
@@ -2612,7 +2689,10 @@ function _stripUndefined(obj) {
 // Rozdělení pro právě ukládaná data — počítá se z jednoho zdroje, ať se hlavní
 // dokument a archivy nemůžou rozejít
 function _currentSplit() {
-  return _splitItems(_stripUndefined(items));
+  var bezFotek = _photoSplit(_stripUndefined(items));
+  var split = _splitItems(bezFotek.items);
+  split.photos = bezFotek.photos;
+  return split;
 }
 
 function _buildCloudPayload() {
@@ -2645,6 +2725,7 @@ function fbForceUploadToCloud() {
   // Ruční nahrání přepíše i všechny archivy, ať se nespoléhá na otisky.
   // Roky si ale pamatujeme dál, aby se ty zrušené pořád měly podle čeho smazat.
   Object.keys(_archiveHashes).forEach(function(y){ _archiveHashes[y] = '!'; });
+  Object.keys(_photoHashes).forEach(function(id){ _photoHashes[id] = '!'; });
   function withTimeout(p) {
     return Promise.race([p, new Promise(function(_, reject) {
       setTimeout(function() { reject(new Error('timeout')); }, 10000);
@@ -2700,8 +2781,9 @@ function fbForceLoadFromCloud() {
       return;
     }
     _rememberArchives(cloud.byYear);
+    _rememberPhotos(cloud.photos);
     _cloudIncomplete = false;
-    var loaded = _applyCloudData(cloud.data, cloud.archiveItems);
+    var loaded = _applyCloudData(cloud.data, cloud.archiveItems, cloud.photos);
     try { _applyItemCacheDoc(cloud.cache, cloud.data.itemCache); } catch(e) {}
     if (dot) dot.className = 'fb-status fb-online';
     showToast(loaded ? 'Data načtena z cloudu (' + items.length + ' položek).' : 'V cloudu jsou prázdná data.', loaded ? '' : 'err');
@@ -2723,10 +2805,11 @@ document.addEventListener('visibilitychange', function() {
     var localTime = (localStorage.getItem(SK+'_savedAt') ? new Date(localStorage.getItem(SK+'_savedAt')).getTime() : 0);
     if (cloud.archiveItems === null && !(data.items && data.items.length)) return;  // neúplné — necháme lokální data být
     _rememberArchives(cloud.byYear);
+    _rememberPhotos(cloud.photos);
     _cloudIncomplete = false;
     if (cloudTime > localTime) {
       saveSnapshot('před sync');
-      if (_applyCloudData(data, cloud.archiveItems)) showToast('Synchronizováno z cloudu.');
+      if (_applyCloudData(data, cloud.archiveItems, cloud.photos)) showToast('Synchronizováno z cloudu.');
     }
     try { _applyItemCacheDoc(cloud.cache, data.itemCache); } catch(e) {}
   });
@@ -12177,7 +12260,7 @@ document.addEventListener('fb-auth', function(e) {
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
   _fbCloudReady = false;
   // Zapomeň stav archivů i cache, ať se nepřenese mezi účty
-  _archiveHashes = {}; _archiveCache = null; _cloudIncomplete = false;
+  _archiveHashes = {}; _archiveCache = null; _cloudIncomplete = false; _photoHashes = {};
   _archivesBlocked = false; _itemCacheLoaded = false;
 
   if (!(e.detail && e.detail.user)) {
@@ -12216,6 +12299,7 @@ document.addEventListener('fb-auth', function(e) {
       var jePrvni = _firstSnapshot;
       _firstSnapshot = false;
       _rememberArchives(cloud.byYear);
+      _rememberPhotos(cloud.photos);
       // Chybí některý archiv? Kompletní seznam v hlavním dokumentu nás podrží;
       // dokud ho nemáme, do cloudu radši nesaháme, ať ho nepřepíšeme neúplným stavem.
       _cloudIncomplete = archiveItems === null && !(data.items && data.items.length);
@@ -12240,7 +12324,7 @@ document.addEventListener('fb-auth', function(e) {
         var isDirty = !!localStorage.getItem(SK+'_dirty');
         if (!localSavedAt || items.length === 0) {
           // Nové zařízení nebo prázdný stav — načti z cloudu
-          _applyCloudData(data, archiveItems);
+          _applyCloudData(data, archiveItems, cloud.photos);
           showToast('Data načtena z cloudu (' + items.length + ' položek).');
         } else if (data.savedAt && localSavedAt === data.savedAt) {
           // Identický stav — nic nedělej
@@ -12254,11 +12338,11 @@ document.addEventListener('fb-auth', function(e) {
             + 'Zrušit = zahodit je a načíst data z cloudu\n\n'
             + '(Obě verze jsou zálohované v Nastavení → Automatické zálohy.)');
           if (upload) { fbSaveToCloud(); }
-          else { _applyCloudData(data, archiveItems); showToast('Data načtena z cloudu (' + items.length + ' položek).'); }
+          else { _applyCloudData(data, archiveItems, cloud.photos); showToast('Data načtena z cloudu (' + items.length + ' položek).'); }
         } else {
           // Ve všech ostatních případech vyhrává cloud — se zálohou lokálních dat
           saveSnapshot('před sync');
-          if (_applyCloudData(data, archiveItems)) showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
+          if (_applyCloudData(data, archiveItems, cloud.photos)) showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
         }
         // Cloud je srovnaný — teprve teď je bezpečné spustit auto-expiraci Bazoše
         setTimeout(bazosExpireCheckSafe, 1500);
@@ -12268,7 +12352,7 @@ document.addEventListener('fb-auth', function(e) {
         // Ignoruj pokud jsme to MY sami právě uložili (stejný savedAt string)
         var isOwnSave = _lastOwnSavedAt && data.savedAt === _lastOwnSavedAt;
         if (!isOwnSave && cloudTime > localTime + 500) {
-          if (_applyCloudData(data, archiveItems)) showToast('Synchronizováno.');
+          if (_applyCloudData(data, archiveItems, cloud.photos)) showToast('Synchronizováno.');
         }
       }
       // Našeptávač jede ze stejného snímku — nezávisle na tom, jestli se data měnila
