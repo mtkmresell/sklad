@@ -64,6 +64,7 @@ výpadků sítě a souběhu dvou zařízení. Pomocné funkce, které dává k d
 | `test-photo-wish.js` | zmenšování fotek, synchronizace wishlistu |
 | `test-photos.js` | vlastní fotky ve vlastních dokumentech |
 | `test-syncsettings.js` | jeden seznam synchronizovaných nastavení |
+| `test-sidebuttons.js` | postranní tlačítka myši, historie oken |
 | `test-platsync.js`, `test-platmgr.js` | platformy a jejich skupiny |
 | `test-target.js`, `test-target2.js` | cílové ceny v eurech a kurzy |
 | `test-tracking.js` | sledování zásilek při změnách stavu |

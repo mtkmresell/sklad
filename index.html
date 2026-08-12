@@ -4389,7 +4389,6 @@ function closeSoldWhereDrop() {
 
 document.addEventListener('click', function(e) {
   if(!e.target.closest('#soldWhereDrop') && !e.target.closest('#sSoldWhere')) closeSoldWhereDrop();
-  if(!e.target.closest('#paymentDrop') && !e.target.closest('#sPaymentMethod')) closePaymentDrop();
 });
 
 // --- Payment method dropdown ---
@@ -4405,64 +4404,6 @@ function savePaymentOpts(arr) {
   try { _ioCloudSync(); } catch(e){}
 }
 
-function openPaymentDrop() {
-  var drop = document.getElementById('paymentDrop');
-  if(!drop) return;
-  renderPaymentDrop();
-  drop.style.display = '';
-  drop.classList.add('open');
-}
-
-function renderPaymentDrop() {
-  var drop = document.getElementById('paymentDrop');
-  if(!drop) return;
-  drop.innerHTML = '';
-  var opts = getPaymentOpts().concat(['Vlastní…']);
-  opts.forEach(function(opt) {
-    var el = document.createElement('div');
-    el.className = 'cs-opt';
-    el.textContent = opt;
-    if(opt === 'Vlastní…') el.style.color = 'var(--accent)';
-    el.addEventListener('mousedown', function(e) {
-      e.preventDefault();
-      var inp = document.getElementById('sPaymentMethod');
-      if(opt === 'Vlastní…') {
-        inp.value = '';
-        inp.removeAttribute('readonly');
-        inp.style.cursor = 'text';
-        closePaymentDrop();
-        inp.focus();
-        // Při opuštění pole ulož novou hodnotu do seznamu
-        inp._saveCustomPayment = true;
-      } else {
-        inp.value = opt;
-        inp.setAttribute('readonly','');
-        inp.style.cursor = 'pointer';
-        closePaymentDrop();
-      }
-    });
-    drop.appendChild(el);
-  });
-}
-
-function closePaymentDrop() {
-  var drop = document.getElementById('paymentDrop');
-  if(drop) { drop.style.display = 'none'; drop.classList.remove('open'); }
-}
-
-// Uloží vlastní hodnotu do seznamu při opuštění pole
-document.addEventListener('focusout', function(e) {
-  if(e.target.id === 'sPaymentMethod' && e.target._saveCustomPayment) {
-    e.target._saveCustomPayment = false;
-    var val = e.target.value.trim();
-    if(val) {
-      var opts = getPaymentOpts();
-      if(!opts.includes(val)) { opts.push(val); savePaymentOpts(opts); }
-    }
-    e.target.setAttribute('readonly','');
-    e.target.style.cursor = 'pointer';
-  }
-});
 
 // --- Editor dropdownů ---
 function openDropdownsEditor() {
@@ -5049,21 +4990,6 @@ function platGroupSiblings(it, excludeId) {
   return items.filter(function(x) {
     return x.id !== excludeId && (x.saleState === 'stock' || !x.saleState) && platGroupKey(x) === key;
   });
-}
-
-// Při přesunu na Čeká: ulož platformy, smaž je, a odfajfkuj ostatním prodanou platformu
-function onMoveToWaiting(it, soldWherePlat) {
-  // Ulož zálohu platforem
-  it._platformsBackup = (it.platforms || []).slice();
-  // Odfajfkuj ostatním ve skupině platformu kde se prodalo
-  if (soldWherePlat) {
-    platGroupSiblings(it, it.id).forEach(function(sib) {
-      var idx2 = (sib.platforms || []).indexOf(soldWherePlat);
-      if (idx2 !== -1) sib.platforms.splice(idx2, 1);
-    });
-  }
-  // Smaž platformy prodávané položce
-  it.platforms = [];
 }
 
 // Při vrácení na sklad: obnov platformy ze skupiny nebo zálohy
@@ -5934,7 +5860,6 @@ function cm(id){
   // Při zavření bulk sell modalu (bez uložení) — obnov bulk bar
   if(id === 'moBulkSell' && bulkMode) { updateBulkBar(); }
 }
-function oc(e,id){if(e.target===document.getElementById(id))cm(id);}
 
 // ── Import state ──
 var _impDest = 'paid';
@@ -9060,30 +8985,6 @@ function openBulkPayoutModal(bulkId) {
   });
 }
 
-function changeBulkWaitState(bulkId) {
-  var rec = getBulkRecord(bulkId);
-  if(!rec) return;
-  var states = [
-    {v:'sending', l:'Čeká na odeslání'},
-    {v:'sent',    l:'Odesláno'},
-    {v:'payout',  l:'Čeká na payout'}
-  ];
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
-  overlay.innerHTML =
-    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:320px;font-family:\'DM Sans\',sans-serif;">' +
-      '<div style="font-family:\'Syne\',sans-serif;font-size:16px;font-weight:700;margin-bottom:16px;">Stav balíku</div>' +
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;font-family:monospace;">' + rec.name + '</div>' +
-      states.map(function(s){
-        var active = (rec.waitState||'sending') === s.v;
-        return '<div onclick="setBulkWaitState(\''+bulkId+'\',\''+s.v+'\')" style="padding:10px 14px;border-radius:var(--radius-sm);cursor:pointer;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'#c8ff0010':'none')+';color:'+(active?'var(--accent)':'var(--text)')+';margin-bottom:8px;font-size:13px;">'+s.l+'</div>';
-      }).join('') +
-      '<button onclick="this.closest(\'div\').parentNode.remove();" style="width:100%;margin-top:6px;padding:9px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;font-size:13px;">Zrušit</button>' +
-    '</div>';
-  document.body.appendChild(overlay);
-}
-
 function setBulkWaitState(bulkId, newState) {
   var rec = getBulkRecord(bulkId);
   if(!rec) return;
@@ -11975,44 +11876,84 @@ function updateSizeVisibility() {
 }
 
 /* ══════════════════════════════════════
-   MOUSE SIDE BUTTONS - modal history
+   POSTRANNÍ TLAČÍTKA MYŠI — historie oken
+
+   Boční tlačítko zpět zavře vrchní otevřené okno a vrátí to, které bylo
+   pod ním; tlačítko dopředu ho zase otevře. Historie se plní sledováním
+   třídy „open" na oknech, ne voláním z jednotlivých míst — okna se
+   otevírají na desítkách míst a takhle se to nemůže rozejít.
 ══════════════════════════════════════ */
 (function() {
-  var modalHistory = [];  // stack otevřených modálů
-  var origOpenFns = {};
+  var historie = [];   // zásobník otevřených oken zdola nahoru
+  var dopredu  = [];   // co jsme zavřeli tlačítkem zpět
 
-  // Sleduj otevírání modálů
-  function pushModal(id) {
-    modalHistory.push(id);
-  }
-  function popModal() {
-    if (modalHistory.length > 0) modalHistory.pop();
-    return modalHistory[modalHistory.length - 1] || null;
+  function zaznamenej(el) {
+    var id = el.id;
+    if (!id) return;
+    if (el.classList.contains('open')) {
+      if (historie[historie.length - 1] === id) return;
+      var byl = historie.indexOf(id);
+      if (byl !== -1) historie.splice(byl, 1);
+      historie.push(id);
+    } else {
+      var i = historie.lastIndexOf(id);
+      if (i !== -1) historie.splice(i, 1);
+    }
   }
 
-  // Mouse button 3/4 = side buttons
-  document.addEventListener('mouseup', function(e) {
-    if (e.button === 3) {
-      // Zpět - zavři aktuální modal, otevři předchozí
-      var openMo = document.querySelector('.modal-overlay.open');
-      if (openMo) {
-        e.preventDefault();
-        var prev = popModal();
-        openMo.classList.remove('open');
-        if (prev && prev !== openMo.id) {
-          var prevEl = document.getElementById(prev);
-          if (prevEl) prevEl.classList.add('open');
-        }
-      }
-    }
-    if (e.button === 4) {
-      // Dopředu - nic (nemáme forward stack)
-    }
+  function sleduj() {
+    var okna = document.querySelectorAll('.mo');
+    if (!okna.length || typeof MutationObserver !== 'function') return;
+    var obs = new MutationObserver(function(zmeny) {
+      zmeny.forEach(function(z) { zaznamenej(z.target); });
+    });
+    okna.forEach(function(el) {
+      obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+      if (el.classList.contains('open')) zaznamenej(el);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sleduj);
+  else sleduj();
+
+  function otevri(id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('open');
+    return !!el;
+  }
+
+  function zpet() {
+    var id = historie[historie.length - 1];
+    if (!id) return false;
+    dopredu.push(id);
+    try { cm(id); } catch(e) { var el = document.getElementById(id); if (el) el.classList.remove('open'); }
+    return true;
+  }
+
+  function vpred() {
+    var id = dopredu.pop();
+    return id ? otevri(id) : false;
+  }
+
+  // Odchyt v capture fázi, tedy dřív než obsluha „klik mimo okno = zavřít".
+  // Jinak by stisk s kurzorem mimo okno zavřel dvě okna najednou.
+  // Zároveň prohlížeč na bočních tlačítkách normálně přechází v historii stránek,
+  // což by uživatele vyhodilo z aplikace — proto si událost bereme celou.
+  document.addEventListener('mousedown', function(e) {
+    if (e.button !== 3 && e.button !== 4) return;
+    if (e.button === 3 && !historie.length) return;
+    if (e.button === 4 && !dopredu.length) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.button === 3) zpet(); else vpred();
+  }, true);
+  // Spolkni navazující události, ať se prohlížeč nerozhodne přejít zpět
+  ['mouseup', 'auxclick'].forEach(function(typ) {
+    document.addEventListener(typ, function(e) {
+      if (e.button === 3 || e.button === 4) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
   });
-
-  // Patch cm() aby sledoval historii
-  var _origCm = window.cm;
-  window._modalHistoryRef = modalHistory;
+  // Běžné kliknutí kamkoli zahodí větev „dopředu"
+  document.addEventListener('click', function() { dopredu.length = 0; }, true);
 })();
 
 /* ══════════════════════════════════════
