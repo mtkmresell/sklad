@@ -1638,11 +1638,111 @@ function makeConfirmOverlay(msgHtml, yesLabel, yesCls, onYes) {
 
 const SK = 'sklad_v3';
 
+/* ══════════════════════════════════════════════════════════════════════
+   CO SE SYNCHRONIZUJE — JEDEN SEZNAM
+
+   Každé nastavení bylo dřív potřeba ručně dopsat na tři místa: do mazání
+   při odhlášení, do stavby cloudového balíčku a do jeho načítání. Když se
+   na některé zapomnělo, nastavení se tiše ztrácelo — stalo se to pětkrát
+   (vlastní kategorie, dropdowny, skupiny platforem, wishlist, rozložení
+   analytiky). Tenhle seznam je zdroj pravdy a všechna tři místa se z něj
+   odvozují, takže zapomenout už nejde.
+
+     key    klíč v localStorage
+     field  název pole v cloudovém dokumentu — přejmenovat znamená
+            přestat vidět dosud uložená data
+     shape  'json'   hodnota je JSON (pole/objekt)
+            'text'   ukládá se jako řetězec
+            'number' číslo
+     keep   prázdná hodnota z cloudu lokální nepřepíše — ochrana proti
+            tomu, aby čerstvé zařízení smazalo nastavení všem ostatním
+     apply  co dodělat po načtení (obnovit proměnnou, překreslit)
+══════════════════════════════════════════════════════════════════════ */
+var _syncSettings = null;
+function syncSettings() {
+  if (_syncSettings) return _syncSettings;
+  _syncSettings = [
+    { key: 'sklad_plat_groups_v1', field: 'platGroups', shape: 'text', keep: true },
+    { key: 'ste_custom_tables', field: 'steTables', shape: 'text', keep: true,
+      apply: function(txt) { try { steTables = JSON.parse(txt); } catch(e) {} rebuildBrandTables(); } },
+    { key: 'ste_brand_order', field: 'steBrandOrder', shape: 'json', keep: true,
+      apply: function(_, v) { steBrandOrder = v; rebuildBrandTables(); } },
+    { key: RETAILERS_KEY, field: 'retailers', shape: 'json', keep: true },
+    { key: IO_LIMIT_KEY, field: 'ioLimit', shape: 'number' },
+    { key: SK_CUSTOM_CATS, field: 'customCats', shape: 'json', keep: true,
+      apply: function() { buildCatSelects(); } },
+    { key: SK_PAYMENT_OPTS, field: 'paymentOpts', shape: 'json', keep: true },
+    { key: SK_LOC_OPTS, field: 'locOpts', shape: 'json', keep: true },
+    { key: SK_WISH, field: 'wishlist', shape: 'json', keep: true,
+      apply: function(_, v) { wishItems = v; } },
+    { key: 'an_order_v2', field: 'anOrder', shape: 'json', keep: true },
+    { key: 'sa_order', field: 'saOrder', shape: 'json', keep: true },
+  ];
+  return _syncSettings;
+}
+
+// Frekvence našeptávaných hodnot — jdou do cloudu pohromadě v jednom poli
+var SYNC_FREQ_KEYS = ['carrier_freq', 'soldWhere_freq', 'payoutCustom_freq'];
+// Klíče, které se při odhlášení mažou, ale do cloudu nepatří
+function syncLocalOnlyKeys() { return [SK, SK + '_savedAt', SK + '_dirty', SK_SNAP]; }
+
+// Doplní do cloudového balíčku všechna nastavení ze seznamu.
+// Chybějící klíč pošle jako null — aby čerstvé zařízení nepřepsalo cloud
+// výchozími hodnotami jen tím, že si je ještě nikdy neuložilo.
+function syncSettingsToPayload(out) {
+  syncSettings().forEach(function(s) {
+    var raw = null;
+    try { raw = localStorage.getItem(s.key); } catch(e) {}
+    if (raw === null || raw === '') { out[s.field] = null; return; }
+    if (s.shape === 'text') { out[s.field] = raw; return; }
+    if (s.shape === 'number') { var n = parseFloat(raw); out[s.field] = isFinite(n) ? n : null; return; }
+    try { out[s.field] = JSON.parse(raw); } catch(e) { out[s.field] = null; }
+  });
+  out.freqMaps = (function() {
+    var m = {};
+    SYNC_FREQ_KEYS.forEach(function(k) {
+      try { var v = localStorage.getItem(k); if (v) m[k] = JSON.parse(v); } catch(e) {}
+    });
+    return m;
+  })();
+  return out;
+}
+
+// Načte nastavení z cloudového dokumentu podle stejného seznamu
+function applySyncSettings(data) {
+  syncSettings().forEach(function(s) {
+    var v = data[s.field];
+    if (v === undefined || v === null) return;
+    var ulozit;
+    if (s.shape === 'number') {
+      var n = parseFloat(v);
+      if (!isFinite(n)) return;
+      ulozit = String(n); v = n;
+    } else if (s.shape === 'text') {
+      ulozit = (typeof v === 'string') ? v : JSON.stringify(v);
+      if (s.keep && !ulozit) return;
+    } else {
+      if (typeof v === 'string') { try { v = JSON.parse(v); } catch(e) { return; } }
+      if (s.keep && (!v || (Array.isArray(v) && !v.length))) return;
+      ulozit = JSON.stringify(v);
+    }
+    try { localStorage.setItem(s.key, ulozit); } catch(e) {}
+    if (s.apply) { try { s.apply(ulozit, v); } catch(e) { console.warn('sync ' + s.field + ':', e); } }
+  });
+  if (data.freqMaps) {
+    SYNC_FREQ_KEYS.forEach(function(k) {
+      if (data.freqMaps[k]) {
+        try { localStorage.setItem(k, JSON.stringify(data.freqMaps[k])); } catch(e) {}
+      }
+    });
+  }
+}
+
 function clearSkladLocalStorage() {
-  ['sklad_v3','sklad_v3_savedAt','sklad_v3_snapshots','sklad_custom_cats_v1',
-   'sklad_plat_groups_v1','sklad_payment_opts_v1','sklad_loc_opts_v1','sklad_wishlist_v1',
-   'carrier_freq','soldWhere_freq','payoutCustom_freq','an_order_v2','sa_order',
-   'ste_brand_order','ste_custom_tables'].forEach(function(k){ localStorage.removeItem(k); });
+  syncLocalOnlyKeys()
+    .concat(syncSettings().map(function(s) { return s.key; }))
+    .concat(SYNC_FREQ_KEYS)
+    .forEach(function(k) { try { localStorage.removeItem(k); } catch(e) {} });
 }
 
 const PLATFORMS = [
@@ -2486,46 +2586,8 @@ function _applyCloudData(data, archiveItems) {
   localStorage.setItem(SK, JSON.stringify(items));
   if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
   localStorage.removeItem(SK+'_dirty');
-  if (data.platGroups) {
-    var pg = typeof data.platGroups === 'string' ? JSON.parse(data.platGroups) : data.platGroups;
-    localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(pg));
-  }
-  if (data.steTables) {
-    steTables = typeof data.steTables === 'string' ? JSON.parse(data.steTables) : data.steTables;
-    localStorage.setItem('ste_custom_tables', JSON.stringify(steTables));
-  }
-  if (data.steBrandOrder) { steBrandOrder = data.steBrandOrder; localStorage.setItem('ste_brand_order', JSON.stringify(steBrandOrder)); }
-  if (data.steTables || data.steBrandOrder) rebuildBrandTables();
-  if (data.freqMaps) {
-    ['carrier_freq','soldWhere_freq','payoutCustom_freq'].forEach(function(k){
-      if (data.freqMaps[k]) localStorage.setItem(k, JSON.stringify(data.freqMaps[k]));
-    });
-  }
-  if (Array.isArray(data.retailers)) {
-    try { localStorage.setItem(RETAILERS_KEY, JSON.stringify(data.retailers)); } catch(e) {}
-  }
-  if (data.ioLimit != null && isFinite(parseFloat(data.ioLimit))) {
-    try { localStorage.setItem(IO_LIMIT_KEY, String(data.ioLimit)); } catch(e) {}
-  }
-  // Vlastní kategorie z cloudu (prázdný seznam nepřepisuje lokální — ochrana proti výmazu)
-  if (Array.isArray(data.customCats) && data.customCats.length) {
-    try { localStorage.setItem(SK_CUSTOM_CATS, JSON.stringify(data.customCats)); } catch(e) {}
-    try { buildCatSelects(); } catch(e) {}
-  }
-  // Seznamy dropdownů (Payout na / Sklad umístění) — prázdný seznam nepřepisuje lokální
-  if (Array.isArray(data.paymentOpts) && data.paymentOpts.length) {
-    try { localStorage.setItem(SK_PAYMENT_OPTS, JSON.stringify(data.paymentOpts)); } catch(e) {}
-  }
-  if (Array.isArray(data.locOpts) && data.locOpts.length) {
-    try { localStorage.setItem(SK_LOC_OPTS, JSON.stringify(data.locOpts)); } catch(e) {}
-  }
-  // Wishlist — prázdný seznam z cloudu nepřepisuje lokální
-  if (Array.isArray(data.wishlist) && data.wishlist.length) {
-    try {
-      localStorage.setItem(SK_WISH, JSON.stringify(data.wishlist));
-      wishItems = data.wishlist;
-    } catch(e) {}
-  }
+  // Všechna nastavení podle jednoho seznamu — viz syncSettings()
+  applySyncSettings(data);
   // Doplň definice kategorií chybějící pro klíče použité na položkách
   try { healCustomCats(); } catch(e) {}
   // Dopočítej původní eurové cílové ceny u záznamů uložených před opravou
@@ -2554,36 +2616,23 @@ function _currentSplit() {
 }
 
 function _buildCloudPayload() {
+  // Rozepsaná tabulka velikostí žije jen v paměti — než se čte seznam
+  // nastavení z localStorage, je potřeba ji tam propsat
   savePanelToMemory(steCurrentBrand);
+  try { saveToStorage(); } catch(e) {}
   var split = _currentSplit();
   var years = Object.keys(split.byYear).sort();
   var ts = new Date().toISOString();
-  return {
+  // Nastavení se doplní podle jednoho seznamu — viz syncSettings()
+  return syncSettingsToPayload({
     // Kompletní seznam pro starší verze aplikace a jako kontrola proti rozdělení.
-    // Po ověření se vypne přes CLOUD_LEGACY_MIRROR a dokument se tím zmenší.
+    // Vypnuté přes CLOUD_LEGACY_MIRROR — dokument je tím výrazně menší.
     items: CLOUD_LEGACY_MIRROR ? split.main.concat([].concat.apply([], years.map(function(y){ return split.byYear[y]; }))) : [],
     itemsStock: split.main,
     archiveYears: years,
     splitSavedAt: ts,
     savedAt: ts,
-    platGroups: (function(){ try { var v=localStorage.getItem('sklad_plat_groups_v1'); return v||null; } catch(e){ return null; } })(),
-    steTables: (function(){ try { return JSON.stringify(steTables); } catch(e){ return null; } })(),
-    steBrandOrder: (function(){ try { return steBrandOrder.slice(); } catch(e){ return null; } })(),
-    freqMaps: (function(){
-      var out = {};
-      ['carrier_freq','soldWhere_freq','payoutCustom_freq'].forEach(function(k){
-        try { var v = localStorage.getItem(k); if (v) out[k] = JSON.parse(v); } catch(e){}
-      });
-      return out;
-    })(),
-    retailers: (function(){ try { return getRetailers(); } catch(e){ return []; } })(),
-    ioLimit: (function(){ try { return getIoLimit(); } catch(e){ return null; } })(),
-    customCats: (function(){ try { return getCustomCats(); } catch(e){ return []; } })(),
-    // Jen explicitně uložené seznamy — jinak by čerstvé zařízení přepsalo cloud výchozími hodnotami
-    paymentOpts: (function(){ try { var v = localStorage.getItem(SK_PAYMENT_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })(),
-    locOpts: (function(){ try { var v = localStorage.getItem(SK_LOC_OPTS); return v ? JSON.parse(v) : []; } catch(e){ return []; } })(),
-    wishlist: (function(){ try { var v = localStorage.getItem(SK_WISH); return v ? JSON.parse(v) : []; } catch(e){ return []; } })()
-  };
+  });
 }
 
 function fbForceUploadToCloud() {
@@ -12554,6 +12603,7 @@ function initSaDragDrop() {
       var order = [];
       wrap.querySelectorAll('[data-an-id]').forEach(function(s){ order.push(s.dataset.anId); });
       try{ localStorage.setItem('sa_order', JSON.stringify(order)); }catch(e){}
+      _ioCloudSync();   // pořadí panelů patří do cloudu
     });
     block.addEventListener('dragover', function(e){
       e.preventDefault();
@@ -12671,6 +12721,7 @@ function initAnDragDrop() {
       var order = [];
       wrap.querySelectorAll('.an-section').forEach(function(s){ order.push(s.dataset.anId); });
       try { localStorage.setItem('an_order_v2', JSON.stringify(order)); } catch(e) {}
+      _ioCloudSync();   // pořadí panelů patří do cloudu
     });
     sec.addEventListener('dragover', function(e) {
       e.preventDefault();
