@@ -10,7 +10,7 @@ jen přes GitHub API (workflow „pages build and deployment", id `256573624`), 
 ## Tvar projektu
 
 ```
-index.html     celá aplikace — 15 400 řádků, 86 % JS, 7 % CSS, 8 % HTML
+index.html     celá aplikace — 15 900 řádků, 86 % JS, 7 % CSS, 8 % HTML
 fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repozitáře
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
@@ -102,7 +102,7 @@ Medián je 12 řádků — soubor je velký, ale ne zanesený.
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 27 souborů
+node test/run.js              # kontrola syntaxe + všech 28 souborů
 node test/run.js archive      # jen vybrané
 ```
 

@@ -7527,9 +7527,15 @@ function renderTagSuggestions() {
 ══════════════════════════════════════════════════════════════════════ */
 var SK_SELLER = 'sklad_seller_v1';
 
+var SELLER_LEGAL_DEFAULT = 'Nejsem plátce DPH, doklad proto není daňovým dokladem podle zákona o DPH. '
+  + 'Slouží jako doklad o prodeji mezi prodávajícím a kupujícím.';
+
 function getSeller() {
-  try { var v = localStorage.getItem(SK_SELLER); if (v) return JSON.parse(v); } catch(e) {}
-  return {};
+  var o = {};
+  try { var v = localStorage.getItem(SK_SELLER); if (v) o = JSON.parse(v) || {}; } catch(e) {}
+  if (o.legal === undefined) o.legal = SELLER_LEGAL_DEFAULT;
+  if (o.signatures === undefined) o.signatures = false;
+  return o;
 }
 function saveSeller(o) {
   try { localStorage.setItem(SK_SELLER, JSON.stringify(o)); } catch(e) {}
@@ -7572,6 +7578,7 @@ function openSaleDocument(id) {
 
   var kontakt = [];
   if (kupujici) {
+    if (kupujici.address) kontakt.push(kupujici.address);
     (kupujici.contacts || []).forEach(function(c) {
       if (['email', 'telefon', 'adresa'].indexOf(c.type) !== -1 && c.value) kontakt.push(c.value);
     });
@@ -7627,16 +7634,19 @@ function openSaleDocument(id) {
   h += _dokladRadek('Stav', 'Použité zboží');
   h += _dokladRadek('Způsob platby', it.paymentMethod);
   h += _dokladRadek('Platforma', it.soldWhere);
+  h += _dokladRadek('Doručení', kupujici && kupujici.pickup ? kupujici.pickup : '');
   h += '</tbody></table>';
 
   h += '<div class="celkem"><div style="font-weight:700;">Celkem k úhradě</div><div class="c">' + escHtml(cena) + '</div></div>';
 
   h += '<div class="pozn">';
   h += p.note ? escHtml(p.note).replace(/\n/g, '<br>') + '<br><br>' : '';
-  h += 'Toto není daňový doklad. Prodávající není plátcem DPH. Doklad slouží jako potvrzení o prodeji mezi prodávajícím a kupujícím.';
+  h += escHtml(p.legal || '').replace(/\n/g, '<br>');
   h += '</div>';
 
-  h += '<div class="podpisy"><div class="podpis">Prodávající</div><div class="podpis">Kupující</div></div>';
+  if (p.signatures) {
+    h += '<div class="podpisy"><div class="podpis">Podpis prodávajícího</div><div class="podpis">Podpis kupujícího</div></div>';
+  }
   h += '</body></html>';
 
   var w = window.open('', '_blank');
@@ -7669,6 +7679,10 @@ function openSellerSettings() {
     + pole('_selEmail', 'E-mail', p.email)
     + pole('_selPhone', 'Telefon', p.phone)
     + pole('_selNote', 'Poznámka na dokladu (nepovinné)', p.note, true)
+    + pole('_selLegal', 'Právní věta v patičce', p.legal, true)
+    + '<div class="fi full" style="margin-bottom:12px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;">'
+    + '<input type="checkbox" id="_selSign" style="width:auto;"' + (p.signatures ? ' checked' : '') + '>'
+    + 'Místo pro podpisy (u osobního předání)</label></div>'
     + '<button class="add-btn" style="width:100%;margin-top:6px;" onclick="saveSellerFromForm()">Uložit</button>'
     + '</div>';
   document.body.appendChild(ov);
@@ -7676,8 +7690,10 @@ function openSellerSettings() {
 
 function saveSellerFromForm() {
   var v = function(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  var sign = document.getElementById('_selSign');
   saveSeller({ name: v('_selName'), address: v('_selAddress'), ico: v('_selIco'),
-    email: v('_selEmail'), phone: v('_selPhone'), note: v('_selNote') });
+    email: v('_selEmail'), phone: v('_selPhone'), note: v('_selNote'),
+    legal: v('_selLegal'), signatures: !!(sign && sign.checked) });
   var ov = document.getElementById('sellerOv');
   if (ov) ov.remove();
   showToast('Údaje pro doklad uloženy.');
@@ -10497,6 +10513,7 @@ function crmCopyContact(el){
 }
 
 function _crmTabContacts(c){
+  var rowsPocet=(c.contacts||[]).length;
   var rows=(c.contacts||[]).map(function(ct,ri){
     var url=_crmContactUrl(ct.type, ct.value);
     var val;
@@ -10514,7 +10531,25 @@ function _crmTabContacts(c){
       +(ct.primary?'<span style="font-size:9px;color:var(--accent);font-family:DM Mono,monospace;border:1px solid var(--accent);border-radius:3px;padding:1px 5px;flex-shrink:0;">hlavní</span>':'')
       +'</div>';
   }).join('');
-  return '<div>'+(rows||'<div style="color:var(--muted);font-size:13px;padding:8px 0;">Žádné kontakty.</div>')+'</div>';
+  // Kam posílat — výdejní místo se u opakovaných zákazníků ptá pořád dokola
+  var dorucRadky = [
+    { l: 'Výdejní místo', v: c.pickup },
+    { l: 'Adresa', v: c.address },
+  ].filter(function(x){ return (x.v || '').trim(); });
+  var doruc = '';
+  if (dorucRadky.length) {
+    doruc = '<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);">'
+      + '<div style="font-size:9px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:7px;">Doručení</div>'
+      + dorucRadky.map(function(x, i){
+          return '<div class="crm-contact-row row-anim" style="animation-delay:'+((rowsPocet+i)*20)+'ms;">'
+            + '<span style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;width:80px;flex-shrink:0;">'+x.l+'</span>'
+            + '<span class="crm-contact-link" data-tip="Kliknutím zkopíruješ" data-copy="'+escHtml(x.v)+'" onclick="crmCopyContact(this)" '
+            + 'style="flex:1;font-size:13px;min-width:0;overflow-wrap:anywhere;white-space:pre-line;">'+escHtml(x.v)+'</span>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+  }
+  return '<div>'+(rows||'<div style="color:var(--muted);font-size:13px;padding:8px 0;">Žádné kontakty.</div>')+doruc+'</div>';
 }
 
 function _crmTabPrefs(c){
@@ -11065,6 +11100,8 @@ function openEditCustomerModal(id){
   var _ico=document.getElementById('crmFldIco'); if(_ico) _ico.value=c.ico||'';
   var _dic=document.getElementById('crmFldDic'); if(_dic) _dic.value=c.dic||'';
   var _web=document.getElementById('crmFldWeb'); if(_web) _web.value=c.web||'';
+  var _pick=document.getElementById('crmFldPickup'); if(_pick) _pick.value=c.pickup||'';
+  var _addr=document.getElementById('crmFldAddress'); if(_addr) _addr.value=c.address||'';
   document.getElementById('crmFldFollowupDate').value=c.followup_date||'';
   document.getElementById('crmFldFollowupNote').value=c.followup_note||'';
   crmRenderStars(c.rating||0);
@@ -11353,7 +11390,7 @@ function openNewCustomerModal() {
   crmNewRating = 0;
   _crmContactIdx = 0;
   _crmUpdateModalForMode(crmMode);
-  ['crmFldName','crmFldNoteQuick','crmFldNoteSpecial','crmFldShoeEu','crmFldTop','crmFldBottom','crmFldSizeNote','crmFldFollowupNote','crmFldIco','crmFldDic','crmFldWeb'].forEach(function(id){
+  ['crmFldName','crmFldNoteQuick','crmFldNoteSpecial','crmFldShoeEu','crmFldTop','crmFldBottom','crmFldSizeNote','crmFldFollowupNote','crmFldIco','crmFldDic','crmFldWeb','crmFldPickup','crmFldAddress'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.value = '';
   });
   document.getElementById('crmFldStatus').value = crmMode==='b2b' ? 'aktivni' : 'bezny';
@@ -11458,6 +11495,8 @@ function saveNewCustomer() {
     ico: ((document.getElementById('crmFldIco')||{}).value||'').trim(),
     dic: ((document.getElementById('crmFldDic')||{}).value||'').trim(),
     web: ((document.getElementById('crmFldWeb')||{}).value||'').trim(),
+    pickup: ((document.getElementById('crmFldPickup')||{}).value||'').trim(),
+    address: ((document.getElementById('crmFldAddress')||{}).value||'').trim(),
     size_shoes_eu: (document.getElementById('crmFldShoeEu').value||'').trim(),
     size_clothing_top: (document.getElementById('crmFldTop').value||'').trim(),
     size_clothing_bottom: (document.getElementById('crmFldBottom').value||'').trim(),
@@ -15637,6 +15676,14 @@ rebuildBrandTables();
         <div class="fi full">
           <label>Poznámka (detail)</label>
           <textarea id="crmFldNoteSpecial" rows="4" placeholder="Delší kontext k zákazníkovi — vše, co se nevejde do krátké poznámky…" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;padding:9px 11px;outline:none;resize:vertical;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+        </div>
+        <div class="fi full">
+          <label>Výdejní místo (kam posílat)</label>
+          <input type="text" id="crmFldPickup" placeholder="Zásilkovna Praha 7, Dělnická 12">
+        </div>
+        <div class="fi full">
+          <label>Adresa</label>
+          <textarea id="crmFldAddress" rows="2" placeholder="Ulice a číslo, město, PSČ"></textarea>
         </div>
       </div>
     </div>

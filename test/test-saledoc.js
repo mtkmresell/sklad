@@ -80,8 +80,8 @@ const SEED = [
   const datumOcek = await page.evaluate(() => fmtDate('2026-07-15'));
   check('uvádí datum prodeje', t.includes(datumOcek), 'čekáno ' + datumOcek + ' | ' + t.slice(0, 160));
   check('uvádí cenu', /5 ?200/.test(t.replace(/[  ]/g, ' ')), t.slice(0, 400));
-  check('má poznámku, že to není daňový doklad', /Toto není daňový doklad/.test(t), t.slice(-260));
-  check('má místo pro podpisy', /Prodávající/.test(t) && /Kupující/.test(t), t.slice(-200));
+  check('má právní větu o DPH', /není daňovým dokladem/.test(t), t.slice(-260));
+  check('podpisy jsou vypnuté, dokud si je nezapneš', !/Podpis prodávajícího/.test(t), t.slice(-200));
   check('má tlačítko na tisk, které se netiskne',
     /window\.print\(\)/.test(h) && /\.noprint\{display:none;?\}/.test(h.replace(/\s/g, '')), 'ok');
 
@@ -89,13 +89,24 @@ const SEED = [
   section('3) Údaje prodávajícího');
   check('bez vyplněných údajů se nespadne, jen chybí jméno', /Prodávající — |Prodávající —/.test(t) || /—/.test(t));
   await page.evaluate(() => saveSeller({ name: 'Michal Novák', address: 'Dlouhá 12\nPraha 1', ico: '12345678',
-    email: 'michal@example.cz', phone: '+420 111 222 333', note: 'Zboží je použité, prodáno bez záruky.' }));
+    email: 'michal@example.cz', phone: '+420 111 222 333', note: 'Zboží je použité, prodáno bez záruky.',
+    legal: SELLER_LEGAL_DEFAULT, signatures: true }));
   h = await doklad('p1'); t = text(h);
   check('jméno prodávajícího je na dokladu', /Michal Novák/.test(t), t.slice(0, 200));
   check('adresa se zalomí na řádky', /Dlouhá 12<br>Praha 1/.test(h), 'ok');
   check('IČO, e-mail i telefon', /12345678/.test(t) && /michal@example\.cz/.test(t) && /420 111 222 333/.test(t), t.slice(0, 300));
-  check('vlastní poznámka je nad zákonnou větou',
-    t.indexOf('Zboží je použité') < t.indexOf('Toto není daňový doklad'), 'ok');
+  check('vlastní poznámka je nad právní větou',
+    t.indexOf('Zboží je použité') < t.indexOf('není daňovým dokladem'), 'ok');
+  check('zapnuté podpisy se objeví', /Podpis prodávajícího/.test(t) && /Podpis kupujícího/.test(t), t.slice(-200));
+
+  const pravni = await page.evaluate(() => {
+    saveSeller(Object.assign({}, getSeller(), { legal: 'Vlastní právní věta.' }));
+    return { vychozi: SELLER_LEGAL_DEFAULT.length > 20 };
+  });
+  h = await doklad('p1'); t = text(h);
+  check('právní větu jde přepsat', /Vlastní právní věta\./.test(t) && !/není daňovým dokladem/.test(t), t.slice(-200));
+  await page.evaluate(() => saveSeller(Object.assign({}, getSeller(), { legal: SELLER_LEGAL_DEFAULT })));
+  check('výchozí právní věta existuje', pravni.vychozi);
 
   const ulozeno = await page.evaluate(() => ({
     lokalne: JSON.parse(localStorage.getItem('sklad_seller_v1') || '{}').name,
@@ -122,6 +133,16 @@ const SEED = [
   check('jméno zákazníka z CRM', /Petra Svobodová/.test(t), t.slice(0, 300));
   check('e-mail i telefon zákazníka', /petra@example\.cz/.test(t) && /777 888 999/.test(t), t.slice(0, 350));
   check('instagram na doklad nepatří', !/@petra/.test(t), t.slice(0, 350));
+
+  // Doručovací údaje ze zákazníka
+  await page.evaluate(() => {
+    const c = customers.find(x => x.name === 'Petra Svobodová');
+    c.pickup = 'Zásilkovna Praha 7, Dělnická 12';
+    c.address = 'Dlouhá 5, Praha 1, 11000';
+  });
+  h = await doklad('p2'); t = text(h);
+  check('výdejní místo je na dokladu jako doručení', /Zásilkovna Praha 7/.test(t), t.slice(0, 400));
+  check('adresa kupujícího taky', /Dlouhá 5, Praha 1/.test(t), t.slice(0, 400));
 
   // ══════════════════════════════════════════════════════════════
   section('5) Eurový prodej');

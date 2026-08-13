@@ -70,6 +70,7 @@ výpadků sítě a souběhu dvou zařízení. Pomocné funkce, které dává k d
 | `test-fonts.js` | fonty se berou lokálně, ne z Googlu |
 | `test-cashflow.js` | cashflow z payoutů, rychlost platforem |
 | `test-saledoc.js` | prodejní doklad a údaje prodávajícího |
+| `test-crmaddress.js` | doručovací údaje u zákazníka — výdejní místo a adresa |
 | `test-platsync.js`, `test-platmgr.js` | platformy a jejich skupiny |
 | `test-target.js`, `test-target2.js` | cílové ceny v eurech a kurzy |
 | `test-tracking.js` | sledování zásilek při změnách stavu |
