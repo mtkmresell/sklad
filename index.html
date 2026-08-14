@@ -1147,6 +1147,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       <button class="tab-btn" id="crmBtn_b2b" onclick="crmSwitchMode('b2b')">Partneři (B2B)</button>
     </div>
     <div style="flex:1;"></div>
+    <button class="icon-btn" id="crmAnalyticsBtn" onclick="crmToggleAnalytics()">Analytika →</button>
     <button class="icon-btn" onclick="openOfferBuilder()">Offer Builder →</button>
     <button class="add-btn" id="crmAddBtn" onclick="openNewCustomerModal()">+ Nový zákazník</button>
   </div>
@@ -1181,6 +1182,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     </label>
   </div>
   <div id="crmList" class="crm-section"></div>
+  <div id="crmAnalytics" class="crm-section" style="display:none;"></div>
 </div>
 <div id="statsBarWrap" style="position:relative;overflow:hidden;flex-shrink:0;">
   <div class="stats-bar" id="statsBar"></div>
@@ -10280,6 +10282,434 @@ function crmSwitchMode(mode) {
   // Přepočítej časově závislé tagy při vstupu do sekce zákazníků
   if(mode==='b2c') refreshCrmActivityTags(true);
   renderCustomers();
+  if(crmViewMode==='analytics') renderCustomerAnalytics();
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   ANALYTIKA ZÁKAZNÍKŮ
+
+   Zákazník sám o sobě žádná čísla nenese — všechno se dopočítává z prodejů,
+   které se na něj vážou přes `linkedCustomerId`.
+
+   B2C a B2B jsou schválně dva různé pohledy. U zákazníka jde o to, jestli
+   se vrací a kolik utrácí. Partner je ale spíš druhý prodejce, takže tam
+   je podstatná historie obchodů a jestli s ním byly problémy — ne útrata.
+══════════════════════════════════════════════════════════════════════ */
+var crmViewMode = 'list';
+
+function crmToggleAnalytics() {
+  crmViewMode = crmViewMode === 'list' ? 'analytics' : 'list';
+  var jeList = crmViewMode === 'list';
+  var list = document.getElementById('crmList');
+  if(list) list.style.display = jeList ? '' : 'none';
+  var filtry = document.querySelector('#customersSection .crm-filters');
+  if(filtry) filtry.style.display = jeList ? '' : 'none';
+  var box = document.getElementById('crmAnalytics');
+  if(box) box.style.display = jeList ? 'none' : '';
+  var btn = document.getElementById('crmAnalyticsBtn');
+  if(btn) btn.textContent = jeList ? 'Analytika →' : '← Zpět';
+  var addBtn = document.getElementById('crmAddBtn');
+  if(addBtn) addBtn.style.display = jeList ? '' : 'none';
+  if(!jeList) renderCustomerAnalytics();
+}
+
+// Prodeje navěšené na jednotlivé protistrany. Vrácené kusy se nezapočítávají —
+// obchod, který se nedokončil, není tržba.
+function crmSalesIndex(mode) {
+  var lidi = mode === 'b2b' ? (partners || []) : (customers || []);
+  var mapa = {};
+  lidi.forEach(function(c){
+    mapa[c.id] = { c:c, prodeje:[], trzby:0, zisk:0, prvni:null, posledni:null };
+  });
+  (items || []).forEach(function(it){
+    var z = it.linkedCustomerId && mapa[it.linkedCustomerId];
+    if(!z) return;
+    if(it.saleState !== 'paid' && it.saleState !== 'waiting') return;
+    if(!profMatch(it)) return;
+    z.prodeje.push(it);
+    z.trzby += it.sellPrice || 0;
+    z.zisk  += it.profit || 0;
+    var d = _dat(it.saleDate);
+    if(d){
+      if(!z.prvni || d < z.prvni) z.prvni = d;
+      if(!z.posledni || d > z.posledni) z.posledni = d;
+    }
+  });
+  return mapa;
+}
+
+// Cenová pásma jsou schválně pevná, ne odvozená z dat — ať se hranice
+// neposouvají pokaždé, když přibude drahý kus, a čísla šla srovnávat v čase.
+var CENOVA_PASMA = [
+  { l:'do 1 000',       min:0,     max:1000 },
+  { l:'1 000 – 2 500',  min:1000,  max:2500 },
+  { l:'2 500 – 5 000',  min:2500,  max:5000 },
+  { l:'5 000 – 10 000', min:5000,  max:10000 },
+  { l:'nad 10 000',     min:10000, max:Infinity },
+];
+function cenovePasmo(kc) {
+  for(var i=0;i<CENOVA_PASMA.length;i++){
+    if(kc >= CENOVA_PASMA[i].min && kc < CENOVA_PASMA[i].max) return CENOVA_PASMA[i].l;
+  }
+  return CENOVA_PASMA[CENOVA_PASMA.length-1].l;
+}
+
+// „EU 42 / US 8.5" → „42"; u karet a LEGO vrací prázdno
+function velikostKlic(it) {
+  var s = (it.size || '').trim();
+  if(!s) return '';
+  return s.split(/\s*\/\s*US/i)[0].replace(/^EU\s*/i,'').trim();
+}
+
+function _caMedian(pole) {
+  if(!pole.length) return null;
+  var a = pole.slice().sort(function(x,y){ return x-y; });
+  return a[Math.floor(a.length/2)];
+}
+function _caDni(od, do_) { return Math.round((do_ - od) / 864e5); }
+
+// ── Stavební prvky, ať to vypadá stejně jako analytika skladu a prodejů ──
+function _caKpi(label, n, color, pre, suf) {
+  return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;">'
+    + '<div style="font-size:9px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;">'+label+'</div>'
+    + '<div data-countup="'+n+'" data-prefix="'+(pre||'')+'" data-suffix="'+(suf||'')+'" style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;color:'+(color||'var(--text)')+';">'+(pre||'')+'0'+(suf||'')+'</div></div>';
+}
+function _caKpiRaw(label, value, color) {
+  return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;">'
+    + '<div style="font-size:9px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;">'+label+'</div>'
+    + '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;color:'+(color||'var(--text)')+';">'+value+'</div></div>';
+}
+function _caBar(label, val, max, color, popis) {
+  var pct = max>0 ? Math.round(val/max*100) : 0;
+  return '<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;margin-bottom:3px;">'
+    + '<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+label+'</span>'
+    + '<span style="font-family:monospace;font-size:11px;color:var(--muted);flex-shrink:0;">'+(popis!==undefined?popis:val)+'</span></div>'
+    + '<div style="height:4px;background:var(--surface);border-radius:2px;"><div class="anim-bar" data-bar-w="'+pct+'" style="height:4px;border-radius:2px;background:'+(color||'var(--accent)')+';width:0%;transition:width 0.6s cubic-bezier(0.34,1,0.64,1);"></div></div></div>';
+}
+function _caPrazdno(text) {
+  return '<div style="color:var(--muted);font-size:12px;padding:6px 0;">'+text+'</div>';
+}
+function _caTabulka(hlavicky, radky) {
+  if(!radky.length) return _caPrazdno('Zatím není z čeho počítat.');
+  var h = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:1px solid var(--border);">';
+  h += hlavicky.map(function(x,i){
+    return '<th style="padding:5px 8px;text-align:'+(i===0?'left':'center')+';font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">'+x+'</th>';
+  }).join('');
+  h += '</tr></thead><tbody>'+radky.join('')+'</tbody></table></div>';
+  return h;
+}
+function _caRadekJmena(id, jmeno) {
+  return '<td style="padding:6px 8px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;">'+escHtml(jmeno)+'</td>';
+}
+function _caBunka(obsah, barva) {
+  return '<td style="padding:6px 8px;text-align:center;font-family:monospace;'+(barva?'color:'+barva+';':'')+'">'+obsah+'</td>';
+}
+
+// ───────────────────────── B2C: vrací se a kolik utrácí ─────────────────────────
+function _caSekceB2C(mapa) {
+  var s = {};
+  var vsichni = Object.keys(mapa).map(function(k){ return mapa[k]; });
+  var nakupujici = vsichni.filter(function(z){ return z.prodeje.length > 0; });
+  var opakovani  = nakupujici.filter(function(z){ return z.prodeje.length >= 2; });
+  var trzbyCelkem = nakupujici.reduce(function(a,z){ return a+z.trzby; }, 0);
+  var ziskCelkem  = nakupujici.reduce(function(a,z){ return a+z.zisk; }, 0);
+  var trzbyOpak   = opakovani.reduce(function(a,z){ return a+z.trzby; }, 0);
+  var kusuCelkem  = nakupujici.reduce(function(a,z){ return a+z.prodeje.length; }, 0);
+
+  s.kpi = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;">'
+    + _caKpi('Zákazníků', vsichni.length)
+    + _caKpi('Z toho nakoupilo', nakupujici.length, 'var(--accent)')
+    + _caKpi('Opakovaných', opakovani.length, opakovani.length ? 'var(--accent)' : 'var(--muted)')
+    + _caKpiRaw('Podíl tržeb od opakovaných', trzbyCelkem>0 ? Math.round(trzbyOpak/trzbyCelkem*100)+' %' : '—',
+        trzbyOpak > trzbyCelkem/2 ? 'var(--accent)' : 'var(--text)')
+    + _caKpi('Tržby', Math.round(trzbyCelkem), 'var(--text)', '', ' Kč')
+    + _caKpi('Zisk', Math.round(ziskCelkem), ziskCelkem>=0?'var(--accent)':'var(--danger)', ziskCelkem>=0?'+':'', ' Kč')
+    + _caKpi('Průměr na zákazníka', nakupujici.length?Math.round(trzbyCelkem/nakupujici.length):0, 'var(--text)', '', ' Kč')
+    + _caKpi('Kusů prodáno', kusuCelkem)
+    + '</div>';
+
+  // ── Opakování ──
+  var kose = [
+    { l:'1 nákup',    n:nakupujici.filter(function(z){return z.prodeje.length===1;}).length, c:'var(--muted)' },
+    { l:'2 nákupy',   n:nakupujici.filter(function(z){return z.prodeje.length===2;}).length, c:'#00bfff' },
+    { l:'3–5 nákupů', n:nakupujici.filter(function(z){return z.prodeje.length>=3&&z.prodeje.length<=5;}).length, c:'#ffaa00' },
+    { l:'6+ nákupů',  n:nakupujici.filter(function(z){return z.prodeje.length>=6;}).length, c:'var(--accent)' },
+  ];
+  var maxKos = Math.max.apply(null, kose.map(function(k){return k.n;})) || 1;
+  s.opakovani = nakupujici.length
+    ? kose.map(function(k){ return _caBar(k.l, k.n, maxKos, k.c, k.n+' × ('+Math.round(k.n/nakupujici.length*100)+' %)'); }).join('')
+      + '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      + (opakovani.length
+          ? 'Opakovaní jsou '+Math.round(opakovani.length/nakupujici.length*100)+' % zákazníků, ale '
+            + Math.round(trzbyOpak/(trzbyCelkem||1)*100)+' % tržeb.'
+          : 'Zatím nikdo nenakoupil podruhé.')
+      + '</div>'
+    : _caPrazdno('Zatím žádný zákazník s prodejem.');
+
+  // ── Doba mezi nákupy ──
+  var rozestupy = [];
+  opakovani.forEach(function(z){
+    var data = z.prodeje.map(function(it){ return _dat(it.saleDate); }).filter(Boolean).sort(function(a,b){ return a-b; });
+    for(var i=1;i<data.length;i++) rozestupy.push(_caDni(data[i-1], data[i]));
+  });
+  var medRozestup = _caMedian(rozestupy);
+
+  // ── Nejlepší zákazníci ──
+  var dnes = new Date();
+  var zebricek = nakupujici.slice().sort(function(a,b){ return b.trzby - a.trzby; }).slice(0, 12);
+  s.nejlepsi = _caTabulka(['Zákazník','Kusů','Tržby','Zisk','Poslední'], zebricek.map(function(z){
+    var odKdy = z.posledni ? _caDni(z.posledni, dnes) : null;
+    var barva = odKdy==null ? 'var(--muted)' : odKdy>180 ? 'var(--danger)' : odKdy>90 ? 'var(--warning)' : 'var(--muted)';
+    return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="crmToggleAnalytics();openCustomerDetail(\''+escHtml(z.c.id)+'\')">'
+      + _caRadekJmena(z.c.id, z.c.name)
+      + _caBunka(z.prodeje.length)
+      + _caBunka(czk(Math.round(z.trzby)))
+      + _caBunka((z.zisk>=0?'+':'')+czk(Math.round(z.zisk)), z.zisk>=0?'var(--accent)':'var(--danger)')
+      + _caBunka(odKdy==null ? '—' : odKdy+' dní', barva)
+      + '</tr>';
+  }));
+
+  // ── Velikosti: co se prodává a kolik na to mám lidí ──
+  var prodejePodleVel = {}, zakazniciPodleVel = {};
+  nakupujici.forEach(function(z){
+    z.prodeje.forEach(function(it){
+      var v = velikostKlic(it);
+      if(v) prodejePodleVel[v] = (prodejePodleVel[v]||0) + 1;
+    });
+  });
+  vsichni.forEach(function(z){
+    var v = (z.c.size_shoes_eu || '').trim();
+    if(v) zakazniciPodleVel[v] = (zakazniciPodleVel[v]||0) + 1;
+  });
+  var velikosti = Object.keys(prodejePodleVel).concat(Object.keys(zakazniciPodleVel))
+    .filter(function(v,i,a){ return a.indexOf(v)===i; })
+    .sort(function(a,b){ return (parseFloat(a)||999) - (parseFloat(b)||999); });
+  var maxVel = Math.max.apply(null, velikosti.map(function(v){ return prodejePodleVel[v]||0; })) || 1;
+  s.velikosti = velikosti.length
+    ? velikosti.map(function(v){
+        var prodano = prodejePodleVel[v]||0, lidi = zakazniciPodleVel[v]||0;
+        return _caBar('EU '+escHtml(v), prodano, maxVel, lidi ? 'var(--accent)' : '#00bfff',
+          prodano+' ks · '+lidi+' zák.');
+      }).join('')
+      + '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      + 'Čísla jsou zkreslená tím, že některé velikosti nakupuješ na sklad častěji — neber to jako poptávku trhu, '
+      + 'ale jako přehled, na co máš lidi.</div>'
+    : _caPrazdno('Zatím žádné velikosti — u karet a LEGO se needitují.');
+
+  // ── Cenová pásma ──
+  var podlePasma = {};
+  nakupujici.forEach(function(z){
+    z.prodeje.forEach(function(it){
+      var p = cenovePasmo(it.sellPrice||0);
+      if(!podlePasma[p]) podlePasma[p] = { n:0, trzby:0, zisk:0 };
+      podlePasma[p].n++; podlePasma[p].trzby += it.sellPrice||0; podlePasma[p].zisk += it.profit||0;
+    });
+  });
+  var maxPasmo = Math.max.apply(null, CENOVA_PASMA.map(function(p){ return (podlePasma[p.l]||{n:0}).n; })) || 1;
+  s.pasma = kusuCelkem
+    ? CENOVA_PASMA.map(function(p){
+        var d = podlePasma[p.l] || { n:0, trzby:0, zisk:0 };
+        var prumZisk = d.n ? Math.round(d.zisk/d.n) : 0;
+        return _caBar(p.l+' Kč', d.n, maxPasmo, prumZisk>=0?'var(--accent)':'var(--danger)',
+          d.n ? d.n+' ks · '+(prumZisk>=0?'+':'')+czk(prumZisk)+'/ks' : '—');
+      }).join('')
+    : _caPrazdno('Zatím žádné prodeje zákazníkům.');
+
+  // ── Odkud přišli ──
+  var podleZdroje = {}, bezZdroje = 0;
+  nakupujici.forEach(function(z){
+    z.prodeje.forEach(function(it){
+      if(it.demandSource) podleZdroje[it.demandSource] = (podleZdroje[it.demandSource]||0) + 1;
+      else bezZdroje++;
+    });
+  });
+  var zdrojeKlice = Object.keys(podleZdroje);
+  var maxZdroj = Math.max.apply(null, zdrojeKlice.map(function(k){ return podleZdroje[k]; })) || 1;
+  s.zdroje = zdrojeKlice.length
+    ? DEMAND_SOURCES.filter(function(d){ return podleZdroje[d.id]; })
+        .sort(function(a,b){ return podleZdroje[b.id]-podleZdroje[a.id]; })
+        .map(function(d){ return _caBar(d.l, podleZdroje[d.id], maxZdroj, 'var(--accent)', podleZdroje[d.id]+' ks'); }).join('')
+      + (bezZdroje ? '<div style="font-size:11px;color:var(--muted);margin-top:10px;">'+bezZdroje+' prodejů bez uvedeného zdroje.</div>' : '')
+    : _caPrazdno('Zdroj poptávky se eviduje od nedávna — u starších prodejů chybí.');
+
+  // ── Aktivita ──
+  var koseAkt = [
+    { l:'do 30 dní',   c:'var(--accent)', f:function(d){ return d!=null && d<30; } },
+    { l:'30–90 dní',   c:'#00bfff',       f:function(d){ return d!=null && d>=30 && d<90; } },
+    { l:'90–180 dní',  c:'#ffaa00',       f:function(d){ return d!=null && d>=90 && d<180; } },
+    { l:'180+ dní',    c:'var(--danger)', f:function(d){ return d!=null && d>=180; } },
+  ];
+  var stariNakupu = nakupujici.map(function(z){ return z.posledni ? _caDni(z.posledni, dnes) : null; });
+  var maxAkt = Math.max.apply(null, koseAkt.map(function(k){ return stariNakupu.filter(k.f).length; })) || 1;
+  s.aktivita = nakupujici.length
+    ? koseAkt.map(function(k){
+        var n = stariNakupu.filter(k.f).length;
+        return _caBar('Naposledy '+k.l, n, maxAkt, k.c, n+' zák.');
+      }).join('')
+      + '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      + (medRozestup!=null
+          ? 'Opakovaní zákazníci se vracejí po '+medRozestup+' dnech (medián). Kdo mlčí výrazně dýl, pravděpodobně odešel.'
+          : 'Až se někdo vrátí podruhé, spočítá se sem i typický odstup mezi nákupy.')
+      + '</div>'
+    : _caPrazdno('Zatím žádné nákupy.');
+
+  return s;
+}
+
+// ─────────── B2B: partner není zákazník, jde o historii a spolehlivost ───────────
+function _caSekceB2B(mapa) {
+  var s = {};
+  var vsichni = Object.keys(mapa).map(function(k){ return mapa[k]; });
+  var obchodovani = vsichni.filter(function(z){ return z.prodeje.length > 0; });
+  var kusu   = obchodovani.reduce(function(a,z){ return a+z.prodeje.length; }, 0);
+  var objem  = obchodovani.reduce(function(a,z){ return a+z.trzby; }, 0);
+  var zisk   = obchodovani.reduce(function(a,z){ return a+z.zisk; }, 0);
+  var dnes = new Date();
+
+  // Jak rychle který partner platí — od prodeje k payoutu
+  function platebniDny(z) {
+    return z.prodeje.map(function(it){
+      var a = _dat(it.saleDate), b = _dat(it.payoutDate);
+      if(!a || !b) return null;
+      var d = _caDni(a, b);
+      return (d < 0 || d > 400) ? null : d;
+    }).filter(function(d){ return d != null; });
+  }
+  // Reklamace v ručně vedené historii kontaktů = signál, že něco drhlo
+  function problemy(z) {
+    return (z.c.contact_history || []).filter(function(h){ return h.type === 'reklamace'; }).length;
+  }
+  var vsechnyPlatby = [];
+  obchodovani.forEach(function(z){ vsechnyPlatby = vsechnyPlatby.concat(platebniDny(z)); });
+  var medPlatba = _caMedian(vsechnyPlatby);
+  var nedoplaceno = obchodovani.reduce(function(a,z){
+    return a + z.prodeje.filter(function(it){ return it.saleState === 'waiting'; }).length;
+  }, 0);
+
+  s.kpi = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;">'
+    + _caKpi('Partnerů', vsichni.length)
+    + _caKpi('Obchodoval jsem s', obchodovani.length, 'var(--accent)')
+    + _caKpi('Kusů celkem', kusu)
+    + _caKpi('Objem', Math.round(objem), 'var(--text)', '', ' Kč')
+    + _caKpi('Zisk', Math.round(zisk), zisk>=0?'var(--accent)':'var(--danger)', zisk>=0?'+':'', ' Kč')
+    + _caKpiRaw('Medián platby', medPlatba!=null ? medPlatba+' dní' : '—',
+        medPlatba!=null && medPlatba>21 ? 'var(--warning)' : 'var(--text)')
+    + _caKpi('Čeká na zaplacení', nedoplaceno, nedoplaceno?'var(--warning)':'var(--muted)')
+    + '</div>';
+
+  // ── Historie obchodů: hlavní pohled, kvůli kterému se partneři evidují ──
+  var zebricek = obchodovani.slice().sort(function(a,b){
+    return (b.posledni ? b.posledni.getTime() : 0) - (a.posledni ? a.posledni.getTime() : 0);
+  });
+  s.historie = _caTabulka(['Partner','Kusů','Objem','Platba','Poslední obchod','Stav'], zebricek.map(function(z){
+    var dny = platebniDny(z);
+    var med = _caMedian(dny);
+    var pot = problemy(z);
+    var odKdy = z.posledni ? _caDni(z.posledni, dnes) : null;
+    var stav = z.c.status === 'blacklist' ? '<span style="color:var(--danger);">Blacklist</span>'
+      : z.c.status === 'rizikovy' ? '<span style="color:var(--warning);">Rizikový</span>'
+      : pot ? '<span style="color:var(--warning);">'+pot+'× reklamace</span>'
+      : '<span style="color:var(--accent);">OK</span>';
+    return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="crmToggleAnalytics();openCustomerDetail(\''+escHtml(z.c.id)+'\')">'
+      + _caRadekJmena(z.c.id, z.c.name)
+      + _caBunka(z.prodeje.length)
+      + _caBunka(czk(Math.round(z.trzby)))
+      + _caBunka(med!=null ? med+' dní' : '—', med!=null && med>21 ? 'var(--warning)' : '')
+      + _caBunka(odKdy==null ? '—' : odKdy+' dní zpět', odKdy!=null && odKdy>365 ? 'var(--muted)' : '')
+      + '<td style="padding:6px 8px;text-align:center;font-size:11px;">'+stav+'</td>'
+      + '</tr>';
+  }));
+
+  // ── Spolehlivost placení ──
+  var sPlatbou = obchodovani.map(function(z){ return { z:z, med:_caMedian(platebniDny(z)) }; })
+    .filter(function(x){ return x.med != null; })
+    .sort(function(a,b){ return b.med - a.med; });
+  var maxPlat = sPlatbou.length ? sPlatbou[0].med : 1;
+  s.spolehlivost = sPlatbou.length
+    ? sPlatbou.map(function(x){
+        return _caBar(escHtml(x.z.c.name), x.med, maxPlat,
+          x.med>21 ? 'var(--danger)' : x.med>7 ? 'var(--warning)' : 'var(--accent)',
+          x.med+' dní · '+x.z.prodeje.length+' ks');
+      }).join('')
+      + '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      + 'Medián dnů od prodeje k připsání payoutu. Počítá se jen z obchodů, které mají obě data.</div>'
+    : _caPrazdno('Zatím není u žádného partnera vyplněné datum prodeje i payoutu.');
+
+  // ── Co u nich jde ──
+  var podleKat = {};
+  obchodovani.forEach(function(z){
+    z.prodeje.forEach(function(it){
+      var k = it.category || 'jine';
+      if(!podleKat[k]) podleKat[k] = { n:0, trzby:0 };
+      podleKat[k].n++; podleKat[k].trzby += it.sellPrice||0;
+    });
+  });
+  var katKlice = Object.keys(podleKat).sort(function(a,b){ return podleKat[b].n - podleKat[a].n; });
+  var maxKat = katKlice.length ? podleKat[katKlice[0]].n : 1;
+  s.kategorie = katKlice.length
+    ? katKlice.map(function(k){
+        return _caBar(getCatLabel(k)||k, podleKat[k].n, maxKat, 'var(--accent)',
+          podleKat[k].n+' ks · '+czk(Math.round(podleKat[k].trzby)));
+      }).join('')
+    : _caPrazdno('Zatím žádné obchody s partnery.');
+
+  // ── Kdo se dlouho neozval ──
+  var spici = obchodovani.filter(function(z){ return z.posledni && _caDni(z.posledni, dnes) > 180; })
+    .sort(function(a,b){ return a.posledni - b.posledni; });
+  s.spici = spici.length
+    ? _caTabulka(['Partner','Kusů','Objem','Naposledy'], spici.map(function(z){
+        return '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="crmToggleAnalytics();openCustomerDetail(\''+escHtml(z.c.id)+'\')">'
+          + _caRadekJmena(z.c.id, z.c.name)
+          + _caBunka(z.prodeje.length)
+          + _caBunka(czk(Math.round(z.trzby)))
+          + _caBunka(_caDni(z.posledni, dnes)+' dní', 'var(--muted)')
+          + '</tr>';
+      }))
+    : _caPrazdno('Se všemi partnery jsi obchodoval během posledního půlroku.');
+
+  return s;
+}
+
+function renderCustomerAnalytics() {
+  var box = document.getElementById('crmAnalytics');
+  if(!box) return;
+  var jeB2B = crmMode === 'b2b';
+  var mapa = crmSalesIndex(crmMode);
+  var s = jeB2B ? _caSekceB2B(mapa) : _caSekceB2C(mapa);
+
+  var poradi = jeB2B
+    ? [['historie','Historie obchodů',true],['spolehlivost','Spolehlivost placení',false],
+       ['kategorie','Co u nich jde',false],['spici','Dlouho beze změny',true]]
+    : [['opakovani','Opakované nákupy',false],['aktivita','Aktivita zákazníků',false],
+       ['nejlepsi','Nejlepší zákazníci',true],['velikosti','Velikosti',false],
+       ['pasma','Cenová pásma',false],['zdroje','Odkud přišla poptávka',false]];
+
+  var html = '<div style="padding-bottom:20px;">';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);">';
+  html += '<span style="font-family:\'Syne\',sans-serif;font-weight:700;font-size:16px;">'
+    + (jeB2B ? 'Analytika partnerů' : 'Analytika zákazníků') + '</span>';
+  html += '<div style="flex:1;"></div>';
+  html += '<button onclick="crmToggleAnalytics()" onmouseover="this.style.opacity=\'0.85\'" onmouseout="this.style.opacity=\'1\'" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.15s;">← Zpět</button>';
+  html += '</div>';
+  html += '<div style="margin-bottom:16px;">'+s.kpi+'</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;">';
+  poradi.forEach(function(p){
+    if(!s[p[0]]) return;
+    html += '<div style="width:'+(p[2]?'100%':'calc(50% - 8px)')+';box-sizing:border-box;">'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;">'
+      + '<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:14px;">'+p[1]+'</div>'
+      + s[p[0]] + '</div></div>';
+  });
+  html += '</div></div>';
+
+  box.innerHTML = html;
+  setTimeout(function(){
+    animateCountUp();
+    box.querySelectorAll('.anim-bar').forEach(function(b){
+      var w = b.dataset.barW || '0';
+      setTimeout(function(){ b.style.width = w+'%'; }, 80);
+    });
+  }, 30);
 }
 
 function renderCustomers() {
@@ -13765,8 +14195,62 @@ function renderStockAnalytics() {
   oldH+='</tbody></table>';
   saSections['oldest'] = oldest.length?oldH:'—';
 
-  var secTitles = {kat:'Kategorie',stari:'Stáří skladu',intent:'Intent (strategie)',lok:'Lokace',plat:'Nalistováno na platformách',zdravi:'Zdraví skladu',nakupy:'Výkonnost nákupů',oldest:'Nejdéle na skladě'};
-  var SA_DEFAULT = ['kat','stari','intent','lok','plat','zdravi','nakupy','oldest'];
+  // ── Vázaný kapitál podle stáří ──
+  // Koláč výš dělí kusy podle počtu. Tady jde o peníze: deset levných ležáků
+  // bolí míň než jeden drahý, a z počtu to poznat není.
+  saSections['kapital_stari'] = (function(){
+    var kose = [
+      { l:'0–30 dní',   c:'#c8ff00', f:function(d){ return d<30; } },
+      { l:'30–90 dní',  c:'#ffaa00', f:function(d){ return d>=30 && d<90; } },
+      { l:'90–180 dní', c:'#ff6b35', f:function(d){ return d>=90 && d<180; } },
+      { l:'180+ dní',   c:'#ff4444', f:function(d){ return d>=180; } },
+    ];
+    var data = kose.map(function(k){
+      var kusy = si.filter(function(it){ var d=daysOld(it); return d!=null && k.f(d); });
+      return { l:k.l, c:k.c, n:kusy.length, kc:kusy.reduce(function(a,it){ return a+buyKc(it); }, 0) };
+    });
+    var maxKc = Math.max.apply(null, data.map(function(d){ return d.kc; })) || 1;
+    if(!totalInv) return '<span style="color:var(--muted);font-size:12px;">Sklad je prázdný.</span>';
+    var h = data.map(function(d){
+      return barRow(d.l, d.kc, maxKc, d.c,
+        czk(Math.round(d.kc))+' · '+d.n+' ks ('+Math.round(d.kc/totalInv*100)+' %)');
+    }).join('');
+    var lezaky = data[2].kc + data[3].kc;
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      + (lezaky > 0
+          ? 'Nad 90 dní leží '+czk(Math.round(lezaky))+', to je '+Math.round(lezaky/totalInv*100)+' % vázaného kapitálu.'
+          : 'Nic neleží déle než 90 dní.')
+      + '</div>';
+    return h;
+  })();
+
+  // ── Kde nakupuju ──
+  saSections['retaileri'] = (function(){
+    var podle = {};
+    var rok = new Date().getFullYear();
+    si.forEach(function(it){
+      var r = (it.buyWhere||'').trim() || '—neuvedeno';
+      if(!podle[r]) podle[r] = { n:0, kc:0, letos:0 };
+      podle[r].n++; podle[r].kc += buyKc(it);
+      var d = parseBuyDate(it);
+      if(d && d.getFullYear() === rok) podle[r].letos++;
+    });
+    var klice = Object.keys(podle).sort(function(a,b){ return podle[b].kc - podle[a].kc; });
+    if(!klice.length) return '<span style="color:var(--muted);font-size:12px;">Zatím žádné nákupy.</span>';
+    var maxKc2 = podle[klice[0]].kc || 1;
+    var h = klice.map(function(r){
+      var d = podle[r];
+      return barRow(escHtml(r), d.kc, maxKc2, r==='—neuvedeno'?'var(--muted)':'#00bfff',
+        d.n+' ks · '+czk(Math.round(d.kc))+(d.letos?' · '+d.letos+' letos':''));
+    }).join('');
+    h += '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+      + 'Jen objem, ne výnosnost — kde nakoupíš, určuje produkt a podmínky, ne marže. '
+      + 'Počítá se z toho, co máš právě teď na skladě.</div>';
+    return h;
+  })();
+
+  var secTitles = {kat:'Kategorie',stari:'Stáří skladu',intent:'Intent (strategie)',lok:'Lokace',plat:'Nalistováno na platformách',zdravi:'Zdraví skladu',nakupy:'Výkonnost nákupů',oldest:'Nejdéle na skladě',kapital_stari:'Vázaný kapitál podle stáří',retaileri:'Kde nakupuju'};
+  var SA_DEFAULT = ['kat','stari','kapital_stari','intent','lok','plat','retaileri','zdravi','nakupy','oldest'];
   var saOrder = (function(){ try{ var s=localStorage.getItem('sa_order'); if(s){ var p=JSON.parse(s); if(Array.isArray(p)&&p.length>=3) return p; } }catch(e){} return SA_DEFAULT.slice(); })();
   SA_DEFAULT.forEach(function(id){ if(saOrder.indexOf(id)===-1) saOrder.push(id); });
 
@@ -14004,7 +14488,8 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
   html+='</div>';
 
   // Pořadí sekcí z localStorage
-  var _anDefOrder = ['cat_where','chart','bar','top5','kapital','month_vs','platforms','cat_roi'];
+  var _anDefOrder = ['cat_where','chart','bar','top5','kapital','month_vs','platforms','cat_roi',
+    'doba_prodeje','sellthrough','sezonnost','rychlost_payout','pasma','vratky'];
   var _anOrder = (function(){ try{ var s=localStorage.getItem('an_order_v2'); if(s){ var p=JSON.parse(s); if(Array.isArray(p)&&p.length>=4) return p; } }catch(e){} return null; })();
 
   html+='<div id="anSectionsWrap">';
@@ -14280,6 +14765,228 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
   html+='</div>';
 
   html+='</div>'; // close last an-section
+
+  // ══════════════════════════════════════════════════════════════════
+  //  DOBA DO PRODEJE, SELL-THROUGH, SEZÓNNOST, PAYOUTY, PÁSMA, VRATKY
+  //
+  //  Sell-through a vratky se schválně nepočítají z `filtSold`, ale ze
+  //  všech položek — poměr prodaných k nakoupeným nedává smysl, když se
+  //  jmenovatel ořízne obdobím.
+  // ══════════════════════════════════════════════════════════════════
+  function _anKarta(id, titulek, obsah, sirka) {
+    return '<div class="an-section" data-an-id="'+id+'" style="margin-bottom:0;'+(sirka||'')+'">'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px;">'
+      + '<div style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:12px;">'+titulek+'</div>'
+      + obsah + '</div></div>';
+  }
+
+  // ── Doba do prodeje ──
+  (function(){
+    var dny = [], podleKat = {};
+    filtSold.forEach(function(it){
+      var od = parseBuyDate(it), do_ = _dat(it.saleDate);
+      if(!od || !do_) return;
+      var d = Math.round((do_ - od)/864e5);
+      if(d < 0 || d > 2000) return;
+      dny.push(d);
+      var k = it.category||'jine';
+      (podleKat[k] = podleKat[k] || []).push(d);
+    });
+    var obsah;
+    if(!dny.length){
+      obsah = '<div style="color:var(--muted);font-size:12px;">U prodaných kusů chybí datum nákupu nebo prodeje.</div>';
+    } else {
+      var med = _caMedian(dny);
+      var serazene = dny.slice().sort(function(a,b){return a-b;});
+      var rychlych = dny.filter(function(d){ return d <= 30; }).length;
+      obsah = '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px;">'
+        + '<div><div style="font-size:9px;font-family:\'DM Mono\',monospace;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;">Medián</div>'
+        + '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;">'+med+' dní</div></div>'
+        + '<div><div style="font-size:9px;font-family:\'DM Mono\',monospace;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;">Nejrychlejší</div>'
+        + '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;color:var(--accent);">'+serazene[0]+' dní</div></div>'
+        + '<div><div style="font-size:9px;font-family:\'DM Mono\',monospace;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;">Nejdelší</div>'
+        + '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;color:var(--warning);">'+serazene[serazene.length-1]+' dní</div></div>'
+        + '<div><div style="font-size:9px;font-family:\'DM Mono\',monospace;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;">Do 30 dní</div>'
+        + '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;">'+Math.round(rychlych/dny.length*100)+' %</div></div>'
+        + '</div>';
+      var katKlice = Object.keys(podleKat).filter(function(k){ return podleKat[k].length >= 2; })
+        .sort(function(a,b){ return _caMedian(podleKat[a]) - _caMedian(podleKat[b]); });
+      var maxMed = katKlice.length ? _caMedian(podleKat[katKlice[katKlice.length-1]]) : 1;
+      obsah += katKlice.map(function(k){
+        var m = _caMedian(podleKat[k]);
+        return _caBar(getCatLabel(k)||k, m, maxMed, m<=30?'var(--accent)':m<=90?'#ffaa00':'var(--danger)',
+          m+' dní · '+podleKat[k].length+' ks');
+      }).join('');
+    }
+    html += _anKarta('doba_prodeje', 'Doba do prodeje', obsah);
+  })();
+
+  // ── Sell-through podle měsíce nákupu ──
+  (function(){
+    var kohorty = {};
+    (items||[]).forEach(function(it){
+      if(it.bulkId || !profMatch(it)) return;
+      var d = parseBuyDate(it);
+      if(!d) return;
+      var k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      if(!kohorty[k]) kohorty[k] = { koupeno:0, prodano:0 };
+      kohorty[k].koupeno++;
+      if(it.saleState==='paid' || it.saleState==='waiting') kohorty[k].prodano++;
+    });
+    var klice = [];
+    for(var i=11;i>=0;i--){
+      var md = new Date(); md.setDate(1); md.setMonth(md.getMonth()-i);
+      klice.push(md.getFullYear()+'-'+String(md.getMonth()+1).padStart(2,'0'));
+    }
+    klice = klice.filter(function(k){ return kohorty[k]; });
+    var obsah;
+    if(!klice.length){
+      obsah = '<div style="color:var(--muted);font-size:12px;">Za posledních 12 měsíců nejsou nákupy s datem.</div>';
+    } else {
+      var czM = ['Led','Úno','Bře','Dub','Kvě','Čvn','Čvc','Srp','Zář','Říj','Lis','Pro'];
+      obsah = klice.map(function(k){
+        var d = kohorty[k];
+        var pct = Math.round(d.prodano/d.koupeno*100);
+        var mo = parseInt(k.split('-')[1],10)-1;
+        return _caBar(czM[mo]+' '+k.split('-')[0].slice(2), pct, 100,
+          pct>=70?'var(--accent)':pct>=40?'#ffaa00':'var(--danger)',
+          d.prodano+'/'+d.koupeno+' · '+pct+' %');
+      }).join('');
+      obsah += '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+        + 'Kolik procent kusů koupených v daném měsíci se už prodalo. U čerstvých měsíců bude číslo přirozeně nízké — '
+        + 'zajímavé je, kde se zastavilo i po půl roce.</div>';
+    }
+    html += _anKarta('sellthrough', 'Sell-through podle měsíce nákupu', obsah);
+  })();
+
+  // ── Sezónnost ──
+  (function(){
+    var mesice = [];
+    for(var i=0;i<12;i++) mesice.push({ n:0, trzby:0, zisk:0 });
+    var maRoky = {};
+    filtSold.forEach(function(it){
+      var d = _dat(it.saleDate);
+      if(!d) return;
+      maRoky[d.getFullYear()] = 1;
+      var m = mesice[d.getMonth()];
+      m.n++; m.trzby += it.sellPrice||0; m.zisk += it.profit||0;
+    });
+    var pocetRoku = Object.keys(maRoky).length;
+    var maxM = Math.max.apply(null, mesice.map(function(m){ return m.n; })) || 1;
+    var czFull = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+    var czKr   = ['Led','Úno','Bře','Dub','Kvě','Čvn','Čvc','Srp','Zář','Říj','Lis','Pro'];
+    var obsah;
+    if(!pocetRoku){
+      obsah = '<div style="color:var(--muted);font-size:12px;">Zatím žádné prodeje s datem.</div>';
+    } else {
+      obsah = '<div style="display:flex;align-items:flex-end;gap:5px;height:110px;">';
+      mesice.forEach(function(m,i){
+        var pct = Math.round(m.n/maxM*96);
+        var tip = czFull[i]+': '+m.n+' ks · '+czk(Math.round(m.trzby));
+        obsah += '<div data-tip="'+tip+'" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;cursor:default;">'
+          + '<div class="anim-col" data-col-h="'+pct+'" style="width:100%;height:0px;border-radius:3px 3px 0 0;background:'+(m.n===maxM?'var(--accent)':'#00bfff')+';opacity:'+(m.n===maxM?'1':'0.7')+';transition:height 0.5s cubic-bezier(0.34,1,0.64,1);"></div>'
+          + '<div style="font-size:9px;font-family:\'DM Mono\',monospace;color:'+(m.n===maxM?'var(--accent)':'var(--muted)')+';">'+czKr[i]+'</div>'
+          + '</div>';
+      });
+      obsah += '</div>';
+      var nej = mesice.indexOf(mesice.slice().sort(function(a,b){ return b.n-a.n; })[0]);
+      obsah += '<div style="font-size:11px;color:var(--muted);margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">'
+        + 'Sečteno přes '+pocetRoku+' '+(pocetRoku===1?'rok':pocetRoku<5?'roky':'let')+'. Nejsilnější je '+czFull[nej].toLowerCase()+'.'
+        + (pocetRoku===1 ? ' Z jednoho roku to ještě není sezónnost, jen průběh — vypovídající to začne být od druhého.' : '')
+        + '</div>';
+    }
+    html += _anKarta('sezonnost', 'Sezónnost prodejů', obsah);
+  })();
+
+  // ── Rychlost payoutu ──
+  (function(){
+    var rychlosti = payoutSpeedStats();
+    var klice = Object.keys(rychlosti).filter(function(k){ return k !== '—' && rychlosti[k].n >= 2; })
+      .sort(function(a,b){ return rychlosti[a].median - rychlosti[b].median; });
+    var obsah;
+    if(!klice.length){
+      obsah = '<div style="color:var(--muted);font-size:12px;">Na výpočet je potřeba aspoň pár prodejů, které mají datum prodeje i payoutu.</div>';
+    } else {
+      var maxMed2 = rychlosti[klice[klice.length-1]].median || 1;
+      obsah = klice.map(function(k){
+        var r = rychlosti[k];
+        return _caBar(escHtml(k), r.median, maxMed2,
+          r.median<=7?'var(--accent)':r.median<=21?'#ffaa00':'var(--danger)',
+          r.median+' dní · '+r.n+' ks ('+r.min+'–'+r.max+')');
+      }).join('');
+      obsah += '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+        + 'Medián dnů od prodeje k payoutu, spočítaný z tvojí historie. Ze stejných čísel vychází i odhad v Cashflow.</div>';
+    }
+    html += _anKarta('rychlost_payout', 'Rychlost payoutu podle platformy', obsah);
+  })();
+
+  // ── Výnosnost cenových pásem ──
+  (function(){
+    var podle = {};
+    filtSold.forEach(function(it){
+      var p = cenovePasmo(it.sellPrice||0);
+      if(!podle[p]) podle[p] = { n:0, trzby:0, zisk:0, naklad:0 };
+      var er = it.profitRateEur||eurRate||25;
+      var bp = it.type==='bulk' ? (it.totalBuyPrice||0) : (it.buyCurrency==='EUR'?(it.buyPrice||0)*er:(it.buyPrice||0));
+      podle[p].n++; podle[p].trzby += it.sellPrice||0; podle[p].zisk += it.profit||0; podle[p].naklad += bp;
+    });
+    var obsah;
+    if(!filtSold.length){
+      obsah = '<div style="color:var(--muted);font-size:12px;">V tomto období nejsou prodeje.</div>';
+    } else {
+      var maxN = Math.max.apply(null, CENOVA_PASMA.map(function(p){ return (podle[p.l]||{n:0}).n; })) || 1;
+      obsah = CENOVA_PASMA.map(function(p){
+        var d = podle[p.l];
+        if(!d) return _caBar(p.l+' Kč', 0, maxN, 'var(--muted)', '—');
+        var prum = Math.round(d.zisk/d.n);
+        var roi = d.naklad>0 ? Math.round(d.zisk/d.naklad*100) : null;
+        return _caBar(p.l+' Kč', d.n, maxN, prum>=0?'var(--accent)':'var(--danger)',
+          d.n+' ks · '+(prum>=0?'+':'')+czk(prum)+'/ks'+(roi!=null?' · '+roi+' % ROI':''));
+      }).join('');
+      obsah += '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+        + 'Průměrný zisk na kus a ROI v každém pásmu. Ukáže, jestli se vyplatí spíš objem levnějších kusů, nebo pár drahých.</div>';
+    }
+    html += _anKarta('pasma', 'Výnosnost cenových pásem', obsah);
+  })();
+
+  // ── Vratky u komisního prodeje ──
+  (function(){
+    var vratky = {}, prodeje = {};
+    (items||[]).forEach(function(it){
+      if(!profMatch(it)) return;
+      // Explicitní záznamy o vrácení
+      (it.returns||[]).forEach(function(r){
+        if(r.w) vratky[r.w] = (vratky[r.w]||0) + 1;
+      });
+      // Kusy vrácené ještě před zavedením evidence: leží na skladě, ale pamatují
+      // si, kde se prodávaly. Bez tohohle by starší vratky úplně zmizely.
+      if(!it.returns && (it.saleState==='stock'||!it.saleState) && it.soldWhere){
+        vratky[it.soldWhere] = (vratky[it.soldWhere]||0) + 1;
+      }
+      if((it.saleState==='paid'||it.saleState==='waiting') && it.soldWhere){
+        prodeje[it.soldWhere] = (prodeje[it.soldWhere]||0) + 1;
+      }
+    });
+    var klice = Object.keys(vratky).sort(function(a,b){ return vratky[b]-vratky[a]; });
+    var obsah;
+    if(!klice.length){
+      obsah = '<div style="color:var(--muted);font-size:12px;">Zatím žádné vrácené kusy. Eviduje se to od chvíle, kdy někde použiješ „Vrátit na sklad".</div>';
+    } else {
+      var maxV = vratky[klice[0]] || 1;
+      obsah = klice.map(function(k){
+        var v = vratky[k], p = prodeje[k]||0;
+        var mira = (v+p) > 0 ? Math.round(v/(v+p)*100) : null;
+        return _caBar(escHtml(k), v, maxV,
+          mira!=null && mira>=30 ? 'var(--danger)' : mira!=null && mira>=15 ? '#ffaa00' : 'var(--muted)',
+          v+'× vráceno'+(mira!=null ? ' · '+mira+' % z pokusů' : ''));
+      }).join('');
+      obsah += '<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+        + 'Procento je podíl vratek ze všech pokusů o prodej na dané platformě. Vratky z doby před zavedením evidence '
+        + 'se dopočítávají odhadem podle toho, kde kus naposledy visel — datum u nich není.</div>';
+    }
+    html += _anKarta('vratky', 'Vratky podle platformy', obsah);
+  })();
+
   html+='</div>'; // close anSectionsWrap
 
   // Insights sekce
