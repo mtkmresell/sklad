@@ -74,6 +74,7 @@ výpadků sítě a souběhu dvou zařízení. Pomocné funkce, které dává k d
 | `test-demand.js` | zdroj poptávky u prodeje, evidence vratek |
 | `test-crmanalytics.js` | analytika zákazníků (B2C) a partnerů (B2B) |
 | `test-analytics2.js` | doba do prodeje, sell-through, sezónnost, payouty, pásma, vratky |
+| `test-offer.js` | Offer Builder — filtry, výběr, ceny, text nabídky |
 | `test-platsync.js`, `test-platmgr.js` | platformy a jejich skupiny |
 | `test-target.js`, `test-target2.js` | cílové ceny v eurech a kurzy |
 | `test-tracking.js` | sledování zásilek při změnách stavu |

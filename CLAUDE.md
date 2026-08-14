@@ -95,6 +95,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | prodejní doklad | `PRODEJNÍ DOKLAD` |
 | analytika zákazníků a partnerů | `ANALYTIKA ZÁKAZNÍKŮ` |
 | zdroj poptávky u prodeje | `ZDROJ POPTÁVKY` |
+| nabídka zákazníkovi | `OFFER BUILDER` |
 | historie cen položky | `HISTORIE CEN U POLOŽKY` |
 
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
@@ -104,7 +105,7 @@ Medián je 12 řádků — soubor je velký, ale ne zanesený.
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 31 souborů
+node test/run.js              # kontrola syntaxe + všech 32 souborů
 node test/run.js archive      # jen vybrané
 ```
 
