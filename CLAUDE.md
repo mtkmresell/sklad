@@ -14,6 +14,7 @@ index.html     celá aplikace — 15 900 řádků, 86 % JS, 7 % CSS, 8 % HTML
 fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repozitáře
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
+nastroje/      čtečka dat z cloudu pro příkazovou řádku (nenasazuje se)
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
@@ -98,6 +99,15 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | nabídka zákazníkovi | `OFFER BUILDER` |
 | export dat pro analýzu | `ANALYTICKÝ EXPORT` |
 | historie cen položky | `HISTORIE CEN U POLOŽKY` |
+
+## Čtení dat mimo prohlížeč
+
+`nastroje/sklad.js` přečte cloud z příkazové řádky (`node nastroje/sklad.js souhrn`),
+aby se nemusela otevírat aplikace. **Jen čte** — kód pro zápis tam není a testy to
+hlídají. Přihlašuje se běžným účtem přes proměnné `SKLAD_EMAIL` a `SKLAD_HESLO`,
+takže platí stejná pravidla Firestore jako v aplikaci; žádný servisní klíč.
+Metriky nepočítá schválně — kurzy EUR umí správně jen aplikace a druhá
+implementace by se s ní rozešla. Podrobnosti v `nastroje/README.md`.
 
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
 `openDropdownsEditor`, `saveItem`, `renderStockAnalytics`, `tableHTML`, `openBulkEditModal`.
