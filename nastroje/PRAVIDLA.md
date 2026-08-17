@@ -99,8 +99,12 @@ Místo posledního bloku dej tyhle dva:
 ## 4. Napiš tři řádky do nastavení
 
 Firebase je za tebou, tenhle krok je jinde — v nastavení prostředí na
-[claude.ai/code](https://claude.ai/code) (ikona mráčku), nebo doma
-v `~/.zshrc` s `export` před každým řádkem.
+[claude.ai/code](https://claude.ai/code), nebo doma v `~/.zshrc`
+s `export` před každým řádkem.
+
+V cloudovém sezení vede cesta přes **tři tečky vpravo nahoře →
+Edit environment**. Ikona mráčku jen ukazuje jméno prostředí
+(`Cloud environment — Default`) a otevřít se z ní nedá.
 
 ```
 SKLAD_EMAIL=ctecka@sklad.local
