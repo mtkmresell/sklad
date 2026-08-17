@@ -17,14 +17,20 @@ projekt; tenhle program stojí ve stejné frontě jako aplikace.
 
 ## Nastavení
 
-Program bere přihlašovací údaje ze dvou proměnných prostředí:
+Program bere přihlašovací údaje z proměnných prostředí:
 
 ```
 SKLAD_EMAIL=tvuj@email.cz
 SKLAD_HESLO=tvojeheslo
+SKLAD_UID=…            nepovinné — čí data číst, bez toho svoje
 ```
 
 **Do repozitáře heslo nepatří** — je veřejný.
+
+`SKLAD_UID` je potřeba jen tehdy, když program běží pod účtem zřízeným
+jen pro čtení. Ten má vlastní prázdnou složku, takže se mu musí říct,
+do čí kóje se má dívat. Návod na takový účet je v `PRAVIDLA.md` a je to
+bezpečnější varianta — zápis pak odmítá server, ne jen absence kódu.
 
 ### V cloudovém sezení (Cowork, Claude Code na webu)
 
@@ -64,6 +70,7 @@ Trvale je lepší dát to do souboru, který čte tvůj shell (`~/.zshrc`,
 ## Použití
 
 ```bash
+node nastroje/sklad.js kdojsem           # pod kým jsem přihlášený a co čtu
 node nastroje/sklad.js souhrn            # přehled v řeči, ne JSON
 node nastroje/sklad.js sklad             # položky na skladě
 node nastroje/sklad.js ceka              # čeká na payout

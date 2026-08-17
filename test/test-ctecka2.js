@@ -154,6 +154,24 @@ const N = require(path.resolve(__dirname, '..', 'nastroje', 'sklad.js'));
   shoda('zákazníci', crm.customers, [{ id: 'c1', name: 'Petr' }]);
   shoda('partneři', crm.partners, [{ id: 'pa1', name: 'Bazar' }]);
 
+  /* ── Čtení cizí složky (účet jen pro čtení) ─────────────────────── */
+  // Čtečka má vlastní uid, ale sahá do kóje majitele. Musí se ptát na
+  // jeho cestu, ne na svoji — jinak by četla svoje prázdno.
+  volani = [];
+  await N.nactiSklad('TOKEN', 'majitel999');
+  ok('výpis míří na složku majitele', volani.some(function (v) {
+    return v.url.indexOf('/users/majitel999/sklad') !== -1;
+  }));
+  ok('do vlastní složky se čtečka neptá', volani.every(function (v) {
+    return v.url.indexOf('/users/' + UID + '/') === -1;
+  }));
+
+  volani = [];
+  await N.nactiCrm('TOKEN', 'majitel999');
+  ok('CRM se čte taky u majitele', volani.some(function (v) {
+    return v.url.indexOf('/users/majitel999/crm/main') !== -1;
+  }));
+
   /* ── Nic se nezapisovalo ────────────────────────────────────────── */
   const zapisy = volani.filter(function (v) {
     const m = (v.opts.method || 'GET').toUpperCase();

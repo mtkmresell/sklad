@@ -15,12 +15,20 @@
    pojistkou proti přepsání novějších dat, jakou má aplikace.
 
    ── Přihlášení ───────────────────────────────────────────────────────
-   Stejný e-mail a heslo jako do aplikace. Berou se z proměnných
-   prostředí, aby se heslo nikdy neocitlo v repozitáři:
+   Berou se z proměnných prostředí, aby se heslo nikdy neocitlo
+   v repozitáři:
 
      SKLAD_EMAIL=...  SKLAD_HESLO=...
+     SKLAD_UID=...    čí data číst; bez toho svoje
+
+   Přihlásit se dá dvojím způsobem. Buď běžným účtem — pak skript vidí
+   totéž co aplikace. Nebo účtem zřízeným jen pro čtení, který má právo
+   číst cizí kóji a nesmí zapisovat; ten potřebuje SKLAD_UID, protože
+   jinak by koukal do své vlastní prázdné. Které je které a co smí,
+   rozhodují pravidla Firestore — návod je v nastroje/PRAVIDLA.md.
 
    ── Použití ──────────────────────────────────────────────────────────
+     node nastroje/sklad.js kdojsem           pod kým jsem a co čtu
      node nastroje/sklad.js souhrn            přehled v řeči, ne JSON
      node nastroje/sklad.js sklad             položky na skladě
      node nastroje/sklad.js ceka              čeká na payout
@@ -299,7 +307,20 @@ async function main() {
   };
 
   const { token, uid } = await prihlas();
-  const { data, archivy, cache } = await nactiSklad(token, uid);
+
+  /* Čí data se čtou. Běžně svoje, ale účet jen pro čtení má vlastní uid
+     a sahá do kóje majitele — bez tohohle by koukal do své prázdné.
+     Komu čtení patří, rozhodují pravidla Firestore, ne tenhle řádek. */
+  const cilovyUid = process.env.SKLAD_UID || uid;
+
+  // Vypíše, pod kým je skript přihlášený — potřeba při psaní pravidel
+  if (prikaz === 'kdojsem') {
+    process.stdout.write('přihlášen jako   ' + uid + '\n'
+      + 'čte data účtu    ' + cilovyUid + (cilovyUid === uid ? '  (svoje)' : '  (cizí — přes SKLAD_UID)') + '\n');
+    return;
+  }
+
+  const { data, archivy, cache } = await nactiSklad(token, cilovyUid);
   if (!data) konec('V cloudu nejsou žádná data — hlavní dokument chybí.');
 
   const polozky = slozPolozky(data, archivy);
@@ -307,7 +328,7 @@ async function main() {
 
   switch (prikaz) {
     case 'souhrn': {
-      const crm = await nactiCrm(token, uid);
+      const crm = await nactiCrm(token, cilovyUid);
       process.stdout.write(vypisSouhrn(polozky.map(bezFotek), crm, data) + '\n');
       break;
     }
@@ -326,7 +347,7 @@ async function main() {
       break;
     }
     case 'zakaznici': {
-      const crm = await nactiCrm(token, uid);
+      const crm = await nactiCrm(token, cilovyUid);
       vystup(crm);
       break;
     }
@@ -337,7 +358,7 @@ async function main() {
       vystup(cache || {});
       break;
     case 'vse': {
-      const crm = await nactiCrm(token, uid);
+      const crm = await nactiCrm(token, cilovyUid);
       vystup({
         aplikace: 'SKLAD',
         nacteno: new Date().toISOString(),
