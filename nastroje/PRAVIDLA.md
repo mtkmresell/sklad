@@ -108,12 +108,23 @@ Edit environment**. Ikona mráčku jen ukazuje jméno prostředí
 
 ```
 SKLAD_EMAIL=ctecka@sklad.local
-SKLAD_HESLO=to dlouhé náhodné heslo z kroku 1
+SKLAD_HESLO=dlouhé náhodné heslo z kroku 1
 SKLAD_UID=UID majitele z kroku 2
 ```
 
-`SKLAD_UID` je nutné. Čtečka má vlastní složku, která je prázdná —
-bez toho řádku by koukala do ní místo do tvojí.
+**Za rovnítkem nesmí zůstat nic z předlohy.** Celý text vpravo se ukládá
+tak, jak je — když z `SKLAD_UID=UID majitele z kroku 2` přepíšeš jen
+konec, zůstane tam `UID ` a čtečka pak hledá složku, která neexistuje.
+Správně vyplněný řádek vypadá takhle:
+
+```
+SKLAD_UID=p6JKNhfrbmZYaF8OIBxgd9durmq2
+```
+
+Pozor na dvě UID. Do `SKLAD_UID` patří **UID majitele**, ne čtečky.
+Čtečka má vlastní složku a ta je prázdná — když se sem dostane její
+vlastní UID, přihlášení projde, čtení projde a nevrátí nic. Pozná se to
+v kroku 5: `kdojsem` vypíše obě UID stejná.
 
 V cloudovém sezení platí změna až pro sezení spuštěná potom; to běžící
 si hodnoty načetlo při startu a znovu je nečte.
@@ -146,6 +157,20 @@ zkontroluj, že jsi dal Publish a že UID nejsou prohozená.
 
 Tenhle příkaz je schválně mimo `sklad.js`. Do čtečky zápis nepatří ani
 na zkoušku.
+
+A nakonec kontrola, že pravidlo není napsané moc široce — čtení složky,
+která čtečce nepatří:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "https://firestore.googleapis.com/v1/projects/sklad-7eec9/databases/(default)/documents/users/nekdojiny123456789/sklad" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Musí vrátit `403`. Kdyby vrátilo `200`, čte čtečka **komukoli** —
+typicky proto, že v `jeCtecka()` chybí podmínka na UID majitele
+a zbylo tam jen `request.auth != null`. Předchozí testy tuhle chybu
+neodhalí, projdou úplně stejně.
 
 ## Když bude potřeba klíč zneplatnit
 
