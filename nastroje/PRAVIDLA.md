@@ -8,6 +8,10 @@ Rozdíl proti běžnému účtu je v tom, kdo to hlídá. Dneska „jen čtení"
 znamená, že v `sklad.js` není napsané ukládání. S tímhle účtem to hlídá
 server Googlu — zápis odmítne, i kdyby ho někdo poslal.
 
+**Kroky 1 až 4 jsou klikání na webu** — žádný terminál, jen dvě stránky,
+na kterých se něco vyplní. **Krok 5 je ověření z příkazové řádky** a dá
+se nechat na tom, kdo s repozitářem pracuje.
+
 ---
 
 ## 1. Založ účet pro čtení
@@ -24,16 +28,20 @@ Ve výpisu uživatelů pak u obou účtů uvidíš sloupec **User UID** — dlou
 > Účet nezakládej registrací v aplikaci. Přihlásilo by tě to z tvého
 > účtu a aplikace by novému začala rovnou ukládat prázdná data.
 
-## 2. Ověř si, které UID je které
+## 2. Opiš si obě UID
 
-Než sáhneš na pravidla, přesvědč se, že čísla sedí:
+Zůstaň ve výpisu uživatelů. Sloupec **User UID** nese u každého účtu
+dlouhý řetězec znaků; potřebuješ oba:
+
+- **UID majitele** — řádek s tvým e-mailem
+- **UID čtečky** — řádek s účtem z prvního kroku
+
+Kdyby sis je prohodil, pozná se to v kroku 5. Ověřit se to dá i takhle,
+ale nutné to není:
 
 ```bash
 SKLAD_EMAIL=tvuj@email.cz SKLAD_HESLO=… node nastroje/sklad.js kdojsem
 ```
-
-Vypíše UID, pod kterým jsi přihlášený. To je **UID majitele**. To druhé
-z konzole je **UID čtečky**.
 
 ## 3. Vlož pravidla
 
@@ -88,18 +96,23 @@ Místo posledního bloku dej tyhle dva:
     }
 ```
 
-## 4. Přepni čtečku na nový účet
+## 4. Napiš tři řádky do nastavení
 
-V nastavení prostředí (nebo doma v terminálu) nahraď proměnné:
+Firebase je za tebou, tenhle krok je jinde — v nastavení prostředí na
+[claude.ai/code](https://claude.ai/code) (ikona mráčku), nebo doma
+v `~/.zshrc` s `export` před každým řádkem.
 
 ```
 SKLAD_EMAIL=ctecka@sklad.local
-SKLAD_HESLO=to dlouhé náhodné heslo
-SKLAD_UID=UID majitele
+SKLAD_HESLO=to dlouhé náhodné heslo z kroku 1
+SKLAD_UID=UID majitele z kroku 2
 ```
 
 `SKLAD_UID` je nutné. Čtečka má vlastní složku, která je prázdná —
 bez toho řádku by koukala do ní místo do tvojí.
+
+V cloudovém sezení platí změna až pro sezení spuštěná potom; to běžící
+si hodnoty načetlo při startu a znovu je nečte.
 
 ## 5. Ověř, že to platí
 
