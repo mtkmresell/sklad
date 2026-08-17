@@ -3010,6 +3010,104 @@ function doJsonBackup() {
   URL.revokeObjectURL(url);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ANALYTICKÝ EXPORT
+
+   Záloha (`doJsonBackup`) je na obnovu aplikace: nese fotky v base64 a
+   naopak vůbec neobsahuje CRM. Na analýzu se proto nehodí — je zbytečně
+   obrovská a chybí v ní zákazníci.
+
+   Tenhle export je opak: fotky pryč, CRM uvnitř. Metriky se sem
+   nepřepisují ručně — počítají se z řádků, takže nemůžou začít říkat
+   něco jiného než aplikace. Berou se jen z funkcí, které už existují.
+══════════════════════════════════════════════════════════════════════ */
+function analyticsExportData() {
+  var rok = new Date().getFullYear();
+
+  // Fotka je pro analýzu k ničemu a nafoukla by soubor o megabajty
+  var polozky = (items || []).map(function(it) {
+    var kopie = {};
+    Object.keys(it).forEach(function(k) {
+      if (k === 'imgUrl' && /^data:/.test(it[k] || '')) return;
+      if (k.charAt(0) === '_') return;                 // pomocná pole běhu aplikace
+      kopie[k] = it[k];
+    });
+    if (it.imgUrl && /^data:/.test(it.imgUrl)) kopie.maFotku = 1;
+    return kopie;
+  });
+
+  var naSklade = polozky.filter(function(it){ return !it.saleState || it.saleState === 'stock'; });
+  var prodane  = polozky.filter(function(it){ return it.saleState === 'paid'; });
+  var cekajici = polozky.filter(function(it){ return it.saleState === 'waiting'; });
+
+  // Ze skupin se berou jen souhrny — `items` v nich jsou odkazy na položky,
+  // které už v exportu jednou jsou
+  var cashflow = null;
+  try {
+    var cf = payoutCashflow();
+    cashflow = {
+      celkem: Math.round(cf.celkem), pocet: cf.pocet,
+      doTydne: Math.round(cf.doTydne), doMesice: Math.round(cf.doMesice), pozde: Math.round(cf.pozde),
+      skupiny: Object.keys(cf.skupiny).map(function(k){
+        var s = cf.skupiny[k];
+        return { klic: s.klic, label: s.label, pocet: s.items.length, suma: Math.round(s.suma) };
+      }),
+    };
+  } catch(e) {}
+
+  return {
+    verze: 1,
+    aplikace: 'SKLAD',
+    vytvoreno: new Date().toISOString(),
+    profil: activeProfile,
+    kurzEur: eurRate,
+    poznamka: 'Ceny jsou v Kč, pokud není uvedena měna u položky. Fotky jsou vynechané '
+      + '(maFotku: 1 značí, že položka fotku má). Metriky si dopočítej z pole "polozky".',
+
+    souhrn: {
+      naSklade: naSklade.length,
+      cekaNaPayout: cekajici.length,
+      prodano: prodane.length,
+      zakazniku: (customers || []).length,
+      partneru: (partners || []).length,
+    },
+
+    polozky: polozky,
+    zakaznici: customers || [],
+    partneri: partners || [],
+
+    ciselniky: {
+      retaileri: getRetailers(),
+      limitIdentifikovaneOsoby: getIoLimit(),
+      kategorie: getCustomCats(),
+      platformy: getPlatGroups(),
+      zdrojePoptavky: DEMAND_SOURCES,
+      cenovaPasma: CENOVA_PASMA.map(function(p){ return { popis: p.l, od: p.min, do: p.max === Infinity ? null : p.max }; }),
+    },
+
+    // Spočítané funkcemi, které pohánějí i obrazovku — ne druhou kopií výpočtu
+    metriky: {
+      rychlostPayoutu: payoutSpeedStats(),
+      limitIdentifikovaneOsoby: ioForecast(rok),
+      cashflow: cashflow,
+    },
+  };
+}
+
+function doAnalyticsExport() {
+  var data = analyticsExportData();
+  var text = JSON.stringify(data, null, 2);
+  var blob = new Blob([text], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'sklad_analytika_' + _dnesISO() + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  var kb = Math.round(text.length / 1024);
+  showToast('Export hotový — ' + data.polozky.length + ' položek, ' + kb + ' kB.');
+}
+
 function importJsonBackup(file) {
   if (!file) return;
   var reader = new FileReader();
@@ -16134,6 +16232,8 @@ rebuildBrandTables();
       <button class="btn-sec" style="font-size:12px;" onclick="document.getElementById('importBackupInput').click()">Import zálohy</button>
       <input type="file" id="importBackupInput" accept=".json" style="display:none;position:fixed;top:-9999px;" onchange="importJsonBackup(this.files[0]);this.value=''">
     </div>
+    <button onclick="doAnalyticsExport()" class="btn-sec" style="font-size:12px;width:100%;">Export pro analýzu</button>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;">Sklad, prodeje i zákazníci v jednom JSONu, bez fotek. Na rozdíl od zálohy se hodí k rozboru dat — třeba ho poslat Claudovi.</div>
   </div>
   <!-- Automatické zálohy -->
   <div class="fs" style="margin-bottom:0;">
