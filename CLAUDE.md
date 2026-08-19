@@ -52,6 +52,10 @@ Stav položky je `saleState`: `stock` → `waiting` → `paid`.
 
 CRM je zvlášť v `users/{uid}/crm/main`.
 
+Kdo smí co číst, řeší pravidla Firestore (žijí jen v konzoli, ne v repozitáři).
+Kromě majitele jsou tři role: **čtečka** pro AI (`nastroje/PRAVIDLA.md`),
+**účetní** (`nastroje/UCETNI.md`) a nikdo jiný. Zapisovat smí jedině majitel.
+
 **Klíčové vlastnosti, které nesmíš rozbít:**
 
 - Čte se **jedním posluchačem celé kolekce** (`onSnapshot` nad kolekcí), takže hlavní
@@ -90,6 +94,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | databáze našeptávače | `HISTORICKÝ CACHE POLOŽEK`, `SPRÁVA NAŠEPTÁVAČE` |
 | automatické zálohy | `AUTOMATICKÉ SNAPSHOTY` |
 | profily (Podnikání/Osobní) | `PROFILY` |
+| pohled účetního | `POHLED ÚČETNÍHO` |
 | limit identifikované osoby | `RETAILEŘI & LIMIT` |
 | animace | `ANIMACE` (v CSS) |
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |

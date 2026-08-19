@@ -60,6 +60,74 @@
 .pf-btn:hover:not(.active) { color:var(--text); }
 .pf-btn.active[data-prof="business"] { background:var(--accent); color:#000; }
 .pf-btn.active[data-prof="personal"] { background:var(--accent2); color:#000; }
+
+/* ── POHLED ÚČETNÍHO ──────────────────────────────────────────────────
+   Skrývá se přes jednu třídu na <body>, ne ve vykreslovacích funkcích —
+   ty se volají pořád dokola a stačilo by zapomenout na jednu, aby se
+   tlačítko na okamžik mihlo. Co je jen skryté a co doopravdy zamčené,
+   je popsané u funkce zapniUctetniRezim(). */
+#uctetniLista { display:none; }
+body.uctetni #uctetniLista {
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  background:linear-gradient(90deg, rgba(255,107,53,0.14), rgba(255,107,53,0.04));
+  border-bottom:1px solid rgba(255,107,53,0.3);
+  padding:8px 18px;
+}
+.ul-znak {
+  font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.12em;
+  text-transform:uppercase; color:var(--accent2);
+  border:1px solid rgba(255,107,53,0.4); border-radius:20px; padding:3px 9px;
+  white-space:nowrap;
+}
+.ul-text { font-size:12px; color:var(--muted); }
+.ul-btn {
+  margin-left:auto; background:none; border:1px solid var(--border);
+  color:var(--muted); font-family:inherit; font-size:11px;
+  padding:4px 10px; border-radius:6px; cursor:pointer; transition:all 0.15s;
+  white-space:nowrap;
+}
+.ul-btn:hover { border-color:var(--accent2); color:var(--accent2); }
+
+/* Sekce a ovládání, do kterých účetní nesmí */
+body.uctetni #btnTab_waiting,
+body.uctetni #btnTab_customers,
+body.uctetni #btnTab_wishlist,
+body.uctetni #profileSwitch,
+body.uctetni #btnAdd,
+body.uctetni #btnBulkMode,
+body.uctetni #btnCalc,
+body.uctetni #btnMissingList,
+body.uctetni #btnCustomerMode,
+body.uctetni #btnStockAnalytics,
+body.uctetni #btnPayoutCal,
+body.uctetni .bulk-bar,
+/* „Analytika →" v Prodáno se skládá až za běhu a nemá vlastní id */
+body.uctetni [onclick*="soldViewMode="] { display:none !important; }
+
+/* Úpravy položek — účetní se jen dívá */
+body.uctetni .ta-btn,
+body.uctetni .card-actions { display:none !important; }
+
+/* Odkazy ven (StockX, sledování zásilek) zůstanou jako text.
+   Míří na atribut, ne na třídu, protože část odkazů žádnou nemá. */
+body.uctetni a[target="_blank"] {
+  pointer-events:none; cursor:default;
+  color:inherit !important; text-decoration:none !important;
+  border-bottom:none !important;
+}
+
+/* V nastavení zbude odhlášení a manuál */
+body.uctetni #moSettings .fs,
+body.uctetni #moSettings .set-akce { display:none !important; }
+.fs-uctetni { display:none; }
+body.uctetni #moSettings .fs-uctetni { display:block !important; }
+
+.um-text { font-size:13px; line-height:1.7; color:#c9c9c9; }
+.um-text h4 {
+  font-family:'Syne',sans-serif; font-size:13px; font-weight:800;
+  color:var(--text); margin:16px 0 4px;
+}
+.um-text p { margin-bottom:2px; }
 .pf-btn.active[data-prof="all"] { background:var(--text); color:#000; }
 .pfm-btn { background:var(--surface2); border:1px solid var(--border); color:var(--muted); font-family:'DM Sans',sans-serif; font-size:12px; padding:7px 14px; border-radius:var(--radius-sm); cursor:pointer; transition:all 0.15s; white-space:nowrap; }
 .pfm-btn:hover:not(.active) { border-color:#555; color:var(--text); }
@@ -2016,6 +2084,9 @@ var activeProfile=(function(){
 })();
 function isPersonal(it){ return !!(it && it.personal); }
 function profMatch(it){
+  // Účetní vidí výhradně podnikání, ať je v activeProfile cokoli —
+  // jedno místo je spolehlivější než hlídat každou cestu, kudy se profil dá přepnout
+  if(typeof jeUctetni==='function' && jeUctetni()) return !isPersonal(it);
   if(activeProfile==='all') return true;
   return activeProfile==='personal' ? isPersonal(it) : !isPersonal(it);
 }
@@ -2427,6 +2498,10 @@ function load(){
 var _svCloudTimer = null;
 var _itemsVersion = 0;
 function sv(){
+  // Účetní nic neukládá. Pravidla Firestore by zápis stejně odmítla, ale
+  // bez tohohle by se lokálně nastavil příznak neuložených změn a aplikace
+  // by se při dalším startu ptala, která verze má vyhrát.
+  if (jeUctetni()) return;
   _itemsVersion++;
   window._lastFilterBuildKey = null; // invalidate filter cache
   try {
@@ -2440,6 +2515,103 @@ function sv(){
     if (_svCloudTimer) clearTimeout(_svCloudTimer);
     _svCloudTimer = setTimeout(function(){ fbSaveToCloud(); }, 500);
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   POHLED ÚČETNÍHO
+
+   Účetní se přihlásí vlastním účtem a uvidí sklad majitele — jen sekce
+   Na skladě a Prodáno, jen podnikatelský profil, bez možnosti cokoli
+   změnit.
+
+   Jak se pozná: účetní má ve svém vlastním dokumentu
+   users/{jehoUid}/sklad/data pole `uctujePro` s UID majitele. Posluchač
+   na to narazí v prvním snímku, přepne čtení na data majitele a zapne
+   tenhle režim. Účet bez toho pole se chová přesně jako dřív, takže se
+   běžného přihlášení tohle nedotkne.
+
+   ── CO JE ZAMČENÉ A CO JEN SCHOVANÉ ─────────────────────────────────
+   Zamčení hlídá server, schování jen rozhraní. Ten rozdíl je podstatný.
+
+   Zamčené:  zákazníci (CRM je vlastní dokument a pravidla Firestore ho
+             účetnímu nepustí — ta data mu nikdy nedorazí) a jakýkoli
+             zápis (pravidla ho odmítnou, ať si aplikace dělá co chce).
+
+   Schované: wishlist a osobní položky. Leží ve stejném dokumentu jako
+             sklad, takže do prohlížeče dorazí a jsou pryč jen z obrazu.
+             Poctivému účetnímu to stačí; kdo otevře vývojářské nástroje,
+             na ně dosáhne. Kdyby to začalo vadit, musel by se wishlist
+             přestěhovat do vlastního dokumentu a osobní položky taky —
+             to je zásah do ukládání, ne do vzhledu.
+
+   Skrývá se přes třídu `uctetni` na <body> a CSS, ne záplatami ve
+   vykreslovacích funkcích. Ty se volají pořád dokola a stačilo by
+   zapomenout na jednu, aby se tlačítko na okamžik mihlo.
+══════════════════════════════════════════════════════════════════════ */
+var _uctetniRezim = false;
+var _uctetniMajitel = null;
+
+function jeUctetni() { return _uctetniRezim; }
+
+// Čí data se čtou. Účetní čte kóji majitele, všichni ostatní svoji.
+function _datovyUid() {
+  if (_uctetniRezim && _uctetniMajitel) return _uctetniMajitel;
+  return window._fbUser ? window._fbUser.uid : null;
+}
+
+// Sekce, do kterých účetní nesmí
+var UCETNI_SKRYTE_TABY = ['waiting', 'customers', 'wishlist'];
+
+function zapniUctetniRezim(majitelUid) {
+  if (_uctetniRezim) return;
+  _uctetniRezim = true;
+  _uctetniMajitel = majitelUid;
+  document.body.classList.add('uctetni');
+
+  // Účetní vidí jen podnikání — přepínač profilů mu mizí, tak ať v něm
+  // neuvízne hodnota z dřívějška
+  activeProfile = 'business';
+  try { localStorage.setItem(PROFILE_KEY, 'business'); } catch(e) {}
+
+  if (UCETNI_SKRYTE_TABY.indexOf(tab) !== -1) switchTab('stock');
+  else { try { renderStats(); renderItems(); } catch(e) {} }
+
+  _vykresliUctetniListu();
+}
+
+// Pruh pod hlavičkou, ať je pořád vidět, v čím skladu se účetní dívá
+function _vykresliUctetniListu() {
+  if (document.getElementById('uctetniLista')) return;
+  var lista = document.createElement('div');
+  lista.id = 'uctetniLista';
+  lista.innerHTML = '<span class="ul-znak">Pohled účetního</span>'
+    + '<span class="ul-text">Vidíš sklad a prodeje. Data se odsud nedají měnit.</span>'
+    + '<button class="ul-btn" onclick="otevriUctetniManual()">Co tu najdu?</button>';
+  var hlavicka = document.querySelector('header');
+  if (hlavicka && hlavicka.parentNode) hlavicka.parentNode.insertBefore(lista, hlavicka.nextSibling);
+}
+
+function otevriUctetniManual() {
+  var h = '<div class="mh"><span class="mt2">Pohled účetního</span>'
+    + '<button class="xb" onclick="cm(\'moUctetniManual\')">✕</button></div>'
+    + '<div class="um-text">'
+    + '<p>Vidíš sklad jednoho podnikatele — jen podnikatelské položky, osobní věci sem nepatří a nezobrazují se.</p>'
+    + '<h4>Na skladě</h4>'
+    + '<p>Zboží, které je nakoupené a zatím neprodané. U každé položky je nákupní cena, datum nákupu, odkud je a číslo objednávky nebo dokladu, pokud bylo zadané.</p>'
+    + '<h4>Prodáno</h4>'
+    + '<p>Zboží, které je prodané a peníze za něj dorazily. Kromě nákupní ceny je tu i prodejní, datum prodeje a datum, kdy přišla platba.</p>'
+    + '<h4>Měny</h4>'
+    + '<p>Částky jsou v korunách, pokud u položky není uvedeno jinak. U nákupů v eurech si aplikace pamatuje kurz ke dni nákupu a u prodejů ke dni platby — čísla se tedy zpětně nemění, i když kurz mezitím vyskočí.</p>'
+    + '<h4>Vyhledávání</h4>'
+    + '<p>Lupa v hlavičce hledá napříč sekcemi — podle názvu, SKU i čísla objednávky.</p>'
+    + '<h4>Co tu není</h4>'
+    + '<p>Zákazníci, analytika, wishlist a osobní sbírka. Do těch dat pohled účetního nevidí.</p>'
+    + '<h4>Změny</h4>'
+    + '<p>Odsud se nedá nic upravit ani smazat. Když něco nesedí, dej vědět majiteli skladu — opraví to na své straně a tobě se to objeví samo.</p>'
+    + '</div>';
+  var el = document.getElementById('moUctetniManual');
+  el.querySelector('.modal').innerHTML = h;
+  el.classList.add('open');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -2497,7 +2669,7 @@ var _photoHashes = {};   // id položky → otisk fotky, kterou máme uloženou 
 
 function _isPhotoData(v) { return typeof v === 'string' && v.slice(0, 5) === 'data:'; }
 function _photoDocRef(fns, id) {
-  return fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'photo_' + id);
+  return fns.doc(window._fbDb, 'users', _datovyUid(), 'sklad', 'photo_' + id);
 }
 
 // Vytáhne fotky z položek. Vrací upravené kopie — originály nechává být.
@@ -2572,7 +2744,7 @@ function _archiveDocRef(fns, year) {
   return fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'sold_' + year);
 }
 function _skladCollection(fns) {
-  return fns.collection(window._fbDb, 'users', window._fbUser.uid, 'sklad');
+  return fns.collection(window._fbDb, 'users', _datovyUid(), 'sklad');
 }
 
 // Poskládá cloudový stav z JEDNOHO snímku celé kolekce. Hlavní dokument,
@@ -2681,6 +2853,7 @@ var _fbCloudReady = false; // true až po prvním onSnapshot
 var _fbSaveCallId = 0;
 var _lastOwnSavedAt = null; // savedAt string našeho posledního cloudu — ignorujeme vlastní snapshot
 function fbSaveToCloud() {
+  if (jeUctetni()) return;   // pohled účetního je jen ke čtení
   if (!window._fbUser || !window._fbDb || !window._fbFns) {
     console.warn('fbSaveToCloud: chybí', {user:!!window._fbUser, db:!!window._fbDb, fns:!!window._fbFns});
     return;
@@ -2803,6 +2976,7 @@ function _buildCloudPayload() {
 }
 
 function fbForceUploadToCloud() {
+  if (jeUctetni()) { showToast('V pohledu účetního se data nedají měnit.', 'err'); return; }
   if (!window._fbUser || !window._fbDb || !window._fbFns) { showToast('Nejsi přihlášen do cloudu', 'err'); return; }
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
@@ -3364,6 +3538,9 @@ function buildListingPlatformFilter(){
 }
 
 function switchTab(t){
+  // Do skrytých sekcí vedou i jiné cesty než tlačítka — třeba výsledek
+  // hledání napříč sekcemi. Účetního odsud odkloníme zpátky na sklad.
+  if (jeUctetni() && UCETNI_SKRYTE_TABY.indexOf(t) !== -1) t = 'stock';
   tab=t;
   if(t!=='stock') stockViewMode='table';
   document.querySelectorAll('.tab-bar .tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
@@ -3983,6 +4160,9 @@ function waitStateBadge(it) {
 function renderItems(){
   if(tab==='wishlist'){renderWishlist();return;}
   if(tab==='sold'){renderSoldView();renderStats();return;}
+  // Do analytiky účetní nesmí — tlačítko sice nevidí, ale režim může zbýt
+  // uložený z dřívějška nebo přijít jinou cestou
+  if(jeUctetni() && stockViewMode==='analytics') stockViewMode='table';
   if(tab==='stock' && stockViewMode==='analytics'){
     // Skrýt filtry
     ['.search-wrap','.view-toggle','#brandFilterWrap','#sizeFilterWrap','#catFilterWrap','#locFilterWrap'].forEach(function(sel){
@@ -11718,6 +11898,9 @@ var _crmContactIdx = 0;
 var _crmFbUnsub = null;
 
 function loadCrmFromFirestore() {
+  // Pravidla Firestore CRM účetnímu nepustí — kdybychom o něj přesto
+  // požádali, přišla by jen chybová hláška o chybějícím oprávnění
+  if (jeUctetni()) { customers = []; partners = []; return; }
   if (!window._fbUser || !window._fbDb || !window._fbFns) return;
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'crm', 'main');
@@ -11738,6 +11921,7 @@ function loadCrmFromFirestore() {
 }
 
 function saveCrmToFirestore() {
+  if (jeUctetni()) return;   // pohled účetního je jen ke čtení
   var savedAt = new Date().toISOString();
   // Lokálně ulož vždy — i bez přihlášení, jinak by se změny ztratily při načtení stránky
   try { localStorage.setItem('sklad_crm', JSON.stringify({customers:customers,partners:partners,savedAt:savedAt})); } catch(e) {}
@@ -13386,6 +13570,14 @@ document.addEventListener('fb-auth', function(e) {
   }
 
   if (e.detail && e.detail.user) {
+    _spustSkladPosluchace();
+  }
+});
+
+/* Posluchač skladu. Vytažený do funkce, protože se jednou může spustit
+   podruhé: účetní má ve vlastní kóji jen odkaz na majitele, takže ho
+   přepneme na jeho data a posloucháme znovu — viz POHLED ÚČETNÍHO. */
+function _spustSkladPosluchace() {
     var fns = window._fbFns;
     var _firstSnapshot = true;
 
@@ -13394,6 +13586,16 @@ document.addEventListener('fb-auth', function(e) {
     _fbUnsubscribe = fns.onSnapshot(_skladCollection(fns), function(snap) {
       var dot = document.getElementById('fbStatusDot');
       var cloud = _collectCloud(snap);
+
+      // Účet, který jen účtuje pro někoho jiného, nemá vlastní sklad —
+      // jen ukazatel na majitele. Přepneme se na jeho data a začneme znovu.
+      if (cloud && cloud.data && cloud.data.uctujePro && !jeUctetni()) {
+        var majitel = String(cloud.data.uctujePro);
+        if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
+        zapniUctetniRezim(majitel);
+        _spustSkladPosluchace();
+        return;
+      }
       if (!cloud) {
         // Cloud prázdný — nahraj lokální data jen pokud nějaká máme
         if (_firstSnapshot) {
@@ -13479,8 +13681,7 @@ document.addEventListener('fb-auth', function(e) {
       _fbCloudReady = false;
       showToast('Sync přerušen – zkus obnovit stránku nebo "Stáhnout z cloudu".', 'err');
     });
-  }
-});
+}
 function switchAuthTab(tab) {
   var isLogin = tab === 'login';
   document.getElementById('authTabLogin').style.background = isLogin ? 'var(--accent)' : 'none';
@@ -14085,6 +14286,9 @@ function renderSoldView(){
     var p=d.split('.'); return p.length===3?p[2]:d.substring(0,4);
   }).filter(Boolean))].sort(function(a,b){return b-a;});
   var stats=calcSoldStats(sold);
+  // Do analytiky prodejů účetní nesmí — tlačítko je skryté, ale režim může
+  // zbýt uložený z dřívějška
+  if(jeUctetni() && soldViewMode==='analytics') soldViewMode='table';
   // Viditelnost filtru míst a vyhledávání (v analytice se skrývají)
   var _fswEl=document.getElementById('filterSoldWhere');
   if(_fswEl){var _fswWrapEl=_fswEl.closest('.cs-wrap')||_fswEl;_fswWrapEl.style.display=soldViewMode==='analytics'?'none':'';}
@@ -16160,11 +16364,26 @@ rebuildBrandTables();
 
 
 <!-- SETTINGS MODAL -->
+<!-- Vysvětlivky pro účetního — obsah se doplňuje v otevriUctetniManual() -->
+<div class="mo" id="moUctetniManual"><div class="modal" style="max-width:540px;"></div></div>
+
 <div class="mo" id="moSettings">
 <div class="modal" style="max-width:720px;padding-bottom:16px;">
   <div class="mh">
     <div class="mt2">Nastavení</div>
-    
+
+  </div>
+
+  <!-- Pohled účetního — zbytek nastavení je skrytý přes CSS -->
+  <div class="fs fs-uctetni">
+    <div class="fs-title">Účet</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">
+      Jsi přihlášený v pohledu účetního. Data se odsud nedají měnit.
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="icon-btn" onclick="cm('moSettings');otevriUctetniManual();">Co tu najdu?</button>
+      <button class="icon-btn" onclick="handleCloudAuthBtn()">Odhlásit se</button>
+    </div>
   </div>
 
   <!-- Kurz EUR/CZK -->
