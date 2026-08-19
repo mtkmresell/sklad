@@ -15,6 +15,7 @@ fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repoz
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
 nastroje/      čtečka dat z cloudu pro příkazovou řádku (nenasazuje se)
+konektor/      MCP server pro Cloudflare — sklad v běžném chatu (nenasazuje se sem)
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
@@ -108,6 +109,12 @@ hlídají. Přihlašuje se běžným účtem přes proměnné `SKLAD_EMAIL` a `S
 takže platí stejná pravidla Firestore jako v aplikaci; žádný servisní klíč.
 Metriky nepočítá schválně — kurzy EUR umí správně jen aplikace a druhá
 implementace by se s ní rozešla. Podrobnosti v `nastroje/README.md`.
+
+`konektor/worker.js` dělá totéž pro běžný chat na claude.ai, mobil a desktop,
+kde není kde spustit program — je to MCP server pro Cloudflare Worker. Čtecí
+logiku má schválně vlastní, protože se vkládá do prohlížeče jako jeden soubor
+bez knihoven; `test-konektor.js` hlídá, že se chová stejně jako čtečka.
+Podrobnosti v `konektor/README.md`.
 
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
 `openDropdownsEditor`, `saveItem`, `renderStockAnalytics`, `tableHTML`, `openBulkEditModal`.
