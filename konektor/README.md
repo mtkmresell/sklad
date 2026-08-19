@@ -43,8 +43,11 @@ a dej **Deploy**.
 
 ### 3. Vlož tajemství
 
-V nastavení Workeru najdi **Variables and Secrets** a přidej čtyři —
-všechny jako **Secret**, ne jako plain text:
+Nastavení není v editoru kódu — vrať se z něj na stránku Workeru. Cesta
+je **Workers & Pages → Overview → tvůj Worker → Settings → Variables and
+Secrets → Add**.
+
+Přidej čtyři, u každé vyber **typ Secret**, ne Text:
 
 | jméno | hodnota |
 |---|---|
