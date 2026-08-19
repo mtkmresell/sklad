@@ -57,6 +57,17 @@ dokument:  data
 pole:      uctujePro   (string)   =  <UID majitele>
 ```
 
+**`sklad` je složka, ne pole.** Konzole v okně „Add a document" nabízí
+rovnou políčko na pole — tam `sklad` nepatří. Zakládá se až uvnitř
+dokumentu tlačítkem **Start collection**. Střídá se to složka → dokument
+→ složka → dokument, proto to zamotaně působí:
+
+1. V kolekci `users` dej **Add document**, Document ID = **UID účetního**.
+   Nabídnuté pole smaž tlačítkem **⊖**, dokument má zůstat prázdný.
+2. Uvnitř něj **Start collection**, jméno `sklad`.
+3. První dokument v ní: Document ID `data`.
+4. A teprve tam pole `uctujePro` (string) = **UID majitele**.
+
 Tenhle dokument je jediné, co účetní ve své kóji má. Aplikace ho přečte,
 pozná podle něj režim účetního a přepne se na data majitele.
 
