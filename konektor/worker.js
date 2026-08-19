@@ -396,15 +396,28 @@ export default {
     if (cesta[1] !== 'mcp') {
       return new Response('Not found', { status: 404 });
     }
-    if (request.method === 'GET') {
-      // Server sám od sebe nic neposílá, takže proud událostí nenabízí
-      return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
+    // Chybějící tajemství se hlásí dřív než cokoli jiného — je to
+    // nejčastější důvod, proč se konektor nepřipojí, a z prohlížeče
+    // to jinak není poznat
+    const chybi = ['SKLAD_EMAIL', 'SKLAD_HESLO', 'SKLAD_UID'].filter(k => !env[k]);
+    if (chybi.length) {
+      return Response.json({
+        stav: 'nenastaveno',
+        chybi,
+        rada: 'Doplň tajemství ve Workeru (Settings → Variables and Secrets) a nasaď znovu.',
+      }, { status: 500 });
     }
+
     if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405, headers: { Allow: 'POST' } });
-    }
-    if (!env.SKLAD_EMAIL || !env.SKLAD_HESLO || !env.SKLAD_UID) {
-      return Response.json(chyba(null, -32603, 'Chybí nastavení: SKLAD_EMAIL, SKLAD_HESLO nebo SKLAD_UID.'), { status: 500 });
+      // Server sám od sebe nic neposílá, takže proud událostí nenabízí.
+      // Odpověď je čitelná schválně — tahle adresa se zkouší v prohlížeči,
+      // a prohlížeč umí jen GET.
+      return Response.json({
+        stav: 'ok',
+        zprava: 'Konektor běží. Adresa je správná a tajemství jsou nastavená. '
+          + 'Tenhle výpis znamená úspěch — vlož adresu do Clauda jako konektor.',
+        poznamka: 'Data se čtou přes POST, proto prohlížeč nic dalšího neukáže.',
+      }, { status: 405, headers: { Allow: 'POST' } });
     }
 
     let telo;

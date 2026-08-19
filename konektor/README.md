@@ -117,10 +117,26 @@ i to, že se nikam nezapisuje. Bez sítě a bez nasazení.
 
 ## Kdyby to nefungovalo
 
+Hláška *„Couldn't register with … sign-in service"* neznamená, že je něco
+špatně nastavené v Claudovi. Znamená, že se na server nedovolal a zkusil
+náhradní cestu přes OAuth, které tady žádné není. Příčina je vždycky
+o krok dřív — server je nedostupný, nebo odmítá adresu.
+
+Pozná se to tak, že se **celá adresa konektoru vloží do prohlížeče**.
+Prohlížeč umí jen GET, takže se nic nerozbije, ale server řekne, co se
+děje. Token se přitom nikam neposílá — jde jen mezi prohlížečem
+a Workerem.
+
+| co se vypíše | čím to je |
+|---|---|
+| `{"stav":"ok",…}` | server běží, adresa i tajemství sedí — chyba je jinde; ověř `/mcp` na konci a přidej konektor znovu |
+| `{"stav":"nenastaveno",…}` | chybí tajemství (jsou vyjmenovaná), nebo se po jejich přidání nenasadilo znovu |
+| `Not found` | token v adrese nesedí s `MCP_TOKEN` ve Workeru |
+| stránka se nenačte | Worker není nasazený, nebo nesedí jeho jméno v adrese |
+
+Další případy:
+
 | co se děje | čím to bývá |
 |---|---|
-| Claude konektor nepřipojí | překlep v adrese, nebo chybí `/mcp` na konci |
-| vrací 404 | nesedí token |
-| „Chybí nastavení" | některé tajemství není uložené, nebo se po přidání nenasadilo znovu |
 | „V cloudu nejsou žádná data" | `SKLAD_UID` je UID čtečky místo majitele |
 | prázdné odpovědi | pravidla Firestore nepouští čtečku k datům majitele |

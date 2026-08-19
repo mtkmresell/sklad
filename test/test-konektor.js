@@ -112,10 +112,35 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   ok('token správné délky, ale jiný, taky 404',
     (await posli({}, '/' + 'x'.repeat(ENV.MCP_TOKEN.length) + '/mcp')).status === 404);
   ok('správný token, ale jiná cesta 404', (await posli({}, '/' + ENV.MCP_TOKEN + '/neco')).status === 404);
-  ok('GET se odmítne', (await posli(null, CESTA, 'GET')).status === 405);
+  /* ── Zkouška z prohlížeče ─────────────────────────────────────────
+     Prohlížeč umí jen GET, a tohle je jediný způsob, jak si uživatel
+     ověří adresu, aniž by komukoli poslal token. Odpověď proto musí
+     říct, co se děje. */
+  const gettem = await posli(null, CESTA, 'GET');
+  ok('GET nedostane data (405)', gettem.status === 405);
+  const gettelo = await gettem.json();
+  ok('ale řekne, že konektor běží', gettelo.stav === 'ok');
+  ok('a poradí, co dál', /konektor/i.test(gettelo.zprava || ''));
 
   const bezNastaveni = await worker.fetch(pozadavek(CESTA, {}), { MCP_TOKEN: ENV.MCP_TOKEN });
   ok('bez přihlašovacích údajů 500', bezNastaveni.status === 500);
+  const bezTelo = await bezNastaveni.json();
+  shoda('a vyjmenuje, co chybí', bezTelo.chybi, ['SKLAD_EMAIL', 'SKLAD_HESLO', 'SKLAD_UID']);
+
+  // Chybějící tajemství se musí poznat i z prohlížeče, tedy přes GET
+  const bezNastaveniGet = await worker.fetch(
+    new Request('https://sklad.workers.dev' + CESTA, { method: 'GET' }), { MCP_TOKEN: ENV.MCP_TOKEN });
+  ok('chybějící tajemství přebijí i GET', bezNastaveniGet.status === 500);
+  ok('a vypíšou se', (await bezNastaveniGet.json()).stav === 'nenastaveno');
+
+  const jenJedno = await worker.fetch(pozadavek(CESTA, {}),
+    { MCP_TOKEN: ENV.MCP_TOKEN, SKLAD_EMAIL: 'a@b.cz', SKLAD_HESLO: 'x' });
+  shoda('hlásí se jen to, co opravdu chybí', (await jenJedno.json()).chybi, ['SKLAD_UID']);
+
+  // Bez tokenu se nesmí prozradit ani to, že tajemství chybí
+  const bezTokenuBezNastaveni = await worker.fetch(
+    new Request('https://sklad.workers.dev/spatny/mcp', { method: 'GET' }), { MCP_TOKEN: ENV.MCP_TOKEN });
+  ok('špatný token mlčí i o nastavení', bezTokenuBezNastaveni.status === 404);
 
   /* ── Protokol ─────────────────────────────────────────────────────── */
   const init = await rpc('initialize', { protocolVersion: '2026-07-28', capabilities: {} });
