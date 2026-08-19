@@ -59,8 +59,10 @@ const POLOZKY = [
     localStorage.clear();
     items = [];
     window.__store = {};
-    // Účetní má ve své kóji jen ukazatel — žádné položky
-    window.__store['users/' + d.UCETNI + '/sklad/data'] = { uctujePro: d.MAJITEL, savedAt: '2026-08-01T10:00:00.000Z' };
+    // Účetní má ve své kóji jen ukazatel — žádné položky.
+    // Dokument má schválně náhodné ID, ne 'data': v konzoli Firebase je snadné
+    // nechat vygenerované jméno a aplikace se na tom nesmí zaseknout.
+    window.__store['users/' + d.UCETNI + '/sklad/OueOmcOl6xKglkAo5n8x'] = { uctujePro: d.MAJITEL };
     // Data majitele
     window.__store['users/' + d.MAJITEL + '/sklad/data'] = { items: JSON.parse(JSON.stringify(d.POLOZKY)), savedAt: '2026-08-02T10:00:00.000Z' };
     window.__store['users/' + d.MAJITEL + '/crm/main'] = { customers: [{ id: 'c1', name: 'Tajny Zakaznik' }], partners: [] };
@@ -78,7 +80,7 @@ const POLOZKY = [
     trida: document.body.classList.contains('uctetni'),
     pocet: items.length,
   }));
-  check('režim účetního se zapnul', stav.rezim === true, JSON.stringify(stav));
+  check('režim účetního se zapnul i u dokumentu s náhodným ID', stav.rezim === true, JSON.stringify(stav));
   check('čte se kóje majitele, ne vlastní', stav.ctenyUid === MAJITEL, stav.ctenyUid);
   check('body nese třídu uctetni', stav.trida === true);
   check('data majitele dorazila', stav.pocet === POLOZKY.length, 'položek: ' + stav.pocet);
@@ -224,6 +226,26 @@ const POLOZKY = [
     return pred !== JSON.stringify(window.__store);
   });
   check('majitel pořád může ukládat', zapisMajitele === true);
+
+  // ══════════════════════════════════════════════════════════════
+  section('13) Hledání ukazatele');
+  const hledani = await page.evaluate(() => {
+    const snap = (dokumenty) => ({ forEach: (f) => dokumenty.forEach(d => f({ id: d.id, data: () => d.v })) });
+    return {
+      vData:      _najdiUcetniOdkaz(snap([{ id: 'data', v: { uctujePro: 'X1' } }])),
+      vNahodnem:  _najdiUcetniOdkaz(snap([{ id: 'aBcD123', v: { uctujePro: 'X2' } }])),
+      meziJinymi: _najdiUcetniOdkaz(snap([{ id: 'cache', v: { a: 1 } }, { id: 'zZz', v: { uctujePro: 'X3' } }])),
+      bezneKoji:  _najdiUcetniOdkaz(snap([{ id: 'data', v: { items: [], savedAt: 'x' } }, { id: 'sold_2025', v: { items: [] } }])),
+      prazdnaHodnota: _najdiUcetniOdkaz(snap([{ id: 'data', v: { uctujePro: '' } }])),
+      spatnyTyp:  _najdiUcetniOdkaz(snap([{ id: 'data', v: { uctujePro: 42 } }])),
+    };
+  });
+  check('najde se v dokumentu data', hledani.vData === 'X1', String(hledani.vData));
+  check('najde se i v dokumentu s náhodným ID', hledani.vNahodnem === 'X2', String(hledani.vNahodnem));
+  check('najde se i mezi jinými dokumenty', hledani.meziJinymi === 'X3', String(hledani.meziJinymi));
+  check('v běžné kóji se nenajde nic', hledani.bezneKoji === null, String(hledani.bezneKoji));
+  check('prázdná hodnota se nebere', hledani.prazdnaHodnota === null, String(hledani.prazdnaHodnota));
+  check('číslo místo textu se nebere', hledani.spatnyTyp === null, String(hledani.spatnyTyp));
 
   // ══════════════════════════════════════════════════════════════
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }

@@ -2770,6 +2770,22 @@ function _collectCloud(snap) {
   };
 }
 
+/* Ukazatel účetního ve snímku kolekce.
+
+   Hledá se ve všech dokumentech, ne jen v tom jménem `data`. Při zakládání
+   v konzoli Firebase totiž stačí nevšimnout si políčka na ID a dokument
+   dostane náhodné jméno — aplikace by ho pak přeskočila, chovala se, jako
+   by kóje byla prázdná, a nikde by nebylo vidět proč. */
+function _najdiUcetniOdkaz(snap) {
+  var nalez = null;
+  snap.forEach(function(d) {
+    if (nalez) return;
+    var v = d.data();
+    if (v && typeof v.uctujePro === 'string' && v.uctujePro) nalez = v.uctujePro;
+  });
+  return nalez;
+}
+
 // Zapamatuje si archivy ze snímku, ať víme, které roky se při ukládání změnily
 function _rememberArchives(byYear) {
   _archiveCache = byYear;
@@ -13585,17 +13601,19 @@ function _spustSkladPosluchace() {
     // konzistentním snímku a fungují stejně offline jako dřív jediný dokument
     _fbUnsubscribe = fns.onSnapshot(_skladCollection(fns), function(snap) {
       var dot = document.getElementById('fbStatusDot');
-      var cloud = _collectCloud(snap);
 
       // Účet, který jen účtuje pro někoho jiného, nemá vlastní sklad —
       // jen ukazatel na majitele. Přepneme se na jeho data a začneme znovu.
-      if (cloud && cloud.data && cloud.data.uctujePro && !jeUctetni()) {
-        var majitel = String(cloud.data.uctujePro);
+      // Musí to být dřív, než se snímek vyhodnotí jako prázdná kóje.
+      var majitel = jeUctetni() ? null : _najdiUcetniOdkaz(snap);
+      if (majitel) {
         if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
         zapniUctetniRezim(majitel);
         _spustSkladPosluchace();
         return;
       }
+
+      var cloud = _collectCloud(snap);
       if (!cloud) {
         // Cloud prázdný — nahraj lokální data jen pokud nějaká máme
         if (_firstSnapshot) {
