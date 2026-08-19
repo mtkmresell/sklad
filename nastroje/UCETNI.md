@@ -40,7 +40,15 @@ a přenos toho, co už je uložené — samostatná práce, ne přepínač.
 
 V [konzoli Firebase](https://console.firebase.google.com/) →
 **Authentication → Users → Add user**. Zadej jeho e-mail a heslo, které
-mu předáš. Opiš si jeho **User UID**.
+mu předáš.
+
+**UID zkopíruj tlačítkem, nikdy ho neopisuj očima.** Ve sloupci
+**User UID** je na to ikonka. V těch řetězcích se běžně potkává velké `O`
+s nulou a velké `I` s malým `l`; když se jeden znak netrefí, pravidla
+porovnávají skoro stejný text a Firestore čtení odmítne. Projeví se to
+hláškou „Sync přerušen" a prázdným skladem, takže na první pohled
+vypadá, že je chyba jinde. Totéž platí pro posílání UID v obrázku —
+z obrázku se ty znaky nerozliší.
 
 ## 2. Vytvoř mu ukazatel na svoje data
 
