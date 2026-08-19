@@ -14,6 +14,8 @@ index.html     celá aplikace — 15 900 řádků, 86 % JS, 7 % CSS, 8 % HTML
 fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repozitáře
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
+nastroje/      čtečka dat z cloudu pro příkazovou řádku (nenasazuje se)
+konektor/      MCP server pro Cloudflare — sklad v běžném chatu (nenasazuje se sem)
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
@@ -49,6 +51,10 @@ Stav položky je `saleState`: `stock` → `waiting` → `paid`.
 | `cache` | databáze našeptávače (názvy, SKU, obrázky) |
 
 CRM je zvlášť v `users/{uid}/crm/main`.
+
+Kdo smí co číst, řeší pravidla Firestore (žijí jen v konzoli, ne v repozitáři).
+Kromě majitele jsou tři role: **čtečka** pro AI (`nastroje/PRAVIDLA.md`),
+**účetní** (`nastroje/UCETNI.md`) a nikdo jiný. Zapisovat smí jedině majitel.
 
 **Klíčové vlastnosti, které nesmíš rozbít:**
 
@@ -88,6 +94,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | databáze našeptávače | `HISTORICKÝ CACHE POLOŽEK`, `SPRÁVA NAŠEPTÁVAČE` |
 | automatické zálohy | `AUTOMATICKÉ SNAPSHOTY` |
 | profily (Podnikání/Osobní) | `PROFILY` |
+| pohled účetního | `POHLED ÚČETNÍHO` |
 | limit identifikované osoby | `RETAILEŘI & LIMIT` |
 | animace | `ANIMACE` (v CSS) |
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
@@ -98,6 +105,21 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | nabídka zákazníkovi | `OFFER BUILDER` |
 | export dat pro analýzu | `ANALYTICKÝ EXPORT` |
 | historie cen položky | `HISTORIE CEN U POLOŽKY` |
+
+## Čtení dat mimo prohlížeč
+
+`nastroje/sklad.js` přečte cloud z příkazové řádky (`node nastroje/sklad.js souhrn`),
+aby se nemusela otevírat aplikace. **Jen čte** — kód pro zápis tam není a testy to
+hlídají. Přihlašuje se běžným účtem přes proměnné `SKLAD_EMAIL` a `SKLAD_HESLO`,
+takže platí stejná pravidla Firestore jako v aplikaci; žádný servisní klíč.
+Metriky nepočítá schválně — kurzy EUR umí správně jen aplikace a druhá
+implementace by se s ní rozešla. Podrobnosti v `nastroje/README.md`.
+
+`konektor/worker.js` dělá totéž pro běžný chat na claude.ai, mobil a desktop,
+kde není kde spustit program — je to MCP server pro Cloudflare Worker. Čtecí
+logiku má schválně vlastní, protože se vkládá do prohlížeče jako jeden soubor
+bez knihoven; `test-konektor.js` hlídá, že se chová stejně jako čtečka.
+Podrobnosti v `konektor/README.md`.
 
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
 `openDropdownsEditor`, `saveItem`, `renderStockAnalytics`, `tableHTML`, `openBulkEditModal`.
