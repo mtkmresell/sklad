@@ -63,11 +63,22 @@ na tajemství opravdový trezor, po uložení se hodnota už nedá zobrazit.
 
 ### 4. Přidej konektor do Clauda
 
-Adresa je:
+Adresa **není** jen `<jméno-workeru>.workers.dev` — Cloudflare do ní vkládá
+i jméno účtu:
 
 ```
-https://<jméno-workeru>.workers.dev/<MCP_TOKEN>/mcp
+https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/mcp
 ```
+
+Neskládej ji z hlavy. Na stránce Workeru (**Overview**) je nahoře odkaz
+se správným tvarem; zkopíruj ho a dopiš za něj token a `/mcp`. Například:
+
+```
+https://dawn-bush-6ac21.mtkm-resell.workers.dev/a7Kd…9Xm2/mcp
+```
+
+Než adresu vložíš do Clauda, otevři ji v prohlížeči — musí přijít
+`{"stav":"ok",…}`.
 
 Na claude.ai jdi do **Customize → Connectors → „+"**, zadej jméno
 (třeba „Sklad") a tuhle adresu. Pole pro OAuth nech prázdná.
