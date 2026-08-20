@@ -16,6 +16,7 @@ test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
 nastroje/      čtečka dat z cloudu pro příkazovou řádku (nenasazuje se)
 konektor/      MCP server pro Cloudflare — sklad v běžném chatu (nenasazuje se sem)
+firestore.rules  znění pravidel Firestore (do provozu se vkládá ručně v konzoli)
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
@@ -52,9 +53,17 @@ Stav položky je `saleState`: `stock` → `waiting` → `paid`.
 
 CRM je zvlášť v `users/{uid}/crm/main`.
 
-Kdo smí co číst, řeší pravidla Firestore (žijí jen v konzoli, ne v repozitáři).
-Kromě majitele jsou tři role: **čtečka** pro AI (`nastroje/PRAVIDLA.md`),
-**účetní** (`nastroje/UCETNI.md`) a nikdo jiný. Zapisovat smí jedině majitel.
+Kdo smí co číst, řeší pravidla Firestore. Kromě majitele jsou dvě role:
+**čtečka** pro AI (`nastroje/PRAVIDLA.md`) a **účetní** (`nastroje/UCETNI.md`).
+Zapisovat smí jedině majitel.
+
+Znění pravidel je ve `firestore.rules`. **Nenasazuje se samo** — do provozu se
+vkládá ručně v konzoli, takže při změně je potřeba upravit obojí. Soubor nese
+skutečná UID schválně: dokud tam byly zástupné texty, jednou se publikovala
+verze s nimi a odstřihlo to čtečku i účetního. UID nejsou tajemství, přístup
+dokazuje přihlášení. `test-pravidla.js` hlídá, že v souboru nezůstal
+nevyplněný zástupný text, že zápis nemá povolený nikdo kromě majitele
+a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovaným.
 
 **Klíčové vlastnosti, které nesmíš rozbít:**
 
