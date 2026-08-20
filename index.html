@@ -4061,6 +4061,52 @@ function bazosActiveCount(bazosPlat) {
   return keys.size;
 }
 
+/* Doplní chybějící datum zaškrtnutí.
+
+   Datum se zapisovalo jen tomu kusu, který uživatel odškrtl. Jenže platformy
+   se kopírují ještě na třech místech — na sourozence ve skupině, při vrácení
+   na sklad a při duplikaci — a datum s sebou nešlo. Takový kus se pak počítal
+   do limitu padesáti (bazosActiveCount bere prázdné datum jako aktivní), ale
+   expirace ho přeskakovala (bazosExpireCheck u prázdného data rovnou končí).
+   Držel tedy místo napořád.
+
+   Ty tři cesty už datum kopírují. Tohle uklízí, co po nich zbylo:
+   vezme datum od sourozence ve skupině, a když není od koho, odhadne ho
+   z data nákupu. Odhad je schválně opatrný na správnou stranu — inzerát
+   nemůže být starší než zboží, takže staré kusy vyprší hned a čerstvé
+   dostanou datum, které dává smysl. */
+function healBazosCheckedAt() {
+  var doplneno = 0;
+  (items || []).forEach(function(it) {
+    if (!it) return;
+    BAZOS_PLATS.forEach(function(bp) {
+      if (!(it.platforms || []).includes(bp)) return;
+      if (it.bazosCheckedAt && it.bazosCheckedAt[bp]) return;
+
+      var kdy = null;
+      // 1) od sourozence ve skupině, který datum má
+      try {
+        var sourozenci = platGroupSiblings(it, it.id) || [];
+        sourozenci.forEach(function(s) {
+          var t = s && s.bazosCheckedAt && s.bazosCheckedAt[bp];
+          if (t && (!kdy || t > kdy)) kdy = t;
+        });
+      } catch(e) {}
+      // 2) jinak podle data nákupu — inzerát nemůže být starší než zboží
+      if (!kdy) {
+        var d = parseBuyDate(it);
+        if (d && !isNaN(d)) kdy = d.getTime();
+      }
+      if (!kdy) kdy = it.dateAdded || Date.now();
+
+      if (!it.bazosCheckedAt) it.bazosCheckedAt = {};
+      it.bazosCheckedAt[bp] = kdy;
+      doplneno++;
+    });
+  });
+  return doplneno;
+}
+
 // Automaticky odškrtne Bazoš platformy kde vypršely 2 měsíce — voláno při načtení
 function bazosExpireCheck() {
   const now = Date.now();
@@ -4091,6 +4137,8 @@ function bazosExpireCheckSafe() {
   if (jeUctetni()) return;
   if (_bazosExpireDone) return;
   _bazosExpireDone = true;
+  // Nejdřív doplnit chybějící data, jinak by je expirace zase přeskočila
+  try { if (healBazosCheckedAt()) sv(); } catch(e) { console.error('healBazosCheckedAt', e); }
   try { bazosExpireCheck(); } catch(e) { console.error('bazosExpire', e); }
 }
 
@@ -4133,8 +4181,15 @@ function togglePlatItem(id, platform) {
     var sibIdx2 = sibPlats.indexOf(platform);
     if (i === -1) {
       if (sibIdx2 === -1) sibPlats.push(platform);
+      // Datum musí jít se skupinou. Bez toho by se sourozenec počítal do
+      // limitu padesáti, ale nikdy by nevypršel.
+      if (isBazos) {
+        if (!sib.bazosCheckedAt) sib.bazosCheckedAt = {};
+        sib.bazosCheckedAt[platform] = items[idx].bazosCheckedAt[platform];
+      }
     } else {
       if (sibIdx2 !== -1) sibPlats.splice(sibIdx2, 1);
+      if (isBazos && sib.bazosCheckedAt) delete sib.bazosCheckedAt[platform];
     }
     sib.platforms = sibPlats;
   });
@@ -5521,6 +5576,9 @@ function onReturnToStock(it) {
   var siblings = platGroupSiblings(it, it.id);
   var withPlats = siblings.find(function(s) { return s.platforms && s.platforms.length > 0; });
   it.platforms = withPlats ? withPlats.platforms.slice() : [];
+  // S platformami musí jít i data zaškrtnutí, jinak by kus držel místo
+  // v limitu padesáti a nikdy nevypršel
+  if (withPlats && withPlats.bazosCheckedAt) it.bazosCheckedAt = Object.assign({}, withPlats.bazosCheckedAt);
   delete it._platformsBackup;
 }
 
@@ -8460,6 +8518,8 @@ document.addEventListener('click', function(e) {
     var duplSiblings = platGroupSiblings(dupl, dupl.id);
     var sibWithPlats = duplSiblings.find(function(s){ return s.platforms && s.platforms.length > 0; });
     dupl.platforms = sibWithPlats ? sibWithPlats.platforms.slice() : [];
+    // Datum zaškrtnutí patří k platformě — viz healBazosCheckedAt()
+    if (sibWithPlats && sibWithPlats.bazosCheckedAt) dupl.bazosCheckedAt = Object.assign({}, sibWithPlats.bazosCheckedAt);
     items.unshift(dupl);
     sv(); renderStats(); renderItems();
     cm('moDetail');
