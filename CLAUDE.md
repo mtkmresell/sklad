@@ -135,6 +135,32 @@ Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
 `openDropdownsEditor`, `saveItem`, `renderStockAnalytics`, `tableHTML`, `openBulkEditModal`.
 Medián je 12 řádků — soubor je velký, ale ne zanesený.
 
+## Rozdělaná témata
+
+Domluvené, ale zatím neudělané. **Připomeň je, dokud se nezavřou** — majitel
+o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
+
+**Prodejní doklady pro účetního.** Účetní vidí čísla na obrazovce a porovná
+si je s výpisem z účtu; co z aplikace nedostane, jsou doklady. Chce to
+sloučit doklady za měsíc do jednoho souboru, každý na své stránce, ať se
+nestahují po kusech. Blokuje to jedna věc: prodejní strana zná jen
+`saleDocNum` a neumí říct, že se u téhle položky fakturovalo nebo že doklad
+vystavuje platforma. Návrh je typ dokladu (doklad / faktura / nic)
+předvyplněný podle kontextu — b2b → faktura, StockX a Vinted → nic, přímý
+prodej → doklad. **Otevřená otázka na majitele:** sedí ta tři pravidla,
+hlavně jestli fakturuje jen firmám.
+
+**Upozornění a automatizace.** Aplikace sama nikdy nic nespustí — je to
+stránka v prohlížeči. Konektor na Cloudflare ale běží pořád a umí se
+spouštět podle hodin (cron trigger, zdarma). Tím je možné to, co dřív ne:
+hlídač vypršení inzerátů na Bazoši, připomínka dlouho čekajících payoutů,
+měsíční souhrn. Jako kanál se nabízí Telegram — bot zdarma, chodí do mobilu,
+nic se neinstaluje.
+
+**Vlastní účet pro konektor.** Konektor i čtečka se hlásí stejným účtem, jehož
+heslo leží na dvou místech (prostředí Claude Code a trezor Cloudflare). Vypnout
+jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to úklid.
+
 ## Testy
 
 ```bash
