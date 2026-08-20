@@ -115,6 +115,11 @@ body.uctetni a[target="_blank"] {
   color:inherit !important; text-decoration:none !important;
   border-bottom:none !important;
 }
+/* Faktury jsou výjimka — účetní je potřebuje otevřít, je to jeho práce */
+body.uctetni a.faktura-link {
+  pointer-events:auto; cursor:pointer;
+  color:var(--accent) !important;
+}
 
 /* V nastavení zbude odhlášení a manuál */
 body.uctetni #moSettings .fs,
@@ -7444,7 +7449,7 @@ function openDetail(id) {
     ] : []),
 
     ['Poznámka', it.note||'—'],
-    ...(it.invoiceUrl ? [['Faktura', '<a href="'+it.invoiceUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
+    ...(it.invoiceUrl ? [['Faktura', '<a href="'+it.invoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
   var secBase = ['Typ','Profil','SKU','Stav','Velikost'];

@@ -188,6 +188,20 @@ const POLOZKY = [
   check('odkaz na StockX se nedá kliknout', odkaz.zadny || odkaz.klikatelny === false, JSON.stringify(odkaz));
   if (!odkaz.zadny) check('ale název položky zůstal čitelný', !!odkaz.text);
 
+  // Faktura je výjimka — účetní ji potřebuje otevřít, je to jeho práce
+  const faktura = await page.evaluate(() => {
+    const a = document.createElement('a');
+    a.href = 'https://example.com/faktura.pdf';
+    a.target = '_blank';
+    a.className = 'faktura-link';
+    a.textContent = 'Otevřít fakturu';
+    document.body.appendChild(a);
+    const klikatelna = getComputedStyle(a).pointerEvents !== 'none';
+    a.remove();
+    return klikatelna;
+  });
+  check('odkaz na fakturu klikatelný zůstává', faktura === true);
+
   // ══════════════════════════════════════════════════════════════
   // Bez obnovení stránky — přesně jak to udělá člověk, který si pohled
   // účetního vyzkouší a pak se přihlásí zpátky jako majitel.
