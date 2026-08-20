@@ -2579,6 +2579,19 @@ function zapniUctetniRezim(majitelUid) {
   _vykresliUctetniListu();
 }
 
+/* Odhlášení režim vypíná. Bez tohohle by po odhlášení účetního zůstal
+   zapnutý i pro toho, kdo se přihlásí po něm ve stejné záložce — a protože
+   se v něm neukládá, majiteli by přestalo fungovat ukládání. Tiše, protože
+   sv() jen mlčky skončí. */
+function vypniUctetniRezim() {
+  if (!_uctetniRezim) return;
+  _uctetniRezim = false;
+  _uctetniMajitel = null;
+  document.body.classList.remove('uctetni');
+  var lista = document.getElementById('uctetniLista');
+  if (lista && lista.parentNode) lista.parentNode.removeChild(lista);
+}
+
 // Pruh pod hlavičkou, ať je pořád vidět, v čím skladu se účetní dívá
 function _vykresliUctetniListu() {
   if (document.getElementById('uctetniLista')) return;
@@ -4072,6 +4085,10 @@ function bazosExpireCheck() {
 // snapshotem — sv() by posunulo lokální savedAt dopředu a stará data by přepsala cloud.
 var _bazosExpireDone = false;
 function bazosExpireCheckSafe() {
+  // Účetní data majitele nepřebírá ani lokálně — uložit by je stejně nemohl,
+  // ale bez tohohle by si v paměti odškrtal vypršené inzeráty a viděl
+  // u položek jiné platformy než majitel
+  if (jeUctetni()) return;
   if (_bazosExpireDone) return;
   _bazosExpireDone = true;
   try { bazosExpireCheck(); } catch(e) { console.error('bazosExpire', e); }
@@ -13573,6 +13590,10 @@ document.addEventListener('fb-auth', function(e) {
 
   // Odhlášení — zruš listener a vyčisti data
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
+  // Režim účetního patří k účtu, ne k záložce. Vypíná se při každé změně
+  // přihlášení, ne jen při odhlášení — Firebase umí ohlásit rovnou nového
+  // uživatele a ten by jinak zdědil cizí kóji i zákaz ukládání.
+  vypniUctetniRezim();
   _fbCloudReady = false;
   // Zapomeň stav archivů i cache, ať se nepřenese mezi účty
   _archiveHashes = {}; _archiveCache = null; _cloudIncomplete = false; _photoHashes = {};

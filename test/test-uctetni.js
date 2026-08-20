@@ -189,7 +189,45 @@ const POLOZKY = [
   if (!odkaz.zadny) check('ale název položky zůstal čitelný', !!odkaz.text);
 
   // ══════════════════════════════════════════════════════════════
-  section('12) Běžného uživatele se to nedotkne');
+  // Bez obnovení stránky — přesně jak to udělá člověk, který si pohled
+  // účetního vyzkouší a pak se přihlásí zpátky jako majitel.
+  section('12) Odhlášení režim vypne');
+  await page.evaluate(() => {
+    window._fbUser = null;
+    document.dispatchEvent(new CustomEvent('fb-auth', { detail: { user: null } }));
+  });
+  await page.waitForTimeout(300);
+  const poOdhlaseni = await page.evaluate(() => ({
+    rezim: jeUctetni(),
+    trida: document.body.classList.contains('uctetni'),
+    lista: !!document.getElementById('uctetniLista'),
+    uid: _datovyUid(),
+  }));
+  check('režim se vypnul', poOdhlaseni.rezim === false, JSON.stringify(poOdhlaseni));
+  check('třída na body je pryč', poOdhlaseni.trida === false);
+  check('lišta účetního je pryč', poOdhlaseni.lista === false);
+  check('nečte se už cizí kóje', poOdhlaseni.uid === null, String(poOdhlaseni.uid));
+
+  section('13) Majitel po účetním ve stejné záložce může ukládat');
+  await page.evaluate((d) => {
+    window.__store = {};
+    window.__store['users/' + d.MAJITEL + '/sklad/data'] = { items: JSON.parse(JSON.stringify(d.POLOZKY)), savedAt: '2026-08-02T10:00:00.000Z' };
+  }, { MAJITEL, POLOZKY });
+  await prihlas(MAJITEL);
+  await emit();
+  await page.waitForTimeout(300);
+  const zapisPoUcetnim = await page.evaluate(async () => {
+    const pred = JSON.stringify(window.__store);
+    items.push({ id: 'poUcetnim', name: 'Majitel smí i po účetním', saleState: 'stock', buyPrice: 1, tags: [] });
+    sv();
+    await new Promise(r => setTimeout(r, 900));
+    return { zapsalo: pred !== JSON.stringify(window.__store), rezim: jeUctetni(), uid: _datovyUid() };
+  });
+  check('ukládání majiteli funguje', zapisPoUcetnim.zapsalo === true, JSON.stringify(zapisPoUcetnim));
+  check('a čte svoji vlastní kóji', zapisPoUcetnim.uid === MAJITEL, zapisPoUcetnim.uid);
+
+  // ══════════════════════════════════════════════════════════════
+  section('14) Běžného uživatele se to nedotkne');
   await page.evaluate(() => location.reload());
   await page.waitForTimeout(3500);
   await page.evaluate(installFakeFirestore);
@@ -228,7 +266,7 @@ const POLOZKY = [
   check('majitel pořád může ukládat', zapisMajitele === true);
 
   // ══════════════════════════════════════════════════════════════
-  section('13) Hledání ukazatele');
+  section('15) Hledání ukazatele');
   const hledani = await page.evaluate(() => {
     const snap = (dokumenty) => ({ forEach: (f) => dokumenty.forEach(d => f({ id: d.id, data: () => d.v })) });
     return {

@@ -310,8 +310,18 @@ async function main() {
 
   /* Čí data se čtou. Běžně svoje, ale účet jen pro čtení má vlastní uid
      a sahá do kóje majitele — bez tohohle by koukal do své prázdné.
-     Komu čtení patří, rozhodují pravidla Firestore, ne tenhle řádek. */
-  const cilovyUid = process.env.SKLAD_UID || uid;
+     Komu čtení patří, rozhodují pravidla Firestore, ne tenhle řádek.
+
+     Mezery kolem se ořezávají schválně: hodnota se opisuje z konzole nebo
+     z předlohy a snadno se v ní něco zavleče. Zbytek předlohy před UID
+     („UID majitele z kroku 2") by jinak vedl na složku, která neexistuje,
+     a projevilo by se to jen prázdným výpisem. */
+  const zadanyUid = (process.env.SKLAD_UID || '').trim();
+  if (zadanyUid && /\s/.test(zadanyUid)) {
+    konec('SKLAD_UID obsahuje mezeru: "' + zadanyUid + '"\n'
+      + 'Má tam být jen samotné UID, nic z předlohy okolo.');
+  }
+  const cilovyUid = zadanyUid || uid;
 
   // Vypíše, pod kým je skript přihlášený — potřeba při psaní pravidel
   if (prikaz === 'kdojsem') {

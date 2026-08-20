@@ -118,7 +118,8 @@ implementace by se s ní rozešla. Podrobnosti v `nastroje/README.md`.
 `konektor/worker.js` dělá totéž pro běžný chat na claude.ai, mobil a desktop,
 kde není kde spustit program — je to MCP server pro Cloudflare Worker. Čtecí
 logiku má schválně vlastní, protože se vkládá do prohlížeče jako jeden soubor
-bez knihoven; `test-konektor.js` hlídá, že se chová stejně jako čtečka.
+bez knihoven; `test-shoda.js` prohání obě cesty stejnými daty a porovnává,
+co z nich vypadne, aby se ty dvě kopie nerozešly.
 Podrobnosti v `konektor/README.md`.
 
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
