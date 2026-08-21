@@ -16,6 +16,7 @@ test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
 nastroje/      čtečka dat z cloudu pro příkazovou řádku (nenasazuje se)
 konektor/      MCP server pro Cloudflare — sklad v běžném chatu (nenasazuje se sem)
+firestore.rules  znění pravidel Firestore (do provozu se vkládá ručně v konzoli)
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
@@ -52,9 +53,17 @@ Stav položky je `saleState`: `stock` → `waiting` → `paid`.
 
 CRM je zvlášť v `users/{uid}/crm/main`.
 
-Kdo smí co číst, řeší pravidla Firestore (žijí jen v konzoli, ne v repozitáři).
-Kromě majitele jsou tři role: **čtečka** pro AI (`nastroje/PRAVIDLA.md`),
-**účetní** (`nastroje/UCETNI.md`) a nikdo jiný. Zapisovat smí jedině majitel.
+Kdo smí co číst, řeší pravidla Firestore. Kromě majitele jsou dvě role:
+**čtečka** pro AI (`nastroje/PRAVIDLA.md`) a **účetní** (`nastroje/UCETNI.md`).
+Zapisovat smí jedině majitel.
+
+Znění pravidel je ve `firestore.rules`. **Nenasazuje se samo** — do provozu se
+vkládá ručně v konzoli, takže při změně je potřeba upravit obojí. Soubor nese
+skutečná UID schválně: dokud tam byly zástupné texty, jednou se publikovala
+verze s nimi a odstřihlo to čtečku i účetního. UID nejsou tajemství, přístup
+dokazuje přihlášení. `test-pravidla.js` hlídá, že v souboru nezůstal
+nevyplněný zástupný text, že zápis nemá povolený nikdo kromě majitele
+a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovaným.
 
 **Klíčové vlastnosti, které nesmíš rozbít:**
 
@@ -118,12 +127,39 @@ implementace by se s ní rozešla. Podrobnosti v `nastroje/README.md`.
 `konektor/worker.js` dělá totéž pro běžný chat na claude.ai, mobil a desktop,
 kde není kde spustit program — je to MCP server pro Cloudflare Worker. Čtecí
 logiku má schválně vlastní, protože se vkládá do prohlížeče jako jeden soubor
-bez knihoven; `test-konektor.js` hlídá, že se chová stejně jako čtečka.
+bez knihoven; `test-shoda.js` prohání obě cesty stejnými daty a porovnává,
+co z nich vypadne, aby se ty dvě kopie nerozešly.
 Podrobnosti v `konektor/README.md`.
 
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
 `openDropdownsEditor`, `saveItem`, `renderStockAnalytics`, `tableHTML`, `openBulkEditModal`.
 Medián je 12 řádků — soubor je velký, ale ne zanesený.
+
+## Rozdělaná témata
+
+Domluvené, ale zatím neudělané. **Připomeň je, dokud se nezavřou** — majitel
+o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
+
+**Prodejní doklady pro účetního.** Účetní vidí čísla na obrazovce a porovná
+si je s výpisem z účtu; co z aplikace nedostane, jsou doklady. Chce to
+sloučit doklady za měsíc do jednoho souboru, každý na své stránce, ať se
+nestahují po kusech. Blokuje to jedna věc: prodejní strana zná jen
+`saleDocNum` a neumí říct, že se u téhle položky fakturovalo nebo že doklad
+vystavuje platforma. Návrh je typ dokladu (doklad / faktura / nic)
+předvyplněný podle kontextu — b2b → faktura, StockX a Vinted → nic, přímý
+prodej → doklad. **Otevřená otázka na majitele:** sedí ta tři pravidla,
+hlavně jestli fakturuje jen firmám.
+
+**Upozornění a automatizace.** Aplikace sama nikdy nic nespustí — je to
+stránka v prohlížeči. Konektor na Cloudflare ale běží pořád a umí se
+spouštět podle hodin (cron trigger, zdarma). Tím je možné to, co dřív ne:
+hlídač vypršení inzerátů na Bazoši, připomínka dlouho čekajících payoutů,
+měsíční souhrn. Jako kanál se nabízí Telegram — bot zdarma, chodí do mobilu,
+nic se neinstaluje.
+
+**Vlastní účet pro konektor.** Konektor i čtečka se hlásí stejným účtem, jehož
+heslo leží na dvou místech (prostředí Claude Code a trezor Cloudflare). Vypnout
+jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to úklid.
 
 ## Testy
 

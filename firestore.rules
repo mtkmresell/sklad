@@ -1,0 +1,67 @@
+// Pravidla Firestore — kdo smí co číst a zapisovat.
+//
+// TENHLE SOUBOR SE NENASAZUJE SÁM. Je to zdroj pravdy k porovnání a
+// k zkopírování; do provozu se vkládá ručně v konzoli Firebase
+// (Firestore Database → Rules → Publish). Když něco měníš, uprav to tady,
+// pak teprve v konzoli, ať se ty dvě verze nerozejdou.
+//
+// Proč tu jsou UID natvrdo: dřív tu byly zástupné texty a jednou se stalo,
+// že se pravidla publikovala s nimi. Porovnávala pak UID s doslovným
+// "SEM_UID_CTECKY", což nemohlo nikdy sedět — odstřihlo to čtečku i účetního
+// a projevilo se to prázdným skladem, tedy příznakem, který ukazuje úplně
+// jinam. Hotový text jde zkopírovat a není co vyplnit.
+//
+// UID nejsou tajemství. Je to jen jméno účtu, ne heslo; kdo ho zná, nedostane
+// se nikam, protože přístup dokazuje přihlášení. Projekt i jeho veřejný klíč
+// jsou ostatně v index.html taky.
+//
+// Role:
+//   majitel  p6JKNhfrbmZYaF8OIBxgd9durmq2   plný přístup ke svým datům
+//   čtečka   bvFwgv4M7wZkO3DshUUKFg0I5sB3   čte sklad i CRM, nezapisuje
+//                                            (nastroje/sklad.js a konektor/)
+//   účetní   HyFRiNVfLaVvt2zzVr0s3313Ty42   čte jen sklad, na CRM nedosáhne
+//                                            (nastroje/UCETNI.md)
+//
+// Co pravidlo nepovolí, to Firestore odmítne — proto tu musí být pokryté
+// obě kolekce, které aplikace používá, a nic jiného tu být nemusí.
+//
+// Hlídá to test/test-pravidla.js: žádné zbylé zástupné texty, zápis jen pro
+// majitele a účetní že opravdu není u CRM.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Majitel — pozná se podle toho, že sahá do své vlastní složky
+    function jeMajitel(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Čtečka pro AI — čte všechno, nezapisuje
+    function jeCtecka(uid) {
+      return request.auth != null
+             && request.auth.uid == 'bvFwgv4M7wZkO3DshUUKFg0I5sB3'
+             && uid == 'p6JKNhfrbmZYaF8OIBxgd9durmq2';
+    }
+
+    // Účetní — čte jen sklad, na zákazníky nedosáhne
+    function jeUcetni(uid) {
+      return request.auth != null
+             && request.auth.uid == 'HyFRiNVfLaVvt2zzVr0s3313Ty42'
+             && uid == 'p6JKNhfrbmZYaF8OIBxgd9durmq2';
+    }
+
+    // Sklad, roční archivy prodejů, fotky, našeptávač
+    match /users/{uid}/sklad/{dokument} {
+      allow read:  if jeMajitel(uid) || jeCtecka(uid) || jeUcetni(uid);
+      allow write: if jeMajitel(uid);
+    }
+
+    // Zákazníci a partneři — účetní tu schválně není
+    match /users/{uid}/crm/{dokument} {
+      allow read:  if jeMajitel(uid) || jeCtecka(uid);
+      allow write: if jeMajitel(uid);
+    }
+  }
+}

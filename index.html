@@ -115,6 +115,11 @@ body.uctetni a[target="_blank"] {
   color:inherit !important; text-decoration:none !important;
   border-bottom:none !important;
 }
+/* Faktury jsou výjimka — účetní je potřebuje otevřít, je to jeho práce */
+body.uctetni a.faktura-link {
+  pointer-events:auto; cursor:pointer;
+  color:var(--accent) !important;
+}
 
 /* V nastavení zbude odhlášení a manuál */
 body.uctetni #moSettings .fs,
@@ -2579,6 +2584,19 @@ function zapniUctetniRezim(majitelUid) {
   _vykresliUctetniListu();
 }
 
+/* Odhlášení režim vypíná. Bez tohohle by po odhlášení účetního zůstal
+   zapnutý i pro toho, kdo se přihlásí po něm ve stejné záložce — a protože
+   se v něm neukládá, majiteli by přestalo fungovat ukládání. Tiše, protože
+   sv() jen mlčky skončí. */
+function vypniUctetniRezim() {
+  if (!_uctetniRezim) return;
+  _uctetniRezim = false;
+  _uctetniMajitel = null;
+  document.body.classList.remove('uctetni');
+  var lista = document.getElementById('uctetniLista');
+  if (lista && lista.parentNode) lista.parentNode.removeChild(lista);
+}
+
 // Pruh pod hlavičkou, ať je pořád vidět, v čím skladu se účetní dívá
 function _vykresliUctetniListu() {
   if (document.getElementById('uctetniLista')) return;
@@ -4048,6 +4066,52 @@ function bazosActiveCount(bazosPlat) {
   return keys.size;
 }
 
+/* Doplní chybějící datum zaškrtnutí.
+
+   Datum se zapisovalo jen tomu kusu, který uživatel odškrtl. Jenže platformy
+   se kopírují ještě na třech místech — na sourozence ve skupině, při vrácení
+   na sklad a při duplikaci — a datum s sebou nešlo. Takový kus se pak počítal
+   do limitu padesáti (bazosActiveCount bere prázdné datum jako aktivní), ale
+   expirace ho přeskakovala (bazosExpireCheck u prázdného data rovnou končí).
+   Držel tedy místo napořád.
+
+   Ty tři cesty už datum kopírují. Tohle uklízí, co po nich zbylo:
+   vezme datum od sourozence ve skupině, a když není od koho, odhadne ho
+   z data nákupu. Odhad je schválně opatrný na správnou stranu — inzerát
+   nemůže být starší než zboží, takže staré kusy vyprší hned a čerstvé
+   dostanou datum, které dává smysl. */
+function healBazosCheckedAt() {
+  var doplneno = 0;
+  (items || []).forEach(function(it) {
+    if (!it) return;
+    BAZOS_PLATS.forEach(function(bp) {
+      if (!(it.platforms || []).includes(bp)) return;
+      if (it.bazosCheckedAt && it.bazosCheckedAt[bp]) return;
+
+      var kdy = null;
+      // 1) od sourozence ve skupině, který datum má
+      try {
+        var sourozenci = platGroupSiblings(it, it.id) || [];
+        sourozenci.forEach(function(s) {
+          var t = s && s.bazosCheckedAt && s.bazosCheckedAt[bp];
+          if (t && (!kdy || t > kdy)) kdy = t;
+        });
+      } catch(e) {}
+      // 2) jinak podle data nákupu — inzerát nemůže být starší než zboží
+      if (!kdy) {
+        var d = parseBuyDate(it);
+        if (d && !isNaN(d)) kdy = d.getTime();
+      }
+      if (!kdy) kdy = it.dateAdded || Date.now();
+
+      if (!it.bazosCheckedAt) it.bazosCheckedAt = {};
+      it.bazosCheckedAt[bp] = kdy;
+      doplneno++;
+    });
+  });
+  return doplneno;
+}
+
 // Automaticky odškrtne Bazoš platformy kde vypršely 2 měsíce — voláno při načtení
 function bazosExpireCheck() {
   const now = Date.now();
@@ -4072,8 +4136,14 @@ function bazosExpireCheck() {
 // snapshotem — sv() by posunulo lokální savedAt dopředu a stará data by přepsala cloud.
 var _bazosExpireDone = false;
 function bazosExpireCheckSafe() {
+  // Účetní data majitele nepřebírá ani lokálně — uložit by je stejně nemohl,
+  // ale bez tohohle by si v paměti odškrtal vypršené inzeráty a viděl
+  // u položek jiné platformy než majitel
+  if (jeUctetni()) return;
   if (_bazosExpireDone) return;
   _bazosExpireDone = true;
+  // Nejdřív doplnit chybějící data, jinak by je expirace zase přeskočila
+  try { if (healBazosCheckedAt()) sv(); } catch(e) { console.error('healBazosCheckedAt', e); }
   try { bazosExpireCheck(); } catch(e) { console.error('bazosExpire', e); }
 }
 
@@ -4116,8 +4186,15 @@ function togglePlatItem(id, platform) {
     var sibIdx2 = sibPlats.indexOf(platform);
     if (i === -1) {
       if (sibIdx2 === -1) sibPlats.push(platform);
+      // Datum musí jít se skupinou. Bez toho by se sourozenec počítal do
+      // limitu padesáti, ale nikdy by nevypršel.
+      if (isBazos) {
+        if (!sib.bazosCheckedAt) sib.bazosCheckedAt = {};
+        sib.bazosCheckedAt[platform] = items[idx].bazosCheckedAt[platform];
+      }
     } else {
       if (sibIdx2 !== -1) sibPlats.splice(sibIdx2, 1);
+      if (isBazos && sib.bazosCheckedAt) delete sib.bazosCheckedAt[platform];
     }
     sib.platforms = sibPlats;
   });
@@ -5504,6 +5581,9 @@ function onReturnToStock(it) {
   var siblings = platGroupSiblings(it, it.id);
   var withPlats = siblings.find(function(s) { return s.platforms && s.platforms.length > 0; });
   it.platforms = withPlats ? withPlats.platforms.slice() : [];
+  // S platformami musí jít i data zaškrtnutí, jinak by kus držel místo
+  // v limitu padesáti a nikdy nevypršel
+  if (withPlats && withPlats.bazosCheckedAt) it.bazosCheckedAt = Object.assign({}, withPlats.bazosCheckedAt);
   delete it._platformsBackup;
 }
 
@@ -7369,7 +7449,7 @@ function openDetail(id) {
     ] : []),
 
     ['Poznámka', it.note||'—'],
-    ...(it.invoiceUrl ? [['Faktura', '<a href="'+it.invoiceUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
+    ...(it.invoiceUrl ? [['Faktura', '<a href="'+it.invoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
   var secBase = ['Typ','Profil','SKU','Stav','Velikost'];
@@ -8443,6 +8523,8 @@ document.addEventListener('click', function(e) {
     var duplSiblings = platGroupSiblings(dupl, dupl.id);
     var sibWithPlats = duplSiblings.find(function(s){ return s.platforms && s.platforms.length > 0; });
     dupl.platforms = sibWithPlats ? sibWithPlats.platforms.slice() : [];
+    // Datum zaškrtnutí patří k platformě — viz healBazosCheckedAt()
+    if (sibWithPlats && sibWithPlats.bazosCheckedAt) dupl.bazosCheckedAt = Object.assign({}, sibWithPlats.bazosCheckedAt);
     items.unshift(dupl);
     sv(); renderStats(); renderItems();
     cm('moDetail');
@@ -13573,6 +13655,10 @@ document.addEventListener('fb-auth', function(e) {
 
   // Odhlášení — zruš listener a vyčisti data
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
+  // Režim účetního patří k účtu, ne k záložce. Vypíná se při každé změně
+  // přihlášení, ne jen při odhlášení — Firebase umí ohlásit rovnou nového
+  // uživatele a ten by jinak zdědil cizí kóji i zákaz ukládání.
+  vypniUctetniRezim();
   _fbCloudReady = false;
   // Zapomeň stav archivů i cache, ať se nepřenese mezi účty
   _archiveHashes = {}; _archiveCache = null; _cloudIncomplete = false; _photoHashes = {};

@@ -18,7 +18,16 @@ function check(n, c, e) { console.log((c ? 'PASS' : 'FAIL') + ' — ' + n + (c |
     ]));
   });
   await page.goto('file://' + path.resolve(__dirname, '..', 'index.html'), { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(3500);
+  // Čekej na připravenost, ne na hodinky. Pevných 3,5 s stačilo, když test běžel
+  // sám, ale pod plnou sadou se prohlížeč občas nestihl a test padal jednou
+  // za čas bez zjevné příčiny.
+  await page.waitForFunction(
+    () => document.readyState === 'complete'
+      && typeof openPlatMgr === 'function'
+      && typeof renderItems === 'function'
+      && !!document.getElementById('itemsGrid'),
+    { timeout: 20000 });
+  await page.waitForTimeout(300);
 
   // ── 1) Odebrání a přidání komisního eshopu se uloží
   const saved = await page.evaluate(async () => {
