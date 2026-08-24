@@ -1412,7 +1412,6 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <div class="fg">
       <div class="fi"><label>Datum nákupu</label><input type="date" id="fBuyDate"></div>
       <div class="fi"><label>Kde koupeno</label><input type="text" id="fWhere" placeholder="SNKRS, LVR, Nike…" autocomplete="new-password"></div>
-      <div class="fi" id="fHomeDateWrap" style="display:none"><label>Datum přijetí na sklad</label><input type="date" id="fHomeDate"></div>
       <div class="fi full"><label>Číslo objednávky</label><input type="text" id="fOrder" placeholder="pro dohledání faktury / emailu"></div>
       <div class="fi full"><label>Typ dokladu nákupu</label>
         <select id="fDokladTyp" onchange="onDokladTypChange()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 10px;outline:none;">
@@ -2107,6 +2106,17 @@ function stripProfileLogs(){
   var cleaned = 0;
   (items||[]).forEach(function(it){
     if (it && it.profileLog !== undefined) { delete it.profileLog; cleaned++; }
+  });
+  return cleaned;
+}
+
+// Jednorázový úklid: zbytek po zrušeném datu přijetí na sklad. Zapisovalo se
+// při volbě lokace „Doma", ale nic se z něj nepočítalo a nikdo ho nečetl.
+// Mizí z položek při načtení a z cloudu při nejbližším uložení.
+function stripHomeDates(){
+  var cleaned = 0;
+  (items||[]).forEach(function(it){
+    if (it && it.homeDate !== undefined) { delete it.homeDate; cleaned++; }
   });
   return cleaned;
 }
@@ -2963,8 +2973,9 @@ function _applyCloudData(data, archiveItems, photos) {
   try { healCustomCats(); } catch(e) {}
   // Dopočítej původní eurové cílové ceny u záznamů uložených před opravou
   try { healTargetPricesEur(); } catch(e) {}
-  // Ukliď zbytky po zrušené evidenci přesunů mezi profily
+  // Ukliď zbytky po zrušené evidenci přesunů mezi profily a po datu přijetí
   try { stripProfileLogs(); } catch(e) {}
+  try { stripHomeDates(); } catch(e) {}
   _itemsVersion++; window._lastFilterBuildKey = null;
   renderStats(); renderItems();
   return true;
@@ -5920,12 +5931,6 @@ function renderLocDrop() {
         closeLocDrop();
         updateWaitStateVisibility();
         if (opt === 'Doma') {
-          var _hd = document.getElementById('fHomeDate');
-          if (_hd && !_hd.value) {
-            var _hdToday = new Date().toISOString().slice(0,10);
-            _hd.value = _hdToday;
-            if (_hd._cdpSetVal) _hd._cdpSetVal(_hdToday);
-          }
         }
       }
     });
@@ -6023,7 +6028,6 @@ function openAddModal(){
   document.getElementById('fWhere').value='';
   document.getElementById('fLocation').value='Na cestě';
   setLocationFields('Na cestě');
-  var _fhd2=document.getElementById('fHomeDate'); if(_fhd2){_fhd2.value='';if(_fhd2._cdpSetVal)_fhd2._cdpSetVal('');}
   var _fDT=document.getElementById('fDokladTyp'); if(_fDT){_fDT.value='id';if(_fDT._csSync)_fDT._csSync();}
   var _fFPW=document.getElementById('fFpCisloWrap'); if(_fFPW) _fFPW.style.display='none';
   var _fDCW=document.getElementById('fDokladCisloWrap'); if(_fDCW) _fDCW.style.display='none';
@@ -6096,7 +6100,6 @@ function openEdit(id){
   })();
   document.getElementById('fFrom').value=it.from||'';
   setLocationFields(it.location||'');
-  var _fhd = document.getElementById('fHomeDate'); if(_fhd) _fhd.value = it.homeDate||'';
   // fState removed
   var fws=document.getElementById('fWaitState'); if(fws && it.waitState){ fws.value=it.waitState; if(fws._csSync) fws._csSync(); }
   document.getElementById('fSaleRef').value=it.saleRef||'';
@@ -6197,7 +6200,7 @@ function openEdit(id){
     var fTC2=document.getElementById('fTrackCarrier');
     if(fTC2&&it.trackingCarrier){fTC2.value=it.trackingCarrier;if(fTC2._csSync)fTC2._csSync();}
     initNumberSteppers();
-    ['fBuyDate','fSaleDate','fPayoutDate','fHomeDate'].forEach(function(id){
+    ['fBuyDate','fSaleDate','fPayoutDate'].forEach(function(id){
       var el = document.getElementById(id);
       if (el && el._cdpSync) el._cdpSync();
     });
@@ -6259,7 +6262,6 @@ async function saveItem(){
       }
       return lid;
     })(),
-    homeDate:document.getElementById('fHomeDate')?.value||(getLocationValue()==='Doma'?new Date().toISOString().slice(0,10):undefined),
     actualSell:0,
     location:getLocationValue()||'Doma',
     tags:(function(){ var v=document.getElementById('fTags')?.value||''; return v.split(',').map(function(t){return t.trim().toLowerCase();}).filter(Boolean); })(),
@@ -9139,12 +9141,10 @@ function bulkChangeLoc(){
     saveBtn.addEventListener('mouseleave', function(){ this.style.opacity='1'; });
     saveBtn.addEventListener('click', function(){
       var newLoc = sel.value;
-      var _bulkToday = new Date().toISOString().slice(0,10);
       bulkSelected.forEach(function(id){
         var it = items.find(function(x){ return x.id===id; });
         if(it) {
           it.location = newLoc;
-          if(newLoc === 'Doma' && !it.homeDate) it.homeDate = _bulkToday;
           if(it.saleState === 'stock' && !locNeedsTracking(newLoc)) clearTracking(it);
         }
       });
@@ -12822,7 +12822,7 @@ function _init() {
   // a mohlo tak při startu přebít čerstvější kopii z cloudu
   try{
     var _fixed = healTargetPricesEur();
-    var _stripped = stripProfileLogs();
+    var _stripped = stripProfileLogs() + stripHomeDates();
     if(_fixed || _stripped) localStorage.setItem(SK, JSON.stringify(items));
   }catch(e){}
   // Bazoš expirace hned jen pokud nečekáme cloud session — jinak až po prvním snapshotu
@@ -13321,8 +13321,6 @@ function updateWaitStateVisibility() {
   var fLoc = document.getElementById('fLocation');
   var loc = fLoc ? fLoc.value : '';
   if (tw) tw.style.display = ((isStock && locNeedsTracking(loc)) || (isWaiting && fws && fws.value === 'sent')) ? '' : 'none';
-  var hdWrap = document.getElementById('fHomeDateWrap');
-  if (hdWrap) hdWrap.style.display = (loc === 'Doma') ? '' : 'none';
 }
 function updateSizeVisibility() {
   var catEl = document.getElementById('fCat');
@@ -13472,7 +13470,7 @@ function initAllCustomInputs() {
     }
   });
   // Date pickers
-  ['fBuyDate','fSaleDate','fPayoutDate','fHomeDate','sSaleDate','bsSaleDate','crmFldFollowupDate'].forEach(id => {
+  ['fBuyDate','fSaleDate','fPayoutDate','sSaleDate','bsSaleDate','crmFldFollowupDate'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.type === 'date') initCustomDatePicker(el);
   });
