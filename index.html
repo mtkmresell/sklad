@@ -5817,7 +5817,11 @@ function _cleanBulkOnDelete(id) {
   // Pokud bulk nemá žádné children, smaž ho taky
   if (bulk.itemIds.length === 0) {
     items = items.filter(function(x){ return x.id !== bulk.id; });
+    return;
   }
+  // Souhrn hlavičky musí sednout na to, co v balíku zbylo — jinak by dál
+  // nesla nákupní cenu a zisk za kus, který už v něm není
+  try { _prepocitejBulk(bulk.id, id); } catch(e) {}
 }
 
 function del(id){
@@ -9513,35 +9517,11 @@ function saveBulkSell() {
 }
 
 // Pomocná: vrátí bulk záznam pro dané bulkId
-function returnBulkToStock(bulkId) {
-  makeConfirmOverlay('Vrátit bulk na sklad?<br><span style="color:var(--muted);font-size:12px;">Všechny položky budou vráceny na sklad.</span>', 'Vrátit na sklad', 'var(--accent)', function() {
-    var children = getBulkItems(bulkId);
-    children.forEach(function(ch) {
-      ch.saleState = 'stock'; ch.bulkId = null; ch.saleDate = null;
-      ch.sellPrice = 0; ch.soldWhere = ''; ch.waitState = null;
-    });
-    items = items.filter(function(it) { return it.id !== bulkId; });
-    sv(); renderItems(); renderStats();
-    showToast('Bulk vrácen na sklad.');
-  });
-}
-
-function delBulk(bulkId) {
-  makeConfirmOverlay('Smazat celý bulk prodej?<br><span style="color:var(--muted);font-size:12px;">Všechny položky budou vráceny na sklad.</span>', 'Smazat bulk', 'var(--danger)', function() {
-    var children = getBulkItems(bulkId);
-    children.forEach(function(ch) {
-      ch.saleState = 'stock';
-      ch.bulkId = null;
-      ch.saleDate = null;
-      ch.sellPrice = 0;
-      ch.soldWhere = '';
-      ch.waitState = null;
-    });
-    items = items.filter(function(it) { return it.id !== bulkId; });
-    sv(); renderItems(); renderStats();
-    showToast('Bulk smazán, položky vráceny na sklad.');
-  });
-}
+/* Obě tlačítka u balíku dřív dělala řádek po řádku totéž — vrátila kusy na
+   sklad a smazala hlavičku. Teď dělá každé něco jiného: šipka balík rozpustí,
+   křížek smaže i s kusy. Definice žijí v sekci ZÁSAHY DO BULK PRODEJE. */
+function returnBulkToStock(bulkId) { rozpustBulk(bulkId); }
+function delBulk(bulkId) { smazBulkVcetneKusu(bulkId); }
 
 function openBulkEditModal(bulkId) {
   var rec = getBulkRecord(bulkId);
@@ -9563,14 +9543,20 @@ function openBulkEditModal(bulkId) {
     };
     var iStyle = 'width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;';
     var curWs = rec.waitState || 'sending';
+    // Zaplacený balík už nikam neputuje — stavy čekání by u něj nedávaly smysl.
+    // Místo nich se edituje datum payoutu, tedy to, co u prodaného zajímá.
+    var jeZaplaceny = rec.saleState === 'paid';
     var wsStates = [{v:'sending',l:'K odeslání'},{v:'sent',l:'Odesláno'},{v:'payout',l:'Čeká na payout'}];
     var wsHtml = wsStates.map(function(s){ var a=curWs===s.v; return '<button data-ws="'+s.v+'" style="flex:1;padding:7px 6px;border:1px solid '+(a?'var(--accent)':'var(--border)')+';background:'+(a?'rgba(200,255,0,0.1)':'none')+';color:'+(a?'var(--accent)':'var(--muted)')+';border-radius:var(--radius-sm);cursor:pointer;font-size:12px;font-family:inherit;">'+s.l+'</button>'; }).join('');
+    var stavPole = jeZaplaceny
+      ? fld('Datum payoutu', '<input id="_bePay" type="date" value="'+(rec.payoutDate||'')+'">')
+      : fld('Stav', '<div style="display:flex;gap:6px;">'+wsHtml+'</div>');
     var rawDate = rec.saleDate ? (rec.saleDate.includes('.')?rec.saleDate.split('.').reverse().join('-'):rec.saleDate) : '';
     var body = '<div style="padding:16px 20px;overflow-y:auto;flex:1;">' +
       fld('Název', '<input id="_beN" style="'+iStyle+'" value="'+rec.name.replace(/"/g,'&quot;')+'">') +
-      fld('Stav', '<div style="display:flex;gap:6px;">'+wsHtml+'</div>') +
+      stavPole +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-        fld('Prodejní cena', '<div style="display:flex;gap:6px;align-items:stretch;"><input id="_beP" type="number" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" value="'+(rec.sellPrice||0)+'"><select id="_beC"><option value="CZK"'+(rec.sellCurrency!=='EUR'?' selected':'')+'>CZK</option><option value="EUR"'+(rec.sellCurrency==='EUR'?' selected':'')+'>EUR</option></select></div>') +
+        fld('Prodejní cena', '<div style="display:flex;gap:6px;align-items:stretch;"><input id="_beP" type="number" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;" value="'+(rec.sellCurrency==='EUR'?getSellOrig(rec):(rec.sellPrice||0))+'"><select id="_beC"><option value="CZK"'+(rec.sellCurrency!=='EUR'?' selected':'')+'>CZK</option><option value="EUR"'+(rec.sellCurrency==='EUR'?' selected':'')+'>EUR</option></select></div>') +
         fld('Datum prodeje', '<input id="_beD" type="date" value="'+rawDate+'">') +
       '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
@@ -9612,6 +9598,8 @@ function openBulkEditModal(bulkId) {
     // Custom date picker
     var dateInp = box.querySelector('#_beD');
     if (dateInp) initCustomDatePicker(dateInp);
+    var payInp = box.querySelector('#_bePay');
+    if (payInp) initCustomDatePicker(payInp);
     // State toggle + hover
     var selectedWs = curWs;
     box.querySelectorAll('[data-ws]').forEach(function(btn) {
@@ -9705,9 +9693,23 @@ function openBulkEditModal(bulkId) {
       var rawDate2 = box.querySelector('#_beD').value;
       var fmted = rawDate2 ? rawDate2.split('-').reverse().join('.') : '';
       items[idx].name = box.querySelector('#_beN').value.trim() || items[idx].name;
-      items[idx].sellPrice = parseFloat(box.querySelector('#_beP').value) || 0;
-      items[idx].sellCurrency = box.querySelector('#_beC').value;
+      // Cena se zadává v Kč nebo v eurech, ale sellPrice je vždycky v Kč.
+      // Bez přepočtu by se zadaných 300 € uložilo jako 300 Kč. Kurz se bere
+      // ten uložený k prodeji, ne dnešní — viz pravidlo o kurzech v CLAUDE.md.
+      var _bCena = parseFloat(box.querySelector('#_beP').value) || 0;
+      var _bMena = box.querySelector('#_beC').value;
+      var _bKurz = items[idx].profitRateEur || eurRate || 25;
+      items[idx].sellPrice = _bMena === 'EUR' ? Math.round(_bCena * _bKurz) : _bCena;
+      items[idx].sellCurrency = _bMena;
+      if (_bMena === 'EUR') items[idx].sellPriceOrig = _bCena;
+      else delete items[idx].sellPriceOrig;
       items[idx].saleDate = fmted;
+      // U zaplaceného balíku se místo stavu čekání edituje datum payoutu
+      var _bPay = box.querySelector('#_bePay');
+      if (_bPay) {
+        if (_bPay.value) items[idx].payoutDate = _bPay.value;
+        else delete items[idx].payoutDate;
+      }
       items[idx].soldWhere = box.querySelector('#_beW').value.trim();
       items[idx].saleRef = box.querySelector('#_beSR').value.trim();
       // Stav — propaguj na děti
@@ -9722,42 +9724,30 @@ function openBulkEditModal(bulkId) {
         items[idx].trackingNum = newTrkNum; items[idx].trackingCarrier = newTrkCarrier; items[idx].trackingUrl = trkUrl||items[idx].trackingUrl;
         getBulkItems(bulkId).forEach(function(ch){ var ci=items.findIndex(function(x){return x.id===ch.id;}); if(ci!==-1){items[ci].trackingNum=newTrkNum;items[ci].trackingCarrier=newTrkCarrier;items[ci].trackingUrl=trkUrl||items[ci].trackingUrl;} });
       }
-      // Přepočítej profit — sellPrice v bulku je vždy v Kč
-      var totalBuy = getBulkItems(bulkId).reduce(function(s,ch){ return s+(ch.buyCurrency==='EUR'?(ch.buyPrice||0)*(eurRate||25):(ch.buyPrice||0)); }, 0);
-      items[idx].profit = Math.round(items[idx].sellPrice - totalBuy);
-      items[idx].roi = totalBuy > 0 ? parseFloat(((items[idx].profit / totalBuy) * 100).toFixed(1)) : 0;
+      // Souhrn dopočítá společný přepočet — počítá i s vedlejšími náklady
+      // a opraví i totalBuyPrice, což se tu dřív nedělalo
+      _prepocitejBulk(bulkId);
       sv(); renderItems(); renderStats();
       close(); showToast('Bulk upraven.', 'ok');
     });
   }
 
+  // Úklid i přepočet jsou společné se sekcí Prodáno — viz ZÁSAHY DO BULK PRODEJE.
+  // Dřív se tu počítalo vlastní: zisk bez vedlejších nákladů a bez opravy
+  // totalBuyPrice, takže hlavička pak ukazovala starou nákupní cenu s novým ziskem.
   window.removeBulkChild = function(bId, chId) {
-    var chIdx = items.findIndex(function(x){ return x.id===chId; });
-    if (chIdx === -1) return;
-    items[chIdx].saleState = 'stock';
-    items[chIdx].bulkId = null;
-    items[chIdx].saleDate = null;
-    items[chIdx].sellPrice = 0;
-    items[chIdx].soldWhere = '';
-    items[chIdx].waitState = null;
-    // Přepočítej bulk záznam
-    var bIdx = items.findIndex(function(x){ return x.id===bId; });
-    if (bIdx !== -1) {
-      var remaining = getBulkItems(bId);
-      if (remaining.length === 0) {
-        items = items.filter(function(x){ return x.id!==bId; });
-        sv(); renderItems(); renderStats();
-        close(); document.removeEventListener('keydown',_esc);
-        showToast('Poslední položka vyjmuta — bulk smazán.', 'ok');
-        return;
-      }
-      var totalBuy2 = remaining.reduce(function(s,ch){ return s+(ch.buyCurrency==='EUR'?(ch.buyPrice||0)*(eurRate||25):(ch.buyPrice||0)); }, 0);
-      items[bIdx].profit = Math.round((items[bIdx].sellPrice||0) - totalBuy2);
-      items[bIdx].roi = totalBuy2 > 0 ? parseFloat(((items[bIdx].profit / totalBuy2) * 100).toFixed(1)) : 0;
-    }
+    var ch = items.find(function(x){ return x.id===chId; });
+    if (!ch) return;
+    _ocistiPoBulku(ch);
+    var zbyva = _prepocitejBulk(bId);
     sv(); renderItems(); renderStats();
+    if (!zbyva) {
+      close(); document.removeEventListener('keydown',_esc);
+      showToast('Poslední položka vyjmuta — balík zanikl.', 'ok');
+      return;
+    }
     render();
-    showToast('Položka vyjmuta z bulku, vrácena na sklad.', 'ok');
+    showToast('Položka vyjmuta z balíku, vrácena na sklad.', 'ok');
   };
 
   document.body.appendChild(ov);
@@ -9775,6 +9765,117 @@ function getBulkItems(bulkId) {
 
 // Set rozbalených bulk skupin
 var expandedBulks = new Set();
+
+/* ══════════════════════════════════════════════════════════════════════
+   ZÁSAHY DO BULK PRODEJE
+
+   Bulk je hlavička (type:'bulk') plus kusy, které na sebe mají odkaz přes
+   bulkId. Prodej — cena, zisk, payout — sedí na hlavičce; kus si nese jen
+   otisk toho, že je součástí balíku.
+
+   Tenhle otisk je potřeba umět zase sundat. Dřív se čistil jen zčásti:
+   zůstávalo sledování zásilky, dopravce a reference prodeje, takže se kus
+   vrátil na sklad a pořád u sebe měl odkaz na zásilku z prodeje, který se
+   zrušil. A když z bulku někdo vyndal kus, hlavička si dál nesla původní
+   nákupní cenu i zisk — souhrn pak seděl na jiný počet kusů, než kolik
+   v balíku doopravdy bylo.
+══════════════════════════════════════════════════════════════════════ */
+
+// Sundá z kusu všechno, co na něj otiskl prodej v balíku
+function _ocistiPoBulku(ch) {
+  if (!ch) return;
+  ch.saleState = 'stock';
+  ch.bulkId = null;
+  ch.waitState = null;
+  ch.sellPrice = 0;
+  ch.soldWhere = '';
+  ['saleDate', 'payoutDate', 'saleRef', 'profit', 'roi', 'sellCurrency',
+   'sellPriceOrig', 'actualSell', 'payoutMethod', 'payoutRateEur', 'profitRateEur'].forEach(function(k) {
+    delete ch[k];
+  });
+  try { clearTracking(ch); } catch(e) {}
+}
+
+/* Přepočítá souhrn hlavičky podle kusů, které v balíku zbyly.
+   Prodejní cena se nemění — ta je za celý balík a nikdo ji nesnížil tím,
+   že se kus vyndal. Mění se nákupní strana, a tím pádem i zisk. */
+/* vynechId — kus, který se právě maže. Úklid při mazání položky běží ještě
+   před tím, než položka zmizí z items, takže by se jinak do součtu započítala. */
+function _prepocitejBulk(bulkId, vynechId) {
+  var rec = getBulkRecord(bulkId);
+  if (!rec) return null;
+  var deti = getBulkItems(bulkId).filter(function(it) { return it.id !== vynechId; });
+  if (!deti.length) {
+    items = items.filter(function(x) { return x.id !== bulkId; });
+    return null;
+  }
+  var kurz = rec.profitRateEur || eurRate || 25;
+  var nakup = deti.reduce(function(s, it) {
+    return s + (it.buyCurrency === 'EUR' ? (it.buyPrice || 0) * kurz : (it.buyPrice || 0));
+  }, 0);
+  rec.itemIds = deti.map(function(it) { return it.id; });
+  if (rec.itemPrices) {
+    Object.keys(rec.itemPrices).forEach(function(id) {
+      if (rec.itemIds.indexOf(id) === -1) delete rec.itemPrices[id];
+    });
+  }
+  rec.totalBuyPrice = nakup;
+  rec.profit = (rec.sellPrice || 0) - nakup - (rec.extraCosts || 0);
+  rec.roi = nakup > 0 ? parseFloat(((rec.profit / nakup) * 100).toFixed(1)) : 0;
+  // Balík je osobní, jen když jsou osobní všechny zbylé kusy
+  rec.personal = deti.every(function(it) { return !!it.personal; });
+  return rec;
+}
+
+// Rozpustí balík — kusy zpátky na sklad, hlavička pryč
+function rozpustBulk(bulkId) {
+  var pocet = getBulkItems(bulkId).length;
+  makeConfirmOverlay('Rozpustit balík?<br><span style="color:var(--muted);font-size:12px;">'
+    + pocet + ' ' + (pocet === 1 ? 'kus se vrátí' : (pocet < 5 ? 'kusy se vrátí' : 'kusů se vrátí'))
+    + ' na sklad. Nákupní data zůstanou, prodej se zruší.</span>',
+    'Rozpustit', 'var(--accent)', function() {
+      getBulkItems(bulkId).forEach(_ocistiPoBulku);
+      items = items.filter(function(it) { return it.id !== bulkId; });
+      sv(); renderItems(); renderStats();
+      showToast(pocet + ' ks vráceno na sklad, balík zrušen.');
+    });
+}
+
+// Smaže balík i s kusy — nevratné, mizí i nákupní data
+function smazBulkVcetneKusu(bulkId) {
+  var deti = getBulkItems(bulkId);
+  var pocet = deti.length;
+  makeConfirmOverlay('Smazat balík <b>i s kusy</b>?<br><span style="color:var(--muted);font-size:12px;">'
+    + 'Smaže se ' + pocet + ' ' + (pocet === 1 ? 'položka' : (pocet < 5 ? 'položky' : 'položek'))
+    + ' včetně nákupních dat. Tohle se nedá vrátit.</span>',
+    'Smazat vše', 'var(--danger)', function() {
+      var kSmazani = deti.map(function(ch) { return ch.id; });
+      items = items.filter(function(it) {
+        return it.id !== bulkId && kSmazani.indexOf(it.id) === -1;
+      });
+      sv(); renderItems(); renderStats();
+      showToast(pocet + ' položek smazáno i s balíkem.', 'err');
+    });
+}
+
+// Vyndá jeden kus z balíku — vrátí ho na sklad a hlavičce přepočítá souhrn
+function vyjmiZBulku(itemId) {
+  var ch = items.find(function(x) { return x.id === itemId; });
+  if (!ch || !ch.bulkId) return;
+  var bulkId = ch.bulkId;
+  var nazev = ch.name || 'Kus';
+  var zbyde = getBulkItems(bulkId).length - 1;
+  makeConfirmOverlay('Vyjmout z balíku?<br><span style="color:var(--muted);font-size:12px;">'
+    + nazev.slice(0, 60) + ' se vrátí na sklad. '
+    + (zbyde > 0 ? 'Balíku se přepočítá souhrn.' : 'Byl to poslední kus, balík tím zanikne.')
+    + '</span>',
+    'Vyjmout', 'var(--accent)', function() {
+      _ocistiPoBulku(ch);
+      _prepocitejBulk(bulkId);
+      sv(); renderItems(); renderStats();
+      showToast(zbyde > 0 ? 'Kus vrácen na sklad, souhrn přepočítán.' : 'Kus vrácen na sklad, balík zanikl.');
+    });
+}
 
 function toggleBulkExpand(bulkId) {
   if(expandedBulks.has(bulkId)) expandedBulks.delete(bulkId);
@@ -14477,9 +14578,18 @@ function renderSoldView(){
         var bProfit=it.profit||0;
         var bRoi=it.roi||0;
         var bpc=bProfit>0?'var(--accent)':bProfit<0?'var(--danger)':'var(--muted)';
-        html+='<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+'" onclick="toggleBulkExpand(\''+it.id+'\')" style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+        // Akce se ukazují až při najetí na řádek — tabulka je hustá a stejně
+        // to dělá sekce Čeká, ať se to chová všude stejně
+        var _bAkce = '<span id="bact_'+it.id+'" style="opacity:0;pointer-events:none;transition:opacity 0.15s;margin-left:10px;display:inline-flex;gap:4px;vertical-align:middle;">'
+          + '<button onclick="event.stopPropagation();openBulkEditModal(\''+it.id+'\')" class="ta-btn">Upravit</button>'
+          + '<button onclick="event.stopPropagation();rozpustBulk(\''+it.id+'\')" class="ta-btn" data-tip="Rozpustit — kusy zpátky na sklad">↩</button>'
+          + '<button onclick="event.stopPropagation();smazBulkVcetneKusu(\''+it.id+'\')" class="ta-btn t-del" data-tip="Smazat balík i s kusy">✕</button>'
+          + '</span>';
+        var _bHover = ' onmouseover="var _b=document.getElementById(\'bact_'+it.id+'\');if(_b){_b.style.opacity=\'1\';_b.style.pointerEvents=\'auto\';}"'
+          + ' onmouseout="var _b=document.getElementById(\'bact_'+it.id+'\');if(_b){_b.style.opacity=\'0\';_b.style.pointerEvents=\'none\';}"';
+        html+='<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+'" onclick="toggleBulkExpand(\''+it.id+'\')"'+_bHover+' style="border-bottom:1px solid rgba(255,255,255,0.04);">';
         html+='<td style="padding:6px 8px;"><span class="bulk-folder-icon'+(isExp?' open':'')+'" style="font-size:10px;color:var(--muted);margin-right:5px;">▶</span><span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:1px 5px;font-family:monospace;">BULK</span></td>';
-        html+='<td style="padding:6px 8px;font-size:13px;font-weight:700;font-family:\'Syne\',sans-serif;">'+it.name+(profBadge(it)?' '+profBadge(it):'')+'</td>';
+        html+='<td style="padding:6px 8px;font-size:13px;font-weight:700;font-family:\'Syne\',sans-serif;">'+it.name+(profBadge(it)?' '+profBadge(it):'')+_bAkce+'</td>';
         html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+children.length+' ks</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">—</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);">'+czk(it.totalBuyPrice||0)+'</td>';
@@ -14496,7 +14606,8 @@ function renderSoldView(){
             var itemSell=it.itemPrices&&it.itemPrices[ch.id]?czk(it.itemPrices[ch.id]):'—';
             var itemProfit=it.itemPrices&&it.itemPrices[ch.id]?(it.itemPrices[ch.id]-buyKcC):null;
             var ipc=itemProfit!=null?(itemProfit>0?'var(--accent)':itemProfit<0?'var(--danger)':'var(--muted)'):'var(--muted)';
-            html+='<tr class="bulk-child-row">';
+            // Klikací na detail — stejně jako v Čeká, kde to fungovalo odjakživa
+            html+='<tr class="bulk-child-row" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
             html+='<td style="padding:3px 8px;"><span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
             html+='<td style="padding:3px 8px;color:var(--muted2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+ch.name+'</td>';
             html+='<td style="padding:3px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(ch.sku||'—')+'</td>';
@@ -14504,7 +14615,9 @@ function renderSoldView(){
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+czk(buyKcC)+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--accent);">'+itemSell+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:'+ipc+';">'+(itemProfit!=null?czkSign(itemProfit):'—')+'</td>';
-            html+='<td colspan="4" style="padding:3px 8px;"></td>';
+            html+='<td colspan="4" style="padding:3px 8px;text-align:right;">'
+              + '<button class="ta-btn" onclick="event.stopPropagation();vyjmiZBulku(\''+ch.id+'\')" data-tip="Vyjmout z balíku na sklad">↩</button>'
+              + '</td>';
             html+='</tr>';
           });
         }
