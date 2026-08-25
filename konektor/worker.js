@@ -382,8 +382,6 @@ async function zpracujZpravu(zprava, env) {
   return chyba(id, -32601, 'neznámá metoda: ' + method);
 }
 
-/* ── Vstupní bod ────────────────────────────────────────────────────── */
-// Porovnání odolné vůči měření času — ať se token nedá uhodnout po znacích
 /* ══════════════════════════════════════════════════════════════════════
    UPOZORNĚNÍ E-MAILEM
 
@@ -395,13 +393,16 @@ async function zpracujZpravu(zprava, env) {
    ── Proč to nechodí každý den ────────────────────────────────────────
    Upozornění, které chodí pořád, se po týdnu přestane číst. Proto se
    nehlásí stav („zbývá 7 dní"), ale okamžik: každá věc se ozve jen ten
-   den, kdy dojde na daný práh. Inzerát tedy přijde ve zprávě třikrát za
-   život — sedm dní, tři dny a den před vypršením — a jinak je ticho.
+   den, kdy je s ní co dělat.
+
+     inzerát na Bazoši   v den vypršení, jednou za život
+     payout              v den, kdy měly peníze dorazit, pak po týdnech
+     souhrn za měsíc     prvního
 
    Vedlejší přínos: nemusí se nikam pamatovat, co už se poslalo. Práh je
-   dané číslo dní a to nastane samo od sebe právě jednou. Když jeden běh
-   vynechá (výpadek), tenhle jeden bod se přeskočí — proto jsou prahy
-   tři, ne jeden.
+   dané číslo dní a to nastane samo od sebe právě jednou. Když ten jeden
+   běh vynechá (výpadek), upozornění se přeskočí — u payoutu to dožene
+   další týden, u inzerátu ne. Za to nestojí posílat mail denně.
 
    ── Peníze schválně nikde ────────────────────────────────────────────
    Stejné pravidlo jako u zbytku konektoru: kurzy EUR umí správně jen
@@ -516,7 +517,7 @@ function ocekavanyPayout(kdeProdano, skupiny) {
   return VYCHOZI_PAYOUT;
 }
 
-/* ── Inzeráty, které se blíží k vypršení ────────────────────────────── */
+/* ── Inzeráty, kterým dnes vypršela platnost ────────────────────────── */
 function bazosBlok(polozky, dnes) {
   const nalezy = [];
   for (const plat of BAZOS_PLATFORMY) {
@@ -530,10 +531,7 @@ function bazosBlok(polozky, dnes) {
       const zbyva = BAZOS_PLATNOST - Math.round((dnes - prazskyDen(kdy)) / DEN);
       if (zbyva !== BAZOS_PRAH) continue;
       const klic = (it.sku && String(it.sku).trim()) ? String(it.sku).trim() : (it.name || it.id);
-      const drive = podleInzeratu.get(klic);
-      if (!drive || zbyva < drive.zbyva) {
-        podleInzeratu.set(klic, { zbyva, nazev: it.name || klic, plat });
-      }
+      if (!podleInzeratu.has(klic)) podleInzeratu.set(klic, { nazev: it.name || klic, plat });
     }
     for (const z of podleInzeratu.values()) nalezy.push(z);
   }
@@ -705,6 +703,8 @@ async function pripravUpozorneni(env) {
   return { polozky, zprava: sestavZpravu(polozky, Date.now(), data) };
 }
 
+/* ── Vstupní bod ────────────────────────────────────────────────────── */
+// Porovnání odolné vůči měření času — ať se token nedá uhodnout po znacích
 function shodujeSe(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
   let rozdil = 0;
