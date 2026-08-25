@@ -9634,6 +9634,10 @@ function openBulkEditModal(bulkId) {
     // Custom select pro měnu
     var curSel = box.querySelector('#_beC');
     if (curSel) initCustomSelect(curSel);
+    // Typ kupujícího vzniká až tady, takže vlastní vzhled potřebuje taky —
+    // bez toho by se vykreslil systémovým dropdownem, který sem nepatří
+    var btSel = box.querySelector('#beBuyerType');
+    if (btSel) { initCustomSelect(btSel); var bw = btSel.closest('.cs-wrap'); if (bw) { bw.classList.add('cs-wide'); bw.style.width = '100%'; } }
     // Custom select pro dopravce
     var carrierSel = box.querySelector('#_beTrkCarrier');
     if (carrierSel) { initCustomSelect(carrierSel); var cw2=carrierSel.closest('.cs-wrap'); if(cw2){cw2.classList.add('cs-wide');cw2.style.width='100%';} }
@@ -13193,7 +13197,7 @@ function initCustomSelect(selectEl) {
   selectEl._csInited = true;
   selectEl.style.display = 'none';
   const wrap = document.createElement('div');
-  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod','fDokladTyp','sBuyerType','fBuyerType'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency','_beC','crmHMPriceCur'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
+  wrap.className = 'cs-wrap' + (['fCat','fCond','fState','fWaitState','fTrackCarrier','fPayoutMethod','fDokladTyp','sBuyerType','fBuyerType','bsBuyerType'].indexOf(selectEl.id) !== -1 ? ' cs-fullwidth' : '') + (['sWaitState'].indexOf(selectEl.id) !== -1 ? ' cs-wide cs-noarrow' : '') + (['fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sSellCurrency','sExtraCurrency','bsTotalCurrency','bsExtraCurrency','_beC','crmHMPriceCur'].indexOf(selectEl.id) !== -1 ? ' cs-currency' : '');
   selectEl.parentNode.insertBefore(wrap, selectEl);
   wrap.appendChild(selectEl);
   const btn = document.createElement('div');
@@ -13624,7 +13628,7 @@ function initNumberSteppers() {
 }
 function initAllCustomInputs() {
   // Custom selects - všechny v modal formuláři
-  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','filterListingStatus','filterListingPlatform','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp','crmFldStatus','sBuyerType','fBuyerType','crmStatusFilter','crmVztahFilter','crmAktivitaFilter'].forEach(id => {
+  ['fCat','fCond','fCategory','fSize','fCondition','fLocation','fBuyCurrency','fSellCurrency','fExtraCurrency','fTargetCurrency','sortBy','filterSoldWhere','filterWaitState','filterListingStatus','filterListingPlatform','sSellCurrency','sExtraCurrency','sWaitState','fState','fWaitState','bsWaitState','bsTotalCurrency','bsExtraCurrency','fTrackCarrier','fPayoutMethod','fDokladTyp','crmFldStatus','sBuyerType','fBuyerType','bsBuyerType','crmStatusFilter','crmVztahFilter','crmAktivitaFilter'].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.tagName === 'SELECT') {
       // Naplň dopravce
