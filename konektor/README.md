@@ -177,6 +177,24 @@ a s průměrem půl roku zpět; rozpad podle místa prodeje a kategorie;
 nejlepší a nejhorší obchod; a stav skladu k dnešku včetně vázaného
 kapitálu.
 
+**Barvy jsou stavové, ne ozdobné.** Zelená `#c8ff00`, oranžová `#ffaa00`
+a červená `#ff4444` — tytéž, kterými aplikace značí zisk a stavy položek.
+
+Poměrová čísla (marže, ROI, zisk na kus) se barví podle **vlastní historie
+skladu**, ne podle vymyšlené hranice: srovnává se s průměrem půl roku zpět
+a kolem něj je osmiprocentní pásmo, ve kterém se nic nehlásí. Co je „dobrá
+marže", ví jedině tenhle sklad; pevná hranice by lhala. Stejně je na tom
+řádek *nejdéle leží* — hlásí se, až kus překročí trojnásobek obvyklé držby,
+protože pevný počet dní znamená u tenisek něco jiného než u LEGA.
+
+**Barva nikdy nestojí sama.** U každého obarveného čísla je i znaménko,
+šipka nebo slovo (`▲ nad obvyklým`, `ztráta`). Jednak kvůli barvosleposti —
+zelená a oranžová jsou pro deuteranopa blízko sebe — jednak proto, že
+textová verze zprávy žádné barvy nemá a musí říct totéž. Hlídá to test.
+
+V rozpadu prodejů je u každého řádku proužek, jehož **délka** ukazuje podíl
+na nejlepším řádku. Informaci nese délka, ne barva.
+
 ### Jak mail vypadá
 
 Posílá se **v HTML i jako prostý text zároveň** a klient si vybere. Bez

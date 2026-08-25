@@ -411,6 +411,34 @@ function prodanoPred(ted, dnu) {
   ok('řekne, kolika kusů se to týká', /U 1 kusu chybí uložený kurz/.test(nepresny), nepresny.slice(0, 400));
   ok('i jakým kurzem počítal', /kurzem 25/.test(nepresny), nepresny.slice(0, 400));
 
+  /* Barva má říct, jestli je číslo dobré nebo špatné. Nesmí ale zůstat
+     jediným nositelem té informace: barvoslepý ji nepřečte a prostý text
+     zprávy žádné barvy nemá. U každého obarveného čísla proto musí být
+     i znaménko, šipka nebo slovo. */
+  sekce('5d) Barvy v číslech');
+  nastavSklad(SRPEN);
+  const barvy = (await cron(PRVNIHO))[0] || {};
+  ok('zisk je zeleně', /#c8ff00[^>]*>8 300 Kč/.test(cist(barvy.html)), '');
+  // Obojí směr musí být slovem — kdyby značku nesl jen jeden, zůstala by
+  // u druhého barva jako jediná stopa
+  ok('co je nad obvyklým, je i napsané',
+    /▲ nad obvyklým/.test(cist(barvy.text)), cist(barvy.text).slice(0, 500));
+  ok('a co pod obvyklým taky',
+    /▼ pod obvyklým/.test(cist(barvy.text)), cist(barvy.text).slice(0, 500));
+  ok('rozpad má proužek podle podílu', /width:100%/.test(barvy.html || ''));
+  ok('a ten nejmenší je kratší', /width:([1-9]|[1-9]\d)%/.test(barvy.html || ''));
+
+  // Ztrátový měsíc musí být na první pohled poznat
+  nastavSklad([
+    { id: 'z1', name: 'Prodělek', category: 'sneakers', soldWhere: 'Vinted',
+      saleState: 'paid', payoutDate: '2026-08-10', buyDate: '2026-06-01',
+      buyPrice: 5000, sellPrice: 3000, extraCosts: 0 },
+  ]);
+  const ztrata = (await cron(PRVNIHO))[0] || {};
+  ok('ztráta je červeně', /#ff4444/.test(ztrata.html || ''), '');
+  ok('a řekne se to i slovem', /ztráta/.test(cist(ztrata.text)), cist(ztrata.text).slice(0, 400));
+  ok('záporné číslo si nese znaménko', /-2 000 Kč/.test(cist(ztrata.text)), cist(ztrata.text).slice(0, 400));
+
   sekce('5c) Zákazníci: jen počty, a jen prvního');
   nastavSklad(SRPEN);
   const sCrm = await cron(PRVNIHO);

@@ -837,11 +837,18 @@ function rozpad(obchody, klic, nadpis) {
     z.kusy++; z.zisk += o.zisk;
     podle.set(k, z);
   }
-  const radky = [...podle.entries()]
+  const vybrane = [...podle.entries()]
     .sort((a, b) => b[1].zisk - a[1].zisk)
-    .slice(0, NEJVIC_ROZPAD)
-    .map(([k, v]) => ({ hlavni: k, vedlejsi: v.kusy + '× · zisk ' + kc(v.zisk) }));
-  return radky.length ? [{ hlavni: nadpis }].concat(radky) : [];
+    .slice(0, NEJVIC_ROZPAD);
+  // Proužek se měří k nejlepšímu řádku, ať je poměr vidět bez počítání
+  const nejvic = Math.max(...vybrane.map(([, v]) => v.zisk), 0);
+  const radky = vybrane.map(([k, v]) => ({
+    hlavni: k,
+    vedlejsi: v.kusy + '× · zisk ' + kc(v.zisk),
+    stav: v.zisk < 0 ? 'spatne' : null,
+    podil: nejvic > 0 && v.zisk > 0 ? v.zisk / nejvic : 0,
+  }));
+  return radky.length ? [{ hlavni: nadpis, stav: 'klid' }].concat(radky) : [];
 }
 
 function mesicniBlok(polozky, cas, dnes, crm) {
@@ -872,18 +879,46 @@ function mesicniBlok(polozky, cas, dnes, crm) {
   const prumer = k => predchozi.length
     ? predchozi.reduce((s, c) => s + c[k], 0) / predchozi.length : 0;
 
-  /* ── 1) Měsíc v číslech ── */
+  /* ── 1) Měsíc v číslech ──
+
+     Poměrová čísla se barví podle toho, jak si vedou proti vlastní
+     historii, ne podle vymyšlené hranice. Co je „dobrá marže", ví
+     jedině tenhle sklad — hranice ze vzduchu by lhala. */
+  const drivZisk = predchozi.reduce((s, c) => s + c.zisk, 0);
+  const drivTrzba = predchozi.reduce((s, c) => s + c.trzba, 0);
+  const drivNaklady = predchozi.reduce((s, c) => s + c.naklady, 0);
+  const drivKusy = predchozi.reduce((s, c) => s + c.kusy, 0);
+
+  /* Kolem obvyklé hodnoty je pásmo, ve kterém se nic nehlásí. Bez něj by
+     se každý výkyv o půl procenta tvářil jako zpráva. */
+  function protiObvyklemu(ted2, driv, pasmo) {
+    if (!driv) return {};
+    const rozdil = (ted2 - driv) / Math.abs(driv);
+    if (Math.abs(rozdil) < pasmo) return { stav: 'klid', znacka: 'jako obvykle' };
+    return rozdil > 0
+      ? { stav: 'dobre', znacka: '▲ nad obvyklým' }
+      : { stav: 'pozor', znacka: '▼ pod obvyklým' };
+  }
+
   const cisla = [
     { co: 'tržba', kolik: kc(ted.trzba) },
-    { co: 'náklady', kolik: kc(ted.naklady) },
-    { co: 'zisk', kolik: kc(ted.zisk) },
-    { co: 'marže', kolik: procenta(ted.zisk, ted.trzba) },
-    { co: 'ROI', kolik: procenta(ted.zisk, ted.naklady) },
+    { co: 'náklady', kolik: kc(ted.naklady), stav: 'klid' },
+    Object.assign({ co: 'zisk', kolik: kc(ted.zisk),
+      stav: ted.zisk >= 0 ? 'dobre' : 'spatne' },
+      ted.zisk < 0 ? { znacka: 'ztráta' } : {}),
+    Object.assign({ co: 'marže', kolik: procenta(ted.zisk, ted.trzba) },
+      protiObvyklemu(ted.trzba ? ted.zisk / ted.trzba : 0,
+        drivTrzba ? drivZisk / drivTrzba : 0, 0.08)),
+    Object.assign({ co: 'ROI', kolik: procenta(ted.zisk, ted.naklady) },
+      protiObvyklemu(ted.naklady ? ted.zisk / ted.naklady : 0,
+        drivNaklady ? drivZisk / drivNaklady : 0, 0.08)),
     { co: 'prodáno kusů', kolik: ted.kusy },
-    { co: 'zisk na kus', kolik: kc(ted.kusy ? ted.zisk / ted.kusy : 0) },
+    Object.assign({ co: 'zisk na kus', kolik: kc(ted.kusy ? ted.zisk / ted.kusy : 0) },
+      protiObvyklemu(ted.kusy ? ted.zisk / ted.kusy : 0,
+        drivKusy ? drivZisk / drivKusy : 0, 0.08)),
   ];
   const drzbaMed = median(ted.drzba);
-  if (drzbaMed !== null) cisla.push({ co: 'obvyklá držba', kolik: dnu(drzbaMed) });
+  if (drzbaMed !== null) cisla.push({ co: 'obvyklá držba', kolik: dnu(drzbaMed), stav: 'klid' });
 
   /* ── 2) Srovnání ── */
   const srovnani = [
@@ -894,6 +929,9 @@ function mesicniBlok(polozky, cas, dnes, crm) {
     hlavni: nazev + ': ' + form(tedH),
     vedlejsi: [zmena(tedH, minH, 'proti ' + MESICE_PROTI[(mesic + 10) % 12]),
       zmena(tedH, prumH, 'proti průměru')].filter(Boolean).join('  ·  ') || 'není s čím srovnat',
+    // Barvu určuje srovnání s průměrem — jeden slabý měsíc proti druhému
+    // slabému by jinak vyšel zeleně
+    stav: !prumH ? null : (tedH >= prumH ? 'dobre' : 'pozor'),
   }));
 
   /* ── 3) Kde a co se prodávalo ── */
@@ -906,10 +944,12 @@ function mesicniBlok(polozky, cas, dnes, crm) {
   if (podleZisku.length) {
     const nej = podleZisku[0], nic = podleZisku[podleZisku.length - 1];
     extremy.push({ hlavni: '▲ ' + nej.nazev,
-      vedlejsi: kc(nej.zisk) + ' · ROI ' + procenta(nej.zisk, nej.naklady) });
+      vedlejsi: kc(nej.zisk) + ' · ROI ' + procenta(nej.zisk, nej.naklady),
+      stav: nej.zisk >= 0 ? 'dobre' : 'spatne' });
     if (podleZisku.length > 1) {
       extremy.push({ hlavni: '▼ ' + nic.nazev,
-        vedlejsi: kc(nic.zisk) + ' · ROI ' + procenta(nic.zisk, nic.naklady), pozor: nic.zisk < 0 });
+        vedlejsi: kc(nic.zisk) + ' · ROI ' + procenta(nic.zisk, nic.naklady),
+        stav: nic.zisk < 0 ? 'spatne' : 'pozor' });
     }
   }
 
@@ -929,11 +969,18 @@ function mesicniBlok(polozky, cas, dnes, crm) {
   }
   const dnesniStav = [
     { co: 'na skladě', kolik: naSklade },
-    { co: 'vázáno v nákupu', kolik: kc(vazano) },
-    { co: 'čeká na payout', kolik: ceka },
+    { co: 'vázáno v nákupu', kolik: kc(vazano), stav: 'klid' },
+    { co: 'čeká na payout', kolik: ceka, stav: ceka ? 'pozor' : 'klid' },
   ];
   if (nejstarsi !== null) {
-    dnesniStav.push({ co: 'nejdéle leží', kolik: dnu(Math.round((dnes - nejstarsi) / DEN)) });
+    /* Kdy je „dlouho" se odvozuje od toho, jak dlouho se v tomhle skladu
+       obvykle drží — trojnásobek je už jiná kategorie. Pevná hranice
+       v dnech by u tenisek a u LEGA znamenala něco jiného. */
+    const lezi = Math.round((dnes - nejstarsi) / DEN);
+    const dlouho = drzbaMed !== null && lezi > drzbaMed * 3;
+    dnesniStav.push({ co: 'nejdéle leží', kolik: dnu(lezi),
+      stav: dlouho ? 'pozor' : 'klid',
+      znacka: dlouho ? '▲ přes trojnásobek obvyklé držby' : '' });
   }
   for (const plat of BAZOS_PLATFORMY) {
     const klice = new Set();
@@ -1006,9 +1053,11 @@ function textZpravy(dnes, bloky, paticka) {
       radky.push('    • ' + p.hlavni + (p.vedlejsi ? '  — ' + p.vedlejsi : ''));
     }
     // Číslo se zarovnává samo, přípona až za ním — jinak by „31 z 50"
-    // a „1 z 50" pod sebou neseděly
+    // a „1 z 50" pod sebou neseděly. Značka je to, co v HTML nese barvu;
+    // tady musí být slovem, jinak by textová verze říkala míň.
     for (const h of b.hodnoty || []) {
-      radky.push('    ' + h.co.padEnd(20) + String(h.kolik).padStart(4) + (h.za || ''));
+      radky.push('    ' + h.co.padEnd(20) + String(h.kolik).padStart(4) + (h.za || '')
+        + (h.znacka ? '   ' + h.znacka : ''));
     }
     radky.push('');
   }
@@ -1023,8 +1072,21 @@ function textZpravy(dnes, bloky, paticka) {
    rozvržení a ten limetkový akcent. */
 const B = {
   bg: '#0f0f0f', surface: '#181818', surface2: '#222222', border: '#2e2e2e',
-  accent: '#c8ff00', text: '#f0f0f0', muted: '#777777', warning: '#ffaa00',
+  accent: '#c8ff00', text: '#f0f0f0', muted: '#777777',
+  warning: '#ffaa00', danger: '#ff4444',
 };
+
+/* Stavové barvy — stejné, jaké aplikace používá u zisku a stavů položek.
+   Barva ale nikdy nestojí sama: u každého obarveného čísla je znaménko,
+   šipka nebo slovo. Jednak kvůli barvosleposti, jednak proto, že prostý
+   text zprávy žádné barvy nemá a musí říct totéž. */
+const STAV_BARVA = {
+  dobre: B.accent,
+  pozor: B.warning,
+  spatne: B.danger,
+  klid: B.muted,
+};
+const barvaStavu = (stav, vychozi) => STAV_BARVA[stav] || vychozi;
 const PISMO = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 const PISMO_MONO = "'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace";
 
@@ -1052,10 +1114,20 @@ function htmlZpravy(dnes, bloky, paticka) {
     const polozky = (b.polozky || []).map(p =>
       '<tr><td style="padding:14px 0 0;">'
       + '<div style="font-family:' + PISMO + ';font-size:15px;font-weight:600;color:'
-      + (p.pozor ? B.warning : B.text) + ';line-height:1.35;">' + esc(p.hlavni) + '</div>'
+      + barvaStavu(p.stav || (p.pozor ? 'pozor' : null), B.text) + ';line-height:1.35;">'
+      + esc(p.hlavni) + '</div>'
       + (p.vedlejsi
         ? '<div style="font-family:' + PISMO_MONO + ';font-size:12px;color:' + B.muted
           + ';padding-top:3px;line-height:1.5;">' + esc(p.vedlejsi) + '</div>'
+        : '')
+      /* Proužek délkou ukazuje podíl na celku. Délka nese informaci,
+         barva je jen jedna — nemá co rozlišovat, jen zvýraznit. */
+      + (p.podil > 0
+        ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+          + 'style="margin-top:6px;width:100%;"><tr>'
+          + '<td style="height:3px;background:' + barvaStavu(p.stav, B.accent) + ';border-radius:2px;'
+          + 'width:' + Math.max(2, Math.round(p.podil * 100)) + '%;font-size:0;line-height:0;">&nbsp;</td>'
+          + '<td style="font-size:0;line-height:0;">&nbsp;</td></tr></table>'
         : '')
       + '</td></tr>').join('');
 
@@ -1064,15 +1136,21 @@ function htmlZpravy(dnes, bloky, paticka) {
       ? '<tr><td style="padding:14px 0 0;">'
         + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
         + 'style="background:' + B.surface + ';border:1px solid ' + B.border + ';border-radius:10px;">'
-        + b.hodnoty.map((h, i) =>
-          '<tr><td style="padding:11px 14px;font-family:' + PISMO + ';font-size:14px;color:'
-          + B.muted + ';' + (i ? 'border-top:1px solid ' + B.border + ';' : '') + '">' + esc(h.co) + '</td>'
-          + '<td align="right" style="padding:11px 14px;font-family:' + PISMO
-          + ';font-size:16px;font-weight:700;color:' + B.text + ';white-space:nowrap;'
-          + (i ? 'border-top:1px solid ' + B.border + ';' : '') + '">' + esc(h.kolik)
-          + (h.za ? '<span style="font-size:13px;font-weight:400;color:' + B.muted + ';">'
-            + esc(h.za) + '</span>' : '')
-          + '</td></tr>').join('')
+        + b.hodnoty.map((h, i) => {
+          const linka = i ? 'border-top:1px solid ' + B.border + ';' : '';
+          const barva = barvaStavu(h.stav, B.text);
+          return '<tr><td style="padding:11px 14px;font-family:' + PISMO + ';font-size:14px;color:'
+            + B.muted + ';' + linka + '">' + esc(h.co) + '</td>'
+            + '<td align="right" style="padding:11px 14px;white-space:nowrap;' + linka + '">'
+            + '<span style="font-family:' + PISMO + ';font-size:16px;font-weight:700;color:'
+            + barva + ';">' + esc(h.kolik) + '</span>'
+            + (h.za ? '<span style="font-family:' + PISMO + ';font-size:13px;color:'
+              + B.muted + ';">' + esc(h.za) + '</span>' : '')
+            // Značka je ta druhá, nebarevná stopa — bez ní by barva stála sama
+            + (h.znacka ? '<div style="font-family:' + PISMO_MONO + ';font-size:11px;color:'
+              + barva + ';padding-top:2px;">' + esc(h.znacka) + '</div>' : '')
+            + '</td></tr>';
+        }).join('')
         + '</table></td></tr>'
       : '';
 
