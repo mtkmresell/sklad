@@ -17,6 +17,15 @@ function check(n, c, e) { console.log((c ? 'PASS' : 'FAIL') + ' — ' + n + (c |
         platforms:['Sellect'] },
     ]));
   });
+  /* Firebase se sem tahá ze sítě. Když dorazí, ohlásí „nikdo přihlášený"
+     a aplikace na to správně zareaguje smazáním lokálních nastavení —
+     jenže tenhle test si právě jedno takové nastavení uložil a po reloadu
+     ho čte. Kdo vyhraje, záviselo na tom, jak rychle se SDK stáhlo, takže
+     test padal zhruba jednou z deseti bez zjevné příčiny.
+
+     Test je o správci platforem, ne o přihlašování — SDK se proto nepustí
+     vůbec a chování je pokaždé stejné. */
+  await page.route('**/firebasejs/**', route => route.abort());
   await page.goto('file://' + path.resolve(__dirname, '..', 'index.html'), { waitUntil: 'domcontentloaded' });
   // Čekej na připravenost, ne na hodinky. Pevných 3,5 s stačilo, když test běžel
   // sám, ale pod plnou sadou se prohlížeč občas nestihl a test padal jednou
