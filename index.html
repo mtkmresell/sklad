@@ -9326,6 +9326,12 @@ function openBulkSellModal() {
   document.getElementById('bsSaleDate').value = new Date().toISOString().slice(0,10);
   document.getElementById('bsSaleRef').value = '';
   document.getElementById('bsSoldWhere').value = '';
+  // Kupující — vyprázdnit, ať se nepřenese z minulého balíku
+  var _bsBt = document.getElementById('bsBuyerType'); if(_bsBt){ _bsBt.value='anonymous'; if(_bsBt._csSync) _bsBt._csSync(); }
+  var _bsBs = document.getElementById('bsBuyerSearch'); if(_bsBs) _bsBs.value='';
+  var _bsBi = document.getElementById('bsBuyerCustomerId'); if(_bsBi) _bsBi.value='';
+  sellBuyerTypeChange('bs');
+  updateBuyerTypeVisibility('bs');
   var profEl = document.getElementById('bsProfitShow');
   var roiEl = document.getElementById('bsRoiShow');
   if(profEl) { profEl.textContent = '—'; profEl.style.color = 'var(--muted)'; }
@@ -9413,7 +9419,7 @@ function openBulkSoldWhereDrop() {
   var opts = getSoldWhereOptions();
   var cur = document.getElementById('bsSoldWhere')?.value || '';
   var html = opts.map(function(o){
-    return '<div class="cs-opt'+(o===cur?' selected':'')+'" onclick="document.getElementById(\'bsSoldWhere\').value=\''+o+'\';document.getElementById(\'bulkSoldWhereDrop\').style.display=\'none\';">'+o+'</div>';
+    return '<div class="cs-opt'+(o===cur?' selected':'')+'" onclick="document.getElementById(\'bsSoldWhere\').value=\''+o+'\';document.getElementById(\'bulkSoldWhereDrop\').style.display=\'none\';updateBuyerTypeVisibility(\'bs\');">'+o+'</div>';
   }).join('');
   if(!html) html = '<div style="padding:10px 14px;font-size:12px;color:var(--muted);">Žádné možnosti</div>';
   drop.innerHTML = html;
@@ -9444,6 +9450,19 @@ function saveBulkSell() {
   var soldWhere = (document.getElementById('bsSoldWhere')?.value||'').trim();
   var waitState = document.getElementById('bsWaitState')?.value || 'sending';
   var saleRef = (document.getElementById('bsSaleRef')?.value||'').trim();
+  /* Kupující. Vazba sedí na hlavičce, ne na kusech — cena za balík je taky
+     na ní a zákazníkovi se počítá útrata z ceny. Kdyby vazba visela na kusech,
+     započítal by se každý jako nákup za nula korun. */
+  var buyerType = (document.getElementById('bsBuyerType')?.value) || 'anonymous';
+  var linkedCustomerId = (function(){
+    if (buyerType === 'anonymous') return '';
+    var lid = document.getElementById('bsBuyerCustomerId')?.value || '';
+    if (!lid) {
+      var typed = (document.getElementById('bsBuyerSearch')?.value || '').trim();
+      if (typed) lid = _crmCreateMinimal(typed, buyerType === 'b2b' ? 'b2b' : 'b2c') || '';
+    }
+    return lid;
+  })();
 
   var selItems = bulkSellIds.map(function(id){ return items.find(function(x){ return x.id===id; }); }).filter(Boolean);
   var totalBuyKc = selItems.reduce(function(acc, it){
@@ -9484,6 +9503,8 @@ function saveBulkSell() {
     saleDate: saleDate,
     soldWhere: soldWhere,
     saleRef: saleRef,
+    buyerType: buyerType,
+    linkedCustomerId: linkedCustomerId,
     itemIds: bulkSellIds.slice(),
     itemPrices: itemPrices,
     // Balík je osobní jen pokud jsou osobní všechny jeho položky
@@ -9510,6 +9531,7 @@ function saveBulkSell() {
   items.push(bulkRecord);
 
   if(soldWhere) trackSoldWhereFreq(soldWhere);
+  if(linkedCustomerId) recalcCustomerStats(linkedCustomerId);
   sv(); renderStats(); renderItems();
   bulkClear();
   cm('moBulkSell');
@@ -9563,6 +9585,26 @@ function openBulkEditModal(bulkId) {
         fld('Platforma / kde prodáno', '<input id="_beW" style="'+iStyle+'" value="'+(rec.soldWhere||'').replace(/"/g,'&quot;')+'">') +
         fld('Prodejní reference / č. prodeje', '<input id="_beSR" style="'+iStyle+'" value="'+(rec.saleRef||'').replace(/"/g,'&quot;')+'">') +
       '</div>' +
+      // Kupující — obsluha je společná s běžným prodejem, jen s jinou předponou
+      (function(){
+        var bt = rec.buyerType || 'anonymous';
+        var jmeno = rec.linkedCustomerId ? (_crmNameById(rec.linkedCustomerId) || '') : '';
+        var opts = [['anonymous','Anonymní'],['b2c','B2C – zákazník'],['b2b','B2B – partner']]
+          .map(function(o){ return '<option value="'+o[0]+'"'+(bt===o[0]?' selected':'')+'>'+o[1]+'</option>'; }).join('');
+        return fld('Typ kupujícího',
+            '<select id="beBuyerType" onchange="sellBuyerTypeChange(\'be\')" style="'+iStyle+'">'+opts+'</select>')
+          + '<div id="beBuyerCustomerRow" style="'+(bt==='anonymous'?'display:none;':'')+'">'
+          + fld('Zákazník',
+              '<div style="position:relative;">'
+              + '<input id="beBuyerSearch" style="'+iStyle+'" placeholder="Hledat zákazníka..." autocomplete="off"'
+              + ' value="'+jmeno.replace(/"/g,'&quot;')+'"'
+              + ' oninput="sellSearchCustomer(this.value,\'be\')" onfocus="sellSearchCustomer(this.value,\'be\')"'
+              + ' onblur="setTimeout(function(){var d=document.getElementById(\'beBuyerDrop\');if(d)d.style.display=\'none\';},200)">'
+              + '<div id="beBuyerDrop" style="position:absolute;top:calc(100% + 4px);left:0;right:0;display:none;z-index:10001;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);max-height:150px;overflow-y:auto;"></div>'
+              + '<input type="hidden" id="beBuyerCustomerId" value="'+(rec.linkedCustomerId||'')+'">'
+              + '</div>')
+          + '</div>';
+      })() +
       '<div style="display:flex;gap:10px;">' +
         '<div style="flex:1;">'+fld('Sledovací číslo', '<input id="_beTrkNum" style="'+iStyle+';font-family:monospace;" value="'+(rec.trackingNum||'')+'">')+'</div>' +
         '<div style="flex:1;">'+fld('Dopravce', (function(){ var cf=JSON.parse(localStorage.getItem('carrier_freq')||'{}'); var opts=Object.keys(CARRIERS).sort(function(a,b){return (cf[b]||0)-(cf[a]||0);}).map(function(k){return '<option value="'+k+'"'+(rec.trackingCarrier===k?' selected':'')+'>'+k+'</option>';}).join(''); return '<select id="_beTrkCarrier">'+opts+'</select>'; })())+'</div>' +
@@ -9712,6 +9754,20 @@ function openBulkEditModal(bulkId) {
       }
       items[idx].soldWhere = box.querySelector('#_beW').value.trim();
       items[idx].saleRef = box.querySelector('#_beSR').value.trim();
+      // Kupující — přepočítat musí starý i nový, jinak by útrata zůstala viset
+      // u toho, komu se balík odebral
+      var _bePuvodni = items[idx].linkedCustomerId || '';
+      var _beBt = (box.querySelector('#beBuyerType') || {}).value || 'anonymous';
+      var _beLid = '';
+      if (_beBt !== 'anonymous') {
+        _beLid = (box.querySelector('#beBuyerCustomerId') || {}).value || '';
+        if (!_beLid) {
+          var _beTyped = ((box.querySelector('#beBuyerSearch') || {}).value || '').trim();
+          if (_beTyped) _beLid = _crmCreateMinimal(_beTyped, _beBt === 'b2b' ? 'b2b' : 'b2c') || '';
+        }
+      }
+      items[idx].buyerType = _beBt;
+      items[idx].linkedCustomerId = _beLid;
       // Stav — propaguj na děti
       if (selectedWs !== items[idx].waitState) {
         items[idx].waitState = selectedWs;
@@ -9727,8 +9783,10 @@ function openBulkEditModal(bulkId) {
       // Souhrn dopočítá společný přepočet — počítá i s vedlejšími náklady
       // a opraví i totalBuyPrice, což se tu dřív nedělalo
       _prepocitejBulk(bulkId);
+      if (_bePuvodni && _bePuvodni !== _beLid) recalcCustomerStats(_bePuvodni);
+      if (_beLid) recalcCustomerStats(_beLid);
       sv(); renderItems(); renderStats();
-      close(); showToast('Bulk upraven.', 'ok');
+      close(); showToast('Balík upraven.', 'ok');
     });
   }
 
@@ -11634,7 +11692,9 @@ function _crmTabHistory(c){
     entries.push({ kind:'manual', t:_histTime(h.date), h:h, oi:oi });
   });
   // 2) Automaticky napojené prodeje ze skladu (linkedCustomerId === c.id) – včetně vrácených/zrušených zpět na sklad
+  // Kus uvnitř balíku se přeskakuje — balík se do historie počítá jednou, přes hlavičku
   items.forEach(function(it){
+    if(it.bulkId) return;
     if(it.linkedCustomerId===c.id && (it.saleState==='waiting'||it.saleState==='paid'||it.saleState==='stock')){
       entries.push({ kind:'sale', t:_histTime(it.payoutDate||it.saleDate||it.dateAdded), it:it });
     }
@@ -12163,6 +12223,7 @@ function _crmComputeTags(c){
   var dates=[];      // data nákupů (jen ta s datem) pro výpočet cyklu/posledního nákupu
   var linkedCount=0; // počet napojených prodejů (Čeká + Prodáno)
   items.forEach(function(it){
+    if(it.bulkId) return;   // balík se počítá jednou, přes hlavičku
     if(it.linkedCustomerId===c.id && (it.saleState==='waiting'||it.saleState==='paid')){
       linkedCount++;
       if(it.saleDate) dates.push(String(it.saleDate).slice(0,10));
@@ -12247,7 +12308,11 @@ async function recalcCustomerStats(customerId) {
   var _statArr = customers;
   if(ci < 0) { ci = partners.findIndex(function(p){ return p.id === customerId; }); _statArr = partners; }
   if(ci < 0) return;
+  /* Bulk prodej se počítá přes hlavičku, ne přes kusy. Cena za balík sedí
+     na hlavičce, kusy mají sellPrice 0 — kdyby se počítaly, přibyly by
+     zákazníkovi nákupy za nula korun a průměr objednávky by spadl. */
   var soldItems = items.filter(function(it){
+    if (it.bulkId) return false;
     return it.linkedCustomerId === customerId && (it.saleState === 'waiting' || it.saleState === 'paid');
   });
   // Collect unique EUR dates for batch rate fetch
@@ -14597,7 +14662,13 @@ function renderSoldView(){
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:'+bpc+';font-weight:600;">'+czkSign(bProfit)+'</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:'+bpc+';">'+(bRoi>=0?'+':'')+bRoi+'%</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-size:12px;color:var(--text);">'+(it.soldWhere||'—')+'</td>';
-        html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+(it.saleRef||'—')+'</td>';
+        // Zákazník má přednost před referencí — u balíku je to konkrétnější údaj
+        var _bZak = it.linkedCustomerId ? _crmNameById(it.linkedCustomerId) : '';
+        html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'
+          + (_bZak
+              ? '<span style="color:var(--accent);cursor:pointer;" onclick="event.stopPropagation();openCustomerFromItem(\''+it.linkedCustomerId+'\')">'+escHtml(_bZak)+' ›</span>'
+              : (it.saleRef||'—'))
+          + '</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+fmtDate(it.payoutDate||it.saleDate)+'</td>';
         html+='</tr>';
         if(isExp){
@@ -16788,6 +16859,23 @@ rebuildBrandTables();
         <option value="payout">Čeká na payout</option>
       </select></div>
       <div class="fi"><label>ID prodeje</label><input type="text" id="bsSaleRef" placeholder="ID prodeje"></div>
+      <!-- Kupující — stejná pole jako u běžného prodeje, obsluha už umí předponu -->
+      <div class="fi full" id="bsBuyerTypeRow">
+        <label>Typ kupujícího</label>
+        <select id="bsBuyerType" onchange="sellBuyerTypeChange('bs')" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 10px;outline:none;">
+          <option value="anonymous">Anonymní</option>
+          <option value="b2c">B2C – zákazník</option>
+          <option value="b2b">B2B – partner</option>
+        </select>
+      </div>
+      <div class="fi full" id="bsBuyerCustomerRow" style="display:none;">
+        <label>Zákazník</label>
+        <div style="position:relative;">
+          <input type="text" id="bsBuyerSearch" placeholder="Hledat zákazníka..." autocomplete="off" oninput="sellSearchCustomer(this.value,'bs')" onfocus="sellSearchCustomer(this.value,'bs')" onblur="setTimeout(function(){var d=document.getElementById('bsBuyerDrop');if(d)d.style.display='none';},200)">
+          <div id="bsBuyerDrop" style="position:absolute;top:calc(100% + 4px);left:0;right:0;display:none;z-index:9999;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);max-height:150px;overflow-y:auto;"></div>
+          <input type="hidden" id="bsBuyerCustomerId">
+        </div>
+      </div>
     </div>
   </div>
   <!-- Rozepsat cenu per položka -->

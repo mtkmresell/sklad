@@ -248,6 +248,72 @@ const SEED = () => ({
   check('řádky kusů vedou na detail', vProdano.detiKlikaci === true);
   check('a mají tlačítko na vyjmutí', vProdano.detiMajiVyjmout === true);
 
+  // ══════════════════════════════════════════════════════════════
+  // Zákazníci přibyli do aplikace dlouho po balících, takže se na ně balík
+  // nedal navázat vůbec. Vazba musí sedět na hlavičce — cena za balík je taky
+  // na ní a útrata zákazníka se počítá z ceny.
+  section('11) Balík se dá přiřadit zákazníkovi');
+  await page.evaluate(() => {
+    document.querySelectorAll('[style*="position:fixed"]').forEach(e => e.remove());
+  });
+  await nasad(SEED());
+  await page.evaluate(() => {
+    customers = [{
+      id: 'c1', name: 'Draško Marič', status: 'bezny', contacts: [], tags_likes: [], tags_dislikes: [],
+      auto_brands: {}, auto_categories: {}, contact_history: [],
+      stats_orders_count: 0, stats_total_spent: 0, stats_avg_order: 0,
+    }];
+    partners = [];
+  });
+
+  const prirazeni = await page.evaluate(async () => {
+    openBulkEditModal('bulk_1');
+    document.querySelector('#beBuyerType').value = 'b2c';
+    sellBuyerTypeChange('be');
+    document.querySelector('#beBuyerCustomerId').value = 'c1';
+    document.querySelector('#_beSave').click();
+    await new Promise(r => setTimeout(r, 600));
+    const b = items.find(i => i.id === 'bulk_1');
+    const c = customers[0];
+    return {
+      naHlavicce: b.linkedCustomerId, typ: b.buyerType,
+      naKusu: items.find(i => i.id === 'k1').linkedCustomerId,
+      pocetNakupu: c.stats_orders_count,
+      utrata: c.stats_total_spent,
+    };
+  });
+  check('vazba sedí na hlavičce', prirazeni.naHlavicce === 'c1', String(prirazeni.naHlavicce));
+  check('typ kupujícího se uložil', prirazeni.typ === 'b2c', String(prirazeni.typ));
+  check('na kusech vazba není', !prirazeni.naKusu, String(prirazeni.naKusu));
+  // Tři kusy, ale jeden nákup za 5000 — ne tři nákupy po nule
+  check('zákazníkovi přibyl jeden nákup', prirazeni.pocetNakupu === 1, String(prirazeni.pocetNakupu));
+  check('a útrata je cena za celý balík', prirazeni.utrata === 5000, String(prirazeni.utrata) + ' (má být 5000)');
+
+  section('12) Kusy z balíku nekazí statistiku');
+  const bezDuplicit = await page.evaluate(async () => {
+    // I kdyby kus vazbu odněkud měl, do počtu nákupů se nesmí promítnout
+    items.find(i => i.id === 'k1').linkedCustomerId = 'c1';
+    await recalcCustomerStats('c1');
+    const c = customers[0];
+    return { pocet: c.stats_orders_count, utrata: c.stats_total_spent };
+  });
+  check('kus v balíku se nepřipočítal', bezDuplicit.pocet === 1, String(bezDuplicit.pocet));
+  check('a útrata zůstala 5000', bezDuplicit.utrata === 5000, String(bezDuplicit.utrata));
+
+  section('13) Odebrání zákazníka přepočítá i jeho');
+  const odebrani = await page.evaluate(async () => {
+    document.querySelectorAll('[style*="position:fixed"]').forEach(e => e.remove());
+    items.find(i => i.id === 'k1').linkedCustomerId = '';
+    openBulkEditModal('bulk_1');
+    document.querySelector('#beBuyerType').value = 'anonymous';
+    sellBuyerTypeChange('be');
+    document.querySelector('#_beSave').click();
+    await new Promise(r => setTimeout(r, 600));
+    return { vazba: items.find(i => i.id === 'bulk_1').linkedCustomerId, utrata: customers[0].stats_total_spent };
+  });
+  check('vazba se zrušila', !odebrani.vazba, String(odebrani.vazba));
+  check('a zákazníkovi útrata spadla na nulu', odebrani.utrata === 0, String(odebrani.utrata));
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');
