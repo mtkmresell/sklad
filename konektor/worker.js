@@ -408,10 +408,25 @@ async function zpracujZpravu(zprava, env) {
 
 const DEN = 86400000;
 const BAZOS_PLATFORMY = ['Bazoš.cz', 'Bazoš.sk', 'Bazoš.pl'];
-const BAZOS_PLATNOST = 60;          // dní, než inzerát vyprší — jako v aplikaci
-const BAZOS_LIMIT = 50;             // kolik inzerátů Bazoš pustí naráz
-const BAZOS_PRAHY = [7, 3, 1];      // kolik dní před vypršením se ozveme
-const PAYOUT_PRAHY = [21, 45, 90];  // jak dlouho smí prodej čekat na peníze
+const BAZOS_PLATNOST = 60;   // dní, než inzerát vyprší — jako v aplikaci
+const BAZOS_LIMIT = 50;      // kolik inzerátů Bazoš pustí naráz
+
+/* Ozveme se až v den vypršení, ne dopředu. Bazoš inzerát nemaže, jen
+   ho odloží do archivu a odtud se nahodí znovu jedním kliknutím — takže
+   předem se stejně nedá dělat nic než ho smazat a vystavit celý znovu,
+   což je horší než počkat. */
+const BAZOS_PRAH = 0;
+
+/* Payout se poprvé ozve v den, kdy měly peníze podle nastavení dorazit,
+   a pak jednou týdně, dokud se to nevyřeší. Kolik dní se čeká, si aplikace
+   drží u každé platformy zvlášť (Nastavení → místa prodeje) — bere se to
+   odtamtud, ať se ta čísla nemusí držet na dvou místech. */
+const PAYOUT_OPAKOVANI = 7;
+
+// Když platforma vlastní nastavení nemá — stejná čísla jako v aplikaci
+const VYCHOZI_PAYOUT_SKUPIN = { platforms: 7, eshopy: 21, local: 3 };
+const VYCHOZI_PAYOUT = 14;
+
 const MESICE = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
   'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
 
@@ -458,6 +473,42 @@ const dnu = n => pocet(n, ['den', 'dny', 'dní']);
 // Hlavička balíku není kus zboží, jen jeho obal — do počtů kusů nepatří
 const jeBalik = it => it && it.type === 'bulk';
 
+/* Rozdělení platforem do skupin i doby payoutu si drží aplikace v nastavení.
+   Do cloudu jde jako text (viz syncSettings, shape 'text'), ale starší
+   zápisy tam mají rovnou objekt — bere se obojí. */
+function platformoveSkupiny(data) {
+  const v = data && data.platGroups;
+  if (!v) return {};
+  if (typeof v === 'object') return v;
+  try { return JSON.parse(v) || {}; } catch { return {}; }
+}
+
+/* Za kolik dní se u téhle platformy čekají peníze.
+
+   Musí to vyjít stejně jako getPayoutDays() v aplikaci — jinak by mail
+   upomínal jindy, než co má uživatel nastavené, a přestal by dávat smysl.
+   Odtud i drobnosti, které samy o sobě nedávají smysl: název se nečistí
+   od mezer a když je platforma omylem ve dvou skupinách, platí ta
+   poslední. Aplikace to dělá takhle, tak to tady musí být stejně.
+
+   Aplikace umí ještě jednu věc navíc — když má u platformy aspoň tři
+   dokončené prodeje, počítá lhůtu z jejich mediánu. Tady se schválně
+   bere jen nastavení: druhá implementace statistiky by se s aplikací
+   dřív nebo později rozešla a mail by upomínal proti jiným číslům,
+   než jaká jsou vidět na obrazovce. */
+function ocekavanyPayout(kdeProdano, skupiny) {
+  const kde = kdeProdano || '';
+  const vlastni = skupiny.payoutDays && skupiny.payoutDays[kde];
+  if (vlastni != null && isFinite(vlastni)) return Number(vlastni);
+
+  let skupina = null;
+  for (const k of ['platforms', 'eshopy', 'local']) {
+    if ((skupiny[k] || []).indexOf(kde) !== -1) skupina = k;
+  }
+  if (skupina) return VYCHOZI_PAYOUT_SKUPIN[skupina] || VYCHOZI_PAYOUT;
+  return VYCHOZI_PAYOUT;
+}
+
 /* ── Inzeráty, které se blíží k vypršení ────────────────────────────── */
 function bazosBlok(polozky, dnes) {
   const nalezy = [];
@@ -470,7 +521,7 @@ function bazosBlok(polozky, dnes) {
       const kdy = it.bazosCheckedAt && it.bazosCheckedAt[plat];
       if (!kdy) continue;
       const zbyva = BAZOS_PLATNOST - Math.round((dnes - prazskyDen(kdy)) / DEN);
-      if (!BAZOS_PRAHY.includes(zbyva)) continue;
+      if (zbyva !== BAZOS_PRAH) continue;
       const klic = (it.sku && String(it.sku).trim()) ? String(it.sku).trim() : (it.name || it.id);
       const drive = podleInzeratu.get(klic);
       if (!drive || zbyva < drive.zbyva) {
@@ -481,50 +532,58 @@ function bazosBlok(polozky, dnes) {
   }
   if (!nalezy.length) return null;
 
-  nalezy.sort((a, b) => a.zbyva - b.zbyva || a.nazev.localeCompare(b.nazev, 'cs'));
-  const radky = ['INZERÁTY NA BAZOŠI'];
-  let prah = null;
-  for (const n of nalezy) {
-    if (n.zbyva !== prah) {
-      prah = n.zbyva;
-      radky.push('', prah === 1 ? '  Vyprší zítra:' : '  Vyprší za ' + dnu(prah) + ':');
-    }
-    radky.push('    • ' + n.nazev + '  (' + n.plat + ')');
-  }
-  const nejblizsi = nalezy[0].zbyva;
+  nalezy.sort((a, b) => a.plat.localeCompare(b.plat, 'cs') || a.nazev.localeCompare(b.nazev, 'cs'));
+  const radky = ['INZERÁTY NA BAZOŠI', '',
+    '  Dnes vypršely — nahoď je znovu z archivu:', ''];
+  for (const n of nalezy) radky.push('    • ' + n.nazev + '  (' + n.plat + ')');
+
   return {
     text: radky.join('\n'),
-    predmet: pocet(nalezy.length, ['inzerát vyprší', 'inzeráty vyprší', 'inzerátů vyprší'])
-      + ', první ' + (nejblizsi === 1 ? 'zítra' : 'za ' + dnu(nejblizsi)),
+    predmet: pocet(nalezy.length, ['inzerát vypršel', 'inzeráty vypršely', 'inzerátů vypršelo']),
   };
 }
 
 /* ── Prodeje, které dlouho čekají na peníze ─────────────────────────── */
-function payoutBlok(polozky, dnes) {
+function payoutBlok(polozky, dnes, skupiny) {
   const nalezy = [];
   for (const it of polozky) {
     if (jeBalik(it)) continue;
     if (stavPolozky(it) !== 'waiting') continue;
     const prodano = denZData(it.saleDate);
     if (prodano === null) continue;
+
     const ceka = Math.round((dnes - prodano) / DEN);
-    if (!PAYOUT_PRAHY.includes(ceka)) continue;
-    nalezy.push({ ceka, nazev: it.name || it.id, kde: it.soldWhere || '', prodano });
+    const ocekavano = ocekavanyPayout(it.soldWhere, skupiny);
+    // Poprvé v den, kdy měly peníze dorazit, pak každý týden dál
+    if (ceka < ocekavano) continue;
+    if ((ceka - ocekavano) % PAYOUT_OPAKOVANI !== 0) continue;
+
+    nalezy.push({ ceka, ocekavano, po: ceka - ocekavano,
+      nazev: it.name || it.id, kde: it.soldWhere || '', prodano });
   }
   if (!nalezy.length) return null;
 
-  nalezy.sort((a, b) => b.ceka - a.ceka || a.nazev.localeCompare(b.nazev, 'cs'));
-  const radky = ['ČEKÁ NA PAYOUT'];
-  let prah = null;
-  for (const n of nalezy) {
-    if (n.ceka !== prah) { prah = n.ceka; radky.push('', '  Bez vyplacení ' + dnu(prah) + ':'); }
-    radky.push('    • ' + n.nazev + (n.kde ? '  — ' + n.kde : '') + ', prodáno ' + formatDne(n.prodano));
-  }
+  nalezy.sort((a, b) => b.po - a.po || a.nazev.localeCompare(b.nazev, 'cs'));
+  const radky = ['ČEKÁ NA PAYOUT', ''];
+  for (const n of radkyPayout(nalezy)) radky.push(n);
+
+  const nejhorsi = nalezy[0];
   return {
     text: radky.join('\n'),
     predmet: pocet(nalezy.length, ['payout čeká', 'payouty čekají', 'payoutů čeká'])
-      + ' už ' + dnu(nalezy[0].ceka),
+      + (nejhorsi.po > 0 ? ', nejdéle o ' + dnu(nejhorsi.po) + ' přes lhůtu' : ''),
   };
+}
+
+function radkyPayout(nalezy) {
+  return nalezy.map(n => {
+    const kde = n.kde || 'bez místa prodeje';
+    const lhuta = n.po === 0
+      ? 'lhůta ' + dnu(n.ocekavano) + ' vyprší dnes'
+      : 'o ' + dnu(n.po) + ' přes lhůtu ' + n.ocekavano + ' dní';
+    return '    • ' + n.nazev + '  — ' + kde + ', ' + lhuta
+      + ', prodáno ' + formatDne(n.prodano);
+  });
 }
 
 /* ── Souhrn za minulý měsíc (posílá se prvního) ─────────────────────── */
@@ -577,13 +636,14 @@ function mesicniBlok(polozky, cas, dnes) {
 }
 
 /* ── Složení celé zprávy ────────────────────────────────────────────── */
-function sestavZpravu(polozky, ted) {
+function sestavZpravu(polozky, ted, data) {
   const cas = prazskeCasti(ted);
   const dnes = prazskyDen(ted);
+  const skupiny = platformoveSkupiny(data);
 
   const bloky = [
     bazosBlok(polozky, dnes),
-    payoutBlok(polozky, dnes),
+    payoutBlok(polozky, dnes, skupiny),
     cas.den === 1 ? mesicniBlok(polozky, cas, dnes) : null,
   ].filter(Boolean);
 
@@ -635,7 +695,7 @@ async function pripravUpozorneni(env) {
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
   if (!data) throw new Error('v cloudu nejsou žádná data — zkontroluj SKLAD_UID');
   const polozky = slozPolozky(data, archivy);
-  return { polozky, zprava: sestavZpravu(polozky, Date.now()) };
+  return { polozky, zprava: sestavZpravu(polozky, Date.now(), data) };
 }
 
 function shodujeSe(a, b) {

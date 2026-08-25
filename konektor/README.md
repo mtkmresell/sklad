@@ -93,17 +93,32 @@ Hlásí tři věci:
 
 | co | kdy se ozve |
 |---|---|
-| inzerát na Bazoši se blíží k vypršení | 7 dní, 3 dny a den předem |
-| prodej dlouho čeká na payout | po 21, 45 a 90 dnech |
+| inzerát na Bazoši vypršel | v den vypršení |
+| prodej čeká na payout | v den, kdy měly peníze dorazit, a pak každý týden |
 | souhrn za minulý měsíc | prvního |
 
 **Většinu dní nepřijde nic** — a tak to má být. Nehlásí se stav („zbývá
-sedm dní"), ale okamžik: každá věc se ozve jen ten den, kdy dojde na daný
-práh. Kdyby chodil mail každé ráno, po týdnu by se přestal otevírat.
+sedm dní"), ale okamžik. Kdyby chodil mail každé ráno, po týdnu by se
+přestal otevírat.
 
-Vedlejší přínos je, že si Worker nemusí nikam pamatovat, co už poslal.
-Práh je dané číslo dní a to nastane samo od sebe právě jednou. Když jeden
-běh vynechá, ten jeden bod se přeskočí — proto jsou prahy tři, ne jeden.
+**Inzerát se hlásí až v den vypršení, ne dopředu.** Bazoš inzerát nemaže,
+jen ho odloží do archivu a odtud se nahodí jedním kliknutím. Předem se
+tedy stejně nedá dělat nic jiného než ho smazat a vystavit celý znovu,
+což je horší než počkat.
+
+**Lhůta payoutu se bere z nastavení aplikace.** Kolik dní se u které
+platformy čeká, se nastavuje v *Nastavení → místa prodeje*; konektor
+sahá po stejném čísle jako odhad cashflow v aplikaci (`getPayoutDays`).
+Když tam nic není, platí výchozí hodnoty podle skupiny — platformy 7 dní,
+e‑shopy 21, místní prodej 3, jinak 14. První upomínka přijde v den, kdy
+měly peníze dorazit, a pak jednou týdně, dokud se to nevyřeší.
+
+Aplikace umí lhůtu odhadnout ještě z mediánu skutečných payoutů, když má
+u platformy aspoň tři dokončené prodeje. Konektor se schválně drží jen
+nastavení: druhá implementace statistiky by se s aplikací dřív nebo
+později rozešla a mail by upomínal proti jiným číslům, než jaká jsou
+vidět na obrazovce. `test-upozorneni.js` porovnává aspoň ta čísla, aby
+se nerozešla ani ta.
 
 **Ve zprávě nejsou částky.** Kurzy EUR umí správně jen aplikace, která si
 pamatuje kurz ke dni nákupu i payoutu; konektor by je počítal jinak.
@@ -229,11 +244,11 @@ zámek na adrese, handshake, seznam nástrojů, filtry, ořezávání odpovědí
 i to, že se nikam nezapisuje. Bez sítě a bez nasazení.
 
 `test-upozorneni.js` dělá totéž pro upozornění: podstrčí Firestore, poštu
-i čas a projde každý den života inzerátu i prodeje, aby ověřil, že se
-ozvou právě třikrát a jinak je ticho. Kdyby se z prahů někdy stal rozsah,
-mail by chodil denně — a tenhle test to zachytí. Hlídá taky přepnutí
-letního času, chování při výpadku pošty a to, že ve zprávě nejsou peníze
-ani zákazníci.
+i čas a projde každý den života inzerátu i prodeje, aby ověřil, kdy přesně
+se ozvou. Kdyby se z prahu někdy stal rozsah, mail by chodil denně —
+a tenhle test to zachytí. Hlídá taky přepnutí letního času, lhůty payoutu
+podle nastavení platforem, chování při výpadku pošty a to, že ve zprávě
+nejsou peníze ani zákazníci.
 
 ## Kdyby to nefungovalo
 

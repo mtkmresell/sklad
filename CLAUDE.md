@@ -139,13 +139,20 @@ co z nich vypadne, aby se ty dvě kopie nerozešly.
 Podrobnosti v `konektor/README.md`.
 
 Konektor navíc jednou denně obhlíží sklad a posílá e-mail, když je co říct —
-vypršení inzerátů na Bazoši, dlouho čekající payouty, měsíční souhrn
+vypršení inzerátů na Bazoši, čekající payouty, měsíční souhrn
 (sekce `UPOZORNĚNÍ E-MAILEM`). **Nehlásí stav, ale okamžik:** každá věc se
 ozve jen ten den, kdy dojde na daný práh, takže většinu dní nepřijde nic.
-Díky tomu si taky nemusí pamatovat, co už poslal — práh nastane sám od sebe
-právě jednou. Kdyby se z prahů udělal rozsah („zbývá 7 dní a míň"), mail by
-chodil denně a přestal by se číst; `test-upozorneni.js` to hlídá. Do zprávy
-schválně nejdou částky (kurzy EUR) ani cokoli z CRM (jde přes cizí službu).
+Kdyby se z prahu udělal rozsah („zbývá 7 dní a míň"), mail by chodil denně
+a přestal by se číst; `test-upozorneni.js` to hlídá. Do zprávy schválně
+nejdou částky (kurzy EUR) ani cokoli z CRM (jde přes cizí službu).
+
+Dvě věci se hlásí schválně jinak, než by se čekalo. **Inzerát až v den
+vypršení**, ne dopředu — Bazoš ho archivuje a nahodí se jedním kliknutím,
+takže předem se nedá dělat nic než ho smazat a vystavit znovu. **Payout
+podle lhůty nastavené u platformy** (`getPayoutDays` v aplikaci, *Nastavení
+→ místa prodeje*), pak po týdnech. Ta čísla jsou tím pádem na dvou místech;
+`test-upozorneni.js` porovnává `DEFAULT_PAYOUT_DAYS` s konstantami
+v konektoru, aby se nerozešla.
 
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
 `openDropdownsEditor`, `saveItem`, `renderStockAnalytics`, `tableHTML`, `openBulkEditModal`.

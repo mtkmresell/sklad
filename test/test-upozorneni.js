@@ -88,10 +88,17 @@ const ENV = {
   RESEND_API_KEY: 're_test', MAIL_KOMU: 'majitel@example.com',
 };
 
-// Sklad postavený tak, aby v daný den padly zvolené prahy
-function nastavSklad(polozky) {
+// Sklad postavený tak, aby v daný den padly zvolené prahy.
+// platGroups jde do cloudu jako text (syncSettings, shape 'text') — tady
+// schválně taky, ať se testuje i to rozbalení.
+function nastavSklad(polozky, skupiny) {
   DOKUMENTY = {
-    data: { savedAt: '2026-08-24T09:30:00Z', itemsStock: polozky, archiveYears: [], items: [] },
+    data: {
+      savedAt: '2026-08-24T09:30:00Z', itemsStock: polozky, archiveYears: [], items: [],
+      platGroups: JSON.stringify(skupiny || {
+        platforms: ['StockX'], eshopy: ['Sneakerstore'], local: ['Bazoš.cz', 'Vinted'],
+      }),
+    },
   };
 }
 // Kdy se musel inzerát zaškrtnout, aby dnes zbývalo `zbyva` dní z šedesáti
@@ -139,22 +146,25 @@ function prodanoPred(ted, dnu) {
   sekce('1) Inzeráty na Bazoši');
   nastavSklad([
     { id: 'a', name: 'Dunk Low Panda', sku: 'DD1391', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 7) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
     { id: 'b', name: 'Jordan 4 Bred', sku: 'JD4', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 8) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 1) } },
   ]);
   let m = await cron(RANO_LETO);
 
-  ok('na prahu se ozve', m.length === 1, JSON.stringify(m.map(x => x.subject)));
+  ok('v den vypršení se ozve', m.length === 1, JSON.stringify(m.map(x => x.subject)));
   ok('a je to ten správný kus', m[0] && /Dunk Low Panda/.test(m[0].text));
-  ok('den před prahem ticho', m[0] && !/Jordan 4 Bred/.test(m[0].text), m[0] && m[0].text);
-  ok('předmět říká, o co jde', m[0] && /1 inzerát vyprší, první za 7 dní/.test(m[0].subject), m[0] && m[0].subject);
+  ok('den předem ještě ticho', m[0] && !/Jordan 4 Bred/.test(m[0].text), m[0] && m[0].text);
+  ok('předmět mluví v minulém čase', m[0] && /1 inzerát vypršel/.test(m[0].subject), m[0] && m[0].subject);
+  ok('řekne, co s tím', m[0] && /nahoď je znovu z archivu/.test(m[0].text), m[0] && m[0].text);
 
-  /* Tohle je jádro celé věci. Kdyby se z prahů stal rozsah („zbývá sedm
-     dní a míň"), mail by chodil každé ráno až do vypršení — a takový
-     mail se po týdnu přestane otevírat. Proto se prochází každý jeden
-     den dopředu a hlídá se, že se ozvou právě tři z nich. */
-  sekce('2) Ozve se jen v den prahu, ne po celou dobu');
+  /* Tohle je jádro celé věci. Kdyby se z prahu stal rozsah, mail by chodil
+     každé ráno — a takový se po týdnu přestane otevírat. Proto se prochází
+     každý jeden den života inzerátu a hlídá se, že se ozve právě jednou.
+
+     Dopředu se schválně nehlásí: Bazoš inzerát archivuje a nahodí se
+     jedním kliknutím, takže před vypršením není co dělat. */
+  sekce('2) Ozve se jen v den vypršení, ne po celou dobu');
   const kdySeOzve = [];
   for (let zbyva = 60; zbyva >= 0; zbyva--) {
     nastavSklad([
@@ -163,23 +173,14 @@ function prodanoPred(ted, dnu) {
     ]);
     if ((await cron(RANO_LETO)).length) kdySeOzve.push(zbyva);
   }
-  shoda('inzerát se ozve třikrát za život', kdySeOzve, [7, 3, 1]);
-
-  const payoutDny = [];
-  for (let ceka = 0; ceka <= 120; ceka++) {
-    nastavSklad([
-      { id: 'w', name: 'Yeezy Slide', saleState: 'waiting', saleDate: prodanoPred(RANO_LETO, ceka) },
-    ]);
-    if ((await cron(RANO_LETO)).length) payoutDny.push(ceka);
-  }
-  shoda('payout se ozve taky třikrát', payoutDny, [21, 45, 90]);
+  shoda('inzerát se ozve jednou za život', kdySeOzve, [0]);
 
   sekce('3) Jeden inzerát, i když kusů je víc');
   nastavSklad([
     { id: 'a', name: 'Dunk Low Panda', sku: 'DD1391', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 3) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
     { id: 'b', name: 'Dunk Low Panda', sku: 'DD1391', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 3) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
   ]);
   m = await cron(RANO_LETO);
   const kolikRadku = (m[0].text.match(/• Dunk Low Panda/g) || []).length;
@@ -188,29 +189,62 @@ function prodanoPred(ted, dnu) {
   sekce('3b) Čeština počítá po třech');
   const inzeraty = n => Array.from({ length: n }, (_, i) => ({
     id: 'i' + i, name: 'Kus ' + i, sku: 'SKU' + i, saleState: 'stock',
-    platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 7) },
+    platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) },
   }));
   nastavSklad(inzeraty(3));
   const tri = (await cron(RANO_LETO))[0].subject;
   nastavSklad(inzeraty(6));
   const sest = (await cron(RANO_LETO))[0].subject;
-  ok('3 inzeráty, ne inzerátů', /3 inzeráty vyprší/.test(tri), tri);
-  ok('6 inzerátů, ne inzeráty', /6 inzerátů vyprší/.test(sest), sest);
+  ok('3 inzeráty, ne inzerátů', /3 inzeráty vypršely/.test(tri), tri);
+  ok('6 inzerátů, ne inzeráty', /6 inzerátů vypršelo/.test(sest), sest);
 
   /* ══════════════════════════════════════════════════════════════ */
-  sekce('4) Čekání na payout');
+  /* Payout se ozve poprvé v den, kdy měly peníze podle nastavení dorazit,
+     a pak jednou týdně dál — dokud se to nevyřeší. Lhůtu si aplikace drží
+     u každé platformy zvlášť, tak se bere odtamtud. */
+  sekce('4) Payout: poprvé ve lhůtě, pak po týdnech');
+  const kdyPayout = async (kde, skupiny) => {
+    const dny = [];
+    for (let ceka = 0; ceka <= 60; ceka++) {
+      nastavSklad([
+        { id: 'w', name: 'Yeezy Slide', saleState: 'waiting', soldWhere: kde,
+          saleDate: prodanoPred(RANO_LETO, ceka) },
+      ], skupiny);
+      if ((await cron(RANO_LETO)).length) dny.push(ceka);
+    }
+    return dny;
+  };
+  const NASTAVENI = {
+    platforms: ['StockX'], eshopy: ['Sneakerstore'], local: ['Bazoš.cz'],
+    payoutDays: { 'Sneakerstore': 30 },
+  };
+  shoda('eshop s vlastní lhůtou 30 dní', await kdyPayout('Sneakerstore', NASTAVENI),
+    [30, 37, 44, 51, 58]);
+  shoda('StockX bere výchozí 7 dní pro skupinu', await kdyPayout('StockX', NASTAVENI),
+    [7, 14, 21, 28, 35, 42, 49, 56]);
+  shoda('místní prodej výchozí 3 dny', await kdyPayout('Bazoš.cz', NASTAVENI),
+    [3, 10, 17, 24, 31, 38, 45, 52, 59]);
+  shoda('neznámé místo padá na 14 dní', await kdyPayout('Neznámý bazar', NASTAVENI),
+    [14, 21, 28, 35, 42, 49, 56]);
+
+  sekce('4b) Co je ve zprávě o payoutu vidět');
   nastavSklad([
     { id: 'w1', name: 'Yeezy Slide', saleState: 'waiting', soldWhere: 'StockX',
-      saleDate: prodanoPred(RANO_LETO, 21) },
-    { id: 'w2', name: 'Sotva prodáno', saleState: 'waiting', saleDate: prodanoPred(RANO_LETO, 20) },
+      saleDate: prodanoPred(RANO_LETO, 7) },
+    { id: 'w2', name: 'Sotva prodáno', saleState: 'waiting', soldWhere: 'StockX',
+      saleDate: prodanoPred(RANO_LETO, 6) },
     // Český tvar data musí fungovat stejně jako ISO
-    { id: 'w3', name: 'Starý prodej', saleState: 'waiting', saleDate: '27.5.2026' },
-  ]);
+    { id: 'w3', name: 'Starý prodej', saleState: 'waiting', soldWhere: 'StockX',
+      saleDate: '11.8.2026' },
+  ], NASTAVENI);
   m = await cron(RANO_LETO);
-  ok('na prahu 21 dní se ozve', m[0] && /Yeezy Slide/.test(m[0].text), m[0] && m[0].text);
+  ok('v den lhůty se ozve', m[0] && /Yeezy Slide/.test(m[0].text), m[0] && m[0].text);
+  ok('a řekne, že lhůta vyprší dnes', m[0] && /lhůta 7 dní vyprší dnes/.test(m[0].text), m[0] && m[0].text);
   ok('o den dřív ne', m[0] && !/Sotva prodáno/.test(m[0].text));
   ok('české datum se čte taky', m[0] && /Starý prodej/.test(m[0].text), m[0] && m[0].text);
-  ok('a je na prahu 90 dní', m[0] && /Bez vyplacení 90 dní/.test(m[0].text));
+  ok('u zpožděného je o kolik', m[0] && /o 7 dní přes lhůtu 7 dní/.test(m[0].text), m[0] && m[0].text);
+  ok('nejhorší je nahoře', m[0] && m[0].text.indexOf('Starý prodej') < m[0].text.indexOf('Yeezy Slide'));
+  ok('předmět zmíní zpoždění', m[0] && /nejdéle o 7 dní přes lhůtu/.test(m[0].subject), m[0] && m[0].subject);
   ok('kde se prodalo je vidět', m[0] && /StockX/.test(m[0].text));
 
   /* ══════════════════════════════════════════════════════════════ */
@@ -236,7 +270,7 @@ function prodanoPred(ted, dnu) {
   sekce('6) Osmá ráno v Praze, ať je léto nebo zima');
   nastavSklad([
     { id: 'a', name: 'Dunk', sku: 'DD', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(Date.UTC(2026, 7, 25, 6), 7) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(Date.UTC(2026, 7, 25, 6), 0) } },
   ]);
   const leto8 = await cron(Date.UTC(2026, 7, 25, 6));   // léto: 06 UTC = 08 Praha
   const leto9 = await cron(Date.UTC(2026, 7, 25, 7));   // léto: 07 UTC = 09 Praha
@@ -245,7 +279,7 @@ function prodanoPred(ted, dnu) {
 
   nastavSklad([
     { id: 'a', name: 'Dunk', sku: 'DD', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(Date.UTC(2026, 0, 15, 7), 7) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(Date.UTC(2026, 0, 15, 7), 0) } },
   ]);
   const zima7 = await cron(Date.UTC(2026, 0, 15, 7));   // zima: 07 UTC = 08 Praha
   const zima6 = await cron(Date.UTC(2026, 0, 15, 6));   // zima: 06 UTC = 07 Praha
@@ -277,7 +311,7 @@ function prodanoPred(ted, dnu) {
   sekce('8) Náhled a zkušební mail v prohlížeči');
   nastavSklad([
     { id: 'a', name: 'Dunk Low Panda', sku: 'DD1391', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 7) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
   ]);
   const nahled = await get('/' + ENV.MCP_TOKEN + '/nahled');
   ok('náhled odpoví', nahled.status === 200, String(nahled.status));
@@ -307,7 +341,7 @@ function prodanoPred(ted, dnu) {
 
   nastavSklad([
     { id: 'a', name: 'Dunk', sku: 'DD', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 7) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
   ]);
   const tiche = await cron(RANO_LETO, bezPosty);
   const zaznamy = logy.slice();
@@ -327,7 +361,45 @@ function prodanoPred(ted, dnu) {
   ok('a zapíše ji do logu', zaznamy2.some(r => /selhala/.test(r)), JSON.stringify(zaznamy2));
 
   /* ══════════════════════════════════════════════════════════════ */
-  sekce('12) Ani tady se nikam nezapisuje');
+  /* Lhůty payoutu jsou na dvou místech: aplikace je používá pro odhad
+     cashflow, konektor pro upomínky. Kdyby se rozešly, mail by upomínal
+     proti jiným číslům, než jaká má uživatel na obrazovce.
+
+     Porovnává se znění konstant v obou souborech. Celý algoritmus to
+     neověří — na to by se musel spustit prohlížeč — ale chytne to ten
+     případ, který opravdu hrozí: že někdo změní čísla v aplikaci
+     a na konektor zapomene. */
+  sekce('12) Lhůty souhlasí s aplikací');
+  const fs = require('fs');
+  const app = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+  const wrk = fs.readFileSync(path.resolve(__dirname, '..', 'konektor', 'worker.js'), 'utf8');
+
+  const cisla = (zdroj, jmeno) => {
+    const m = new RegExp(jmeno + '\\s*=\\s*\\{([^}]*)\\}').exec(zdroj);
+    if (!m) return null;
+    const out = {};
+    for (const kus of m[1].split(',')) {
+      const p = /([A-Za-z_]+)\s*:\s*(\d+)/.exec(kus);
+      if (p) out[p[1]] = +p[2];
+    }
+    return out;
+  };
+  const vApp = cisla(app, 'DEFAULT_PAYOUT_DAYS');
+  const vKonektoru = cisla(wrk, 'VYCHOZI_PAYOUT_SKUPIN');
+  ok('aplikace ta čísla pořád má', !!vApp, String(vApp));
+  shoda('výchozí lhůty skupin sedí', vKonektoru, vApp);
+
+  // Poslední záchrana, když platforma není nikde: v aplikaci je to holé
+  // `return 14` na konci getPayoutDays, v konektoru pojmenovaná konstanta
+  const teloFn = /function getPayoutDays[\s\S]*?\n\}/.exec(app);
+  const zalohaApp = teloFn && [...teloFn[0].matchAll(/return\s+(\d+);/g)].pop();
+  const zalohaWrk = /VYCHOZI_PAYOUT\s*=\s*(\d+)/.exec(wrk);
+  ok('getPayoutDays v aplikaci pořád je', !!zalohaApp, teloFn && teloFn[0].slice(0, 80));
+  shoda('i poslední záchrana sedí',
+    zalohaWrk && zalohaWrk[1], zalohaApp && zalohaApp[1]);
+
+  /* ══════════════════════════════════════════════════════════════ */
+  sekce('13) Ani tady se nikam nezapisuje');
   const doFirestore = volani.filter(v => /firestore\.googleapis\.com|identitytoolkit/.test(v.url));
   const zapisy = doFirestore.filter(v =>
     ['PATCH', 'PUT', 'DELETE'].includes(v.method) ||
