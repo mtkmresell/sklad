@@ -15,7 +15,8 @@ fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repoz
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
 nastroje/      čtečka dat z cloudu pro příkazovou řádku (nenasazuje se)
-konektor/      MCP server pro Cloudflare — sklad v běžném chatu (nenasazuje se sem)
+konektor/      MCP server pro Cloudflare — sklad v běžném chatu + denní upozornění
+               e-mailem (nenasazuje se sem, vkládá se ručně do Cloudflare)
 firestore.rules  znění pravidel Firestore (do provozu se vkládá ručně v konzoli)
 ```
 
@@ -137,6 +138,15 @@ bez knihoven; `test-shoda.js` prohání obě cesty stejnými daty a porovnává,
 co z nich vypadne, aby se ty dvě kopie nerozešly.
 Podrobnosti v `konektor/README.md`.
 
+Konektor navíc jednou denně obhlíží sklad a posílá e-mail, když je co říct —
+vypršení inzerátů na Bazoši, dlouho čekající payouty, měsíční souhrn
+(sekce `UPOZORNĚNÍ E-MAILEM`). **Nehlásí stav, ale okamžik:** každá věc se
+ozve jen ten den, kdy dojde na daný práh, takže většinu dní nepřijde nic.
+Díky tomu si taky nemusí pamatovat, co už poslal — práh nastane sám od sebe
+právě jednou. Kdyby se z prahů udělal rozsah („zbývá 7 dní a míň"), mail by
+chodil denně a přestal by se číst; `test-upozorneni.js` to hlídá. Do zprávy
+schválně nejdou částky (kurzy EUR) ani cokoli z CRM (jde přes cizí službu).
+
 Nejdelší funkce (nad 200 řádků) jsou vykreslovací: `renderSoldAnalytics`,
 `openDropdownsEditor`, `saveItem`, `renderStockAnalytics`, `tableHTML`, `openBulkEditModal`.
 Medián je 12 řádků — soubor je velký, ale ne zanesený.
@@ -156,12 +166,12 @@ předvyplněný podle kontextu — b2b → faktura, StockX a Vinted → nic, př
 prodej → doklad. **Otevřená otázka na majitele:** sedí ta tři pravidla,
 hlavně jestli fakturuje jen firmám.
 
-**Upozornění a automatizace.** Aplikace sama nikdy nic nespustí — je to
-stránka v prohlížeči. Konektor na Cloudflare ale běží pořád a umí se
-spouštět podle hodin (cron trigger, zdarma). Tím je možné to, co dřív ne:
-hlídač vypršení inzerátů na Bazoši, připomínka dlouho čekajících payoutů,
-měsíční souhrn. Jako kanál se nabízí Telegram — bot zdarma, chodí do mobilu,
-nic se neinstaluje.
+**Upozornění e-mailem — kód hotový, čeká na zapojení.** Je v konektoru
+(`UPOZORNĚNÍ E-MAILEM`), ale běžet začne, až majitel v Cloudflare doplní
+`RESEND_API_KEY` a `MAIL_KOMU` a přidá dva cron triggery. Postup je
+v `konektor/README.md`. **Ptej se, jestli to zapojil** — do té doby to
+je jen kód v repozitáři. Telegram se zvažoval a majitel ho odmítl:
+nepoužívá ho a časem by ho ignoroval.
 
 **Vlastní účet pro konektor.** Konektor i čtečka se hlásí stejným účtem, jehož
 heslo leží na dvou místech (prostředí Claude Code a trezor Cloudflare). Vypnout
@@ -170,7 +180,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 43 souborů
+node test/run.js              # kontrola syntaxe + všech 44 souborů
 node test/run.js archive      # jen vybrané
 ```
 

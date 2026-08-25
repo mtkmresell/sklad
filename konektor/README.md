@@ -83,6 +83,100 @@ Než adresu vložíš do Clauda, otevři ji v prohlížeči — musí přijít
 Na claude.ai jdi do **Customize → Connectors → „+"**, zadej jméno
 (třeba „Sklad") a tuhle adresu. Pole pro OAuth nech prázdná.
 
+## Upozornění e-mailem
+
+Aplikace je stránka v prohlížeči a sama od sebe nikdy nic nespustí. Worker
+ale běží pořád, takže se **jednou denně v osm ráno** podívá do skladu a když
+je co říct, pošle mail.
+
+Hlásí tři věci:
+
+| co | kdy se ozve |
+|---|---|
+| inzerát na Bazoši se blíží k vypršení | 7 dní, 3 dny a den předem |
+| prodej dlouho čeká na payout | po 21, 45 a 90 dnech |
+| souhrn za minulý měsíc | prvního |
+
+**Většinu dní nepřijde nic** — a tak to má být. Nehlásí se stav („zbývá
+sedm dní"), ale okamžik: každá věc se ozve jen ten den, kdy dojde na daný
+práh. Kdyby chodil mail každé ráno, po týdnu by se přestal otevírat.
+
+Vedlejší přínos je, že si Worker nemusí nikam pamatovat, co už poslal.
+Práh je dané číslo dní a to nastane samo od sebe právě jednou. Když jeden
+běh vynechá, ten jeden bod se přeskočí — proto jsou prahy tři, ne jeden.
+
+**Ve zprávě nejsou částky.** Kurzy EUR umí správně jen aplikace, která si
+pamatuje kurz ke dni nákupu i payoutu; konektor by je počítal jinak.
+Nejsou tam ani jména zákazníků — mail jde přes cizí službu a v CRM nemá
+co pohledávat.
+
+### 1. Založ si Resend
+
+Poštu neumí Cloudflare sám od sebe poslat. [resend.com](https://resend.com)
+má zdarma 3 000 mailů měsíčně, což je pro tohle mnohonásobně dost.
+
+Zaregistruj se **stejným e-mailem, na který chceš upozornění dostávat**.
+Bez vlastní domény totiž Resend pouští maily jen na adresu, kterou se
+účet zakládal — což je tady spíš pojistka než překážka.
+
+Pak **API Keys → Create API Key**, oprávnění stačí *Sending access*.
+Klíč začíná `re_` a ukáže se jen jednou; zkopíruj si ho.
+
+### 2. Přidej dvě tajemství
+
+Stejná cesta jako minule — **Workers & Pages → tvůj Worker → Settings →
+Variables and Secrets → Add**, typ **Secret**:
+
+| jméno | hodnota |
+|---|---|
+| `RESEND_API_KEY` | klíč z kroku 1 (`re_…`) |
+| `MAIL_KOMU` | e-mail, kam mají upozornění chodit |
+
+Pak **Deploy**.
+
+### 3. Nastav hodiny
+
+**Settings → Triggers → Cron Triggers → Add Cron Trigger.** Přidej dva:
+
+```
+0 6 * * *
+0 7 * * *
+```
+
+Cloudflare umí spouštět jen podle světového času (UTC) a Praha je proti
+němu v létě o dvě hodiny napřed a v zimě o jednu. Worker si sám ohlídá,
+kterému z těch dvou časů zrovna vychází osmá ráno v Praze, a ten druhý
+zahodí. Díky tomu se nemusí nic přenastavovat dvakrát do roka.
+
+### 4. Vyzkoušej to
+
+Vlož do prohlížeče adresu Workeru zakončenou `/test-mail`:
+
+```
+https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/test-mail
+```
+
+Pošle mail hned, i když zrovna není co hlásit. Odpoví `{"stav":"odeslano"}`.
+**Kdyby nepřišel, mrkni do spamu** a označ ho jako „není spam" — poprvé to
+občas potřeba je, protože odesílatel je sdílená adresa Resendu.
+
+Se `/nahled` místo `/test-mail` uvidíš, co by dnes ráno přišlo, **aniž by
+se cokoli odeslalo**. Užitečné, když chceš jen zkontrolovat, že Worker na
+data vidí.
+
+| co se vypíše | čím to je |
+|---|---|
+| `{"stav":"odeslano",…}` | hotovo, koukni do schránky |
+| `{"stav":"nenastaveno","chybi":[…]}` | chybí tajemství, nebo se po jejich přidání nenasadilo znovu |
+| `"chyba":"odeslání selhalo (403)…"` | klíč Resendu nesedí, nebo je bez práva odesílat |
+| `"chyba":"odeslání selhalo (422)…"` | `MAIL_KOMU` není adresa, na kterou Resend bez vlastní domény pustí |
+
+### Až budeš mít vlastní doménu
+
+Volitelné tajemství `MAIL_ODESILATEL` přepíše odesílatele — třeba
+`Sklad <sklad@tvojedomena.cz>`. Bez něj se posílá z `onboarding@resend.dev`.
+Až doména v Resendu projde ověřením, `MAIL_KOMU` může být jakákoli adresa.
+
 ## Nástroje, které konektor nabízí
 
 | nástroj | k čemu |
@@ -116,15 +210,30 @@ Konektor vidí i CRM, tedy jména a telefony tvých zákazníků. Popis nástroj
 říká Claudovi, ať s tím zachází úsporně, ale sdílení takových chatů si
 rozmysli.
 
+Adresy `/nahled` a `/test-mail` jsou za stejným zámkem jako `/mcp` — bez
+tokenu odpoví 404. Upozornění chodí jen na `MAIL_KOMU`; kdo by token
+získal, adresu nezmění, protože je v trezoru Cloudflare, ne v odkazu.
+
+**Co odchází do Resendu:** názvy položek, kde se prodalo, data a počty.
+Žádné částky a **nikdy nic z CRM** — jména ani telefony zákazníků se do
+zprávy nedostanou a při denní obhlídce se CRM ani nečte. Hlídá to test.
+
 ## Testy
 
 ```bash
-node test/run.js konektor
+node test/run.js konektor upozorneni
 ```
 
 `test-konektor.js` prochází protokol i data proti podstrčenému Firestore —
 zámek na adrese, handshake, seznam nástrojů, filtry, ořezávání odpovědí
 i to, že se nikam nezapisuje. Bez sítě a bez nasazení.
+
+`test-upozorneni.js` dělá totéž pro upozornění: podstrčí Firestore, poštu
+i čas a projde každý den života inzerátu i prodeje, aby ověřil, že se
+ozvou právě třikrát a jinak je ticho. Kdyby se z prahů někdy stal rozsah,
+mail by chodil denně — a tenhle test to zachytí. Hlídá taky přepnutí
+letního času, chování při výpadku pošty a to, že ve zprávě nejsou peníze
+ani zákazníci.
 
 ## Kdyby to nefungovalo
 
@@ -151,3 +260,9 @@ Další případy:
 |---|---|
 | „V cloudu nejsou žádná data" | `SKLAD_UID` je UID čtečky místo majitele |
 | prázdné odpovědi | pravidla Firestore nepouští čtečku k datům majitele |
+| upozornění nechodí vůbec | nejsou nastavené cron triggery, nebo `/test-mail` hlásí chybu |
+| upozornění nechodí, `/test-mail` projde | nejspíš prostě není co hlásit — ověř `/nahled` |
+| chodí, ale padají do spamu | označ jednou „není spam", případně si na ně udělej filtr |
+
+Cron se dá zkontrolovat i zpětně: **Workers & Pages → tvůj Worker →
+Logs**. U každého ranního běhu je vidět, jestli něco odešlo, nebo proč ne.

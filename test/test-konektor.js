@@ -228,16 +228,32 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   ok('a ne jako chyba protokolu', zly.syrove.error === undefined);
 
   /* ── Nic se nezapisuje ────────────────────────────────────────────── */
-  const zapisy = volani.filter(v =>
+  // Do Firestore smí jen čtení. POST je tam legitimní jen u :batchGet
+  // (hromadné čtení) a u přihlášení — všechno ostatní by byl zápis.
+  const doFirestore = volani.filter(v => /firestore\.googleapis\.com|identitytoolkit/.test(v.url));
+  const zapisy = doFirestore.filter(v =>
     ['PATCH', 'PUT', 'DELETE'].includes(v.method) ||
     (v.method === 'POST' && !v.url.includes(':batchGet') && !v.url.includes('signIn')));
   shoda('žádný zápisový požadavek do Firestore', zapisy.map(v => v.method + ' ' + v.url), []);
+
+  // Kam všude Worker vůbec sahá. Kdyby přibyla další adresa, ať se o tom ví.
+  const hostitele = [...new Set(volani.map(v => new URL(v.url).host))].sort();
+  shoda('Worker mluví jen s Googlem', hostitele,
+    ['firestore.googleapis.com', 'identitytoolkit.googleapis.com']);
 
   const zdroj = require('fs').readFileSync(path.resolve(__dirname, '..', 'konektor', 'worker.js'), 'utf8');
   ok('žádný commit', !/documents:commit/.test(zdroj));
   ok('žádný PATCH', !/['"]PATCH['"]/.test(zdroj));
   ok('žádný DELETE', !/['"]DELETE['"]/.test(zdroj));
-  ok('token se nikam nevypisuje', !/console\.(log|error|warn)/.test(zdroj));
+
+  /* Do logu Workeru nesmí spadnout nic tajného. Dřív se to hlídalo tím,
+     že se console nesměla použít vůbec — jenže cron bez logu je němý:
+     když se upozornění neodešle, nikdo se to nedozví. Tak se místo toho
+     kontroluje, co se do logu předává. */
+  const konzole = zdroj.match(/console\.(log|error|warn)\([^\n]*/g) || [];
+  const podezrele = konzole.filter(r => /env\.|token|heslo|api_key|password/i.test(r));
+  shoda('do logu nejde nic tajného', podezrele, []);
+  ok('cron má log, aby nebyl němý', konzole.length > 0);
 
   console.log(selhalo ? selhalo + ' z ' + (proslo + selhalo) + ' kontrol selhalo' : 'OK (' + proslo + ' kontrol)');
   process.exit(selhalo ? 1 : 0);
