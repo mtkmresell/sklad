@@ -557,6 +557,36 @@ select:hover{border-color:var(--accent);}
 .cs-drop::-webkit-scrollbar { width:3px; }
 .cs-drop::-webkit-scrollbar-thumb { background:rgba(200,255,0,0.25); border-radius:2px; }
 .cs-drop.open { display:flex; }
+
+/* ── Psaní v nabídce (viz PSANÍ V DROPDOWNU) ─────────────────────────── */
+.cs-opt.cs-skryto { display:none; }
+.cs-opt.cs-najeto {
+  background:rgba(200,255,0,0.10);
+  color:var(--text);
+  box-shadow:inset 2px 0 0 var(--accent);
+}
+/* Proužek s napsaným textem drží nahoře, ať je vidět i po odrolování */
+.cs-hledani {
+  position:sticky; top:0; z-index:1;
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:6px 12px;
+  background:var(--surface2);
+  border-bottom:1px solid var(--border);
+}
+.cs-hledani-text {
+  font-family:'DM Mono',monospace; font-size:12px; color:var(--accent);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.cs-hledani-text::after {
+  content:'|'; margin-left:1px; opacity:0.7;
+  animation:csKurzor 1s step-end infinite;
+}
+@keyframes csKurzor { 50% { opacity:0; } }
+.cs-hledani-pocet {
+  font-family:'DM Mono',monospace; font-size:10px; color:var(--muted2);
+  white-space:nowrap; flex-shrink:0;
+}
+@media(prefers-reduced-motion:reduce){ .cs-hledani-text::after { animation:none; } }
 .cs-opt {
   padding:8px 12px; font-size:13px; font-family:'DM Sans',sans-serif;
   color:var(--muted); cursor:pointer; transition:background 0.1s, color 0.1s;
@@ -13264,6 +13294,157 @@ function initCustomSelect(selectEl) {
     }
   }, {once: false, capture: false});
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   PSANÍ V DROPDOWNU
+
+   Některé nabídky mají přes dvacet položek (Kde prodáno, Dopravce) a hledat
+   v nich očima a kolečkem myši je zdlouhavé. Otevřeš nabídku, začneš psát
+   a seznam se zúží.
+
+   Jedna obsluha pro všechny nabídky v aplikaci. Ty stavěné přes
+   initCustomSelect() i ty psané ručně totiž shodou okolností vykreslují
+   položky stejně — jako .cs-opt uvnitř .cs-drop — takže stačí najít tu
+   otevřenou a pracovat s ní. Platí to i pro nabídky, které teprve vzniknou.
+
+   Nejdřív se hledá podle začátku slova, a teprve když nic nesedí, tak
+   kdekoli uvnitř. Napsané „s" tak nabídne Section a StockX, ne Pikastore.
+   Diakritika a velikost písmen nehrají roli, „zasilkovna" najde Zásilkovnu.
+══════════════════════════════════════════════════════════════════════ */
+(function() {
+  var buffer = '';
+  // Ke které nabídce napsané patří. Bez toho by se text přenesl do další
+  // otevřené nabídky a filtroval ji podle něčeho, co uživatel psal jinde.
+  var patriK = null;
+
+  function bezDiakritiky(s) {
+    return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  // Otevřená nabídka. Ty od initCustomSelect se přepínají třídou .open,
+  // ručně psané rovnou stylem, tak se ptáme na výsledek, ne na způsob.
+  function otevrenaNabidka() {
+    var vse = Array.prototype.slice.call(document.querySelectorAll('.cs-drop'));
+    for (var i = 0; i < vse.length; i++) {
+      var d = vse[i];
+      if (d.offsetParent !== null && getComputedStyle(d).display !== 'none') return d;
+    }
+    return null;
+  }
+
+  function polozky(drop) {
+    return Array.prototype.slice.call(drop.querySelectorAll('.cs-opt'));
+  }
+
+  function zvyrazni(drop, el) {
+    polozky(drop).forEach(function(o) { o.classList.remove('cs-najeto'); });
+    if (!el) return;
+    el.classList.add('cs-najeto');
+    // scrollIntoView by hýbal celou stránkou, tady stačí posunout nabídku
+    var horni = el.offsetTop, dolni = horni + el.offsetHeight;
+    if (horni < drop.scrollTop) drop.scrollTop = horni;
+    else if (dolni > drop.scrollTop + drop.clientHeight) drop.scrollTop = dolni - drop.clientHeight;
+  }
+
+  function napoveda(drop, text, pocet) {
+    var el = drop.querySelector('.cs-hledani');
+    if (!text) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'cs-hledani';
+      drop.insertBefore(el, drop.firstChild);
+    }
+    el.innerHTML = '<span class="cs-hledani-text">' + text.replace(/</g, '&lt;') + '</span>'
+      + '<span class="cs-hledani-pocet">' + (pocet ? pocet + '×' : 'nic nenalezeno') + '</span>';
+  }
+
+  function filtruj(drop) {
+    var vsechny = polozky(drop);
+    if (!buffer) {
+      vsechny.forEach(function(o) { o.classList.remove('cs-skryto', 'cs-najeto'); });
+      napoveda(drop, '');
+      return;
+    }
+    var q = bezDiakritiky(buffer);
+    var zacatek = vsechny.filter(function(o) { return bezDiakritiky(o.textContent).indexOf(q) === 0; });
+    var sedi = zacatek.length ? zacatek
+      : vsechny.filter(function(o) { return bezDiakritiky(o.textContent).indexOf(q) !== -1; });
+
+    // Když nic nesedí, seznam zůstane celý — ať je vidět, že se jen nic
+    // nenašlo, místo prázdného okna
+    vsechny.forEach(function(o) { o.classList.toggle('cs-skryto', sedi.length > 0 && sedi.indexOf(o) === -1); });
+    napoveda(drop, buffer, sedi.length);
+    zvyrazni(drop, sedi[0] || null);
+  }
+
+  function viditelne(drop) {
+    return polozky(drop).filter(function(o) { return !o.classList.contains('cs-skryto'); });
+  }
+
+  function posun(drop, smer) {
+    var v = viditelne(drop);
+    if (!v.length) return;
+    var ted = drop.querySelector('.cs-opt.cs-najeto');
+    var i = ted ? v.indexOf(ted) : -1;
+    i = i === -1 ? (smer > 0 ? 0 : v.length - 1) : (i + smer + v.length) % v.length;
+    zvyrazni(drop, v[i]);
+  }
+
+  /* Uklidí stopy po filtrování. Nestačí zapomenout napsané — schované položky
+     a proužek zůstávají v DOM, a nabídka by se příště otevřela s částí
+     položek pryč. Zavřít se přitom dá i jinudy než kliknutím: Escapem,
+     výběrem, zavřením celého okna. */
+  function uklid() {
+    document.querySelectorAll('.cs-opt.cs-skryto, .cs-opt.cs-najeto').forEach(function(o) {
+      o.classList.remove('cs-skryto', 'cs-najeto');
+    });
+    document.querySelectorAll('.cs-hledani').forEach(function(h) { h.remove(); });
+  }
+
+  function zrus() {
+    if (buffer || patriK) uklid();
+    buffer = ''; patriK = null;
+  }
+
+  document.addEventListener('keydown', function(e) {
+    var drop = otevrenaNabidka();
+    if (!drop) { zrus(); return; }
+    // Jiná nabídka než ta, do které se psalo — začínáme nanovo
+    if (drop !== patriK) { zrus(); patriK = drop; }
+
+    // Když uživatel píše do skutečného pole, patří klávesy jemu
+    var a = document.activeElement;
+    if (a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !a.readOnly && a.type !== 'checkbox'))) return;
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); posun(drop, e.key === 'ArrowDown' ? 1 : -1); return;
+    }
+    if (e.key === 'Enter') {
+      var vyber = drop.querySelector('.cs-opt.cs-najeto') || viditelne(drop)[0];
+      if (vyber) { e.preventDefault(); zrus(); vyber.click(); }
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (buffer) { e.preventDefault(); zrus(); filtruj(drop); }  // první Escape zruší psaní
+      return;                                                     // druhý zavře nabídku jinde
+    }
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      buffer = buffer.slice(0, -1);
+      filtruj(drop);
+      return;
+    }
+    // Jen běžné znaky, ne zkratky
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      buffer += e.key;
+      filtruj(drop);
+    }
+  });
+
+  // Kliknutí nabídku buď otevře, zavře, nebo v ní vybere — pokaždé psaní končí
+  document.addEventListener('click', function() { zrus(); }, true);
+})();
 
 /* ══════════════════════════════════════
    CUSTOM DATE PICKER

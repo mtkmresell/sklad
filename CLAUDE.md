@@ -34,6 +34,11 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
 - Kód je ES5-ish (`var`, `function`) ve starších částech, novější části používají moderní
   zápis. Piš ve stylu okolního kódu, nesjednocuj to plošně.
 - Funkce jsou globální (klasické `<script>`, ne moduly). Nové věci drž v IIFE, kde to jde.
+- **Každý `<select>` musí projít `initCustomSelect()`** — systémová nabídka se rozbalí
+  bíle a do vzhledu aplikace nezapadá. U selectu psaného v HTML se jeho id přidá do
+  seznamu při startu, u vzniklého za běhu se `initCustomSelect()` volá ručně. Není to
+  vidět, dokud se na nabídku neklikne; hlídá to `test-selecty.js`. Nabídky se pak taky
+  samy umí prohledávat psaním (`PSANÍ V DROPDOWNU`) — bez vlastního vzhledu ne.
 - Před commitem vždy `node test/run.js`.
 - Commituj a pushuj až na vyžádání; pushuje se do `main`.
 
@@ -114,6 +119,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | nabídka zákazníkovi | `OFFER BUILDER` |
 | export dat pro analýzu | `ANALYTICKÝ EXPORT` |
 | historie cen položky | `HISTORIE CEN U POLOŽKY` |
+| psaní v rozbalovací nabídce | `PSANÍ V DROPDOWNU` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -164,7 +170,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 33 souborů
+node test/run.js              # kontrola syntaxe + všech 43 souborů
 node test/run.js archive      # jen vybrané
 ```
 
