@@ -143,8 +143,15 @@ vypršení inzerátů na Bazoši, zaseknuté zásilky a payouty, pondělní obhl
 (sekce `UPOZORNĚNÍ E-MAILEM`). **Nehlásí stav, ale okamžik:** každá věc se
 ozve jen ten den, kdy dojde na daný práh, takže většinu dní nepřijde nic.
 Kdyby se z prahu udělal rozsah („zbývá 7 dní a míň"), mail by chodil denně
-a přestal by se číst; `test-upozorneni.js` to hlídá. Do zprávy schválně
-nejdou částky (kurzy EUR) ani cokoli z CRM (jde přes cizí službu).
+a přestal by se číst; `test-upozorneni.js` to hlídá. Do běžných upozornění
+schválně nejdou částky (kurzy EUR) ani cokoli z CRM (jde přes cizí službu).
+
+**Měsíční report je z toho výjimka** — peníze i počty zákazníků v něm jsou,
+majitel o to stál. Smí se to, protože u prodaných kusů je kurz uložený
+(`buyRateEur`, `payoutRateEur`, `profitRateEur`) a počítá se z něj; navíc
+uložený zisk má přednost před dopočítaným, ať report ukazuje totéž co
+obrazovka. Vzorec je tím pádem na dvou místech — tady a v `_itemProfit()`.
+CRM se čte **jen prvního** a jdou z něj jen počty, nikdy jména.
 
 Tři věci se hlásí schválně jinak, než by se čekalo. **Inzerát až v den
 vypršení**, ne dopředu — Bazoš ho archivuje a nahodí se jedním kliknutím,

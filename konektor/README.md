@@ -100,7 +100,7 @@ Hlásí pět věcí:
 | zásilka je dlouho na cestě | po 5 dnech od odeslání, pak každý týden |
 | prodej čeká na payout | v den, kdy měly peníze dorazit, a pak každý týden |
 | pondělní obhlídka | každé pondělí, když je co projít |
-| souhrn za minulý měsíc | prvního |
+| report za minulý měsíc | prvního |
 
 Bazoš se hlídá **na všech třech** — `.cz`, `.sk` i `.pl`. V měsíčním souhrnu
 se ale řádek pro danou zemi objeví, jen když tam něco vystaveného je.
@@ -140,10 +140,42 @@ v komisi (platformy ze skupiny *eshopy*). Když není co projít, mlčí
 i v pondělí, jinak by z ní byl otravný budík. Dlouhý výčet se zkracuje,
 protože se stejně nečte a jen nafoukne zprávu.
 
-**Ve zprávě nejsou částky.** Kurzy EUR umí správně jen aplikace, která si
-pamatuje kurz ke dni nákupu i payoutu; konektor by je počítal jinak.
-Nejsou tam ani jména zákazníků — mail jde přes cizí službu a v CRM nemá
-co pohledávat.
+**V běžných upozorněních nejsou částky.** Kurzy EUR umí správně jen
+aplikace, která si pamatuje kurz ke dni nákupu i payoutu. Nejsou tam ani
+jména zákazníků — mail jde přes cizí službu a v CRM nemá co pohledávat.
+
+### Měsíční report
+
+Jediná zpráva, ve které peníze i čísla ze CRM jsou. Bez tržby a zisku by
+report nedával smysl a majitel o něj výslovně stál.
+
+Počítat se to smí proto, že **u prodaných kusů kurz známý je** — aplikace
+si u každého uloží kurz ke dni nákupu i payoutu (`buyRateEur`,
+`payoutRateEur`, `profitRateEur`) a počítá z nich, ne z dnešního.
+Konektor sahá po týchž číslech a **uložený zisk má přednost před
+dopočítaným**, aby report ukazoval totéž co obrazovka. Kus, u kterého
+kurz uložený není, se počítá záložním kurzem a ve zprávě se přizná,
+kolika kusů se to týká.
+
+Vzorec je tím pádem na dvou místech — tady a v `_itemProfit()` v aplikaci.
+`test-upozorneni.js` proto počítá modelový měsíc na korunu a ověřuje
+i tu přednost uloženého čísla.
+
+**Balíky** se musí rozlišit: peníze nese hlavička (`type: 'bulk'`), kusy
+v ní mají `sellPrice: 0`. Do tržby jdou hlavičky a kusy mimo balík, do
+počtu kusů naopak členové a hlavička ne. Jinak by se nákup započítal
+dvakrát nebo by balík vyšel jako jeden kus.
+
+Ze CRM jde do zprávy **jen počet** nových a celkových zákazníků, nikdy
+jméno ani kontakt. A **CRM se čte jen prvního** — po zbytek měsíce se do
+něj konektor vůbec nepodívá, ať se cizí osobní údaje netahají ze serveru
+kvůli mailu, ve kterém stejně nemají co dělat.
+
+Report obsahuje: tržbu, náklady, zisk, marži, ROI, počet kusů, zisk na
+kus a obvyklou dobu držby; srovnání zisku, tržby a kusů s minulým měsícem
+a s průměrem půl roku zpět; rozpad podle místa prodeje a kategorie;
+nejlepší a nejhorší obchod; a stav skladu k dnešku včetně vázaného
+kapitálu.
 
 ### Jak mail vypadá
 

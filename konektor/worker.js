@@ -450,6 +450,9 @@ const HODINA_ODESLANI = 10;
 
 const MESICE = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
   'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+// „proti červenci", ne „proti červenec"
+const MESICE_PROTI = ['lednu', 'únoru', 'březnu', 'dubnu', 'květnu', 'červnu',
+  'červenci', 'srpnu', 'září', 'říjnu', 'listopadu', 'prosinci'];
 
 const PRAHA = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/Prague',
@@ -713,35 +716,225 @@ function tydenniBlok(polozky, dnes, skupiny) {
   };
 }
 
-/* ── Souhrn za minulý měsíc (posílá se prvního) ─────────────────────── */
-function mesicniBlok(polozky, cas, dnes) {
+/* ══════════════════════════════════════════════════════════════════════
+   MĚSÍČNÍ REPORT
+
+   Jediná zpráva, ve které jsou peníze a čísla ze CRM. Ve zbytku
+   upozornění schválně nejsou — tady o ně majitel výslovně stál a dává
+   to smysl: bez tržby a zisku není report k ničemu.
+
+   ── Proč se to smí počítat ───────────────────────────────────────────
+   Zbytek konektoru se penězům vyhýbá, protože kurz EUR zná správně jen
+   aplikace. U prodaných kusů to ale neplatí: aplikace si u každého uloží
+   kurz ke dni nákupu i payoutu (buyRateEur, payoutRateEur, profitRateEur)
+   a počítá se z nich, ne z dnešního. Konektor sahá po týchž číslech.
+
+   Vzorec je tím pádem na dvou místech — tady a v _itemProfit() v aplikaci.
+   Kdyby se rozešly, report by ukazoval jiná čísla než obrazovka, což je
+   horší než žádný report. Hlídá to test-upozorneni.js.
+
+   Kus, u kterého kurz uložený není, se počítá záložním kurzem a ve zprávě
+   se přizná, kolika kusů se to týká. Mlčky hádat u reportu nejde.
+
+   ── Balíky ──────────────────────────────────────────────────────────
+   Balík je hlavička (type 'bulk') a v ní kusy (bulkId). Peníze nese
+   hlavička, kusy mají sellPrice 0. Do tržby proto jdou hlavičky a kusy
+   mimo balík; do počtu kusů naopak kusy v balíku a hlavička ne. Jinak
+   by se nákup započítal dvakrát nebo by balík vyšel jako jeden kus.
+══════════════════════════════════════════════════════════════════════ */
+
+// Když u kusu chybí uložený kurz. Stejné číslo jako záloha v aplikaci.
+const ZALOZNI_KURZ = 25;
+const MESICU_PRUMER = 6;   // z kolika měsíců zpět se počítá průměr
+const NEJVIC_ROZPAD = 5;   // kolik řádků v rozpadu podle místa a kategorie
+
+const jeCastBaliku = it => !!(it && it.bulkId);
+
+// Kurzy tak, jak je bere _itemProfit() v aplikaci
+const kurzProdeje = it => it.payoutRateEur || it.profitRateEur || null;
+const kurzNakupu = it => it.buyRateEur || it.profitRateEur || null;
+
+function vKc(hodnota, mena, kurz, stav) {
+  const c = hodnota || 0;
+  if (mena !== 'EUR') return c;
+  if (kurz) return c * kurz;
+  stav.bezKurzu.add(stav.prave);
+  return c * ZALOZNI_KURZ;
+}
+
+function trzbaKusu(it, stav) {
+  if (jeBalik(it)) return it.sellPrice || 0;   // balík má cenu uloženou v Kč
+  const hodnota = it.sellCurrency === 'EUR' ? (it.sellPriceOrig || it.sellPrice) : it.sellPrice;
+  return vKc(hodnota, it.sellCurrency, kurzProdeje(it), stav);
+}
+
+function nakladyKusu(it, stav) {
+  if (jeBalik(it)) return (it.totalBuyPrice || 0) + (it.extraCosts || 0);
+  return vKc(it.buyPrice, it.buyCurrency, kurzNakupu(it), stav)
+    + vKc(it.extraCosts, it.extraCurrency, kurzProdeje(it), stav);
+}
+
+/* Zisk se bere přesně jako v _itemProfit(): u balíku uložený, u kusu
+   s uloženým kurzem taky uložený, jinak dopočítaný. Ta zkratka tam je
+   schválně — uložené číslo je to, co majitel vidí v aplikaci. */
+function ziskKusu(it, stav) {
+  if (jeBalik(it)) return it.profit || 0;
+  if (it.profit != null && (it.payoutRateEur || it.profitRateEur)) return it.profit;
+  return trzbaKusu(it, stav) - nakladyKusu(it, stav);
+}
+
+function mesicniCisla(polozky, od, doKdy, stav) {
+  const c = { trzba: 0, naklady: 0, zisk: 0, kusy: 0, drzba: [], obchody: [] };
+  for (const it of polozky) {
+    if (stavPolozky(it) !== 'paid') continue;
+    const kdy = denZData(it.payoutDate || it.saleDate);
+    if (kdy === null || kdy < od || kdy >= doKdy) continue;
+
+    if (jeCastBaliku(it)) { c.kusy++; continue; }   // peníze nese hlavička
+    if (!jeBalik(it)) c.kusy++;
+
+    stav.prave = it.name || it.id;
+    const t = trzbaKusu(it, stav);
+    const n = nakladyKusu(it, stav);
+    const z = ziskKusu(it, stav);
+    c.trzba += t; c.naklady += n; c.zisk += z;
+    c.obchody.push({ nazev: it.name || it.id, zisk: z, naklady: n,
+      kde: it.soldWhere || '', kategorie: it.category || 'bez kategorie' });
+
+    const koupeno = denZData(it.buyDate);
+    if (koupeno !== null) c.drzba.push(Math.round((kdy - koupeno) / DEN));
+  }
+  return c;
+}
+
+const median = a => {
+  if (!a.length) return null;
+  const s = a.slice().sort((x, y) => x - y);
+  const p = Math.floor(s.length / 2);
+  return s.length % 2 ? s[p] : Math.round((s[p - 1] + s[p]) / 2);
+};
+
+function kc(n) { return Math.round(n).toLocaleString('cs-CZ') + ' Kč'; }
+function procenta(cast, zaklad) {
+  if (!zaklad) return '—';
+  return (cast / zaklad * 100).toFixed(1).replace('.', ',') + ' %';
+}
+
+/* Změna proti něčemu. Šipka i znaménko, ať se to dá přečíst jedním
+   pohledem a nemuselo se to dopočítávat z hlavy. */
+function zmena(ted, drive, popis) {
+  if (!drive) return null;
+  const r = (ted - drive) / Math.abs(drive) * 100;
+  const smer = r >= 0 ? '▲' : '▼';
+  return smer + ' ' + Math.abs(r).toFixed(0) + ' % ' + popis;
+}
+
+function rozpad(obchody, klic, nadpis) {
+  const podle = new Map();
+  for (const o of obchody) {
+    const k = o[klic] || 'neuvedeno';
+    const z = podle.get(k) || { kusy: 0, zisk: 0 };
+    z.kusy++; z.zisk += o.zisk;
+    podle.set(k, z);
+  }
+  const radky = [...podle.entries()]
+    .sort((a, b) => b[1].zisk - a[1].zisk)
+    .slice(0, NEJVIC_ROZPAD)
+    .map(([k, v]) => ({ hlavni: k, vedlejsi: v.kusy + '× · zisk ' + kc(v.zisk) }));
+  return radky.length ? [{ hlavni: nadpis }].concat(radky) : [];
+}
+
+function mesicniBlok(polozky, cas, dnes, crm) {
   const mesic = cas.mesic === 1 ? 12 : cas.mesic - 1;
   const rok = cas.mesic === 1 ? cas.rok - 1 : cas.rok;
-  const od = Date.UTC(rok, mesic - 1, 1);
-  const doKdy = Date.UTC(mesic === 12 ? rok + 1 : rok, mesic === 12 ? 0 : mesic, 1);
+  const jmenoMesice = MESICE[mesic - 1] + ' ' + rok;
+  const zacatek = (r, m) => Date.UTC(m === 13 ? r + 1 : r, m === 13 ? 0 : m - 1, 1);
+  const od = zacatek(rok, mesic);
+  const doKdy = zacatek(rok, mesic + 1);
 
-  let prodano = 0;
-  let naSklade = 0;
-  let ceka = 0;
-  for (const it of polozky) {
-    if (jeBalik(it)) continue;
-    const stav = stavPolozky(it);
-    if (stav === 'stock') naSklade++;
-    else if (stav === 'waiting') ceka++;
-    else if (stav === 'paid') {
-      const d = denZData(it.payoutDate || it.saleDate);
-      if (d !== null && d >= od && d < doKdy) prodano++;
+  const stav = { bezKurzu: new Set(), prave: '' };
+  const ted = mesicniCisla(polozky, od, doKdy, stav);
+  if (!ted.kusy && !ted.trzba) return null;   // prázdný měsíc report nepotřebuje
+
+  // Předchozí měsíc a průměr z půl roku zpět — samotné číslo nic neříká
+  const zpet = n => {
+    let r = rok, m = mesic - n;
+    while (m < 1) { m += 12; r -= 1; }
+    return { od: zacatek(r, m), doKdy: zacatek(r, m + 1) };
+  };
+  const minuly = (r => mesicniCisla(polozky, r.od, r.doKdy, stav))(zpet(1));
+  const predchozi = [];
+  for (let n = 1; n <= MESICU_PRUMER; n++) {
+    const r = zpet(n);
+    const c = mesicniCisla(polozky, r.od, r.doKdy, stav);
+    if (c.kusy || c.trzba) predchozi.push(c);
+  }
+  const prumer = k => predchozi.length
+    ? predchozi.reduce((s, c) => s + c[k], 0) / predchozi.length : 0;
+
+  /* ── 1) Měsíc v číslech ── */
+  const cisla = [
+    { co: 'tržba', kolik: kc(ted.trzba) },
+    { co: 'náklady', kolik: kc(ted.naklady) },
+    { co: 'zisk', kolik: kc(ted.zisk) },
+    { co: 'marže', kolik: procenta(ted.zisk, ted.trzba) },
+    { co: 'ROI', kolik: procenta(ted.zisk, ted.naklady) },
+    { co: 'prodáno kusů', kolik: ted.kusy },
+    { co: 'zisk na kus', kolik: kc(ted.kusy ? ted.zisk / ted.kusy : 0) },
+  ];
+  const drzbaMed = median(ted.drzba);
+  if (drzbaMed !== null) cisla.push({ co: 'obvyklá držba', kolik: dnu(drzbaMed) });
+
+  /* ── 2) Srovnání ── */
+  const srovnani = [
+    ['zisk', ted.zisk, minuly.zisk, prumer('zisk'), kc],
+    ['tržba', ted.trzba, minuly.trzba, prumer('trzba'), kc],
+    ['kusy', ted.kusy, minuly.kusy, prumer('kusy'), n => String(Math.round(n))],
+  ].map(([nazev, tedH, minH, prumH, form]) => ({
+    hlavni: nazev + ': ' + form(tedH),
+    vedlejsi: [zmena(tedH, minH, 'proti ' + MESICE_PROTI[(mesic + 10) % 12]),
+      zmena(tedH, prumH, 'proti průměru')].filter(Boolean).join('  ·  ') || 'není s čím srovnat',
+  }));
+
+  /* ── 3) Kde a co se prodávalo ── */
+  const kdeACo = rozpad(ted.obchody, 'kde', '— Kde se prodávalo —')
+    .concat(rozpad(ted.obchody, 'kategorie', '— Podle kategorie —'));
+
+  /* ── 4) Nejlepší a nejhorší ── */
+  const podleZisku = ted.obchody.slice().sort((a, b) => b.zisk - a.zisk);
+  const extremy = [];
+  if (podleZisku.length) {
+    const nej = podleZisku[0], nic = podleZisku[podleZisku.length - 1];
+    extremy.push({ hlavni: '▲ ' + nej.nazev,
+      vedlejsi: kc(nej.zisk) + ' · ROI ' + procenta(nej.zisk, nej.naklady) });
+    if (podleZisku.length > 1) {
+      extremy.push({ hlavni: '▼ ' + nic.nazev,
+        vedlejsi: kc(nic.zisk) + ' · ROI ' + procenta(nic.zisk, nic.naklady), pozor: nic.zisk < 0 });
     }
   }
 
-  const hodnoty = [];
-  const pridej = (co, kolik, za) => hodnoty.push({ co, kolik, za: za || '' });
-  pridej('prodáno kusů', prodano);
-  pridej('na skladě', naSklade);
-  pridej('čeká na payout', ceka);
-
-  // Kolik z padesáti povolených inzerátů je zabraných — tohle se špatně
-  // hlídá okem a když se limit vyčerpá, další inzerát prostě nejde přidat
+  /* ── 5) Sklad a zákazníci k dnešku ── */
+  let naSklade = 0, vazano = 0, nejstarsi = null, ceka = 0;
+  const skladStav = { bezKurzu: new Set(), prave: '' };
+  for (const it of polozky) {
+    if (jeBalik(it)) continue;
+    const s = stavPolozky(it);
+    if (s === 'waiting') { ceka++; continue; }
+    if (s !== 'stock') continue;
+    naSklade++;
+    skladStav.prave = it.name || it.id;
+    vazano += vKc(it.buyPrice, it.buyCurrency, kurzNakupu(it), skladStav);
+    const p = denPorizeni(it);
+    if (p !== null && (nejstarsi === null || p < nejstarsi)) nejstarsi = p;
+  }
+  const dnesniStav = [
+    { co: 'na skladě', kolik: naSklade },
+    { co: 'vázáno v nákupu', kolik: kc(vazano) },
+    { co: 'čeká na payout', kolik: ceka },
+  ];
+  if (nejstarsi !== null) {
+    dnesniStav.push({ co: 'nejdéle leží', kolik: dnu(Math.round((dnes - nejstarsi) / DEN)) });
+  }
   for (const plat of BAZOS_PLATFORMY) {
     const klice = new Set();
     for (const it of polozky) {
@@ -750,14 +943,36 @@ function mesicniBlok(polozky, cas, dnes) {
       if (kdy && Math.round((dnes - prazskyDen(kdy)) / DEN) >= BAZOS_PLATNOST) continue;
       klice.add((it.sku && String(it.sku).trim()) ? String(it.sku).trim() : (it.name || it.id));
     }
-    if (klice.size) pridej('inzeráty ' + plat, klice.size, ' z ' + BAZOS_LIMIT);
+    if (klice.size) dnesniStav.push({ co: 'inzeráty ' + plat, kolik: klice.size, za: ' z ' + BAZOS_LIMIT });
   }
 
-  return {
-    nadpis: 'Souhrn za ' + MESICE[mesic - 1] + ' ' + rok,
-    hodnoty,
-    predmet: 'souhrn za ' + MESICE[mesic - 1] + ' ' + rok,
-  };
+  // Ze CRM jdou do zprávy jen počty, nikdy jména — mail jde přes cizí službu
+  const zakaznici = (crm && crm.customers) || [];
+  const noviZakaznici = zakaznici.filter(z => {
+    const d = denZData(String(z.createdAt || '').slice(0, 10));
+    return d !== null && d >= od && d < doKdy;
+  }).length;
+  if (zakaznici.length) {
+    dnesniStav.push({ co: 'noví zákazníci', kolik: noviZakaznici });
+    dnesniStav.push({ co: 'zákazníků celkem', kolik: zakaznici.length });
+  }
+
+  const bloky = [
+    { nadpis: 'Report za ' + jmenoMesice, hodnoty: cisla, penize: true,
+      predmet: 'report za ' + jmenoMesice + ' · zisk ' + kc(ted.zisk) },
+    { nadpis: 'Srovnání', polozky: srovnani },
+  ];
+  if (kdeACo.length) bloky.push({ nadpis: 'Rozpad prodejů', polozky: kdeACo });
+  if (extremy.length) bloky.push({ nadpis: 'Nejlepší a nejhorší obchod', polozky: extremy });
+  bloky.push({ nadpis: 'Sklad k dnešku', hodnoty: dnesniStav });
+
+  // Nepřesnost se přizná, ne zamlčí
+  if (stav.bezKurzu.size) {
+    bloky[0].uvod = 'U ' + pocet(stav.bezKurzu.size, ['kusu', 'kusů', 'kusů'])
+      + ' chybí uložený kurz EUR, počítáno kurzem ' + ZALOZNI_KURZ
+      + '. Čísla jsou o to nepřesná.';
+  }
+  return bloky;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -773,10 +988,16 @@ function mesicniBlok(polozky, cas, dnes) {
 ══════════════════════════════════════════════════════════════════════ */
 
 const ODKAZ_APLIKACE = 'https://mtkmresell.github.io/sklad/';
-const PATICKA = 'Poslal konektor skladu. Částky ve zprávě schválně nejsou — '
-  + 'kurzy EUR umí správně jen aplikace.';
 
-function textZpravy(dnes, bloky) {
+/* Patička se řídí tím, co ve zprávě je. Běžná upozornění peníze schválně
+   nenesou; měsíční report ano. Jedna věta pro obojí by v jednom z těch
+   dvou případů lhala. */
+const PATICKA_BEZ_PENEZ = 'Poslal konektor skladu. Částky ve zprávě schválně nejsou — '
+  + 'kurzy EUR umí správně jen aplikace.';
+const PATICKA_S_PENEZI = 'Poslal konektor skladu. Částky se počítají z kurzů uložených '
+  + 'u každého nákupu a payoutu, stejně jako v aplikaci.';
+
+function textZpravy(dnes, bloky, paticka) {
   const radky = ['Sklad — ' + formatDne(dnes), ''];
   for (const b of bloky) {
     radky.push('', b.nadpis.toUpperCase(), '');
@@ -787,11 +1008,11 @@ function textZpravy(dnes, bloky) {
     // Číslo se zarovnává samo, přípona až za ním — jinak by „31 z 50"
     // a „1 z 50" pod sebou neseděly
     for (const h of b.hodnoty || []) {
-      radky.push('    ' + h.co.padEnd(20) + String(h.kolik).padStart(4) + h.za);
+      radky.push('    ' + h.co.padEnd(20) + String(h.kolik).padStart(4) + (h.za || ''));
     }
     radky.push('');
   }
-  radky.push('', '— — —', PATICKA, ODKAZ_APLIKACE);
+  radky.push('', '— — —', paticka, ODKAZ_APLIKACE);
   return radky.join('\n');
 }
 
@@ -817,7 +1038,7 @@ function esc(s) {
 /* Mail se skládá z tabulek a stylů psaných přímo u prvků. Není to
    zvyk z lenosti — poštovní klienti flexbox, grid ani <style> v hlavičce
    spolehlivě neumí a Outlook z toho udělá kaši. */
-function htmlZpravy(dnes, bloky) {
+function htmlZpravy(dnes, bloky, paticka) {
   const sekce = bloky.map(b => {
     const nadpis = '<tr><td style="padding:0 0 10px;border-bottom:1px solid ' + B.border + ';">'
       + '<span style="font-family:' + PISMO_MONO + ';font-size:11px;letter-spacing:1.4px;'
@@ -887,7 +1108,7 @@ function htmlZpravy(dnes, bloky) {
 
     + '<tr><td style="padding:38px 0 0;border-top:1px solid ' + B.border + ';">'
     + '<div style="font-family:' + PISMO + ';font-size:12px;color:' + B.muted + ';line-height:1.6;">'
-    + esc(PATICKA) + '</div>'
+    + esc(paticka) + '</div>'
     + '<div style="padding-top:8px;"><a href="' + ODKAZ_APLIKACE + '" '
     + 'style="font-family:' + PISMO_MONO + ';font-size:12px;color:' + B.accent + ';">'
     + 'Otevřít sklad</a></div>'
@@ -914,32 +1135,37 @@ function zkusebniZprava(dnes) {
   }];
   return {
     predmet: 'Sklad: zkušební zpráva',
-    text: textZpravy(dnes, bloky),
-    html: htmlZpravy(dnes, bloky),
+    text: textZpravy(dnes, bloky, PATICKA_BEZ_PENEZ),
+    html: htmlZpravy(dnes, bloky, PATICKA_BEZ_PENEZ),
   };
 }
 
 /* ── Složení celé zprávy ────────────────────────────────────────────── */
-function sestavZpravu(polozky, ted, data) {
+function sestavZpravu(polozky, ted, data, crm) {
   const cas = prazskeCasti(ted);
   const dnes = prazskyDen(ted);
   const skupiny = platformoveSkupiny(data);
 
-  // Pořadí od nejnaléhavějšího: co dnes zmizelo, co vázne, pak rutina
+  // Pořadí od nejnaléhavějšího: co dnes zmizelo, co vázne, pak rutina.
+  // Měsíční report vrací víc bloků najednou, proto se to zplošťuje.
   const bloky = [
     bazosBlok(polozky, dnes),
     zasilkaBlok(polozky, dnes),
     payoutBlok(polozky, dnes, skupiny),
     denVTydnu(dnes) === TYDENNI_DEN ? tydenniBlok(polozky, dnes, skupiny) : null,
-    cas.den === 1 ? mesicniBlok(polozky, cas, dnes) : null,
-  ].filter(Boolean);
+    cas.den === 1 ? mesicniBlok(polozky, cas, dnes, crm) : null,
+  ].flat().filter(Boolean);
 
   if (!bloky.length) return null;
 
+  // Report vrací víc bloků, ale předmět nese jen první z nich
+  const predmety = bloky.map(b => b.predmet).filter(Boolean);
+  const paticka = bloky.some(b => b.penize) ? PATICKA_S_PENEZI : PATICKA_BEZ_PENEZ;
+
   return {
-    predmet: 'Sklad: ' + bloky.map(b => b.predmet).join(' · '),
-    text: textZpravy(dnes, bloky),
-    html: htmlZpravy(dnes, bloky),
+    predmet: 'Sklad: ' + predmety.join(' · '),
+    text: textZpravy(dnes, bloky, paticka),
+    html: htmlZpravy(dnes, bloky, paticka),
   };
 }
 
@@ -1008,7 +1234,16 @@ async function pripravUpozorneni(env) {
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
   if (!data) throw new Error('v cloudu nejsou žádná data — zkontroluj SKLAD_UID');
   const polozky = slozPolozky(data, archivy);
-  return { polozky, zprava: sestavZpravu(polozky, Date.now(), data) };
+
+  /* CRM se čte jen prvního, kvůli počtu zákazníků v reportu. Po zbytek
+     měsíce se do něj konektor vůbec nepodívá — ať se cizí osobní údaje
+     netahají ze serveru kvůli mailu, ve kterém stejně nemají co dělat. */
+  const ted = Date.now();
+  const crm = prazskeCasti(ted).den === 1
+    ? await nactiCrm(token, env.SKLAD_UID)
+    : null;
+
+  return { polozky, zprava: sestavZpravu(polozky, ted, data, crm) };
 }
 
 /* ── Vstupní bod ────────────────────────────────────────────────────── */

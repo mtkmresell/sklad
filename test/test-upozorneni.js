@@ -317,23 +317,108 @@ function prodanoPred(ted, dnu) {
   ok('ale počet je vidět celý', /Nikde nevystaveno \(20\)/.test(dlouhy.text || ''), dlouhy.text);
 
   /* ══════════════════════════════════════════════════════════════ */
-  sekce('5) Měsíční souhrn jen prvního');
+  /* Report je jediná zpráva, ve které smí být peníze a čísla ze CRM.
+     Čísla proto sedí na korunu — kdyby se rozešla s aplikací, ukazoval
+     by report něco jiného než obrazovka, což je horší než žádný report. */
+  sekce('5) Měsíční report');
   const PRVNIHO = Date.UTC(2026, 8, 1, 8, 0, 0);  // 1. 9. 2026, 10:00 v Praze
-  nastavSklad([
-    { id: 's1', name: 'Na skladě', saleState: 'stock' },
-    { id: 'w1', name: 'Čeká', saleState: 'waiting', saleDate: '2026-08-30' },
-    { id: 'p1', name: 'Prodáno v srpnu', saleState: 'paid', payoutDate: '2026-08-14' },
-    { id: 'p2', name: 'Prodáno v červenci', saleState: 'paid', payoutDate: '2026-07-14' },
-    { id: 'bk', type: 'bulk', name: 'Balík', saleState: 'paid', payoutDate: '2026-08-20' },
-  ]);
-  const prvniho = await cron(PRVNIHO);
-  const jindy = await cron(RANO_LETO);
+  // Pevné mezery v číslech se v testu normalizují
+  const cist = s => String(s || '').replace(/ /g, ' ');
 
-  ok('prvního přijde souhrn', prvniho.length === 1, JSON.stringify(prvniho.map(x => x.subject)));
-  ok('a je za minulý měsíc', prvniho[0] && /SOUHRN ZA SRPEN 2026/.test(prvniho[0].text), prvniho[0] && prvniho[0].text);
-  ok('počítá jen srpnové prodeje', prvniho[0] && /prodáno kusů\s+1/.test(prvniho[0].text), prvniho[0] && prvniho[0].text);
-  ok('hlavička balíku není kus', prvniho[0] && !/prodáno kusů\s+2/.test(prvniho[0].text));
-  ok('jindy souhrn nechodí', jindy.length === 0);
+  const SRPEN = [
+    // Kus v Kč: 3000 − 1000 − 200 = 1800
+    { id: 'p1', name: 'Dunk Panda', category: 'sneakers', soldWhere: 'StockX',
+      saleState: 'paid', payoutDate: '2026-08-14', buyDate: '2026-07-15',
+      buyPrice: 1000, sellPrice: 3000, extraCosts: 200 },
+    // Kus v EUR s uloženými kurzy: 200×25 − 100×25 = 2500
+    { id: 'p2', name: 'Jordan 4', category: 'sneakers', soldWhere: 'Vinted',
+      saleState: 'paid', payoutDate: '2026-08-20', buyDate: '2026-08-10',
+      buyPrice: 100, buyCurrency: 'EUR', buyRateEur: 25,
+      sellPrice: 200, sellPriceOrig: 200, sellCurrency: 'EUR', payoutRateEur: 25 },
+    // Balík: peníze nese hlavička, kusy se počítají z členů
+    { id: 'bk', type: 'bulk', name: 'Balík LEGO', saleState: 'paid',
+      payoutDate: '2026-08-25', sellPrice: 10000, totalBuyPrice: 6000, profit: 4000 },
+    { id: 'bm1', name: 'LEGO 1', bulkId: 'bk', saleState: 'paid', payoutDate: '2026-08-25', sellPrice: 0 },
+    { id: 'bm2', name: 'LEGO 2', bulkId: 'bk', saleState: 'paid', payoutDate: '2026-08-25', sellPrice: 0 },
+    // Červenec — jen pro srovnání, do srpna se nesmí připočíst
+    { id: 'p0', name: 'Starý prodej', category: 'lego', soldWhere: 'StockX',
+      saleState: 'paid', payoutDate: '2026-07-14', buyPrice: 1000, sellPrice: 2000 },
+    // Sklad k dnešku
+    { id: 's1', name: 'Leží na skladě', saleState: 'stock', buyPrice: 5000, buyDate: '2025-09-01' },
+    { id: 'w1', name: 'Čeká', saleState: 'waiting', saleDate: '2026-08-30' },
+  ];
+  nastavSklad(SRPEN);
+  const rep = (await cron(PRVNIHO))[0] || {};
+  const t = cist(rep.text);
+
+  ok('prvního přijde', !!rep.text, JSON.stringify(rep.subject));
+  ok('a je za minulý měsíc', /REPORT ZA SRPEN 2026/.test(t), t.slice(0, 200));
+  ok('jindy nechodí', (await cron(RANO_LETO)).length === 0);
+
+  // tržba 3000 + 5000 + 10000 = 18 000; náklady 1200 + 2500 + 6000 = 9 700
+  ok('tržba sedí', /tržba\s+18 000 Kč/.test(t), t);
+  ok('náklady sedí', /náklady\s+9 700 Kč/.test(t), t);
+  ok('zisk sedí', /zisk\s+8 300 Kč/.test(t), t);
+  ok('kusy počítají členy balíku, ne hlavičku', /prodáno kusů\s+4/.test(t), t);
+  ok('marže se počítá z tržby', /marže\s+46,1 %/.test(t), t);
+  ok('ROI se počítá z nákladů', /ROI\s+85,6 %/.test(t), t);
+  ok('zisk na kus', /zisk na kus\s+2 075 Kč/.test(t), t);
+  ok('červenec se nepřipočítal', !/20 000 Kč/.test(t), t);
+  ok('předmět nese zisk', /zisk 8 300 Kč/.test(cist(rep.subject)), rep.subject);
+
+  ok('srovnává s minulým měsícem', /proti červenci/.test(t), t);
+  ok('i s průměrem', /proti průměru/.test(t), t);
+  ok('rozpad podle místa prodeje', /Kde se prodávalo/.test(t) && /StockX/.test(t), t);
+  ok('rozpad podle kategorie', /Podle kategorie/.test(t) && /sneakers/.test(t), t);
+  ok('nejlepší obchod', /▲ Balík LEGO/.test(t), t);
+  ok('nejhorší obchod', /▼ Dunk Panda/.test(t), t);
+  ok('stav skladu k dnešku', /na skladě\s+1/.test(t) && /vázáno v nákupu\s+5 000 Kč/.test(t), t);
+  ok('a jak dlouho nejstarší leží', /nejdéle leží\s+\d+ dní/.test(t), t);
+
+  /* Report je jediná zpráva s penězi, takže musí mít i jinou patičku.
+     Ta běžná tvrdí, že částky ve zprávě nejsou — pod reportem plným
+     korun by to byla lež. */
+  ok('patička u reportu mluví o kurzech', /kurzů uložených/.test(t), t.slice(-300));
+  ok('a netvrdí, že částky nejsou', !/schválně nejsou/.test(t), t.slice(-300));
+  ok('u běžného dne patička zůstává', /schválně nejsou/.test(cist(m[0] && m[0].text)), m[0] && m[0].text);
+
+  // Řádky s čísly nemají příponu — nesmí za nimi zůstat „undefined"
+  ok('žádné undefined v hodnotách', !/undefined/.test(t), t);
+  ok('ani v předmětu', !/undefined|·\s*·/.test(rep.subject || ''), rep.subject);
+
+  /* Aplikace si u prodaného kusu uloží spočítaný zisk a report ho má
+     převzít, ne přepočítávat. Kdyby si počítal po svém, ukazoval by
+     u kusů s doplatky nebo ručně upravenou cenou jiné číslo než
+     obrazovka — a člověk by nevěděl, kterému věřit. */
+  sekce('5a) Uložený zisk má přednost před dopočítaným');
+  nastavSklad([
+    { id: 'ul', name: 'Ručně upravený', category: 'sneakers', soldWhere: 'StockX',
+      saleState: 'paid', payoutDate: '2026-08-14', buyDate: '2026-07-01',
+      buyPrice: 1000, sellPrice: 3000, extraCosts: 0,
+      // Dopočtem by vyšlo 2000, ale aplikace si uložila tohle
+      profit: 2222, profitRateEur: 25 },
+  ]);
+  const ulozeny = cist(((await cron(PRVNIHO))[0] || {}).text);
+  ok('bere se uložené číslo', /zisk\s+2 222 Kč/.test(ulozeny), ulozeny.slice(0, 400));
+  ok('a ne dopočítané', !/zisk\s+2 000 Kč/.test(ulozeny), ulozeny.slice(0, 400));
+
+  sekce('5b) Kurz, který chybí, se přizná');
+  nastavSklad(SRPEN.concat([{
+    id: 'bezkurzu', name: 'EUR bez kurzu', saleState: 'paid', payoutDate: '2026-08-11',
+    buyPrice: 100, buyCurrency: 'EUR', sellPrice: 200, sellPriceOrig: 200, sellCurrency: 'EUR',
+  }]));
+  const nepresny = cist(((await cron(PRVNIHO))[0] || {}).text);
+  ok('řekne, kolika kusů se to týká', /U 1 kusu chybí uložený kurz/.test(nepresny), nepresny.slice(0, 400));
+  ok('i jakým kurzem počítal', /kurzem 25/.test(nepresny), nepresny.slice(0, 400));
+
+  sekce('5c) Zákazníci: jen počty, a jen prvního');
+  nastavSklad(SRPEN);
+  const sCrm = await cron(PRVNIHO);
+  const dotazyPrvniho = volani.map(v => v.url);
+  ok('prvního se CRM přečte', dotazyPrvniho.some(u => u.includes('/crm/')), JSON.stringify(dotazyPrvniho));
+  ok('do zprávy jde počet', /noví zákazníci\s+\d/.test(cist(sCrm[0].text)), sCrm[0].text);
+  ok('ale žádné jméno', !/Petr Novák/.test(sCrm[0].text || ''), sCrm[0].text);
+  ok('ani telefon', !/777123456/.test(sCrm[0].text || ''));
 
   /* ══════════════════════════════════════════════════════════════ */
   sekce('6) Desátá v Praze, ať je léto nebo zima');
