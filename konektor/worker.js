@@ -785,10 +785,17 @@ export default {
       // Server sám od sebe nic neposílá, takže proud událostí nenabízí.
       // Odpověď je čitelná schválně — tahle adresa se zkouší v prohlížeči,
       // a prohlížeč umí jen GET.
+      // Pošta má vlastní tajemství a bez nich konektor funguje dál — jen
+      // nechodí ranní mail. Dřív o tom tenhle výpis mlčel a tvrdil, že je
+      // nastavené všechno, takže se nedalo poznat, že upozornění neběží.
+      const chybiMail = MAIL_TAJEMSTVI.filter(k => !env[k]);
       return Response.json({
         stav: 'ok',
-        zprava: 'Konektor běží. Adresa je správná a tajemství jsou nastavená. '
+        zprava: 'Konektor běží. Adresa i token sedí a na sklad vidí. '
           + 'Tenhle výpis znamená úspěch — vlož adresu do Clauda jako konektor.',
+        upozorneni: chybiMail.length
+          ? 'Ranní upozornění e-mailem zatím neběží, chybí: ' + chybiMail.join(', ')
+          : 'Ranní upozornění e-mailem jsou nastavená. Zkusit je můžeš na /test-mail.',
         poznamka: 'Data se čtou přes POST, proto prohlížeč nic dalšího neukáže.',
       }, { status: 405, headers: { Allow: 'POST' } });
     }

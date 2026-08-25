@@ -326,6 +326,22 @@ function prodanoPred(ted, dnu) {
   ok('zkušební mail odejde i v tichý den', posta.length === 1, JSON.stringify(posta));
   ok('a hlásí komu', zkouska.telo && zkouska.telo.komu === 'majitel@example.com', JSON.stringify(zkouska.telo));
 
+  /* Výpis, který uživatel uvidí, když si adresu otevře v prohlížeči.
+     Je to jediná zpětná vazba, kterou z konektoru bez Clauda dostane,
+     tak musí říct pravdu i o poště — ne jen o čtení skladu. */
+  sekce('8b) Výpis v prohlížeči hlásí i stav pošty');
+  const sPostou = await get('/' + ENV.MCP_TOKEN + '/mcp');
+  ok('konektor se hlásí jako běžící', sPostou.telo && sPostou.telo.stav === 'ok', JSON.stringify(sPostou.telo));
+  ok('a řekne, že pošta je nastavená',
+    sPostou.telo && /jsou nastavená/.test(sPostou.telo.upozorneni || ''), JSON.stringify(sPostou.telo));
+
+  const bezPostyEnv = Object.assign({}, ENV);
+  delete bezPostyEnv.MAIL_KOMU;
+  const bezPostyVypis = await get('/' + ENV.MCP_TOKEN + '/mcp', RANO_LETO, bezPostyEnv);
+  ok('bez pošty konektor pořád běží', bezPostyVypis.telo && bezPostyVypis.telo.stav === 'ok', JSON.stringify(bezPostyVypis.telo));
+  ok('ale přizná, že upozornění neběží',
+    bezPostyVypis.telo && /MAIL_KOMU/.test(bezPostyVypis.telo.upozorneni || ''), JSON.stringify(bezPostyVypis.telo));
+
   sekce('9) Zámek platí i na nové adresy');
   const zly1 = await get('/spatnytokenspatnytokenspatnytok1/nahled');
   const zly2 = await get('/spatnytokenspatnytokenspatnytok1/test-mail');
