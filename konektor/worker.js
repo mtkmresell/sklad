@@ -687,8 +687,37 @@ async function posliMail(env, predmet, text) {
     }),
   });
   const odpoved = await r.text();
-  if (!r.ok) throw new Error('odeslání selhalo (' + r.status + '): ' + odpoved.slice(0, 300));
-  return odpoved;
+  if (r.ok) return odpoved;
+
+  // Pošta odpovídá JSONem; do hlášky patří jen ta věta pro člověka,
+  // ne celý balík se závorkami a zpětnými lomítky
+  let hlaska = odpoved.slice(0, 300);
+  try {
+    const j = JSON.parse(odpoved);
+    if (j && j.message) hlaska = j.message;
+  } catch {}
+  const e = new Error('odeslání selhalo (' + r.status + '): ' + hlaska);
+  e.hlaska = hlaska;
+  throw e;
+}
+
+/* Nejčastější důvody, proč pošta odmítne. Chodí anglicky, bez kontextu
+   a mluví o pojmech Resendu — tohle z nich dělá krok, který jde udělat. */
+function radaKChybe(e) {
+  const h = String((e && e.hlaska) || (e && e.message) || '');
+  if (/only send testing emails/i.test(h)) {
+    return 'Resend bez ověřené domény pouští maily jen na adresu, kterou jsi zakládal účet. '
+      + 'Buď nastav MAIL_KOMU na ni, nebo si ověř vlastní doménu na resend.com/domains '
+      + 'a pak nastav MAIL_ODESILATEL na adresu v té doméně.';
+  }
+  if (/API key is invalid|Missing API key|restricted|unauthorized/i.test(h)) {
+    return 'Klíč RESEND_API_KEY nesedí nebo nemá právo odesílat. '
+      + 'Vygeneruj nový v Resendu (API Keys, oprávnění Sending access) a přepiš tajemství.';
+  }
+  if (/domain is not verified|verify a domain/i.test(h)) {
+    return 'Doména v MAIL_ODESILATEL není v Resendu ověřená — projdi resend.com/domains.';
+  }
+  return null;
 }
 
 const MAIL_TAJEMSTVI = ['RESEND_API_KEY', 'MAIL_KOMU'];
@@ -777,7 +806,10 @@ export default {
           poznamka: 'Kdyby nepřišel, mrkni do spamu a označ ho jako „není spam".',
         });
       } catch (e) {
-        return Response.json({ stav: 'chyba', chyba: String(e.message || e) }, { status: 500 });
+        const odpoved = { stav: 'chyba', chyba: String((e && e.message) || e) };
+        const rada = radaKChybe(e);
+        if (rada) odpoved.rada = rada;
+        return Response.json(odpoved, { status: 500 });
       }
     }
 

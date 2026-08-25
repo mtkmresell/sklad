@@ -186,8 +186,13 @@ data vidí.
 |---|---|
 | `{"stav":"odeslano",…}` | hotovo, koukni do schránky |
 | `{"stav":"nenastaveno","chybi":[…]}` | chybí tajemství, nebo se po jejich přidání nenasadilo znovu |
-| `"chyba":"odeslání selhalo (403)…"` | klíč Resendu nesedí, nebo je bez práva odesílat |
-| `"chyba":"odeslání selhalo (422)…"` | `MAIL_KOMU` není adresa, na kterou Resend bez vlastní domény pustí |
+| `"chyba":"odeslání selhalo …"` | pošta odmítla; u chyby je i `rada`, co s tím |
+| `Not found` na `/nahled` i `/test-mail` | v Cloudflare běží starší kód — vlož worker.js znovu a nasaď |
+
+U odmítnuté pošty se hláška od Resendu rozbalí do čitelné věty a přidá se
+k ní `rada` v češtině. Nejčastější je tahle: **bez ověřené domény pouští
+Resend maily jen na adresu, kterou jsi zakládal účet** — takže `MAIL_KOMU`
+musí být ona, dokud si doménu neověříš.
 
 ### Až budeš mít vlastní doménu
 

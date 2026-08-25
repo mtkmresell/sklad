@@ -366,15 +366,36 @@ function prodanoPred(ted, dnu) {
 
   sekce('11) Když selže odeslání');
   const puvodniFetch = global.fetch;
-  global.fetch = async function (url, opts) {
-    if (String(url).includes('api.resend.com')) return odp(422, {}, 'domain not verified');
-    return puvodniFetch(url, opts);
+  const postaOdmita = (stav, telo) => {
+    global.fetch = async function (url, opts) {
+      if (String(url).includes('api.resend.com')) return odp(stav, {}, JSON.stringify(telo));
+      return puvodniFetch(url, opts);
+    };
   };
+
+  postaOdmita(422, { message: 'domain is not verified' });
   const spadlo = await cron(RANO_LETO);
   const zaznamy2 = logy.slice();
-  global.fetch = puvodniFetch;
   ok('cron chybu spolkne', spadlo.length === 0);
   ok('a zapíše ji do logu', zaznamy2.some(r => /selhala/.test(r)), JSON.stringify(zaznamy2));
+
+  /* Hlášky z pošty chodí anglicky a zabalené v JSONu. Kdo si otevře
+     /test-mail v prohlížeči, potřebuje vidět větu, ne změť zpětných
+     lomítek — a hlavně potřebuje vědět, co s tím. */
+  sekce('11b) Chyba pošty se dá přečíst');
+  postaOdmita(403, {
+    statusCode: 403, name: 'validation_error',
+    message: 'You can only send testing emails to your own email address (sklad@example.com).',
+  });
+  const zamitnuto = await get('/' + ENV.MCP_TOKEN + '/test-mail');
+  global.fetch = puvodniFetch;
+
+  ok('vrátí se chyba', zamitnuto.telo && zamitnuto.telo.stav === 'chyba', JSON.stringify(zamitnuto.telo));
+  ok('je v ní věta od pošty, ne celý JSON',
+    zamitnuto.telo && /only send testing emails/.test(zamitnuto.telo.chyba || '')
+      && !/statusCode/.test(zamitnuto.telo.chyba || ''), JSON.stringify(zamitnuto.telo));
+  ok('a rada, co s tím',
+    zamitnuto.telo && /MAIL_KOMU/.test(zamitnuto.telo.rada || ''), JSON.stringify(zamitnuto.telo));
 
   /* ══════════════════════════════════════════════════════════════ */
   /* Lhůty payoutu jsou na dvou místech: aplikace je používá pro odhad
