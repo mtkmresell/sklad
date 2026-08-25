@@ -24,11 +24,18 @@
      MCP_TOKEN     dlouhý náhodný klíč, který je součástí adresy
 
    Adresa konektoru pak je:
-     https://<jméno-workeru>.workers.dev/<MCP_TOKEN>/mcp
+     https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/mcp
+
+   Ta prostřední část tam opravdu patří — bez ní se hostitel nepřeloží
+   a Claude hlásí jen „chyba", z čehož se důvod nepozná. Adresu proto
+   neskládej z hlavy: je vypsaná v Cloudflare u Workeru pod
+   Settings → Domains & Routes. Tady je pro pořádek ta skutečná,
+   ať se předloha nemá jak zkomolit:
+     https://dawn-bush-6ac21.mtkm-resell.workers.dev/<MCP_TOKEN>/mcp
 
    Bez správného tokenu server odpoví 404 a nic neprozradí. Token je
    jediný zámek na veřejné adrese — kdo ho má, přečte si sklad. Zapsat
-   nemůže ani s ním.
+   nemůže ani s ním. Adresa sama tajná není; tajný je jen token.
 ══════════════════════════════════════════════════════════════════════ */
 
 const PROJEKT = 'sklad-7eec9';

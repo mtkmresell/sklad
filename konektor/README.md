@@ -63,18 +63,21 @@ na tajemství opravdový trezor, po uložení se hodnota už nedá zobrazit.
 
 ### 4. Přidej konektor do Clauda
 
-Adresa **není** jen `<jméno-workeru>.workers.dev` — Cloudflare do ní vkládá
-i jméno účtu:
+Adresa má **tři** části: jméno workeru, jméno účtu a `workers.dev`.
 
 ```
 https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/mcp
 ```
 
-Neskládej ji z hlavy. Na stránce Workeru (**Overview**) je nahoře odkaz
-se správným tvarem; zkopíruj ho a dopiš za něj token a `/mcp`. Například:
+Na jméno účtu se snadno zapomene a chyba se pak špatně hledá — hostitel
+se nepřeloží a Claude hlásí jen „chyba", ze které důvod nepoznáš.
+Neskládej adresu z hlavy: v Cloudflare je vypsaná u Workeru pod
+**Settings → Domains & Routes**. Zkopíruj ji a dopiš za ni token a `/mcp`.
+
+Tady je pro pořádek ta skutečná (tajný je jen token, adresa ne):
 
 ```
-https://dawn-bush-6ac21.mtkm-resell.workers.dev/a7Kd…9Xm2/mcp
+https://dawn-bush-6ac21.mtkm-resell.workers.dev/<MCP_TOKEN>/mcp
 ```
 
 Než adresu vložíš do Clauda, otevři ji v prohlížeči — musí přijít

@@ -255,6 +255,26 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   shoda('do logu nejde nic tajného', podezrele, []);
   ok('cron má log, aby nebyl němý', konzole.length > 0);
 
+  /* ── Předloha adresy ──────────────────────────────────────────────── */
+  /* Adresa workeru má tři části: jméno workeru, jméno účtu a workers.dev.
+     Předloha bez té prostřední se sem dostala dvakrát a pokaždé stálo
+     hodiny zjistit, proč se konektor „bez důvodu" odpojil — hostitel se
+     nepřeloží a Claude hlásí jen „chyba". */
+  const dokumenty = ['konektor/worker.js', 'konektor/README.md'].map(p => ({
+    p, obsah: require('fs').readFileSync(path.resolve(__dirname, '..', p), 'utf8'),
+  }));
+  const zkomolene = [];
+  for (const d of dokumenty) {
+    for (const adresa of d.obsah.match(/[^\s`'"]*workers\.dev[^\s`'")]*/g) || []) {
+      const hostitel = adresa.replace(/^https?:\/\//, '').split('/')[0];
+      const casti = hostitel.split('.');
+      // Samotné „workers.dev" je běžná zmínka v textu, ne předloha adresy.
+      // Vadí až tvar s jednou částí navíc — to je ta chybějící část s účtem.
+      if (casti.length === 3) zkomolene.push(d.p + ': ' + adresa);
+    }
+  }
+  shoda('nikde není adresa bez jména účtu', zkomolene, []);
+
   console.log(selhalo ? selhalo + ' z ' + (proslo + selhalo) + ' kontrol selhalo' : 'OK (' + proslo + ' kontrol)');
   process.exit(selhalo ? 1 : 0);
 })().catch(e => { console.log('ERROR: ' + (e && e.stack || e)); process.exit(1); });
