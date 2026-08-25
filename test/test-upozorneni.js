@@ -43,8 +43,8 @@ const UID = 'majitel1';
 const KOL = 'projects/sklad-7eec9/databases/(default)/documents/users/' + UID + '/sklad';
 const DEN = 86400000;
 
-// Pevný okamžik: úterý 25. 8. 2026, 06:00 UTC = 08:00 v Praze (letní čas)
-const RANO_LETO = Date.UTC(2026, 7, 25, 6, 0, 0);
+// Pevný okamžik: úterý 25. 8. 2026, 08:00 UTC = 10:00 v Praze (letní čas)
+const RANO_LETO = Date.UTC(2026, 7, 25, 8, 0, 0);
 
 let DOKUMENTY = {};
 let volani = [];
@@ -248,8 +248,77 @@ function prodanoPred(ted, dnu) {
   ok('kde se prodalo je vidět', m[0] && /StockX/.test(m[0].text));
 
   /* ══════════════════════════════════════════════════════════════ */
+  sekce('4c) Zásilka dlouho na cestě');
+  /* Tentýž kus hlásí i payout — čeká na peníze jako každý jiný prodej.
+     Test se proto ptá výslovně na blok o zásilkách, ne jen na to, že
+     nějaký mail odešel. */
+  const kdyZasilka = async (extra) => {
+    const dny = [];
+    for (let na = 0; na <= 30; na++) {
+      nastavSklad([Object.assign({
+        id: 'z', name: 'Yeezy Slide', saleState: 'waiting', waitState: 'sent',
+        trackingNum: 'CP123456789CZ', trackingCarrier: 'Zásilkovna',
+        sentAt: prodanoPred(RANO_LETO, na), saleDate: prodanoPred(RANO_LETO, na),
+      }, extra || {})]);
+      const m = await cron(RANO_LETO);
+      if (m[0] && /DLOUHO NA CESTĚ/.test(m[0].text)) dny.push(na);
+    }
+    return dny;
+  };
+  shoda('po pěti dnech, pak po týdnech', await kdyZasilka(), [5, 12, 19, 26]);
+  shoda('bez sledovacího čísla mlčí', await kdyZasilka({ trackingNum: '' }), []);
+  shoda('dokud není odesláno, taky mlčí', await kdyZasilka({ waitState: 'sending' }), []);
+
+  // Staré kusy sentAt nemají — počítá se od data prodeje
+  shoda('bez sentAt se bere datum prodeje', await kdyZasilka({ sentAt: undefined }), [5, 12, 19, 26]);
+
+  nastavSklad([
+    { id: 'z', name: 'Yeezy Slide', saleState: 'waiting', waitState: 'sent',
+      trackingNum: 'CP123456789CZ', trackingCarrier: 'Zásilkovna',
+      sentAt: prodanoPred(RANO_LETO, 5) },
+  ]);
+  const zas = (await cron(RANO_LETO))[0] || {};
+  ok('je vidět dopravce i číslo', /Zásilkovna/.test(zas.text || '') && /CP123456789CZ/.test(zas.text || ''), zas.text);
+  ok('a jak dlouho už jede', /na cestě 5 dní/.test(zas.text || ''), zas.text);
+
+  /* ══════════════════════════════════════════════════════════════ */
+  /* Pondělní obhlídka schválně porušuje pravidlo „okamžik, ne stav" —
+     je to připomínka rituálu, o kterou majitel stál. Ale i ta musí
+     mlčet, když není co projít. */
+  sekce('4d) Pondělní obhlídka');
+  const SKLAD_PONDELI = [
+    { id: 'a', name: 'Nikde nevystavený kus', saleState: 'stock', platforms: [], buyDate: '2026-05-01' },
+    { id: 'b', name: 'V komisi u Sneakerstore', saleState: 'stock', platforms: ['Sneakerstore'], buyDate: '2026-07-01' },
+    { id: 'c', name: 'Na Bazoši', saleState: 'stock', platforms: ['Bazoš.cz'], buyDate: '2026-08-01' },
+  ];
+  const PONDELI = Date.UTC(2026, 7, 24, 8);   // pondělí 24. 8. 2026, 10:00 v Praze
+  const UTERY = Date.UTC(2026, 7, 25, 8);     // úterý
+
+  nastavSklad(SKLAD_PONDELI);
+  const vPondeli = (await cron(PONDELI))[0] || {};
+  const vUtery = await cron(UTERY);
+
+  ok('v pondělí přijde', !!vPondeli.text, JSON.stringify(vPondeli.subject));
+  ok('v úterý ne', vUtery.length === 0, JSON.stringify(vUtery.map(x => x.subject)));
+  ok('vypíše nevystavené', /Nikde nevystavený kus/.test(vPondeli.text || ''), vPondeli.text);
+  ok('i komisní', /V komisi u Sneakerstore/.test(vPondeli.text || ''), vPondeli.text);
+  ok('ale ne to, co běžně inzeruje', !/Na Bazoši/.test(vPondeli.text || ''), vPondeli.text);
+  ok('řekne, jak dlouho leží', /na skladě \d+ dní/.test(vPondeli.text || ''), vPondeli.text);
+
+  nastavSklad([{ id: 'c', name: 'Na Bazoši', saleState: 'stock', platforms: ['Bazoš.cz'] }]);
+  ok('když není co projít, mlčí i v pondělí', (await cron(PONDELI)).length === 0);
+
+  // Dlouhý výčet by zprávu nafoukl a stejně by se nečetl
+  nastavSklad(Array.from({ length: 20 }, (_, i) => ({
+    id: 'x' + i, name: 'Kus ' + i, saleState: 'stock', platforms: [], buyDate: '2026-05-01',
+  })));
+  const dlouhy = (await cron(PONDELI))[0] || {};
+  ok('dlouhý seznam se zkrátí', /a další 12 kusů/.test(dlouhy.text || ''), dlouhy.text);
+  ok('ale počet je vidět celý', /Nikde nevystaveno \(20\)/.test(dlouhy.text || ''), dlouhy.text);
+
+  /* ══════════════════════════════════════════════════════════════ */
   sekce('5) Měsíční souhrn jen prvního');
-  const PRVNIHO = Date.UTC(2026, 8, 1, 6, 0, 0);  // 1. 9. 2026, 08:00 v Praze
+  const PRVNIHO = Date.UTC(2026, 8, 1, 8, 0, 0);  // 1. 9. 2026, 10:00 v Praze
   nastavSklad([
     { id: 's1', name: 'Na skladě', saleState: 'stock' },
     { id: 'w1', name: 'Čeká', saleState: 'waiting', saleDate: '2026-08-30' },
@@ -267,24 +336,24 @@ function prodanoPred(ted, dnu) {
   ok('jindy souhrn nechodí', jindy.length === 0);
 
   /* ══════════════════════════════════════════════════════════════ */
-  sekce('6) Osmá ráno v Praze, ať je léto nebo zima');
+  sekce('6) Desátá v Praze, ať je léto nebo zima');
   nastavSklad([
     { id: 'a', name: 'Dunk', sku: 'DD', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(Date.UTC(2026, 7, 25, 6), 0) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(Date.UTC(2026, 7, 25, 8), 0) } },
   ]);
-  const leto8 = await cron(Date.UTC(2026, 7, 25, 6));   // léto: 06 UTC = 08 Praha
-  const leto9 = await cron(Date.UTC(2026, 7, 25, 7));   // léto: 07 UTC = 09 Praha
-  ok('v létě se pustí šestá UTC', leto8.length === 1);
-  ok('a sedmá UTC už ne', leto9.length === 0);
+  const leto8 = await cron(Date.UTC(2026, 7, 25, 8));   // léto: 08 UTC = 10 Praha
+  const leto9 = await cron(Date.UTC(2026, 7, 25, 9));   // léto: 09 UTC = 11 Praha
+  ok('v létě se pustí osmá UTC', leto8.length === 1);
+  ok('a devátá UTC už ne', leto9.length === 0);
 
   nastavSklad([
     { id: 'a', name: 'Dunk', sku: 'DD', saleState: 'stock',
-      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(Date.UTC(2026, 0, 15, 7), 0) } },
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(Date.UTC(2026, 0, 15, 9), 0) } },
   ]);
-  const zima7 = await cron(Date.UTC(2026, 0, 15, 7));   // zima: 07 UTC = 08 Praha
-  const zima6 = await cron(Date.UTC(2026, 0, 15, 6));   // zima: 06 UTC = 07 Praha
-  ok('v zimě se pustí sedmá UTC', zima7.length === 1);
-  ok('a šestá UTC už ne', zima6.length === 0);
+  const zima7 = await cron(Date.UTC(2026, 0, 15, 9));   // zima: 09 UTC = 10 Praha
+  const zima6 = await cron(Date.UTC(2026, 0, 15, 8));   // zima: 08 UTC = 09 Praha
+  ok('v zimě se pustí devátá UTC', zima7.length === 1);
+  ok('a osmá UTC už ne', zima6.length === 0);
 
   /* ══════════════════════════════════════════════════════════════ */
   /* Mail odchází ve dvou podobách naráz. Kdyby chyběla textová, uvidí

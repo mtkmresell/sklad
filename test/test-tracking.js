@@ -152,6 +152,30 @@ const SEED = [
     !unit.doma && !unit.prazdno && unit.naceste && unit.vraceno && unit.budeVraceno && unit.zruseno && !unit.vlastni,
     JSON.stringify(unit));
 
+  /* ── 10) Datum odeslání ──────────────────────────────────────────
+     Z něj konektor počítá, jak dlouho je zásilka na cestě. Kdyby se
+     nezapisovalo, počítalo by se od data prodeje a kus odeslaný o týden
+     později by se hlásil jako ztracený. */
+  const odeslano = await page.evaluate(() => {
+    const dnes = new Date().toISOString().slice(0, 10);
+    const it = { id: 'sa1', name: 'Kus', saleState: 'waiting', waitState: 'sending' };
+
+    markSentAt(it, 'sent');
+    const poOdeslani = it.sentAt;
+
+    // Druhý průchod nesmí datum posunout — jinak by se odpočet resetoval
+    it.sentAt = '2020-01-01';
+    markSentAt(it, 'sent');
+    const nepresunuto = it.sentAt;
+
+    // Vrácení zpátky datum uklidí, ať po opravené chybě nezůstane viset
+    markSentAt(it, 'sending');
+    return { poOdeslani, dnes, nepresunuto, poVraceni: it.sentAt };
+  });
+  check('odeslání zapíše dnešní datum', odeslano.poOdeslani === odeslano.dnes, JSON.stringify(odeslano));
+  check('opakované označení datum neposune', odeslano.nepresunuto === '2020-01-01', JSON.stringify(odeslano));
+  check('vrácení do „odesílá se" datum smaže', odeslano.poVraceni === undefined, JSON.stringify(odeslano));
+
   check('žádné JS chyby', errs.filter(e => !/keySplines/.test(e)).length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();
   console.log(failures ? `\n${failures} TESTŮ SELHALO` : '\nVŠECHNY TESTY PROŠLY');

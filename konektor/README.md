@@ -89,16 +89,21 @@ Na claude.ai jdi do **Customize → Connectors → „+"**, zadej jméno
 ## Upozornění e-mailem
 
 Aplikace je stránka v prohlížeči a sama od sebe nikdy nic nespustí. Worker
-ale běží pořád, takže se **jednou denně v osm ráno** podívá do skladu a když
-je co říct, pošle mail.
+ale běží pořád, takže se **jednou denně v deset dopoledne** podívá do skladu
+a když je co říct, pošle mail.
 
-Hlásí tři věci:
+Hlásí pět věcí:
 
 | co | kdy se ozve |
 |---|---|
 | inzerát na Bazoši vypršel | v den vypršení |
+| zásilka je dlouho na cestě | po 5 dnech od odeslání, pak každý týden |
 | prodej čeká na payout | v den, kdy měly peníze dorazit, a pak každý týden |
+| pondělní obhlídka | každé pondělí, když je co projít |
 | souhrn za minulý měsíc | prvního |
+
+Bazoš se hlídá **na všech třech** — `.cz`, `.sk` i `.pl`. V měsíčním souhrnu
+se ale řádek pro danou zemi objeví, jen když tam něco vystaveného je.
 
 **Většinu dní nepřijde nic** — a tak to má být. Nehlásí se stav („zbývá
 sedm dní"), ale okamžik. Kdyby chodil mail každé ráno, po týdnu by se
@@ -122,6 +127,18 @@ nastavení: druhá implementace statistiky by se s aplikací dřív nebo
 později rozešla a mail by upomínal proti jiným číslům, než jaká jsou
 vidět na obrazovce. `test-upozorneni.js` porovnává aspoň ta čísla, aby
 se nerozešla ani ta.
+
+**Zásilka se počítá od `sentAt`** — data, které si aplikace zapíše při
+přechodu do stavu „odesláno". Kusy označené dřív, než tohle pole vzniklo,
+ho nemají a počítají se od data prodeje; bývá to týž nebo následující
+den, takže se tím nanejvýš ozveme o kousek dřív.
+
+**Pondělní obhlídka je jediná, která hlásí stav, ne okamžik.** Chodí
+každé pondělí, protože o to majitel stál — je to připomínka rituálu, ne
+událost. Vypisuje kusy na skladě, které nejsou nikde vystavené, a kusy
+v komisi (platformy ze skupiny *eshopy*). Když není co projít, mlčí
+i v pondělí, jinak by z ní byl otravný budík. Dlouhý výčet se zkracuje,
+protože se stejně nečte a jen nafoukne zprávu.
 
 **Ve zprávě nejsou částky.** Kurzy EUR umí správně jen aplikace, která si
 pamatuje kurz ke dni nákupu i payoutu; konektor by je počítal jinak.
@@ -179,13 +196,13 @@ Pak **Deploy**.
 **Settings → Triggers → Cron Triggers → Add Cron Trigger.** Přidej dva:
 
 ```
-0 6 * * *
-0 7 * * *
+0 8 * * *
+0 9 * * *
 ```
 
 Cloudflare umí spouštět jen podle světového času (UTC) a Praha je proti
 němu v létě o dvě hodiny napřed a v zimě o jednu. Worker si sám ohlídá,
-kterému z těch dvou časů zrovna vychází osmá ráno v Praze, a ten druhý
+kterému z těch dvou časů zrovna vychází desátá dopoledne v Praze, a ten druhý
 zahodí. Díky tomu se nemusí nic přenastavovat dvakrát do roka.
 
 ### 4. Vyzkoušej to

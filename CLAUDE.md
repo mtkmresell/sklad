@@ -139,16 +139,18 @@ co z nich vypadne, aby se ty dvě kopie nerozešly.
 Podrobnosti v `konektor/README.md`.
 
 Konektor navíc jednou denně obhlíží sklad a posílá e-mail, když je co říct —
-vypršení inzerátů na Bazoši, čekající payouty, měsíční souhrn
+vypršení inzerátů na Bazoši, zaseknuté zásilky a payouty, pondělní obhlídku, měsíční souhrn
 (sekce `UPOZORNĚNÍ E-MAILEM`). **Nehlásí stav, ale okamžik:** každá věc se
 ozve jen ten den, kdy dojde na daný práh, takže většinu dní nepřijde nic.
 Kdyby se z prahu udělal rozsah („zbývá 7 dní a míň"), mail by chodil denně
 a přestal by se číst; `test-upozorneni.js` to hlídá. Do zprávy schválně
 nejdou částky (kurzy EUR) ani cokoli z CRM (jde přes cizí službu).
 
-Dvě věci se hlásí schválně jinak, než by se čekalo. **Inzerát až v den
+Tři věci se hlásí schválně jinak, než by se čekalo. **Inzerát až v den
 vypršení**, ne dopředu — Bazoš ho archivuje a nahodí se jedním kliknutím,
-takže předem se nedá dělat nic než ho smazat a vystavit znovu. **Payout
+takže předem se nedá dělat nic než ho smazat a vystavit znovu. **Pondělní
+obhlídka** je jediná, která hlásí stav místo okamžiku: chodí každé pondělí,
+protože o to majitel stál, ale mlčí, když není co projít. **Payout
 podle lhůty nastavené u platformy** (`getPayoutDays` v aplikaci, *Nastavení
 → místa prodeje*), pak po týdnech. Ta čísla jsou tím pádem na dvou místech;
 `test-upozorneni.js` porovnává `DEFAULT_PAYOUT_DAYS` s konstantami

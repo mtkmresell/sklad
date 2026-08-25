@@ -5590,6 +5590,7 @@ async function saveSell() {
     });
   }
   trackSoldWhereFreq(soldWherePlat);
+  markSentAt(items[idx], items[idx].waitState);
   // Historie cen — skutečná prodejní cena uzavírá vývoj
   logPrice(items[idx], sp, spOrigCur, spOrigCur === 'EUR' ? spOrig : null, true);
   sv(); renderStats(); renderItems(); cm('moSell');
@@ -5832,8 +5833,22 @@ function changeWaitState(id, newState) {
     }
   } else {
     items[idx].waitState = newState;
+    markSentAt(items[idx], newState);
   }
   sv(); renderStats(); renderItems();
+}
+
+/* Datum odeslání. Bez něj se „jak dlouho je zásilka na cestě" počítalo
+   od data prodeje, což u kusu odeslaného o týden později lhalo.
+   Zapisuje se jen při přechodu do „odesláno" a zpátky se maže, aby
+   opravená chyba nenechala viset staré datum. */
+function markSentAt(it, newState) {
+  if (!it) return;
+  if (newState === 'sent') {
+    if (!it.sentAt) it.sentAt = new Date().toISOString().slice(0, 10);
+  } else {
+    delete it.sentAt;
+  }
 }
 
 function _cleanBulkOnDelete(id) {
@@ -6376,6 +6391,7 @@ async function saveItem(){
       // Samotný dopravce bez čísla i bez vlastní URL je jen předvolba selectu — neukládej ho
       if (!_merged.trackingNum && !_merged.trackingUrl) delete _merged.trackingCarrier;
       items[i] = _merged;
+      markSentAt(items[i], items[i].waitState);
       // Zákazník byl napojen/odpojen/změněn — přepočti statistiky obou stran
       var _newLinkedCustomerId = items[i].linkedCustomerId || '';
       if (_newLinkedCustomerId !== _oldLinkedCustomerId) {
@@ -9554,6 +9570,7 @@ function saveBulkSell() {
         soldWhere: soldWhere,
         platforms: []
       });
+      markSentAt(items[idx2], waitState);
     }
   });
 

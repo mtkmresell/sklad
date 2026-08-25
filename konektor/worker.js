@@ -435,6 +435,19 @@ const PAYOUT_OPAKOVANI = 7;
 const VYCHOZI_PAYOUT_SKUPIN = { platforms: 7, eshopy: 21, local: 3 };
 const VYCHOZI_PAYOUT = 14;
 
+/* Zásilka bývá doručená za dva tři dny. Když je po pěti pořád na cestě,
+   je čas se po ní podívat — u ztraceného balíku se reklamuje snáz, dokud
+   je čerstvý. Pak jednou týdně, dokud se to nevyřeší. */
+const ZASILKA_PRAH = 5;
+const ZASILKA_OPAKOVANI = 7;
+
+// Pondělní obhlídka skladu
+const TYDENNI_DEN = 1;      // 0 = neděle
+const NEJVIC_V_SEZNAMU = 8; // delší výčet se ve zprávě už nečte
+
+// V kolik hodin pražského času se posílá
+const HODINA_ODESLANI = 10;
+
 const MESICE = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen',
   'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
 
@@ -480,6 +493,26 @@ const dnu = n => pocet(n, ['den', 'dny', 'dní']);
 
 // Hlavička balíku není kus zboží, jen jeho obal — do počtů kusů nepatří
 const jeBalik = it => it && it.type === 'bulk';
+
+// Den v týdnu pražského data (0 = neděle). prazskyDen je UTC půlnoc, takže
+// getUTCDay vrací den toho pražského data, ne toho, co je zrovna v UTC.
+const denVTydnu = denCislo => new Date(denCislo).getUTCDay();
+
+// Kdy se kus pořídil — pro „jak dlouho už leží"
+function denPorizeni(it) {
+  const z = denZData(it.buyDate);
+  if (z !== null) return z;
+  return it.dateAdded ? prazskyDen(it.dateAdded) : null;
+}
+
+/* Dlouhý výčet se ve zprávě stejně nečte a jen ji nafoukne. Ukáže se
+   jen začátek a dopíše se, kolik toho zbylo. */
+function orizniSeznam(polozky, celkem) {
+  if (celkem <= NEJVIC_V_SEZNAMU) return polozky;
+  return polozky.slice(0, NEJVIC_V_SEZNAMU).concat([{
+    hlavni: '… a další ' + pocet(celkem - NEJVIC_V_SEZNAMU, ['kus', 'kusy', 'kusů']),
+  }]);
+}
 
 /* Rozdělení platforem do skupin i doby payoutu si drží aplikace v nastavení.
    Do cloudu jde jako text (viz syncSettings, shape 'text'), ale starší
@@ -583,6 +616,100 @@ function payoutBlok(polozky, dnes, skupiny) {
     })),
     predmet: pocet(nalezy.length, ['payout čeká', 'payouty čekají', 'payoutů čeká'])
       + (nejhorsi.po > 0 ? ', nejdéle o ' + dnu(nejhorsi.po) + ' přes lhůtu' : ''),
+  };
+}
+
+/* ── Zásilky, které jsou dlouho na cestě ────────────────────────────── */
+/* Datum odeslání si aplikace zapisuje do `sentAt` až od srpna 2026.
+   U starších kusů se počítá od data prodeje — bývá to týž den nebo
+   den po něm, takže se tím nanejvýš ozveme o kousek dřív. */
+function zasilkaBlok(polozky, dnes) {
+  const nalezy = [];
+  for (const it of polozky) {
+    if (jeBalik(it)) continue;
+    if (stavPolozky(it) !== 'waiting') continue;
+    if (it.waitState !== 'sent') continue;
+    if (!it.trackingNum) continue;
+
+    const odeslano = denZData(it.sentAt) !== null ? denZData(it.sentAt) : denZData(it.saleDate);
+    if (odeslano === null) continue;
+
+    const naCeste = Math.round((dnes - odeslano) / DEN);
+    if (naCeste < ZASILKA_PRAH) continue;
+    if ((naCeste - ZASILKA_PRAH) % ZASILKA_OPAKOVANI !== 0) continue;
+
+    nalezy.push({ naCeste, nazev: it.name || it.id,
+      dopravce: it.trackingCarrier || '', cislo: it.trackingNum, odeslano });
+  }
+  if (!nalezy.length) return null;
+
+  nalezy.sort((a, b) => b.naCeste - a.naCeste || a.nazev.localeCompare(b.nazev, 'cs'));
+  return {
+    nadpis: 'Dlouho na cestě',
+    uvod: 'Pořád označené jako odeslané. Zkus sledování, případně reklamuj.',
+    polozky: nalezy.map(n => ({
+      hlavni: n.nazev,
+      vedlejsi: [n.dopravce || 'bez dopravce', n.cislo,
+        'na cestě ' + dnu(n.naCeste)].join(' · '),
+      pozor: true,
+    })),
+    predmet: pocet(nalezy.length, ['zásilka je', 'zásilky jsou', 'zásilek je'])
+      + ' dlouho na cestě',
+  };
+}
+
+/* ── Pondělní obhlídka ──────────────────────────────────────────────── */
+/* Tenhle blok schválně porušuje pravidlo „okamžik, ne stav". Ostatní se
+   ozvou, když se něco stane; tenhle chodí každé pondělí, protože o to
+   majitel stál — je to připomínka rituálu, ne událost. Proto taky mlčí,
+   když není co projít, jinak by z něj byl otravný budík. */
+function tydenniBlok(polozky, dnes, skupiny) {
+  const komisni = new Set(skupiny.eshopy || []);
+
+  const bezInzerce = [];
+  const vKomisi = [];
+  for (const it of polozky) {
+    if (jeBalik(it)) continue;
+    if (stavPolozky(it) !== 'stock') continue;
+
+    const kde = it.platforms || [];
+    const porizeno = denPorizeni(it);
+    const lezi = porizeno === null ? null : Math.round((dnes - porizeno) / DEN);
+    const zaznam = { nazev: it.name || it.id, lezi, kde };
+
+    if (!kde.length) bezInzerce.push(zaznam);
+    else if (kde.some(p => komisni.has(p))) vKomisi.push(zaznam);
+  }
+  if (!bezInzerce.length && !vKomisi.length) return null;
+
+  const podleStari = (a, b) => (b.lezi || 0) - (a.lezi || 0);
+  const naRadek = z => ({
+    hlavni: z.nazev,
+    vedlejsi: [z.kde.length ? z.kde.join(', ') : 'nikde nevystaveno',
+      z.lezi === null ? 'bez data nákupu' : 'na skladě ' + dnu(z.lezi)].join(' · '),
+  });
+
+  const polozky2 = [];
+  if (bezInzerce.length) {
+    bezInzerce.sort(podleStari);
+    polozky2.push({ hlavni: '— Nikde nevystaveno (' + bezInzerce.length + ') —' });
+    polozky2.push(...orizniSeznam(bezInzerce.map(naRadek), bezInzerce.length));
+  }
+  if (vKomisi.length) {
+    vKomisi.sort(podleStari);
+    polozky2.push({ hlavni: '— V komisi (' + vKomisi.length + ') —' });
+    polozky2.push(...orizniSeznam(vKomisi.map(naRadek), vKomisi.length));
+  }
+
+  const casti = [];
+  if (bezInzerce.length) casti.push(bezInzerce.length + '× bez inzerce');
+  if (vKomisi.length) casti.push(vKomisi.length + '× v komisi');
+
+  return {
+    nadpis: 'Pondělní obhlídka',
+    uvod: 'Projdi inzerci a komisní prodeje.',
+    polozky: polozky2,
+    predmet: casti.join(', '),
   };
 }
 
@@ -798,9 +925,12 @@ function sestavZpravu(polozky, ted, data) {
   const dnes = prazskyDen(ted);
   const skupiny = platformoveSkupiny(data);
 
+  // Pořadí od nejnaléhavějšího: co dnes zmizelo, co vázne, pak rutina
   const bloky = [
     bazosBlok(polozky, dnes),
+    zasilkaBlok(polozky, dnes),
     payoutBlok(polozky, dnes, skupiny),
+    denVTydnu(dnes) === TYDENNI_DEN ? tydenniBlok(polozky, dnes, skupiny) : null,
     cas.den === 1 ? mesicniBlok(polozky, cas, dnes) : null,
   ].filter(Boolean);
 
@@ -1004,12 +1134,12 @@ export default {
   /* Denní obhlídka skladu.
 
      Cloudflare umí spouštět jen podle UTC, a Praha je proti němu v létě
-     o dvě hodiny a v zimě o jednu. Proto jsou nastavené dva časy a tady
-     se pustí jen ten, kterému zrovna vychází osmá ráno v Praze —
-     přechod na letní čas se tak nemusí hlídat ručně dvakrát do roka. */
+     o dvě hodiny a v zimě o jednu. Proto jsou nastavené dva časy (0 8 * * *
+     a 0 9 * * *) a tady se pustí jen ten, kterému zrovna vychází desátá
+     v Praze — přechod na letní čas se nemusí hlídat dvakrát do roka. */
   async scheduled(event, env, ctx) {
     const hodina = prazskeCasti(Date.now()).hodina;
-    if (hodina !== 8) return;
+    if (hodina !== HODINA_ODESLANI) return;
 
     const chybi = ['SKLAD_EMAIL', 'SKLAD_HESLO', 'SKLAD_UID'].concat(MAIL_TAJEMSTVI)
       .filter(k => !env[k]);
