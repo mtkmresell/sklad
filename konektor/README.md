@@ -128,6 +128,28 @@ pamatuje kurz ke dni nákupu i payoutu; konektor by je počítal jinak.
 Nejsou tam ani jména zákazníků — mail jde přes cizí službu a v CRM nemá
 co pohledávat.
 
+### Jak mail vypadá
+
+Posílá se **v HTML i jako prostý text zároveň** a klient si vybere. Bez
+textové verze by prázdno viděl každý, kdo si HTML nezobrazuje.
+
+Obě podoby vznikají z týchž dat (`textZpravy` a `htmlZpravy` nad stejnými
+bloky). Kdyby si každá skládala zprávu po svém, dřív nebo později by se
+rozešly — proto bloky vrací holá data, ne hotový text.
+
+Vzhled je vzatý z aplikace: pozadí `#0f0f0f`, limetkový akcent `#c8ff00`,
+vlasové linky `#2e2e2e`. **Písma se převzít nedají** — Syne ani DM Sans se
+do mailu nenačtou, poštovní klienti vlastní fonty ignorují. Shodná je tedy
+barva a rozvržení, ne písmo.
+
+HTML je schválně z tabulek a stylů psaných přímo u prvků. Není to lenost:
+flexbox, grid ani `<style>` v hlavičce poštovní klienti spolehlivě neumí
+a Outlook z toho udělá kaši. Ze stejného důvodu v mailu nejsou obrázky —
+a taky proto, že mail bez obrázků má menší šanci skončit v hromadné poště.
+
+Názvy položek si píše uživatel a jdou rovnou do HTML, takže se ošetřují
+(`esc`). Ostrá závorka v názvu by jinak rozhodila značky. Hlídá to test.
+
 ### 1. Založ si Resend
 
 Poštu neumí Cloudflare sám od sebe poslat. [resend.com](https://resend.com)

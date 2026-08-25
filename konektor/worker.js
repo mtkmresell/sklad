@@ -538,12 +538,10 @@ function bazosBlok(polozky, dnes) {
   if (!nalezy.length) return null;
 
   nalezy.sort((a, b) => a.plat.localeCompare(b.plat, 'cs') || a.nazev.localeCompare(b.nazev, 'cs'));
-  const radky = ['INZERÁTY NA BAZOŠI', '',
-    '  Dnes vypršely — nahoď je znovu z archivu:', ''];
-  for (const n of nalezy) radky.push('    • ' + n.nazev + '  (' + n.plat + ')');
-
   return {
-    text: radky.join('\n'),
+    nadpis: 'Inzeráty na Bazoši',
+    uvod: 'Dnes vypršely — nahoď je znovu z archivu.',
+    polozky: nalezy.map(n => ({ hlavni: n.nazev, vedlejsi: n.plat })),
     predmet: pocet(nalezy.length, ['inzerát vypršel', 'inzeráty vypršely', 'inzerátů vypršelo']),
   };
 }
@@ -569,26 +567,23 @@ function payoutBlok(polozky, dnes, skupiny) {
   if (!nalezy.length) return null;
 
   nalezy.sort((a, b) => b.po - a.po || a.nazev.localeCompare(b.nazev, 'cs'));
-  const radky = ['ČEKÁ NA PAYOUT', ''];
-  for (const n of radkyPayout(nalezy)) radky.push(n);
-
   const nejhorsi = nalezy[0];
   return {
-    text: radky.join('\n'),
+    nadpis: 'Čeká na payout',
+    polozky: nalezy.map(n => ({
+      hlavni: n.nazev,
+      vedlejsi: [
+        n.kde || 'bez místa prodeje',
+        n.po === 0 ? 'lhůta ' + dnu(n.ocekavano) + ' vyprší dnes'
+          : 'o ' + dnu(n.po) + ' přes lhůtu ' + n.ocekavano + ' dní',
+        'prodáno ' + formatDne(n.prodano),
+      ].join(' · '),
+      // Co je po lhůtě, ať jde vidět dřív než se to přečte
+      pozor: n.po > 0,
+    })),
     predmet: pocet(nalezy.length, ['payout čeká', 'payouty čekají', 'payoutů čeká'])
       + (nejhorsi.po > 0 ? ', nejdéle o ' + dnu(nejhorsi.po) + ' přes lhůtu' : ''),
   };
-}
-
-function radkyPayout(nalezy) {
-  return nalezy.map(n => {
-    const kde = n.kde || 'bez místa prodeje';
-    const lhuta = n.po === 0
-      ? 'lhůta ' + dnu(n.ocekavano) + ' vyprší dnes'
-      : 'o ' + dnu(n.po) + ' přes lhůtu ' + n.ocekavano + ' dní';
-    return '    • ' + n.nazev + '  — ' + kde + ', ' + lhuta
-      + ', prodáno ' + formatDne(n.prodano);
-  });
 }
 
 /* ── Souhrn za minulý měsíc (posílá se prvního) ─────────────────────── */
@@ -612,11 +607,8 @@ function mesicniBlok(polozky, cas, dnes) {
     }
   }
 
-  const radky = ['SOUHRN ZA ' + MESICE[mesic - 1].toUpperCase() + ' ' + rok, ''];
-  // Číslo se zarovnává samo, přípona až za ním — jinak by „31 z 50"
-  // a „1 z 50" pod sebou neseděly
-  const pridej = (co, kolik, za) =>
-    radky.push('    ' + co.padEnd(20) + String(kolik).padStart(4) + (za || ''));
+  const hodnoty = [];
+  const pridej = (co, kolik, za) => hodnoty.push({ co, kolik, za: za || '' });
   pridej('prodáno kusů', prodano);
   pridej('na skladě', naSklade);
   pridej('čeká na payout', ceka);
@@ -635,8 +627,168 @@ function mesicniBlok(polozky, cas, dnes) {
   }
 
   return {
-    text: radky.join('\n'),
+    nadpis: 'Souhrn za ' + MESICE[mesic - 1] + ' ' + rok,
+    hodnoty,
     predmet: 'souhrn za ' + MESICE[mesic - 1] + ' ' + rok,
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   VYKRESLENÍ ZPRÁVY
+
+   Bloky výš vrací holá data, ne hotový text. Vykreslení jsou dvě — prosté
+   a HTML — a obě čtou z téhož zdroje. Kdyby si každé skládalo zprávu samo,
+   dřív nebo později by se rozešly a jeden z příjemců by viděl něco jiného.
+
+   Posílá se obojí najednou. Kdo má klienta na HTML, uvidí barvy; kdo ne
+   (nebo si nechá zobrazovat prostý text), dostane čitelnou zprávu a ne
+   změť značek.
+══════════════════════════════════════════════════════════════════════ */
+
+const ODKAZ_APLIKACE = 'https://mtkmresell.github.io/sklad/';
+const PATICKA = 'Poslal konektor skladu. Částky ve zprávě schválně nejsou — '
+  + 'kurzy EUR umí správně jen aplikace.';
+
+function textZpravy(dnes, bloky) {
+  const radky = ['Sklad — ' + formatDne(dnes), ''];
+  for (const b of bloky) {
+    radky.push('', b.nadpis.toUpperCase(), '');
+    if (b.uvod) radky.push('  ' + b.uvod, '');
+    for (const p of b.polozky || []) {
+      radky.push('    • ' + p.hlavni + (p.vedlejsi ? '  — ' + p.vedlejsi : ''));
+    }
+    // Číslo se zarovnává samo, přípona až za ním — jinak by „31 z 50"
+    // a „1 z 50" pod sebou neseděly
+    for (const h of b.hodnoty || []) {
+      radky.push('    ' + h.co.padEnd(20) + String(h.kolik).padStart(4) + h.za);
+    }
+    radky.push('');
+  }
+  radky.push('', '— — —', PATICKA, ODKAZ_APLIKACE);
+  return radky.join('\n');
+}
+
+/* ── Barvy a písma pro HTML ─────────────────────────────────────────── */
+/* Vzato z aplikace (:root v index.html), ať to k sobě sedí. Písma se
+   ale převzít nedají — Syne ani DM Sans se do mailu nenačtou, klienti
+   vlastní fonty ignorují. Zbývá tedy systémové písmo; shodná je barva,
+   rozvržení a ten limetkový akcent. */
+const B = {
+  bg: '#0f0f0f', surface: '#181818', surface2: '#222222', border: '#2e2e2e',
+  accent: '#c8ff00', text: '#f0f0f0', muted: '#777777', warning: '#ffaa00',
+};
+const PISMO = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const PISMO_MONO = "'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace";
+
+// Do HTML jdou názvy položek od uživatele — musí se odzbrojit
+function esc(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* Mail se skládá z tabulek a stylů psaných přímo u prvků. Není to
+   zvyk z lenosti — poštovní klienti flexbox, grid ani <style> v hlavičce
+   spolehlivě neumí a Outlook z toho udělá kaši. */
+function htmlZpravy(dnes, bloky) {
+  const sekce = bloky.map(b => {
+    const nadpis = '<tr><td style="padding:0 0 10px;border-bottom:1px solid ' + B.border + ';">'
+      + '<span style="font-family:' + PISMO_MONO + ';font-size:11px;letter-spacing:1.4px;'
+      + 'text-transform:uppercase;color:' + B.accent + ';">' + esc(b.nadpis) + '</span></td></tr>';
+
+    const uvod = b.uvod
+      ? '<tr><td style="padding:14px 0 0;font-family:' + PISMO + ';font-size:14px;color:'
+        + B.muted + ';">' + esc(b.uvod) + '</td></tr>'
+      : '';
+
+    const polozky = (b.polozky || []).map(p =>
+      '<tr><td style="padding:14px 0 0;">'
+      + '<div style="font-family:' + PISMO + ';font-size:15px;font-weight:600;color:'
+      + (p.pozor ? B.warning : B.text) + ';line-height:1.35;">' + esc(p.hlavni) + '</div>'
+      + (p.vedlejsi
+        ? '<div style="font-family:' + PISMO_MONO + ';font-size:12px;color:' + B.muted
+          + ';padding-top:3px;line-height:1.5;">' + esc(p.vedlejsi) + '</div>'
+        : '')
+      + '</td></tr>').join('');
+
+    // Čísla v souhrnu: popis vlevo, hodnota vpravo, oddělené vlasovou linkou
+    const hodnoty = (b.hodnoty || []).length
+      ? '<tr><td style="padding:14px 0 0;">'
+        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
+        + 'style="background:' + B.surface + ';border:1px solid ' + B.border + ';border-radius:10px;">'
+        + b.hodnoty.map((h, i) =>
+          '<tr><td style="padding:11px 14px;font-family:' + PISMO + ';font-size:14px;color:'
+          + B.muted + ';' + (i ? 'border-top:1px solid ' + B.border + ';' : '') + '">' + esc(h.co) + '</td>'
+          + '<td align="right" style="padding:11px 14px;font-family:' + PISMO
+          + ';font-size:16px;font-weight:700;color:' + B.text + ';white-space:nowrap;'
+          + (i ? 'border-top:1px solid ' + B.border + ';' : '') + '">' + esc(h.kolik)
+          + (h.za ? '<span style="font-size:13px;font-weight:400;color:' + B.muted + ';">'
+            + esc(h.za) + '</span>' : '')
+          + '</td></tr>').join('')
+        + '</table></td></tr>'
+      : '';
+
+    return '<tr><td style="padding:34px 0 0;">'
+      + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+      + nadpis + uvod + polozky + hodnoty
+      + '</table></td></tr>';
+  }).join('');
+
+  return '<!doctype html><html lang="cs"><head>'
+    + '<meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<meta name="color-scheme" content="dark">'
+    + '<meta name="supported-color-schemes" content="dark">'
+    + '</head>'
+    + '<body style="margin:0;padding:0;background:' + B.bg + ';">'
+    + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
+    + 'bgcolor="' + B.bg + '" style="background:' + B.bg + ';">'
+    + '<tr><td align="center" style="padding:28px 16px 44px;">'
+    + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
+    + 'style="max-width:580px;">'
+
+    // Hlavička — v aplikaci je logo Syne 800 s limetkovým koncem
+    + '<tr><td style="padding:0 0 4px;">'
+    + '<span style="font-family:' + PISMO + ';font-size:22px;font-weight:800;letter-spacing:-0.5px;'
+    + 'color:' + B.text + ';">SKLAD</span>'
+    + '<span style="font-family:' + PISMO + ';font-size:22px;font-weight:800;color:' + B.accent + ';">.</span>'
+    + '</td></tr>'
+    + '<tr><td style="font-family:' + PISMO_MONO + ';font-size:12px;color:' + B.muted + ';">'
+    + esc(formatDne(dnes)) + '</td></tr>'
+
+    + sekce
+
+    + '<tr><td style="padding:38px 0 0;border-top:1px solid ' + B.border + ';">'
+    + '<div style="font-family:' + PISMO + ';font-size:12px;color:' + B.muted + ';line-height:1.6;">'
+    + esc(PATICKA) + '</div>'
+    + '<div style="padding-top:8px;"><a href="' + ODKAZ_APLIKACE + '" '
+    + 'style="font-family:' + PISMO_MONO + ';font-size:12px;color:' + B.accent + ';">'
+    + 'Otevřít sklad</a></div>'
+    + '</td></tr>'
+
+    + '</table></td></tr></table></body></html>';
+}
+
+/* Ukázka pro /test-mail. Prochází stejným vykreslením jako pravá zpráva,
+   takže se na ní dá zkontrolovat i vzhled — a hlavně dorazí i v den, kdy
+   sklad nemá co hlásit, což je většina dní. */
+function zkusebniZprava(dnes) {
+  const bloky = [{
+    nadpis: 'Zkušební zpráva',
+    uvod: 'Cesta k poště funguje. Dnes není co hlásit, tak je tu aspoň ukázka.',
+    polozky: [
+      { hlavni: 'Takhle vypadá řádek s položkou', vedlejsi: 'místo prodeje · podrobnost · datum' },
+      { hlavni: 'A takhle ten, co je po lhůtě', vedlejsi: 'zvýrazní se barvou', pozor: true },
+    ],
+    hodnoty: [
+      { co: 'takhle vypadají čísla', kolik: 42, za: '' },
+      { co: 'inzeráty Bazoš.cz', kolik: 31, za: ' z 50' },
+    ],
+  }];
+  return {
+    predmet: 'Sklad: zkušební zpráva',
+    text: textZpravy(dnes, bloky),
+    html: htmlZpravy(dnes, bloky),
   };
 }
 
@@ -654,37 +806,34 @@ function sestavZpravu(polozky, ted, data) {
 
   if (!bloky.length) return null;
 
-  const predmet = 'Sklad: ' + bloky.map(b => b.predmet).join(' · ');
-  const text = [
-    'Sklad — ' + formatDne(dnes),
-    '',
-    bloky.map(b => b.text).join('\n\n\n'),
-    '',
-    '',
-    '— — —',
-    'Poslal konektor skladu. Částky ve zprávě schválně nejsou; kurzy EUR',
-    'umí správně jen aplikace: https://mtkmresell.github.io/sklad/',
-  ].join('\n');
-
-  return { predmet, text };
+  return {
+    predmet: 'Sklad: ' + bloky.map(b => b.predmet).join(' · '),
+    text: textZpravy(dnes, bloky),
+    html: htmlZpravy(dnes, bloky),
+  };
 }
 
 /* ── Odeslání ───────────────────────────────────────────────────────── */
 const MAIL_URL = 'https://api.resend.com/emails';
 
-async function posliMail(env, predmet, text) {
+async function posliMail(env, zprava) {
+  const telo = {
+    from: env.MAIL_ODESILATEL || 'Sklad <onboarding@resend.dev>',
+    to: [env.MAIL_KOMU],
+    subject: zprava.predmet,
+    text: zprava.text,
+  };
+  // Obojí naráz — klient si vybere. Bez textové verze by ten, kdo si
+  // HTML nezobrazuje, dostal prázdný mail.
+  if (zprava.html) telo.html = zprava.html;
+
   const r = await fetch(MAIL_URL, {
     method: 'POST',
     headers: {
       Authorization: 'Bearer ' + env.RESEND_API_KEY,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      from: env.MAIL_ODESILATEL || 'Sklad <onboarding@resend.dev>',
-      to: [env.MAIL_KOMU],
-      subject: predmet,
-      text,
-    }),
+    body: JSON.stringify(telo),
   });
   const odpoved = await r.text();
   if (r.ok) return odpoved;
@@ -793,16 +942,13 @@ export default {
                 + 'Ticho je správný stav; mail chodí jen když je co říct.',
           });
         }
-        // Zkušební mail se posílá i v den, kdy není co hlásit — ověřuje
-        // se tu cesta k poště, ne obsah
-        const predmet = zprava ? zprava.predmet : 'Sklad: zkušební zpráva';
-        const text = zprava ? zprava.text
-          : 'Zkušební zpráva z konektoru skladu.\n\n'
-            + 'Dnes není co hlásit — žádný inzerát ani payout nedošel na práh.\n'
-            + 'Kdyby bylo, stálo by to tady. Cesta k poště funguje.\n';
-        await posliMail(env, predmet, text);
+        // Zkušební mail chodí i v den, kdy není co hlásit — ověřuje se
+        // cesta k poště, ne obsah. Ukázková zpráva projde stejným
+        // vykreslením jako ta pravá, takže je na ní vidět i vzhled.
+        const posilana = zprava || zkusebniZprava(prazskyDen(Date.now()));
+        await posliMail(env, posilana);
         return Response.json({
-          stav: 'odeslano', komu: env.MAIL_KOMU, predmet,
+          stav: 'odeslano', komu: env.MAIL_KOMU, predmet: posilana.predmet,
           poznamka: 'Kdyby nepřišel, mrkni do spamu a označ ho jako „není spam".',
         });
       } catch (e) {
@@ -875,7 +1021,7 @@ export default {
     try {
       const { zprava } = await pripravUpozorneni(env);
       if (!zprava) return;  // ticho je správný stav
-      await posliMail(env, zprava.predmet, zprava.text);
+      await posliMail(env, zprava);
       console.log('odesláno: ' + zprava.predmet);
     } catch (e) {
       // Spadnout potichu by znamenalo, že se o vypršelém inzerátu nikdo

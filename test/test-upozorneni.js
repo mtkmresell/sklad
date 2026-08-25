@@ -287,6 +287,41 @@ function prodanoPred(ted, dnu) {
   ok('a šestá UTC už ne', zima6.length === 0);
 
   /* ══════════════════════════════════════════════════════════════ */
+  /* Mail odchází ve dvou podobách naráz. Kdyby chyběla textová, uvidí
+     prázdno každý, kdo si HTML nezobrazuje; kdyby se skládaly zvlášť,
+     rozejdou se. Obě proto vznikají z týchž dat. */
+  sekce('6b) HTML i text v jednom mailu');
+  nastavSklad([
+    { id: 'a', name: 'Dunk Low Panda', sku: 'DD1391', saleState: 'stock',
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
+  ]);
+  m = await cron(RANO_LETO);
+  const mail = m[0] || {};
+  ok('posílá se text', typeof mail.text === 'string' && mail.text.length > 0);
+  ok('posílá se i HTML', typeof mail.html === 'string' && mail.html.length > 0);
+  ok('HTML je celý dokument', /^<!doctype html>/i.test(mail.html || ''), (mail.html || '').slice(0, 40));
+  ok('má barvu akcentu z aplikace', /#c8ff00/.test(mail.html || ''));
+  ok('drží tmavé pozadí i v tmavém režimu klienta',
+    /color-scheme/.test(mail.html || '') && /#0f0f0f/.test(mail.html || ''));
+  ok('položka je v obou podobách',
+    /Dunk Low Panda/.test(mail.text || '') && /Dunk Low Panda/.test(mail.html || ''));
+  ok('žádné neposazené vykreslení nezůstalo', !/undefined|\[object/.test(mail.html || ''));
+
+  /* Názvy položek si píše uživatel a jdou rovnou do HTML. Ostrá závorka
+     v názvu by jinak rozhodila značky — a v horším případě do mailu
+     propašovala cokoli dalšího. */
+  sekce('6c) Název položky nemůže rozbít HTML');
+  nastavSklad([
+    { id: 'a', name: 'Dunk <script>zle()</script> & "spol"', sku: 'X1', saleState: 'stock',
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
+  ]);
+  const zakerny = (await cron(RANO_LETO))[0] || {};
+  ok('značka se nepropíše', !/<script>/.test(zakerny.html || ''), (zakerny.html || '').slice(0, 200));
+  ok('ale text zůstane čitelný', /&lt;script&gt;/.test(zakerny.html || ''));
+  ok('ampersand i uvozovky ošetřeny', /&amp;/.test(zakerny.html || '') && /&quot;spol&quot;/.test(zakerny.html || ''));
+  ok('v prostém textu se nemění nic', /<script>zle\(\)<\/script> & "spol"/.test(zakerny.text || ''));
+
+  /* ══════════════════════════════════════════════════════════════ */
   sekce('7) Co ve zprávě nesmí být');
   nastavSklad([
     { id: 'w1', name: 'Yeezy Slide', saleState: 'waiting', soldWhere: 'StockX',
