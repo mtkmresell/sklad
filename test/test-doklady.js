@@ -104,12 +104,15 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
     payout: (document.getElementById('pdPayout') || {}).value,
     maTyp: !!document.getElementById('pdDocType'),
     typZabalen: !!(document.getElementById('pdDocType') || {}).closest?.('.cs-wrap'),
+    // Nejdelší volba je „Nic — řeší platforma"; v úzkém tlačítku se ořízne
+    typSiroky: !!(document.getElementById('pdDocType') || {}).closest?.('.cs-wrap')?.classList.contains('cs-fullwidth'),
     maFakturacni: !!document.getElementById('pdCompany'),
     maAdresu: !!document.getElementById('pdAddress'),
   }));
   check('lhůta se předvyplní z nastavení', detail.payout === '30', detail.payout);
   check('je tam volba dokladu', detail.maTyp === true);
   check('a má vlastní vzhled', detail.typZabalen === true, 'systémový select do aplikace nezapadá');
+  check('a je přes celou šířku', detail.typSiroky === true, 'jinak se nejdelší volba ořízne');
   check('u eshopu jsou fakturační údaje', detail.maFakturacni && detail.maAdresu);
 
   // U local prodeje kupujícím není firma, tak tam ta pole nepatří
