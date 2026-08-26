@@ -642,18 +642,25 @@ function zasilkaBlok(polozky, dnes) {
     if ((naCeste - ZASILKA_PRAH) % ZASILKA_OPAKOVANI !== 0) continue;
 
     nalezy.push({ naCeste, nazev: it.name || it.id,
-      dopravce: it.trackingCarrier || '', cislo: it.trackingNum, odeslano });
+      dopravce: it.trackingCarrier || '', cislo: it.trackingNum,
+      // Adresu sledování si aplikace ukládá u položky — skládat ji znovu
+      // by znamenalo držet tabulku dopravců na druhém místě
+      odkaz: it.trackingUrl || '', odeslano });
   }
   if (!nalezy.length) return null;
 
   nalezy.sort((a, b) => b.naCeste - a.naCeste || a.nazev.localeCompare(b.nazev, 'cs'));
   return {
     nadpis: 'Dlouho na cestě',
-    uvod: 'Pořád označené jako odeslané. Zkus sledování, případně reklamuj.',
+    uvod: 'Pořád označené jako odeslané. Mrkni na tracking, případně '
+      + 'kontaktuj zákazníka nebo zahaj reklamaci.',
     polozky: nalezy.map(n => ({
       hlavni: n.nazev,
-      vedlejsi: [n.dopravce || 'bez dopravce', n.cislo,
-        'na cestě ' + dnu(n.naCeste)].join(' · '),
+      vedlejsi: [
+        n.dopravce || 'bez dopravce',
+        n.odkaz ? { text: n.cislo, url: n.odkaz } : n.cislo,
+        'uběhlo ' + dnu(n.naCeste) + ' od odeslání',
+      ],
       pozor: true,
     })),
     predmet: pocet(nalezy.length, ['zásilka je', 'zásilky jsou', 'zásilek je'])
@@ -1036,11 +1043,9 @@ function mesicniBlok(polozky, cas, dnes, crm) {
 
 const ODKAZ_APLIKACE = 'https://mtkmresell.github.io/sklad/';
 
-/* Patička se řídí tím, co ve zprávě je. Běžná upozornění peníze schválně
-   nenesou; měsíční report ano. Jedna věta pro obojí by v jednom z těch
-   dvou případů lhala. */
-const PATICKA_BEZ_PENEZ = 'Poslal konektor skladu. Částky ve zprávě schválně nejsou — '
-  + 'kurzy EUR umí správně jen aplikace.';
+/* U běžného upozornění není co vysvětlovat, tak se nevysvětluje. V reportu
+   ano — čtenář má právo vědět, odkud se ty částky berou. */
+const PATICKA_BEZ_PENEZ = 'Poslal konektor skladu.';
 const PATICKA_S_PENEZI = 'Poslal konektor skladu. Částky se počítají z kurzů uložených '
   + 'u každého nákupu a payoutu, stejně jako v aplikaci.';
 
@@ -1050,7 +1055,8 @@ function textZpravy(dnes, bloky, paticka) {
     radky.push('', b.nadpis.toUpperCase(), '');
     if (b.uvod) radky.push('  ' + b.uvod, '');
     for (const p of b.polozky || []) {
-      radky.push('    • ' + p.hlavni + (p.vedlejsi ? '  — ' + p.vedlejsi : ''));
+      const v = vedlejsiText(p.vedlejsi);
+      radky.push('    • ' + p.hlavni + (v ? '  — ' + v : ''));
     }
     // Číslo se zarovnává samo, přípona až za ním — jinak by „31 z 50"
     // a „1 z 50" pod sebou neseděly. Značka je to, co v HTML nese barvu;
@@ -1097,28 +1103,54 @@ function esc(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/* Adresa sledování se bere z položky, kam ji uložila aplikace. Do odkazu
+   ale nesmí cokoli — javascript: v href by z upozornění udělal zbraň.
+   Projdou jen http a https. */
+function bezpecnyOdkaz(url) {
+  const u = String(url || '').trim();
+  return /^https?:\/\//i.test(u) ? u : null;
+}
+
+/* Vedlejší řádek je buď text, nebo řada dílků, z nichž některý může být
+   odkaz. Textová verze z odkazu vezme jen jeho popisek — adresa
+   sledování je dlouhá a v prostém textu by řádek rozbila. */
+function vedlejsiText(v) {
+  if (!Array.isArray(v)) return v || '';
+  return v.map(d => (typeof d === 'string' ? d : d.text)).join(' · ');
+}
+function vedlejsiHtml(v, barva) {
+  const dilky = Array.isArray(v) ? v : [v || ''];
+  return dilky.map(d => {
+    if (typeof d === 'string') return esc(d);
+    const url = bezpecnyOdkaz(d.url);
+    if (!url) return esc(d.text);
+    return '<a href="' + esc(url) + '" style="color:' + barva
+      + ';text-decoration:underline;">' + esc(d.text) + '</a>';
+  }).join(' · ');
+}
+
 /* Mail se skládá z tabulek a stylů psaných přímo u prvků. Není to
    zvyk z lenosti — poštovní klienti flexbox, grid ani <style> v hlavičce
    spolehlivě neumí a Outlook z toho udělá kaši. */
 function htmlZpravy(dnes, bloky, paticka) {
   const sekce = bloky.map(b => {
     const nadpis = '<tr><td style="padding:0 0 10px;border-bottom:1px solid ' + B.border + ';">'
-      + '<span style="font-family:' + PISMO_MONO + ';font-size:11px;letter-spacing:1.4px;'
+      + '<span style="font-family:' + PISMO_MONO + ';font-size:12.5px;letter-spacing:1.6px;'
       + 'text-transform:uppercase;color:' + B.accent + ';">' + esc(b.nadpis) + '</span></td></tr>';
 
     const uvod = b.uvod
-      ? '<tr><td style="padding:14px 0 0;font-family:' + PISMO + ';font-size:14px;color:'
+      ? '<tr><td style="padding:18px 0 0;font-family:' + PISMO + ';font-size:15.5px;line-height:1.55;color:'
         + B.muted + ';">' + esc(b.uvod) + '</td></tr>'
       : '';
 
     const polozky = (b.polozky || []).map(p =>
-      '<tr><td style="padding:14px 0 0;">'
-      + '<div style="font-family:' + PISMO + ';font-size:15px;font-weight:600;color:'
+      '<tr><td style="padding:18px 0 0;">'
+      + '<div style="font-family:' + PISMO + ';font-size:17px;font-weight:600;color:'
       + barvaStavu(p.stav || (p.pozor ? 'pozor' : null), B.text) + ';line-height:1.35;">'
       + esc(p.hlavni) + '</div>'
-      + (p.vedlejsi
-        ? '<div style="font-family:' + PISMO_MONO + ';font-size:12px;color:' + B.muted
-          + ';padding-top:3px;line-height:1.5;">' + esc(p.vedlejsi) + '</div>'
+      + (p.vedlejsi && vedlejsiText(p.vedlejsi)
+        ? '<div style="font-family:' + PISMO_MONO + ';font-size:13.5px;color:' + B.muted
+          + ';padding-top:5px;line-height:1.55;">' + vedlejsiHtml(p.vedlejsi, B.accent) + '</div>'
         : '')
       /* Proužek délkou ukazuje podíl na celku. Délka nese informaci,
          barva je jen jedna — nemá co rozlišovat, jen zvýraznit. */
@@ -1139,22 +1171,22 @@ function htmlZpravy(dnes, bloky, paticka) {
         + b.hodnoty.map((h, i) => {
           const linka = i ? 'border-top:1px solid ' + B.border + ';' : '';
           const barva = barvaStavu(h.stav, B.text);
-          return '<tr><td style="padding:11px 14px;font-family:' + PISMO + ';font-size:14px;color:'
+          return '<tr><td style="padding:14px 17px;font-family:' + PISMO + ';font-size:15.5px;color:'
             + B.muted + ';' + linka + '">' + esc(h.co) + '</td>'
-            + '<td align="right" style="padding:11px 14px;white-space:nowrap;' + linka + '">'
-            + '<span style="font-family:' + PISMO + ';font-size:16px;font-weight:700;color:'
+            + '<td align="right" style="padding:14px 17px;white-space:nowrap;' + linka + '">'
+            + '<span style="font-family:' + PISMO + ';font-size:19px;font-weight:700;color:'
             + barva + ';">' + esc(h.kolik) + '</span>'
-            + (h.za ? '<span style="font-family:' + PISMO + ';font-size:13px;color:'
+            + (h.za ? '<span style="font-family:' + PISMO + ';font-size:15px;color:'
               + B.muted + ';">' + esc(h.za) + '</span>' : '')
             // Značka je ta druhá, nebarevná stopa — bez ní by barva stála sama
-            + (h.znacka ? '<div style="font-family:' + PISMO_MONO + ';font-size:11px;color:'
-              + barva + ';padding-top:2px;">' + esc(h.znacka) + '</div>' : '')
+            + (h.znacka ? '<div style="font-family:' + PISMO_MONO + ';font-size:12px;color:'
+              + barva + ';padding-top:3px;">' + esc(h.znacka) + '</div>' : '')
             + '</td></tr>';
         }).join('')
         + '</table></td></tr>'
       : '';
 
-    return '<tr><td style="padding:34px 0 0;">'
+    return '<tr><td style="padding:46px 0 0;">'
       + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
       + nadpis + uvod + polozky + hodnoty
       + '</table></td></tr>';
@@ -1169,26 +1201,26 @@ function htmlZpravy(dnes, bloky, paticka) {
     + '<body style="margin:0;padding:0;background:' + B.bg + ';">'
     + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
     + 'bgcolor="' + B.bg + '" style="background:' + B.bg + ';">'
-    + '<tr><td align="center" style="padding:28px 16px 44px;">'
+    + '<tr><td align="center" style="padding:52px 20px 76px;">'
     + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
-    + 'style="max-width:580px;">'
+    + 'style="max-width:660px;">'
 
     // Hlavička — v aplikaci je logo Syne 800 s limetkovým koncem
     + '<tr><td style="padding:0 0 4px;">'
-    + '<span style="font-family:' + PISMO + ';font-size:22px;font-weight:800;letter-spacing:-0.5px;'
+    + '<span style="font-family:' + PISMO + ';font-size:28px;font-weight:800;letter-spacing:-0.6px;'
     + 'color:' + B.text + ';">SKLAD</span>'
-    + '<span style="font-family:' + PISMO + ';font-size:22px;font-weight:800;color:' + B.accent + ';">.</span>'
+    + '<span style="font-family:' + PISMO + ';font-size:28px;font-weight:800;color:' + B.accent + ';">.</span>'
     + '</td></tr>'
-    + '<tr><td style="font-family:' + PISMO_MONO + ';font-size:12px;color:' + B.muted + ';">'
+    + '<tr><td style="font-family:' + PISMO_MONO + ';font-size:13px;letter-spacing:0.5px;color:' + B.muted + ';">'
     + esc(formatDne(dnes)) + '</td></tr>'
 
     + sekce
 
-    + '<tr><td style="padding:38px 0 0;border-top:1px solid ' + B.border + ';">'
-    + '<div style="font-family:' + PISMO + ';font-size:12px;color:' + B.muted + ';line-height:1.6;">'
+    + '<tr><td style="padding:50px 0 0;border-top:1px solid ' + B.border + ';">'
+    + '<div style="font-family:' + PISMO + ';font-size:13px;color:' + B.muted + ';line-height:1.65;">'
     + esc(paticka) + '</div>'
     + '<div style="padding-top:8px;"><a href="' + ODKAZ_APLIKACE + '" '
-    + 'style="font-family:' + PISMO_MONO + ';font-size:12px;color:' + B.accent + ';">'
+    + 'style="font-family:' + PISMO_MONO + ';font-size:13px;color:' + B.accent + ';">'
     + 'Otevřít sklad</a></div>'
     + '</td></tr>'
 

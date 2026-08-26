@@ -279,7 +279,35 @@ function prodanoPred(ted, dnu) {
   ]);
   const zas = (await cron(RANO_LETO))[0] || {};
   ok('je vidět dopravce i číslo', /Zásilkovna/.test(zas.text || '') && /CP123456789CZ/.test(zas.text || ''), zas.text);
-  ok('a jak dlouho už jede', /na cestě 5 dní/.test(zas.text || ''), zas.text);
+  ok('a jak dlouho už jede', /uběhlo 5 dní od odeslání/.test(zas.text || ''), zas.text);
+  ok('poradí, co dělat', /kontaktuj zákazníka nebo zahaj reklamaci/.test(zas.text || ''), zas.text);
+
+  /* Sledovací číslo je v aplikaci proklikové, v mailu má být taky —
+     jinak by se muselo ručně přepisovat do stránky dopravce. */
+  nastavSklad([
+    { id: 'z', name: 'Yeezy Slide', saleState: 'waiting', waitState: 'sent',
+      trackingNum: 'CP123456789CZ', trackingCarrier: 'Zásilkovna',
+      trackingUrl: 'https://tracking.packeta.com/cs/?id=CP123456789CZ',
+      sentAt: prodanoPred(RANO_LETO, 5) },
+  ]);
+  const sOdkazem = (await cron(RANO_LETO))[0] || {};
+  ok('číslo je v HTML odkaz',
+    /<a href="https:\/\/tracking\.packeta\.com[^"]*"[^>]*>CP123456789CZ<\/a>/.test(sOdkazem.html || ''),
+    (sOdkazem.html || '').slice(0, 100));
+  ok('v prostém textu zůstane jen číslo',
+    /CP123456789CZ/.test(sOdkazem.text || '') && !/tracking\.packeta/.test(sOdkazem.text || ''),
+    sOdkazem.text);
+
+  // Adresa od uživatele nesmí do odkazu propašovat cokoli
+  nastavSklad([
+    { id: 'z', name: 'Yeezy Slide', saleState: 'waiting', waitState: 'sent',
+      trackingNum: 'X1', trackingCarrier: 'DPD',
+      trackingUrl: 'javascript:alert(1)', sentAt: prodanoPred(RANO_LETO, 5) },
+  ]);
+  const zakernyOdkaz = (await cron(RANO_LETO))[0] || {};
+  ok('javascript: se odkazem nestane', !/javascript:/.test(zakernyOdkaz.html || ''),
+    (zakernyOdkaz.html || '').slice(0, 100));
+  ok('ale číslo je pořád vidět', /X1/.test(zakernyOdkaz.html || ''));
 
   /* ══════════════════════════════════════════════════════════════ */
   /* Pondělní obhlídka schválně porušuje pravidlo „okamžik, ne stav" —
@@ -379,8 +407,7 @@ function prodanoPred(ted, dnu) {
      Ta běžná tvrdí, že částky ve zprávě nejsou — pod reportem plným
      korun by to byla lež. */
   ok('patička u reportu mluví o kurzech', /kurzů uložených/.test(t), t.slice(-300));
-  ok('a netvrdí, že částky nejsou', !/schválně nejsou/.test(t), t.slice(-300));
-  ok('u běžného dne patička zůstává', /schválně nejsou/.test(cist(m[0] && m[0].text)), m[0] && m[0].text);
+  ok('a běžná zpráva ji nemá', !/kurzů uložených/.test(cist(m[0] && m[0].text)), m[0] && m[0].text);
 
   // Řádky s čísly nemají příponu — nesmí za nimi zůstat „undefined"
   ok('žádné undefined v hodnotách', !/undefined/.test(t), t);
@@ -519,7 +546,8 @@ function prodanoPred(ted, dnu) {
   const telo = text.split('— — —')[0];
   ok('žádné částky', !/\b(2600|1800)\b/.test(telo), telo);
   ok('žádná měna', !/\b(CZK|EUR|Kč)\b/.test(telo), telo);
-  ok('patička říká, proč tam částky nejsou', /Částky/.test(text), text);
+  // Běžné upozornění nemá co vysvětlovat, tak patička nic nevysvětluje
+  ok('patička je krátká', /Poslal konektor skladu\.\s*$/m.test(text), text.slice(-200));
   ok('CRM se ani nečte', !dotazy.some(u => u.includes('/crm/')), JSON.stringify(dotazy));
   ok('žádné jméno zákazníka', !/Petr Novák/.test(text));
   ok('odkaz na aplikaci tam je', /mtkmresell\.github\.io/.test(text));

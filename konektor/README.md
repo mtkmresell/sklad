@@ -128,6 +128,12 @@ později rozešla a mail by upomínal proti jiným číslům, než jaká jsou
 vidět na obrazovce. `test-upozorneni.js` porovnává aspoň ta čísla, aby
 se nerozešla ani ta.
 
+Sledovací číslo je v mailu **proklikové** — adresa se bere z `trackingUrl`
+uložené u položky, takže se tabulka dopravců nedrží na druhém místě. Do
+odkazu projdou jen adresy začínající `http` nebo `https`; `javascript:`
+v href by z upozornění udělal zbraň. V prosté textové verzi zůstane jen
+číslo, adresa by řádek rozbila.
+
 **Zásilka se počítá od `sentAt`** — data, které si aplikace zapíše při
 přechodu do stavu „odesláno". Kusy označené dřív, než tohle pole vzniklo,
 ho nemají a počítají se od data prodeje; bývá to týž nebo následující
