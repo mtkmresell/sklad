@@ -121,6 +121,54 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
   const local = await page.evaluate(() => ({ maFakturacni: !!document.getElementById('pdCompany') }));
   check('u local prodeje fakturační údaje nejsou', local.maFakturacni === false);
 
+  /* Spodní tlačítka patří celému oknu, ne detailu — a dokud o detailu
+     nevěděla, vyhazovala uživatele z celé správy platforem. Uložit jedno
+     místo a vypadnout ven je to poslední, co člověk chce; obvykle jich
+     nastavuje víc po sobě. */
+  section('4b) Zpět z detailu vede na seznam, ne ven');
+  const zpet = await page.evaluate(() => {
+    openPlatMgr();
+    openPlatDetail('Sneakerstore', 'eshopy');
+    document.querySelector('#moPlatMgr [data-action="closeplatmgr"]').click();
+    return {
+      oknoOtevrene: document.getElementById('moPlatMgr').classList.contains('open'),
+      nastaveniZavrena: !document.getElementById('moSettings').classList.contains('open'),
+      vSeznamu: !document.getElementById('pdDocType') && !!document.getElementById('pmg_eshopy'),
+    };
+  });
+  check('správa platforem zůstane otevřená', zpet.oknoOtevrene === true);
+  check('nastavení se neotevře', zpet.nastaveniZavrena === true, 'to je o dvě patra výš');
+  check('a jsme zpátky na seznamu míst', zpet.vSeznamu === true);
+
+  // Ze seznamu naopak Zpět ven vede — tam je to správně
+  const zpetZeSeznamu = await page.evaluate(() => {
+    openPlatMgr();
+    document.querySelector('#moPlatMgr [data-action="closeplatmgr"]').click();
+    return {
+      oknoZavrene: !document.getElementById('moPlatMgr').classList.contains('open'),
+      nastaveniOtevrena: document.getElementById('moSettings').classList.contains('open'),
+    };
+  });
+  check('ze seznamu Zpět zavře správu', zpetZeSeznamu.oknoZavrene === true);
+  check('a otevře nastavení', zpetZeSeznamu.nastaveniOtevrena === true);
+
+  section('4c) Uložit z detailu taky vede na seznam');
+  const poUlozeni = await page.evaluate(() => {
+    document.getElementById('moSettings').classList.remove('open');
+    openPlatMgr();
+    openPlatDetail('Sneakerstore', 'eshopy');
+    document.getElementById('pdPayout').value = '33';
+    savePlatMgr();
+    return {
+      oknoOtevrene: document.getElementById('moPlatMgr').classList.contains('open'),
+      vSeznamu: !document.getElementById('pdDocType') && !!document.getElementById('pmg_eshopy'),
+      ulozeno: (getPlatGroups().payoutDays || {})['Sneakerstore'],
+    };
+  });
+  check('okno zůstane otevřené', poUlozeni.oknoOtevrene === true);
+  check('jsme na seznamu míst', poUlozeni.vSeznamu === true);
+  check('a změna se opravdu uložila', poUlozeni.ulozeno === 33, String(poUlozeni.ulozeno));
+
   section('5) Detail se uloží');
   const ulozeno = await page.evaluate(() => {
     openPlatMgr();

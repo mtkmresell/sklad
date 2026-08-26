@@ -3552,9 +3552,10 @@ function openPlatDetail(name, key) {
       + (stat ? 'zatím jen ' + stat.n + ' prodejů, na medián je málo' : 'zatím žádný dokončený prodej') + '</span>';
 
   var h = '';
-  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">'
-    + '<button class="icon-btn" data-action="platback" style="padding:6px 12px;">Zpět</button>'
-    + '<span style="font-family:Syne,sans-serif;font-size:17px;font-weight:800;">' + escHtml(name) + '</span>'
+  h += '<div style="margin-bottom:20px;">'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:10px;text-transform:uppercase;'
+    + 'letter-spacing:1px;color:var(--muted2);margin-bottom:3px;">Místo prodeje</div>'
+    + '<div style="font-family:Syne,sans-serif;font-size:19px;font-weight:800;">' + escHtml(name) + '</div>'
     + '</div>';
 
   // ── Payout
@@ -3699,12 +3700,17 @@ function addPlatItem(key){
 function savePlatMgr(){
   if(!_tmpGroups) _tmpGroups=getPlatGroups();
   // Uživatel může dát Uložit rovnou z detailu, aniž by se vracel zpátky
+  var zDetailu = !!_platDetail;
   stashPlatDetail();
   savePlatGroupsData(_tmpGroups);
-  _tmpGroups=null;
   buildPlatFilter();
   buildListingPlatformFilter();
   renderItems();
+  /* Z detailu se vrací na seznam míst, ne ven z nástroje. Uložit jedno
+     místo a vypadnout z celé správy je to poslední, co uživatel chtěl —
+     většinou jich nastavuje víc po sobě. */
+  if (zDetailu) { showToast('Uloženo.'); openPlatMgr(false); return; }
+  _tmpGroups=null;
   cm('moPlatMgr');
 }
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
@@ -8786,7 +8792,15 @@ document.addEventListener('click', function(e) {
   if (action === 'removeimg') { removeImg(); return; }
   if (action === 'fetchrate') { fetchCnbRate(true); return; }
   if (action === 'savesettings') { saveSettings(); return; }
-  if (action === 'closeplatmgr') { _tmpGroups=null; cm('moPlatMgr'); return; }
+  if (action === 'closeplatmgr') {
+    /* Z detailu místa se vrací na seznam míst. Dřív tady bylo zavření
+       celého okna napevno, takže rozkliknuté místo vyhodilo uživatele
+       až do nastavení — o dvě patra výš, než čekal. */
+    if (_platDetail) { stashPlatDetail(); openPlatMgr(false); return; }
+    _tmpGroups=null; cm('moPlatMgr');
+    document.getElementById('moSettings').classList.add('open');
+    return;
+  }
   if (action === 'saveplatmgr') { savePlatMgr(); return; }
   if (action === 'savesell') { saveSell(); return; }
   if (action === 'bulkdelete') { bulkDelete(); return; }
@@ -17201,7 +17215,7 @@ rebuildBrandTables();
   </div>
   <div id="platMgrBody" class="pmg-scroll" style="max-height:60vh;overflow-y:auto;padding-right:10px;"></div>
   <div class="btn-row">
-    <button class="btn-sec" data-action="closeplatmgr" onclick="document.getElementById('moSettings').classList.add('open')">Zpět</button>
+    <button class="btn-sec" data-action="closeplatmgr">Zpět</button>
     <button class="btn-pri" data-action="saveplatmgr">Uložit změny</button>
   </div>
 </div>
