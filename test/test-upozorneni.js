@@ -313,13 +313,6 @@ function prodanoPred(ted, dnu) {
     (zakernyOdkaz.html || '').slice(0, 100));
   ok('ale číslo je pořád vidět', /X1/.test(zakernyOdkaz.html || ''));
 
-  /* Aplikace u DPD číslo při kliknutí zkopíruje do schránky, protože ho
-     jejich stránka z adresy nepřevezme. Mail to udělat nemůže — klienti
-     JavaScript nepouštějí — tak to aspoň řekne, ať u toho člověk nestojí
-     zbytečně. */
-  ok('u DPD se připomene vložení', /číslo si zkopíruj, DPD ho chce vložit/.test(zakernyOdkaz.text || ''),
-    zakernyOdkaz.text);
-  ok('u ostatních dopravců ne', !/zkopíruj/.test(sOdkazem.text || ''), sOdkazem.text);
 
   /* ══════════════════════════════════════════════════════════════ */
   /* Pondělní obhlídka schválně porušuje pravidlo „okamžik, ne stav" —

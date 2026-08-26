@@ -134,12 +134,6 @@ odkazu projdou jen adresy začínající `http` nebo `https`; `javascript:`
 v href by z upozornění udělal zbraň. V prosté textové verzi zůstane jen
 číslo, adresa by řádek rozbila.
 
-U **DPD** aplikace číslo při kliknutí kopíruje do schránky, protože ho
-jejich stránka z adresy nepřevezme. Mail to udělat nemůže — poštovní
-klienti JavaScript nepouštějí a žádná náhrada neexistuje — tak aspoň
-připíše, že se číslo bude muset vložit. Seznam takových dopravců je
-v `DOPRAVCI_S_VKLADANIM`; v aplikaci je totéž ve `waitStateBadge()`.
-
 **Zásilka se počítá od `sentAt`** — data, které si aplikace zapíše při
 přechodu do stavu „odesláno". Kusy označené dřív, než tohle pole vzniklo,
 ho nemají a počítají se od data prodeje; bývá to týž nebo následující

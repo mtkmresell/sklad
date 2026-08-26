@@ -441,12 +441,6 @@ const VYCHOZI_PAYOUT = 14;
 const ZASILKA_PRAH = 5;
 const ZASILKA_OPAKOVANI = 7;
 
-/* Dopravci, u kterých stránka sledování číslo z adresy nepřevezme a chce
-   ho vložit ručně. Aplikace je u nich při kliknutí kopíruje do schránky;
-   v mailu to nejde (klienti JavaScript nepouští), tak se aspoň připomene.
-   Stejný seznam jako v aplikaci — tam je to v waitStateBadge(). */
-const DOPRAVCI_S_VKLADANIM = ['DPD'];
-
 // Pondělní obhlídka skladu
 const TYDENNI_DEN = 1;      // 0 = neděle
 const NEJVIC_V_SEZNAMU = 8; // delší výčet se ve zprávě už nečte
@@ -662,18 +656,15 @@ function zasilkaBlok(polozky, dnes) {
     nadpis: 'Dlouho na cestě',
     uvod: 'Pořád označené jako odeslané. Mrkni na tracking, případně '
       + 'kontaktuj zákazníka nebo zahaj reklamaci.',
-    polozky: nalezy.map(n => {
-      const vedlejsi = [
+    polozky: nalezy.map(n => ({
+      hlavni: n.nazev,
+      vedlejsi: [
         n.dopravce || 'bez dopravce',
         n.odkaz ? { text: n.cislo, url: n.odkaz } : n.cislo,
         'uběhlo ' + dnu(n.naCeste) + ' od odeslání',
-      ];
-      // Kopírovat do schránky umí aplikace, mail ne — aspoň to řekne
-      if (DOPRAVCI_S_VKLADANIM.includes(n.dopravce)) {
-        vedlejsi.push('číslo si zkopíruj, ' + n.dopravce + ' ho chce vložit');
-      }
-      return { hlavni: n.nazev, vedlejsi, pozor: true };
-    }),
+      ],
+      pozor: true,
+    })),
     predmet: pocet(nalezy.length, ['zásilka je', 'zásilky jsou', 'zásilek je'])
       + ' dlouho na cestě',
   };
