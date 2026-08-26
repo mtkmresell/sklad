@@ -441,6 +441,12 @@ const VYCHOZI_PAYOUT = 14;
 const ZASILKA_PRAH = 5;
 const ZASILKA_OPAKOVANI = 7;
 
+/* Dopravci, u kterých stránka sledování číslo z adresy nepřevezme a chce
+   ho vložit ručně. Aplikace je u nich při kliknutí kopíruje do schránky;
+   v mailu to nejde (klienti JavaScript nepouští), tak se aspoň připomene.
+   Stejný seznam jako v aplikaci — tam je to v waitStateBadge(). */
+const DOPRAVCI_S_VKLADANIM = ['DPD'];
+
 // Pondělní obhlídka skladu
 const TYDENNI_DEN = 1;      // 0 = neděle
 const NEJVIC_V_SEZNAMU = 8; // delší výčet se ve zprávě už nečte
@@ -606,13 +612,15 @@ function payoutBlok(polozky, dnes, skupiny) {
   const nejhorsi = nalezy[0];
   return {
     nadpis: 'Čeká na payout',
+    // Kde · kdy · a teprve pak jak je na tom lhůta. Nejdřív se člověk
+    // potřebuje chytit toho, co si pamatuje, pak teprve řešit zpoždění.
     polozky: nalezy.map(n => ({
       hlavni: n.nazev,
       vedlejsi: [
         n.kde || 'bez místa prodeje',
+        'prodáno ' + formatDne(n.prodano),
         n.po === 0 ? 'lhůta ' + dnu(n.ocekavano) + ' vyprší dnes'
           : 'o ' + dnu(n.po) + ' přes lhůtu ' + n.ocekavano + ' dní',
-        'prodáno ' + formatDne(n.prodano),
       ].join(' · '),
       // Co je po lhůtě, ať jde vidět dřív než se to přečte
       pozor: n.po > 0,
@@ -654,15 +662,18 @@ function zasilkaBlok(polozky, dnes) {
     nadpis: 'Dlouho na cestě',
     uvod: 'Pořád označené jako odeslané. Mrkni na tracking, případně '
       + 'kontaktuj zákazníka nebo zahaj reklamaci.',
-    polozky: nalezy.map(n => ({
-      hlavni: n.nazev,
-      vedlejsi: [
+    polozky: nalezy.map(n => {
+      const vedlejsi = [
         n.dopravce || 'bez dopravce',
         n.odkaz ? { text: n.cislo, url: n.odkaz } : n.cislo,
         'uběhlo ' + dnu(n.naCeste) + ' od odeslání',
-      ],
-      pozor: true,
-    })),
+      ];
+      // Kopírovat do schránky umí aplikace, mail ne — aspoň to řekne
+      if (DOPRAVCI_S_VKLADANIM.includes(n.dopravce)) {
+        vedlejsi.push('číslo si zkopíruj, ' + n.dopravce + ' ho chce vložit');
+      }
+      return { hlavni: n.nazev, vedlejsi, pozor: true };
+    }),
     predmet: pocet(nalezy.length, ['zásilka je', 'zásilky jsou', 'zásilek je'])
       + ' dlouho na cestě',
   };
@@ -1043,11 +1054,12 @@ function mesicniBlok(polozky, cas, dnes, crm) {
 
 const ODKAZ_APLIKACE = 'https://mtkmresell.github.io/sklad/';
 
-/* U běžného upozornění není co vysvětlovat, tak se nevysvětluje. V reportu
-   ano — čtenář má právo vědět, odkud se ty částky berou. */
-const PATICKA_BEZ_PENEZ = 'Poslal konektor skladu.';
-const PATICKA_S_PENEZI = 'Poslal konektor skladu. Částky se počítají z kurzů uložených '
-  + 'u každého nákupu a payoutu, stejně jako v aplikaci.';
+/* Kdo mail dostane, ví, odkud přišel — připomínat to je plýtvání místem.
+   Patička proto zůstává prázdná a je v ní jen odkaz do aplikace. Výjimka
+   je report: u částek má čtenář právo vědět, odkud se berou. */
+const PATICKA_BEZ_PENEZ = '';
+const PATICKA_S_PENEZI = 'Částky se počítají z kurzů uložených u každého nákupu '
+  + 'a payoutu, stejně jako v aplikaci.';
 
 function textZpravy(dnes, bloky, paticka) {
   const radky = ['Sklad — ' + formatDne(dnes), ''];
@@ -1067,7 +1079,9 @@ function textZpravy(dnes, bloky, paticka) {
     }
     radky.push('');
   }
-  radky.push('', '— — —', paticka, ODKAZ_APLIKACE);
+  radky.push('', '— — —');
+  if (paticka) radky.push(paticka);
+  radky.push(ODKAZ_APLIKACE);
   return radky.join('\n');
 }
 
@@ -1217,9 +1231,11 @@ function htmlZpravy(dnes, bloky, paticka) {
     + sekce
 
     + '<tr><td style="padding:50px 0 0;border-top:1px solid ' + B.border + ';">'
-    + '<div style="font-family:' + PISMO + ';font-size:13px;color:' + B.muted + ';line-height:1.65;">'
-    + esc(paticka) + '</div>'
-    + '<div style="padding-top:8px;"><a href="' + ODKAZ_APLIKACE + '" '
+    + (paticka
+      ? '<div style="font-family:' + PISMO + ';font-size:13px;color:' + B.muted
+        + ';line-height:1.65;">' + esc(paticka) + '</div>'
+      : '')
+    + '<div style="padding-top:' + (paticka ? '8px' : '0') + ';"><a href="' + ODKAZ_APLIKACE + '" '
     + 'style="font-family:' + PISMO_MONO + ';font-size:13px;color:' + B.accent + ';">'
     + 'Otevřít sklad</a></div>'
     + '</td></tr>'

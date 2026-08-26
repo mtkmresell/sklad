@@ -246,6 +246,10 @@ function prodanoPred(ted, dnu) {
   ok('nejhorší je nahoře', m[0] && m[0].text.indexOf('Starý prodej') < m[0].text.indexOf('Yeezy Slide'));
   ok('předmět zmíní zpoždění', m[0] && /nejdéle o 7 dní přes lhůtu/.test(m[0].subject), m[0] && m[0].subject);
   ok('kde se prodalo je vidět', m[0] && /StockX/.test(m[0].text));
+  /* Pořadí: kde · kdy · lhůta. Nejdřív se člověk chytí toho, co si
+     pamatuje, teprve pak řeší zpoždění. */
+  ok('pořadí je místo, datum, lhůta',
+    m[0] && /StockX · prodáno \d+\. \d+\. \d+ · (lhůta|o \d)/.test(m[0].text), m[0] && m[0].text);
 
   /* ══════════════════════════════════════════════════════════════ */
   sekce('4c) Zásilka dlouho na cestě');
@@ -308,6 +312,14 @@ function prodanoPred(ted, dnu) {
   ok('javascript: se odkazem nestane', !/javascript:/.test(zakernyOdkaz.html || ''),
     (zakernyOdkaz.html || '').slice(0, 100));
   ok('ale číslo je pořád vidět', /X1/.test(zakernyOdkaz.html || ''));
+
+  /* Aplikace u DPD číslo při kliknutí zkopíruje do schránky, protože ho
+     jejich stránka z adresy nepřevezme. Mail to udělat nemůže — klienti
+     JavaScript nepouštějí — tak to aspoň řekne, ať u toho člověk nestojí
+     zbytečně. */
+  ok('u DPD se připomene vložení', /číslo si zkopíruj, DPD ho chce vložit/.test(zakernyOdkaz.text || ''),
+    zakernyOdkaz.text);
+  ok('u ostatních dopravců ne', !/zkopíruj/.test(sOdkazem.text || ''), sOdkazem.text);
 
   /* ══════════════════════════════════════════════════════════════ */
   /* Pondělní obhlídka schválně porušuje pravidlo „okamžik, ne stav" —
@@ -546,8 +558,10 @@ function prodanoPred(ted, dnu) {
   const telo = text.split('— — —')[0];
   ok('žádné částky', !/\b(2600|1800)\b/.test(telo), telo);
   ok('žádná měna', !/\b(CZK|EUR|Kč)\b/.test(telo), telo);
-  // Běžné upozornění nemá co vysvětlovat, tak patička nic nevysvětluje
-  ok('patička je krátká', /Poslal konektor skladu\.\s*$/m.test(text), text.slice(-200));
+  // Běžné upozornění nemá co vysvětlovat — pod čarou zbývá jen odkaz
+  ok('pod čarou je jen odkaz',
+    /— — —\nhttps:\/\/mtkmresell\.github\.io\/sklad\/$/.test(text.trimEnd()), text.slice(-200));
+  ok('a nic o tom, kdo to poslal', !/Poslal konektor/.test(text), text.slice(-200));
   ok('CRM se ani nečte', !dotazy.some(u => u.includes('/crm/')), JSON.stringify(dotazy));
   ok('žádné jméno zákazníka', !/Petr Novák/.test(text));
   ok('odkaz na aplikaci tam je', /mtkmresell\.github\.io/.test(text));
