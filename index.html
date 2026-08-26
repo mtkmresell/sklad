@@ -1484,7 +1484,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       </select></div>
       <div class="fi"><label>Prodejní reference / č. prodeje</label><input type="text" id="fSaleRef" placeholder="ID prodeje"></div>
       
-      <div class="fi"><label>Kde prodáno</label><input type="text" id="fSoldWhere" placeholder="StockX, Vinted..." oninput="updateBuyerTypeVisibility('f')"></div>
+      <div class="fi"><label>Kde prodáno</label><input type="text" id="fSoldWhere" placeholder="StockX, Vinted..." oninput="updateBuyerTypeVisibility('f');updateSaleInvoiceVisibility()"></div>
       <div class="fi"><label>Datum prodeje</label><input type="date" id="fSaleDate"></div>
       <div class="fi hide-if-stock hide-if-waiting"><label>Datum vyplacení</label><input type="date" id="fPayoutDate"></div>
       <div class="fi hide-if-stock hide-if-waiting"><label>Způsob platby</label><select id="fPayoutMethod"></select></div>
@@ -1525,7 +1525,8 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   </div>
 
   <div class="fs"><div class="fs-title">Faktura</div>
-    <div class="fi full"><label>Odkaz na fakturu</label><input type="url" id="fInvoiceUrl" placeholder="https://drive.google.com/..."></div>
+    <div class="fi full"><label>Odkaz na fakturu přijatou (nákup)</label><input type="url" id="fInvoiceUrl" placeholder="https://drive.google.com/..."></div>
+    <div class="fi full" id="fSaleInvoiceWrap" style="display:none;"><label>Odkaz na fakturu vydanou (prodej)</label><input type="url" id="fSaleInvoiceUrl" placeholder="https://drive.google.com/..."></div>
   </div>
 
   <div class="fs"><div class="fs-title">Fotka &amp; odkazy</div>
@@ -3451,7 +3452,27 @@ function platAcceptsCategory(platName, category, groups) {
   return allowed.indexOf(category) !== -1;
 }
 
+/* Řádek v seznamu míst. Schválně nese jen jméno, táhlo a křížek —
+   zbytek nastavení je až v detailu. Dřív se všechno mačkalo sem a při
+   dvaceti místech z toho byla nepřehledná zeď. */
 function renderPlatItem(p, key, g) {
+  var typ = getPlatDocType(p, g);
+  var dny = (g.payoutDays && g.payoutDays[p] != null) ? g.payoutDays[p] : (DEFAULT_PAYOUT_DAYS[key] || 14);
+  var barvaTypu = typ === 'doklad' ? 'var(--accent)' : typ === 'faktura' ? 'var(--warning)' : 'var(--muted2)';
+  var popisTypu = typ === 'doklad' ? 'doklad' : typ === 'faktura' ? 'faktura' : 'bez dokladu';
+
+  return '<div class="pmg-item" draggable="true" data-name="' + escHtml(p) + '" data-group="' + key + '">'
+    + '<span class="pmg-drag">⠿</span>'
+    + '<span class="pmg-name" data-action="platdetail" data-name="' + escHtml(p) + '" data-key="' + key + '"'
+    + ' style="cursor:pointer;">' + escHtml(p) + '</span>'
+    + '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:' + barvaTypu + ';white-space:nowrap;">' + popisTypu + '</span>'
+    + '<span style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted2);white-space:nowrap;">' + dny + ' dní</span>'
+    + '<button class="pmg-del" data-action="delplat" data-key="' + key + '" data-name="' + escHtml(p) + '">×</button>'
+    + '</div>';
+}
+
+// Původní podoba řádku se vším naráz — ponecháno pro případ návratu
+function renderPlatItemFull(p, key, g) {
   var allowedCats = (g.platCategories && g.platCategories[p]) || [];
   var allCats = getCatLabels();
   var catKeys = Object.keys(allCats);
@@ -3482,7 +3503,7 @@ function renderPlatItem(p, key, g) {
 }
 
 function openPlatMgr(fresh){
-  if(fresh!==false) _tmpGroups=null;
+  if(fresh!==false) { _tmpGroups=null; _platDetail=null; }
   if(!_tmpGroups) _tmpGroups=getPlatGroups();
   const g=_tmpGroups;
   const groupNames={platforms:'Platformy (StockX…)',eshopy:'Komise / eshopy',local:'Local prodej'};
@@ -3507,6 +3528,125 @@ function openPlatMgr(fresh){
 
 let _tmpGroups=null;
 let _dragSrc=null;
+let _platDetail=null;   // které místo je zrovna rozkliknuté
+
+/* ── Detail jednoho místa prodeje ────────────────────────────────────
+   Všechno, co se u místa nastavuje, je tady. V seznamu zůstalo jen to,
+   co je potřeba vidět naráz u všech — jméno, pořadí a čím se to řeší. */
+function openPlatDetail(name, key) {
+  if (!_tmpGroups) _tmpGroups = getPlatGroups();
+  _platDetail = { name: name, key: key };
+  var g = _tmpGroups;
+  var typ = getPlatDocType(name, g);
+  var dny = (g.payoutDays && g.payoutDays[name] != null) ? g.payoutDays[name] : '';
+  var vychoziDny = DEFAULT_PAYOUT_DAYS[key] || 14;
+
+  // Kolik to podle historie trvá doopravdy — vedle nastavené lhůty
+  var stat = null;
+  try { stat = payoutSpeedStats()[name]; } catch(e) {}
+  var zHistorie = (stat && stat.n >= 3)
+    ? '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">'
+      + 'podle historie ' + stat.median + ' dní (' + stat.n + ' prodejů, '
+      + stat.min + '–' + stat.max + ')</span>'
+    : '<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted2);">'
+      + (stat ? 'zatím jen ' + stat.n + ' prodejů, na medián je málo' : 'zatím žádný dokončený prodej') + '</span>';
+
+  var h = '';
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">'
+    + '<button class="icon-btn" data-action="platback" style="padding:6px 12px;">← Zpět</button>'
+    + '<span style="font-family:Syne,sans-serif;font-size:17px;font-weight:800;">' + escHtml(name) + '</span>'
+    + '</div>';
+
+  // ── Payout
+  h += '<div class="fs"><div class="fs-title">Vyplacení</div>'
+    + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+    + '<input type="number" id="pdPayout" min="0" max="365" value="' + escHtml(String(dny))
+    + '" placeholder="' + vychoziDny + '" style="width:90px;background:var(--surface2);border:1px solid var(--border);'
+    + 'border-radius:var(--radius-sm);color:var(--text);font-size:13px;padding:8px 10px;outline:none;font-family:inherit;">'
+    + '<span style="font-size:12px;color:var(--muted);">dní · prázdné = výchozích ' + vychoziDny + '</span>'
+    + '</div>'
+    + '<div style="margin-top:8px;">' + zHistorie + '</div>'
+    + '</div>';
+
+  // ── Co se vystavuje
+  h += '<div class="fs"><div class="fs-title">Co se vystavuje</div>'
+    + '<select id="pdDocType">'
+    + Object.keys(DOC_TYPES).map(function(k) {
+        return '<option value="' + k + '"' + (typ === k ? ' selected' : '') + '>' + DOC_TYPES[k] + '</option>';
+      }).join('')
+    + '</select>'
+    + '<div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6;">'
+    + 'Doklad — vystaví se koncovému zákazníkovi.<br>'
+    + 'Faktura — u prodeje se objeví pole na odkaz na vydanou fakturu.<br>'
+    + 'Nic — doklad řeší platforma, u prodeje se nenabídne nic.'
+    + '</div></div>';
+
+  // ── Fakturační údaje (jen tam, kde je kupujícím firma)
+  if (platMaBilling(key)) {
+    var b = getPlatBilling(name, g);
+    var pole = [
+      ['pdCompany', 'Název firmy', b.company || '', 'text'],
+      ['pdIco', 'IČO', b.ico || '', 'text'],
+      ['pdDic', 'DIČ', b.dic || '', 'text'],
+    ];
+    h += '<div class="fs"><div class="fs-title">Fakturační údaje kupujícího</div><div class="fg">'
+      + pole.map(function(f) {
+          return '<div class="fi"><label>' + f[1] + '</label>'
+            + '<input type="' + f[3] + '" id="' + f[0] + '" value="' + escHtml(f[2]) + '"></div>';
+        }).join('')
+      + '<div class="fi full"><label>Adresa</label>'
+      + '<textarea id="pdAddress" rows="2" placeholder="Ulice a číslo, město, PSČ">' + escHtml(b.address || '') + '</textarea></div>'
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:8px;">'
+      + 'Při komisním prodeji je kupujícím tenhle eshop — údaje se vypíšou na doklad.'
+      + '</div></div>';
+  }
+
+  // ── Kategorie
+  var allCats = getCatLabels();
+  var allowed = (g.platCategories && g.platCategories[name]) || [];
+  h += '<div class="fs"><div class="fs-title">Co se tu prodává</div><div style="display:flex;flex-wrap:wrap;gap:5px;">';
+  Object.keys(allCats).forEach(function(k) {
+    var ck = allowed.length === 0 || allowed.indexOf(k) !== -1;
+    h += '<label onclick="togglePlatCat(this)" data-plat="' + encodeURIComponent(name) + '" data-cat="' + k + '"'
+      + ' style="display:inline-flex;align-items:center;cursor:pointer;font-size:12px;padding:5px 10px;border-radius:5px;user-select:none;'
+      + 'color:' + (ck ? 'var(--accent)' : 'var(--muted)') + ';'
+      + 'background:' + (ck ? 'rgba(200,255,0,0.06)' : 'var(--surface3)') + ';'
+      + 'border:1px solid ' + (ck ? '#c8ff0030' : 'var(--border)') + ';">' + allCats[k] + '</label>';
+  });
+  h += '</div><div style="font-size:11px;color:var(--muted);margin-top:8px;">'
+    + 'Nic zaškrtnutého = všechno. Podle toho se nabízí místo u položky.</div></div>';
+
+  document.getElementById('platMgrBody').innerHTML = h;
+  initCustomSelect(document.getElementById('pdDocType'));
+}
+
+/* Uloží rozdělaný detail do _tmpGroups. Volá se při odchodu z detailu
+   i při uložení celé správy — jinak by se změny ztratily tím, že
+   uživatel klikne rovnou na Uložit. */
+function stashPlatDetail() {
+  if (!_platDetail || !_tmpGroups) return;
+  var g = _tmpGroups, name = _platDetail.name, key = _platDetail.key;
+  var hod = function(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; };
+
+  var dny = hod('pdPayout');
+  if (!g.payoutDays) g.payoutDays = {};
+  if (dny !== '' && parseInt(dny, 10) > 0) g.payoutDays[name] = parseInt(dny, 10);
+  else delete g.payoutDays[name];
+
+  var typ = hod('pdDocType');
+  if (!g.platDoc) g.platDoc = {};
+  if (typ && DOC_TYPES[typ]) g.platDoc[name] = typ;
+
+  if (platMaBilling(key)) {
+    var b = { company: hod('pdCompany'), ico: hod('pdIco'), dic: hod('pdDic'), address: hod('pdAddress') };
+    if (!g.platBilling) g.platBilling = {};
+    // Prázdné údaje se neukládají, ať se soubor nezanáší prázdnými objekty
+    if (b.company || b.ico || b.dic || b.address) g.platBilling[name] = b;
+    else delete g.platBilling[name];
+  }
+  _platDetail = null;
+}
 
 function initPlatDragDrop(){
   document.querySelectorAll('.pmg-list').forEach(list=>{
@@ -3558,6 +3698,8 @@ function addPlatItem(key){
 }
 function savePlatMgr(){
   if(!_tmpGroups) _tmpGroups=getPlatGroups();
+  // Uživatel může dát Uložit rovnou z detailu, aniž by se vracel zpátky
+  stashPlatDetail();
   savePlatGroupsData(_tmpGroups);
   _tmpGroups=null;
   buildPlatFilter();
@@ -6051,7 +6193,7 @@ function openAddModal(){
   var tabTitles = {stock: 'Nová položka — Na skladě', waiting: 'Nová položka — Čeká', sold: 'Nová položka — Prodáno'};
   document.getElementById('mTitle').textContent = tabTitles[tab] || 'Nová položka';
   var _qw=document.getElementById('fQtyWrap'); if(_qw) _qw.style.display='';
-  ['fName','fSku','fSize','fBuy','fSell','fOrder','fFrom','fSaleRef','fNote','fInvoiceUrl','fTrackNum','fTrackUrl','fTags','fTargetPrice'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['fName','fSku','fSize','fBuy','fSell','fOrder','fFrom','fSaleRef','fNote','fInvoiceUrl','fSaleInvoiceUrl','fTrackNum','fTrackUrl','fTags','fTargetPrice'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   var _fTC=document.getElementById('fTargetCurrency'); if(_fTC){_fTC.value='CZK';if(_fTC._csSync)_fTC._csSync();};
   document.getElementById('fCat').value='sneakers';
   updateFieldsByCat('sneakers');
@@ -6186,6 +6328,8 @@ function openEdit(id){
     el.value = val; if(el._csSync) el._csSync();
   })();
   document.getElementById('fNote').value=it.note||''; document.getElementById('fInvoiceUrl').value=it.invoiceUrl||'';
+  var _sfi=document.getElementById('fSaleInvoiceUrl'); if(_sfi) _sfi.value=it.saleInvoiceUrl||'';
+  updateSaleInvoiceVisibility(it);
   (function(){ var tf=document.getElementById('fTags'); if(tf){tf.value=(it.tags&&it.tags.length)?it.tags.join(', '):'';} renderTagSuggestions(); })();
   document.getElementById('fStockxUrl').value=it.stockxUrl||''; document.getElementById('fStockxUrl')._autoGenerated=false;
   document.getElementById('fImgUrl').value=it.imgUrl||'';
@@ -6314,7 +6458,7 @@ async function saveItem(){
     actualSell:0,
     location:getLocationValue()||'Doma',
     tags:(function(){ var v=document.getElementById('fTags')?.value||''; return v.split(',').map(function(t){return t.trim().toLowerCase();}).filter(Boolean); })(),
-    note:document.getElementById('fNote').value.trim(),invoiceUrl:document.getElementById('fInvoiceUrl').value.trim(),platforms:getPlats(),stockxUrl:document.getElementById('fStockxUrl').value.trim(),imgUrl:document.getElementById('fImgUrl').value.trim(),
+    note:document.getElementById('fNote').value.trim(),invoiceUrl:document.getElementById('fInvoiceUrl').value.trim(),saleInvoiceUrl:(document.getElementById('fSaleInvoiceUrl')||{}).value?.trim()||'',platforms:getPlats(),stockxUrl:document.getElementById('fStockxUrl').value.trim(),imgUrl:document.getElementById('fImgUrl').value.trim(),
     trackingNum:(document.getElementById('fTrackNum')||{}).value?.trim()||undefined,
     trackingCarrier:(function(){ var el=document.getElementById('fTrackCarrier'); return (el && el.value) ? el.value : undefined; })(),
     trackingUrl:(function(){
@@ -7502,6 +7646,7 @@ function openDetail(id) {
 
     ['Poznámka', it.note||'—'],
     ...(it.invoiceUrl ? [['Faktura', '<a href="'+it.invoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
+    ...(it.saleInvoiceUrl ? [['Faktura vydaná', '<a href="'+it.saleInvoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
   var secBase = ['Typ','Profil','SKU','Stav','Velikost'];
@@ -7509,7 +7654,7 @@ function openDetail(id) {
   var secStock= ['Sklad','Na skladě','Cílová cena','Vývoj ceny','Strategie','Sledování zásilky'];
   var secSell = ['Prodejní cena','Zisk','Datum prodeje','Datum vyplacení','Kde prodáno','Vývoj ceny','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
   var secNote = ['Poznámka'];
-  var secInvoice = ['Faktura'];
+  var secInvoice = ['Faktura','Faktura vydaná'];
   // Bazos rows jsou dynamické — přidej je do sekce skladu
   bazosRows.forEach(function(r){ secStock.push(r[0]); });
 
@@ -7538,7 +7683,7 @@ function openDetail(id) {
   var btnsHtml;
   if (isPaid) {
     btnsHtml = '<div style="display:flex;gap:8px;margin-top:20px;">'
-      + '<button class="btn-sec" onclick="openSaleDocument(\''+it.id+'\')" style="flex:1;">Doklad</button>'
+      + (lzeVystavitDoklad(it) ? '<button class="btn-sec" onclick="openSaleDocument(\''+it.id+'\')" style="flex:1;">Doklad</button>' : '')
       + '<button class="btn-sec" data-action="edit" data-id="'+it.id+'" style="flex:1;">Upravit</button>'
       + '<button class="btn-sec" data-action="del" data-id="'+it.id+'" style="border-color:var(--danger);color:var(--danger);flex:1;">Smazat</button>'
       + '</div>';
@@ -8036,6 +8181,34 @@ function saveSeller(o) {
   _ioCloudSync();
 }
 
+/* Pole na odkaz na vydanou fakturu se ukazuje jen tam, kde má smysl —
+   u míst nastavených na fakturu. Jinde by jen zabíralo místo a mátlo.
+   Reaguje i na změnu místa prodeje ve formuláři, ne jen na otevření. */
+function updateSaleInvoiceVisibility(it) {
+  var wrap = document.getElementById('fSaleInvoiceWrap');
+  if (!wrap) return;
+  var kde = (document.getElementById('fSoldWhere') || {}).value || (it && it.soldWhere) || '';
+  var prof = (document.getElementById('fProfile') || {}).value;
+  var osobni = prof ? prof === 'personal' : !!(it && it.personal);
+  wrap.style.display = (!osobni && getPlatDocType(kde) === 'faktura') ? '' : 'none';
+}
+
+/* Kdy se u prodeje vůbec nabízí doklad.
+
+   Osobní věci se prodávají mimo podnikání a doklad k nim nepatří —
+   proto se ani nenabídne. U podnikání rozhoduje nastavení místa prodeje. */
+function lzeVystavitDoklad(it) {
+  if (!it) return false;
+  if (isPersonal(it)) return false;
+  return getPlatDocType(it.soldWhere) === 'doklad';
+}
+
+// Místo dokladu se u prodeje schovává odkaz na fakturu vystavenou jinde
+function chceOdkazNaFakturu(it) {
+  if (!it || isPersonal(it)) return false;
+  return getPlatDocType(it.soldWhere) === 'faktura';
+}
+
 // Číslo dokladu ve tvaru ROK-NNN; jednou přidělené se už nemění
 function saleDocNumber(it) {
   if (!it) return '';
@@ -8070,12 +8243,29 @@ function openSaleDocument(id) {
     : czk(it.sellPrice || 0);
   var datum = fmtDate(it.saleDate) || fmtDate(_dnesISO());
 
-  var kontakt = [];
-  if (kupujici) {
-    if (kupujici.address) kontakt.push(kupujici.address);
-    (kupujici.contacts || []).forEach(function(c) {
-      if (['email', 'telefon', 'adresa'].indexOf(c.type) !== -1 && c.value) kontakt.push(c.value);
-    });
+  /* Kdo je kupující. U komisních eshopů a platforem jsou to jejich
+     fakturační údaje ze Správy platforem — prodává se přece jim.
+     U local prodeje jde zboží koncovému člověku, takže se berou údaje
+     ze zákazníka v CRM. Co chybí, se prostě nevypíše. */
+  var billing = getPlatBilling(it.soldWhere);
+  var maBilling = !!(billing.company || billing.ico || billing.dic || billing.address);
+  var kupujiciJmeno, kontakt = [];
+
+  if (maBilling) {
+    kupujiciJmeno = billing.company || it.soldWhere;
+    if (billing.address) kontakt.push(billing.address);
+    if (billing.ico) kontakt.push('IČO: ' + billing.ico);
+    if (billing.dic) kontakt.push('DIČ: ' + billing.dic);
+  } else {
+    kupujiciJmeno = kupujici ? kupujici.name : 'Neuvedeno';
+    if (kupujici) {
+      if (kupujici.address) kontakt.push(kupujici.address);
+      (kupujici.contacts || []).forEach(function(c) {
+        if (['email', 'telefon', 'adresa'].indexOf(c.type) !== -1 && c.value) kontakt.push(c.value);
+      });
+      if (kupujici.ico) kontakt.push('IČO: ' + kupujici.ico);
+      if (kupujici.dic) kontakt.push('DIČ: ' + kupujici.dic);
+    }
   }
 
   var h = '<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">';
@@ -8099,11 +8289,9 @@ function openSaleDocument(id) {
   h += '.podpisy{display:flex;gap:60px;margin-top:44px;}';
   h += '.podpis{flex:1;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#888;}';
   h += '@media print{body{padding:16px;} .noprint{display:none;}}';
-  h += '.noprint{margin-bottom:20px;}';
+  h += '.noprint{margin-top:36px;display:flex;justify-content:flex-end;}';
   h += '.noprint button{font:inherit;font-size:12px;padding:8px 16px;border:1px solid #111;background:#111;color:#fff;border-radius:6px;cursor:pointer;}';
   h += '</style></head><body>';
-
-  h += '<div class="noprint"><button onclick="window.print()">Vytisknout nebo uložit jako PDF</button></div>';
 
   h += '<div class="hl"><div><h1>Prodejní doklad</h1><div class="cislo">č. ' + escHtml(cislo) + '</div></div>';
   h += '<div style="text-align:right;"><div class="nadpis">Datum prodeje</div><div style="font-weight:700;">' + escHtml(datum) + '</div></div></div>';
@@ -8117,7 +8305,7 @@ function openSaleDocument(id) {
   if (p.phone) h += '<div>' + escHtml(p.phone) + '</div>';
   h += '</div>';
   h += '<div class="strana"><div class="nadpis">Kupující</div>';
-  h += '<div class="jmeno">' + escHtml(kupujici ? kupujici.name : 'Neuvedeno') + '</div>';
+  h += '<div class="jmeno">' + escHtml(kupujiciJmeno) + '</div>';
   kontakt.forEach(function(k) { h += '<div>' + escHtml(k) + '</div>'; });
   h += '</div></div>';
 
@@ -8125,7 +8313,6 @@ function openSaleDocument(id) {
   h += _dokladRadek('Název', it.name || '—');
   h += _dokladRadek('SKU', it.sku);
   h += _dokladRadek('Velikost', it.size);
-  h += _dokladRadek('Stav', 'Použité zboží');
   h += _dokladRadek('Způsob platby', it.paymentMethod);
   h += _dokladRadek('Platforma', it.soldWhere);
   h += _dokladRadek('Doručení', kupujici && kupujici.pickup ? kupujici.pickup : '');
@@ -8141,6 +8328,8 @@ function openSaleDocument(id) {
   if (p.signatures) {
     h += '<div class="podpisy"><div class="podpis">Podpis prodávajícího</div><div class="podpis">Podpis kupujícího</div></div>';
   }
+  // Tisk až úplně dole vpravo — nahoře překážel v tom, co je na dokladu podstatné
+  h += '<div class="noprint"><button onclick="window.print()">Vytisknout nebo uložit jako PDF</button></div>';
   h += '</body></html>';
 
   var w = window.open('', '_blank');
@@ -8701,6 +8890,8 @@ document.addEventListener('click', function(e) {
   else if (action === 'tgplat') { tgPlat(btn); }
   else if (action === 'addplat') { addPlatItem(btn.dataset.key); }
   else if (action === 'delplat') { if(!_tmpGroups)_tmpGroups=getPlatGroups(); var k=btn.dataset.key,n=btn.dataset.name; if(_tmpGroups[k])_tmpGroups[k]=_tmpGroups[k].filter(function(p){return p!==n;}); openPlatMgr(false); }
+  else if (action === 'platdetail') { openPlatDetail(btn.dataset.name, btn.dataset.key); }
+  else if (action === 'platback') { stashPlatDetail(); openPlatMgr(false); }
 
   else if (action === 'nextstock') {
     if(window._stockTimer) { clearTimeout(window._stockTimer); window._stockTimer = null; }
@@ -13073,6 +13264,56 @@ function checkBackupReminder() { /* placeholder */ }
 
 // Výchozí doby payoutu per typ (dny) — přepisuje se v nastavení platforem
 var DEFAULT_PAYOUT_DAYS = { platforms: 7, eshopy: 21, local: 3 };
+
+/* ══════════════════════════════════════════════════════════════════════
+   TYP DOKLADU U MÍSTA PRODEJE
+
+   Co se u prodeje vystavuje, se liší podle toho, kde se prodalo:
+
+     doklad   prodejní doklad koncovému zákazníkovi (Vinted, Bazoš, FB)
+     faktura  fakturu vystavuješ jinde, sem se uloží jen odkaz na ni
+     nic      doklad řeší platforma sama (StockX) — nenabízí se nic
+
+   Nastavuje se u každého místa ve Správě platforem. Co nastavené není,
+   se řídí skupinou: local prodej jde koncovým zákazníkům, kdežto eshopy
+   a platformy si doklady dělají samy. Většina míst tak nepotřebuje
+   nastavit vůbec nic.
+══════════════════════════════════════════════════════════════════════ */
+var DOC_TYPES = { doklad: 'Prodejní doklad', faktura: 'Faktura (odkaz)', nic: 'Nic — řeší platforma' };
+var DEFAULT_DOC_TYPE = { platforms: 'nic', eshopy: 'nic', local: 'doklad' };
+
+/* Ve které skupině místo prodeje je. Když v žádné, chová se jako local.
+   Pozor na jméno: platGroupKey() je něco úplně jiného — klíč pro
+   párování stejných kusů. Splynula mi ta dvě a testy to naštěstí
+   chytly, tak ať se to nestane znovu. */
+function skupinaMista(soldWhere, g) {
+  g = g || getPlatGroups();
+  var kde = (soldWhere || '').trim();
+  var nalezeno = null;
+  ['platforms', 'eshopy', 'local'].forEach(function(k) {
+    if ((g[k] || []).indexOf(kde) !== -1) nalezeno = k;
+  });
+  return nalezeno;
+}
+
+function getPlatDocType(soldWhere, g) {
+  g = g || getPlatGroups();
+  var kde = (soldWhere || '').trim();
+  var vlastni = g.platDoc && g.platDoc[kde];
+  if (vlastni && DOC_TYPES[vlastni]) return vlastni;
+  var skupina = skupinaMista(kde, g);
+  return skupina ? (DEFAULT_DOC_TYPE[skupina] || 'nic') : 'doklad';
+}
+
+/* Fakturační údaje protistrany — u eshopů a platforem je kupujícím ten
+   eshop, ne koncový zákazník. Vyplňují se proto jen tam; u local prodeje
+   se kupující bere ze zákazníka v CRM. */
+function getPlatBilling(soldWhere, g) {
+  g = g || getPlatGroups();
+  var kde = (soldWhere || '').trim();
+  return (g.platBilling && g.platBilling[kde]) || {};
+}
+function platMaBilling(key) { return key === 'platforms' || key === 'eshopy'; }
 
 function getPayoutDays(soldWhere) {
   var g = getPlatGroups();

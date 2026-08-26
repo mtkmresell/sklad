@@ -115,6 +115,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
 | cashflow z payoutů | `CASHFLOW Z PAYOUTŮ` |
 | prodejní doklad | `PRODEJNÍ DOKLAD` |
+| typ dokladu u místa prodeje | `TYP DOKLADU U MÍSTA PRODEJE` |
 | analytika zákazníků a partnerů | `ANALYTIKA ZÁKAZNÍKŮ` |
 | zdroj poptávky u prodeje | `ZDROJ POPTÁVKY` |
 | nabídka zákazníkovi | `OFFER BUILDER` |
@@ -172,15 +173,10 @@ Medián je 12 řádků — soubor je velký, ale ne zanesený.
 Domluvené, ale zatím neudělané. **Připomeň je, dokud se nezavřou** — majitel
 o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
 
-**Prodejní doklady pro účetního.** Účetní vidí čísla na obrazovce a porovná
-si je s výpisem z účtu; co z aplikace nedostane, jsou doklady. Chce to
-sloučit doklady za měsíc do jednoho souboru, každý na své stránce, ať se
-nestahují po kusech. Blokuje to jedna věc: prodejní strana zná jen
-`saleDocNum` a neumí říct, že se u téhle položky fakturovalo nebo že doklad
-vystavuje platforma. Návrh je typ dokladu (doklad / faktura / nic)
-předvyplněný podle kontextu — b2b → faktura, StockX a Vinted → nic, přímý
-prodej → doklad. **Otevřená otázka na majitele:** sedí ta tři pravidla,
-hlavně jestli fakturuje jen firmám.
+**Doklady za měsíc v jednom souboru.** Typ dokladu u místa prodeje už
+existuje (`TYP DOKLADU U MÍSTA PRODEJE`), takže to, co tohle blokovalo, je
+vyřešené. Zbývá samotný export: sloučit doklady za měsíc do jednoho
+souboru, každý na své stránce, ať se účetnímu nestahují po kusech.
 
 **Upozornění e-mailem — kód hotový, čeká na zapojení.** Je v konektoru
 (`UPOZORNĚNÍ E-MAILEM`), ale běžet začne, až majitel v Cloudflare doplní
@@ -196,7 +192,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 44 souborů
+node test/run.js              # kontrola syntaxe + všech 45 souborů
 node test/run.js archive      # jen vybrané
 ```
 
