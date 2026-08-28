@@ -101,11 +101,30 @@ function check(n, c, e) { console.log((c ? 'PASS' : 'FAIL') + ' — ' + n + (c |
   });
   check('kategorie platformy se uloží', JSON.stringify(cats) === JSON.stringify(['sneakers']), JSON.stringify(cats));
 
-  // ── 5) Změna přežije znovunačtení stránky
+  /* ── 5) Změna přežije znovunačtení stránky
+     Před uložením je potřeba mít jistotu, že v úložišti opravdu je — jinak
+     by se čekalo na něco, co tam nikdy nebylo, a chyba by se svedla
+     na znovunačtení. */
+  const vUlozisti = await page.evaluate(() =>
+    (JSON.parse(localStorage.getItem('sklad_plat_groups_v1') || '{}').eshopy || []).includes('NovýEshop'));
+  check('před znovunačtením je změna v úložišti', vUlozisti === true,
+    'kdyby ne, nemá smysl zkoumat, co přežije reload');
+
   await page.reload({ waitUntil: 'domcontentloaded' });
-  // Čekej na dokončení startu, ne na pevný čas — pod zátěží se 3,5 s nemusí stihnout
   await page.waitForFunction(() => typeof getPlatGroups === 'function' && !!document.getElementById('itemsGrid'), null, { timeout: 20000 });
-  await page.waitForTimeout(500);
+
+  /* Místo pevného čekání se čeká na skutečný stav. Pevných 500 ms tu
+     bylo léta a pod plnou sadou to jednou z tuctu nestihlo — což pak
+     vypadalo, že se nastavení ztratilo, i když se jen ještě nenačetlo.
+     Když hodnota nedorazí ani za deset vteřin, spadne to tady s jasnou
+     hláškou místo záhadné neshody o dva řádky níž. */
+  let nacetloSe = true;
+  try {
+    await page.waitForFunction(
+      () => (getPlatGroups().eshopy || []).includes('NovýEshop'), null, { timeout: 10000 });
+  } catch (e) { nacetloSe = false; }
+  check('po znovunačtení se nastavení objeví do deseti vteřin', nacetloSe,
+    'buď se ztratilo, nebo start trvá podezřele dlouho');
   const afterReload = await page.evaluate(() => {
     var g = getPlatGroups();
     return { added: g.eshopy.includes('NovýEshop'), removed: !g.eshopy.includes('Sellect'), cat: g.platCategories['NovýEshop'] };
