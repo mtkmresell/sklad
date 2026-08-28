@@ -211,3 +211,6 @@ Když měníš cokoli kolem ukládání, pusť aspoň `test-archive`, `test-list
 - V číslech se používají pevné mezery (` `, ` `); v testech je normalizuj.
 - `clearSkladLocalStorage()` maže při odhlášení — co není v `syncSettings()`, to zmizí.
 - Kurz EUR se pamatuje ke dni nákupu i payoutu. Nikdy nepřepočítávej zpětně dnešním kurzem.
+- **V testech nepiš pevná data, když se pak měří stáří.** `buyDate: '2026-07-29'`
+  bylo při psaní „před 20 dny", za měsíc z toho bylo 30 a test spadl beze změny
+  v kódu. Počítej je ode dneška: `new Date(Date.now() - 20*DEN).toISOString().slice(0,10)`.

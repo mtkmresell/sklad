@@ -32,18 +32,23 @@ const DEN = 24 * 60 * 60 * 1000;
   const doplneni = await page.evaluate((DEN) => {
     localStorage.clear();
     const ted = Date.now();
+    /* Data nákupu se počítají ode dneška, ne pevně. Dřív tu stály
+       konkrétní dny a test tichounce tikal: byly zvolené tak, aby při
+       psaní vyšly do očekávaného rozmezí, a jak kalendář popolezl,
+       vypadly z něj a test spadl bez jediné změny v kódu. */
+    const pred = (dnu) => new Date(ted - dnu * DEN).toISOString().slice(0, 10);
     items = [
       // starý kus bez data — inzerát je dávno mrtvý, pozná se podle nákupu
-      { id: 'a1', name: 'Stara cepice', buyDate: '2025-04-07', dateAdded: ted - 500 * DEN,
+      { id: 'a1', name: 'Stara cepice', buyDate: pred(500), dateAdded: ted - 500 * DEN,
         saleState: 'stock', platforms: ['Bazoš.cz'], tags: [] },
       // čerstvý kus bez data
-      { id: 'a2', name: 'Nova bota', buyDate: '2026-07-29', dateAdded: ted - 20 * DEN,
+      { id: 'a2', name: 'Nova bota', buyDate: pred(20), dateAdded: ted - 20 * DEN,
         saleState: 'stock', platforms: ['Bazoš.cz'], tags: [] },
       // kus, který datum má — nesmí se přepsat
-      { id: 'a3', name: 'Ma datum', buyDate: '2026-08-01', dateAdded: ted - 5 * DEN,
+      { id: 'a3', name: 'Ma datum', buyDate: pred(27), dateAdded: ted - 5 * DEN,
         saleState: 'stock', platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': ted - 3 * DEN }, tags: [] },
       // kus bez Bazoše — nemá se ho to týkat
-      { id: 'a4', name: 'Jen Vinted', buyDate: '2026-06-01', dateAdded: ted - 40 * DEN,
+      { id: 'a4', name: 'Jen Vinted', buyDate: pred(88), dateAdded: ted - 40 * DEN,
         saleState: 'stock', platforms: ['Vinted'], tags: [] },
     ];
     const puvodniA3 = items[2].bazosCheckedAt['Bazoš.cz'];
@@ -77,10 +82,13 @@ const DEN = 24 * 60 * 60 * 1000;
   section('3) Počítadlo limitu je po úklidu poctivé');
   const pocty = await page.evaluate((DEN) => {
     const ted = Date.now();
+    // Zase ode dneška — „živý" inzerát musí zůstat pod šedesáti dny,
+    // a pevné datum by se pod tu hranici jednou propadlo samo
+    const dnyZpet = (dnu) => new Date(ted - dnu * DEN).toISOString().slice(0, 10);
     items = [
       { id: 'b1', name: 'Ziva 1', sku: 'S1', saleState: 'stock', platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': ted - 5 * DEN }, tags: [] },
-      { id: 'b2', name: 'Mrtva', sku: 'S2', buyDate: '2024-01-01', dateAdded: ted - 700 * DEN, saleState: 'stock', platforms: ['Bazoš.cz'], tags: [] },
-      { id: 'b3', name: 'Ziva 2', sku: 'S3', buyDate: '2026-08-10', dateAdded: ted - 9 * DEN, saleState: 'stock', platforms: ['Bazoš.cz'], tags: [] },
+      { id: 'b2', name: 'Mrtva', sku: 'S2', buyDate: dnyZpet(700), dateAdded: ted - 700 * DEN, saleState: 'stock', platforms: ['Bazoš.cz'], tags: [] },
+      { id: 'b3', name: 'Ziva 2', sku: 'S3', buyDate: dnyZpet(18), dateAdded: ted - 9 * DEN, saleState: 'stock', platforms: ['Bazoš.cz'], tags: [] },
     ];
     const pred = bazosActiveCount('Bazoš.cz');
     healBazosCheckedAt();
