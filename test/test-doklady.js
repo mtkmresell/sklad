@@ -169,6 +169,39 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
   check('jsme na seznamu míst', poUlozeni.vSeznamu === true);
   check('a změna se opravdu uložila', poUlozeni.ulozeno === 33, String(poUlozeni.ulozeno));
 
+  /* Tohle je ta cesta, na které se nastavení ztrácelo. Změna v detailu
+     se jen odložila do paměti a čekala na „Uložit změny" o patro výš —
+     jenže z detailu vede Zpět na seznam a ze seznamu Zpět zavírá, a to
+     zavření odloženou změnu zahodilo. Dvakrát Zpět = nastavení pryč,
+     a nic o tom neřeklo. */
+  section('4d) Odchod z detailu nastavení uloží');
+  const poZpet = await page.evaluate(() => {
+    localStorage.removeItem('sklad_plat_groups_v1');
+    var zpet = document.querySelector('#moPlatMgr [data-action="closeplatmgr"]');
+    openPlatMgr();
+    openPlatDetail('Hypeboost', 'eshopy');
+    document.getElementById('pdDocType').value = 'faktura';
+    document.getElementById('pdPayout').value = '9';
+    document.getElementById('pdCompany').value = 'Hypeboost s.r.o.';
+    zpet.click();                                  // zpět na seznam
+    var poNavratu = getPlatDocType('Hypeboost');
+    zpet.click();                                  // a ven ze správy
+    var payload = {}; syncSettingsToPayload(payload);
+    return {
+      poNavratu: poNavratu,
+      poZavreni: getPlatDocType('Hypeboost'),
+      dny: (getPlatGroups().payoutDays || {})['Hypeboost'],
+      firma: getPlatBilling('Hypeboost').company,
+      vCloudu: /"Hypeboost":"faktura"/.test(String(payload.platGroups || '')),
+    };
+  });
+  check('po návratu na seznam nastavení platí', poZpet.poNavratu === 'faktura', poZpet.poNavratu);
+  check('a přežije i zavření správy', poZpet.poZavreni === 'faktura', poZpet.poZavreni);
+  check('lhůta se uloží taky', poZpet.dny === 9, String(poZpet.dny));
+  check('i fakturační údaje', poZpet.firma === 'Hypeboost s.r.o.', poZpet.firma);
+  check('a dostane se to do cloudového balíčku', poZpet.vCloudu === true,
+    'bez toho by to zůstalo jen v tomhle prohlížeči');
+
   section('5) Detail se uloží');
   const ulozeno = await page.evaluate(() => {
     openPlatMgr();

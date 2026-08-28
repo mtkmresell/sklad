@@ -3627,6 +3627,9 @@ function openPlatDetail(name, key) {
    uživatel klikne rovnou na Uložit. */
 function stashPlatDetail() {
   if (!_platDetail || !_tmpGroups) return;
+  /* Bez formuláře v DOM se nemá co číst — a kdyby se to zkusilo, prázdná
+     pole by vypadala jako „smaž nastavení" a tiše by ho vymazala. */
+  if (!document.getElementById('pdDocType')) { _platDetail = null; return; }
   var g = _tmpGroups, name = _platDetail.name, key = _platDetail.key;
   var hod = function(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; };
 
@@ -3647,6 +3650,15 @@ function stashPlatDetail() {
     else delete g.platBilling[name];
   }
   _platDetail = null;
+
+  /* Uloží se rovnou, do prohlížeče i do cloudu.
+
+     Dřív se změna jen odložila do _tmpGroups a čekala na „Uložit změny"
+     o patro výš. Jenže z detailu vede Zpět na seznam a ze seznamu Zpět
+     zavírá — a to zavření _tmpGroups zahazuje. Kdo dal dvakrát Zpět,
+     přišel o nastavení a nic mu to neřeklo. Odchod z detailu je pro
+     uživatele okamžik, kdy je to nastavené; ať to tak i je. */
+  savePlatGroupsData(g);
 }
 
 function initPlatDragDrop(){
