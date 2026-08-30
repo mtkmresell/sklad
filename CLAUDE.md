@@ -48,6 +48,12 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
 `items` je pole v paměti, zrcadlené do `localStorage['sklad_v3']` a do cloudu.
 Stav položky je `saleState`: `stock` → `waiting` → `paid`.
 
+U čekajících je ještě `waitState`: `sending` → `sent` → `payout` → `completed`.
+**`reklamace` je z té řady vyjmutá** — ztracený balík je pořád čekající prodej
+(peníze dorazí od dopravce), takže se chová jako `payout`, jen je jinak
+označený. Nedá se do něj procyklovat, nastavuje se ručně v úpravě položky;
+`test-reklamace.js` to hlídá.
+
 ### Cloud (Firestore, kolekce `users/{uid}/sklad`)
 
 | dokument | obsah |
@@ -192,7 +198,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 45 souborů
+node test/run.js              # kontrola syntaxe + všech 46 souborů
 node test/run.js archive      # jen vybrané
 ```
 
