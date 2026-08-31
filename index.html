@@ -1812,6 +1812,7 @@ function syncSettings() {
     { key: SK_LOC_OPTS, field: 'locOpts', shape: 'json', keep: true },
     { key: SK_WISH, field: 'wishlist', shape: 'json', keep: true,
       apply: function(_, v) { wishItems = v; } },
+    { key: SK_IG_POSTS, field: 'igPosts', shape: 'json', keep: true },
     { key: 'an_order_v2', field: 'anOrder', shape: 'json', keep: true },
     { key: 'sa_order', field: 'saOrder', shape: 'json', keep: true },
     { key: 'sklad_seller_v1', field: 'seller', shape: 'json', keep: true },
@@ -6623,8 +6624,13 @@ async function saveItem(){
       _dNew.sellPriceOrig = _dNew.sellPrice;
       _dNew.sellPrice = Math.round(_dNew.sellPrice * (eurRate || 25) * 100) / 100;
     }
+    var _igPripravene = igPriprav(getIgPosts());
     for(var _qi=0; _qi<qty; _qi++){
-      items.unshift({id:uid(),dateAdded:Date.now(),..._dNew});
+      var _novy = {id:uid(),dateAdded:Date.now(),..._dNew};
+      // Na Instagramu příspěvek nikdy nezmizí — když tam název už je,
+      // je kus vystavený, i když se naskladnil až teď
+      igDoplnUNove(_novy, _igPripravene);
+      items.unshift(_novy);
     }
     if (_dNew.linkedCustomerId) recalcCustomerStats(_dNew.linkedCustomerId);
   }
@@ -7022,6 +7028,9 @@ function doImport() {
 
   var impRate = parseFloat(document.getElementById('impRate').value) || eurRate;
   var count=0;
+  // Předpočítaný seznam příspěvků na Instagramu — normalizovat ho u každého
+  // z několika set řádků znovu by import zbytečně zdrželo
+  var _igImport = igPriprav(getIgPosts());
 
   function getVal(row, field) {
     return map[field]!==undefined ? (row[map[field]]||'').trim() : '';
@@ -7093,6 +7102,7 @@ function doImport() {
       obj.waitState = 'sending';
     }
 
+    igDoplnUNove(obj, _igImport);
     items.unshift(obj);
     count++;
   });
@@ -8971,6 +8981,12 @@ document.addEventListener('click', function(e) {
   else if (action === 'tgplat') { tgPlat(btn); }
   else if (action === 'addplat') { addPlatItem(btn.dataset.key); }
   else if (action === 'delplat') { if(!_tmpGroups)_tmpGroups=getPlatGroups(); var k=btn.dataset.key,n=btn.dataset.name; if(_tmpGroups[k])_tmpGroups[k]=_tmpGroups[k].filter(function(p){return p!==n;}); openPlatMgr(false); }
+  else if (action === 'igsave') { saveIgMgr(); }
+  else if (action === 'igprojed') {
+    saveIgMgr();
+    var _n = igProjedSklad();
+    showToast(_n ? 'Instagram doplněn u ' + _n + ' kusů.' : 'Nebylo co doplnit.');
+  }
   else if (action === 'platdetail') { openPlatDetail(btn.dataset.name, btn.dataset.key); }
   else if (action === 'platback') { stashPlatDetail(); openPlatMgr(false); }
 
@@ -10726,6 +10742,163 @@ function purgeTestEntriesFromCache() {
   });
   if (pryc) { itemCacheSave(cache); fbSaveItemCache(); }
   return pryc;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   INSTAGRAM — DATABÁZE PŘÍSPĚVKŮ
+
+   Na Instagramu se příspěvek nikdy nemaže. Když se tam kus jednou nafotil,
+   nabídka tam visí napořád — i když se mezitím prodal a naskladnil znovu
+   o rok později. Aplikace o tom sama neví a hlásila by, že kus není
+   nikde vystavený.
+
+   Proto je tu seznam názvů, které na Instagramu už jsou. Když se přidá
+   nová položka a její název v seznamu sedí, Instagram se zaškrtne sám.
+
+   ── Proč se párují jen názvy ─────────────────────────────────────────
+   Na Instagramu se velikosti neřeší — příspěvek je o modelu, ne o kusu.
+   Název navíc nebývá napsaný stejně jako v aplikaci, tak se porovnává
+   po slovech, ne znak po znaku.
+
+   ── Radši nespárovat než spárovat špatně ─────────────────────────────
+   Když párování něco přehlédne, uživatel Instagram odklikne ručně —
+   otrava na deset vteřin. Když spáruje omylem, bude si myslet, že je
+   kus vystavený, a nebude. To je horší, proto je pravidlo přísné:
+   buď se názvy po očištění rovnají, nebo je jeden celý obsažený
+   v druhém a má aspoň tři slova.
+══════════════════════════════════════════════════════════════════════ */
+var SK_IG_POSTS = 'sklad_ig_posts_v1';
+var IG_PLATFORMA = 'Instagram';
+var IG_MIN_SLOV = 3;   // kratší název je na volnou shodu příliš obecný
+
+function getIgPosts() {
+  try { var v = localStorage.getItem(SK_IG_POSTS); return v ? (JSON.parse(v) || []) : []; }
+  catch (e) { return []; }
+}
+function saveIgPosts(seznam) {
+  try { localStorage.setItem(SK_IG_POSTS, JSON.stringify(seznam || [])); } catch (e) {}
+  _ioCloudSync();
+}
+
+// Očištění názvu: malá písmena, bez diakritiky, bez interpunkce
+function igNorm(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+function igSlova(s) { var n = igNorm(s); return n ? n.split(' ') : []; }
+
+function igPodmnozina(mensi, vetsi) {
+  return mensi.every(function (t) { return vetsi.indexOf(t) !== -1; });
+}
+
+/* Vrátí příspěvek, který danému názvu odpovídá, nebo null.
+   Druhý parametr je předpočítaný seznam, ať se to nemusí normalizovat
+   znovu u každé z několika set položek. */
+function igNajdiPrispevek(nazev, pripravene) {
+  var n = igNorm(nazev);
+  if (!n) return null;
+  var slova = n.split(' ');
+  var seznam = pripravene || igPriprav(getIgPosts());
+
+  for (var i = 0; i < seznam.length; i++) {
+    if (seznam[i].norm === n) return { post: seznam[i].raw, shoda: 'přesná' };
+  }
+  if (slova.length < IG_MIN_SLOV) return null;   // příliš obecné na volnou shodu
+  for (var j = 0; j < seznam.length; j++) {
+    var p = seznam[j];
+    if (p.slova.length < IG_MIN_SLOV) continue;
+    if (igPodmnozina(slova, p.slova) || igPodmnozina(p.slova, slova)) {
+      return { post: p.raw, shoda: 'volná' };
+    }
+  }
+  return null;
+}
+
+function igPriprav(seznam) {
+  return (seznam || []).map(function (r) {
+    return { raw: r, norm: igNorm(r), slova: igSlova(r) };
+  }).filter(function (p) { return p.norm; });
+}
+
+/* Zaškrtne Instagram u nově přidané položky, když se název najde.
+   Volá se jen při vzniku položky — ne při každém načtení. Kdyby to
+   běželo pořád, ručně odškrtnutý Instagram by se pokaždé vrátil zpátky
+   a nešlo by ho odstranit. */
+function igDoplnUNove(it, pripravene) {
+  if (!it || !it.name) return false;
+  var plats = it.platforms || [];
+  if (plats.indexOf(IG_PLATFORMA) !== -1) return false;
+  if (!igNajdiPrispevek(it.name, pripravene)) return false;
+  it.platforms = plats.concat([IG_PLATFORMA]);
+  return true;
+}
+
+/* Jednorázové projetí skladu — pro kusy přidané dřív, než seznam vznikl.
+   Vrací počet doplněných. */
+function igProjedSklad() {
+  var pripravene = igPriprav(getIgPosts());
+  if (!pripravene.length) return 0;
+  var pocet = 0;
+  (items || []).forEach(function (it) {
+    if (!it || it.type === 'bulk') return;
+    if ((it.saleState || 'stock') !== 'stock') return;
+    if (igDoplnUNove(it, pripravene)) pocet++;
+  });
+  if (pocet) { sv(); renderStats(); renderItems(); }
+  return pocet;
+}
+
+/* Správa seznamu příspěvků. Vkládá se jeden název na řádek — tak
+   se dá seznam prostě zkopírovat odkudkoli, kde ho majitel vede. */
+function openIgMgr() {
+  var seznam = getIgPosts();
+  var o = document.createElement('div');
+  o.id = 'igMgrOverlay';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  o.addEventListener('click', function (e) { if (e.target === o) o.remove(); });
+  o.innerHTML =
+    '<div class="modal" style="max-width:620px;width:100%;max-height:88vh;overflow-y:auto;">'
+    + '<div class="mh"><div class="mt2">Příspěvky na Instagramu</div></div>'
+    + '<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:14px;">'
+    + 'Na Instagramu se příspěvek nikdy nemaže, takže co tu je, zůstává vystavené napořád. '
+    + 'Když se přidá kus s takovým názvem, Instagram se u něj zaškrtne sám.<br>'
+    + 'Jeden název na řádek. Velikosti neřeš, na Instagramu se stejně neuvádí.'
+    + '</div>'
+    + '<textarea id="igPostsInp" rows="14" placeholder="Jordan 4 Black Cat&#10;Nike Dunk Low Panda&#10;Corteiz Cargo Black" '
+    + 'style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);'
+    + 'color:var(--text);font-family:\'DM Mono\',monospace;font-size:12px;padding:10px;outline:none;resize:vertical;">'
+    + escHtml(seznam.join('\n')) + '</textarea>'
+    + '<div id="igMgrInfo" style="font-size:12px;color:var(--muted);margin-top:10px;min-height:18px;">'
+    + 'Uloženo: ' + seznam.length + ' ' + (seznam.length === 1 ? 'název' : seznam.length < 5 ? 'názvy' : 'názvů') + '</div>'
+    + '<div class="btn-row" style="margin-top:16px;">'
+    + '<button class="btn-sec" onclick="document.getElementById(\'igMgrOverlay\').remove()">Zpět</button>'
+    + '<button class="btn-sec" data-action="igprojed">Projet sklad</button>'
+    + '<button class="btn-pri" data-action="igsave">Uložit</button>'
+    + '</div></div>';
+  document.body.appendChild(o);
+}
+
+function saveIgMgr() {
+  var inp = document.getElementById('igPostsInp');
+  if (!inp) return;
+  // Prázdné řádky a duplicity pryč, ať seznam neroste o nic
+  var videno = {};
+  var seznam = inp.value.split('\n')
+    .map(function (r) { return r.trim(); })
+    .filter(function (r) {
+      if (!r) return false;
+      var k = igNorm(r);
+      if (!k || videno[k]) return false;
+      videno[k] = 1;
+      return true;
+    });
+  saveIgPosts(seznam);
+  var info = document.getElementById('igMgrInfo');
+  if (info) info.textContent = 'Uloženo: ' + seznam.length + ' názvů.';
+  showToast('Uloženo ' + seznam.length + ' názvů.');
 }
 
 // ── SPRÁVA NAŠEPTÁVAČE ────────────────────────────────────
@@ -17240,6 +17413,7 @@ rebuildBrandTables();
       <button class="btn-sec" onclick="cm('moSettings');openRetailersMgr()">Retaileři &amp; EU limit</button>
       <button class="btn-sec" id="btnRecalcRates" onclick="recalcAllRates()">Přepočítat kurzy ČNB</button>
       <button class="btn-sec" onclick="cm('moSettings');openItemCacheMgr()">Databáze našeptávače</button>
+      <button class="btn-sec" onclick="cm('moSettings');openIgMgr()">Posty na Instagramu</button>
       <button class="btn-sec" onclick="cm('moSettings');openSellerSettings()">Údaje pro doklad</button>
     </div>
     <div id="recalcRatesStatus" style="display:none;font-size:11px;color:var(--muted);margin-top:8px;font-family:monospace;"></div>

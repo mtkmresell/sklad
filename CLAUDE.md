@@ -101,6 +101,26 @@ Jeden seznam, ze kterého se odvozuje mazání při odhlášení, stavba balíč
 **Nové nastavení přidej jen tam** — nikam jinam se nic dopisovat nemusí. Dřív se to
 psalo na tři místa a pětkrát se na jedno zapomnělo.
 
+### Instagram
+
+Na Instagramu se příspěvek nikdy nemaže. Když se kus prodá a za rok naskladní
+znovu, nabídka tam pořád visí — aplikace by ale hlásila, že není nikde vystavený.
+Proto je v nastavení seznam názvů, které na Instagramu už jsou
+(`INSTAGRAM — DATABÁZE PŘÍSPĚVKŮ`), a u nové položky se Instagram zaškrtne sám.
+
+Dvě věci se nesmí rozbít:
+
+- **Doplňuje se jen při vzniku položky**, ne při vykreslování. Kdyby to běželo
+  pořád, ručně odškrtnutý Instagram by se pokaždé vrátil a nešel by odstranit.
+- **Radši nespárovat než spárovat špatně.** Přehlédnutý kus se odklikne ručně,
+  ale falešná shoda tvrdí, že je kus vystavený, a přitom není — a majitel
+  přijde o prodej, aniž by tušil proč. Proto shoda znamená buď rovnost po
+  očištění, nebo celý název obsažený v druhém, a to jen od tří slov výš
+  (`IG_MIN_SLOV`); „Nike Dunk" by jinak spárovalo půlku skladu.
+
+Velikosti se schválně neporovnávají, na Instagramu se neuvádí.
+`test-instagram.js` hlídá hlavně tu druhou půlku — co se spárovat **nesmí**.
+
 ### Fotky
 
 V paměti a v `localStorage` je fotka v položce jako `imgUrl` (data URI). Do cloudu jde
@@ -135,6 +155,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | export dat pro analýzu | `ANALYTICKÝ EXPORT` |
 | historie cen položky | `HISTORIE CEN U POLOŽKY` |
 | psaní v rozbalovací nabídce | `PSANÍ V DROPDOWNU` |
+| databáze příspěvků na Instagramu | `INSTAGRAM — DATABÁZE PŘÍSPĚVKŮ` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -205,7 +226,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 46 souborů
+node test/run.js              # kontrola syntaxe + všech 47 souborů
 node test/run.js archive      # jen vybrané
 ```
 

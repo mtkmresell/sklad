@@ -46,13 +46,13 @@ async function measure(browser, w, h) {
   const d = await measure(browser, 1600, 1000);
   check('okno je výrazně širší než dřívějších 420 px', d.data.modalW >= 700, String(d.data.modalW));
   check('okno se vejde na obrazovku', !d.data.modalOverflows, String(d.data.modalW));
-  check('všech 9 nástrojů vykresleno', d.data.count === 9, String(d.data.count));
+  check('všech 10 nástrojů vykresleno', d.data.count === 10, String(d.data.count));
   check('desktop: všechna tlačítka stejně široká', d.data.widths.length === 1, JSON.stringify(d.data.widths));
   check('desktop: všechna tlačítka stejně vysoká', d.data.heights.length === 1, JSON.stringify(d.data.heights));
   check('desktop: mřížka má 4 sloupce', d.data.cols === 4, String(d.data.cols));
   check('desktop: nic nepřetéká z okna', !d.data.spill, '');
   check('popisky zůstaly beze změny',
-    JSON.stringify(d.data.labelsIntact) === JSON.stringify(['Správa platforem', 'Tabulky velikostí', 'Import', 'Export', 'Dropdowny', 'Retaileři & EU limit', 'Přepočítat kurzy ČNB', 'Databáze našeptávače', 'Údaje pro doklad']),
+    JSON.stringify(d.data.labelsIntact) === JSON.stringify(['Správa platforem', 'Tabulky velikostí', 'Import', 'Export', 'Dropdowny', 'Retaileři & EU limit', 'Přepočítat kurzy ČNB', 'Databáze našeptávače', 'Posty na Instagramu', 'Údaje pro doklad']),
     JSON.stringify(d.data.labelsIntact));
   check('desktop: žádné JS chyby', d.errs.length === 0, JSON.stringify(d.errs.slice(0, 3)));
 
