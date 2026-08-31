@@ -55,7 +55,7 @@ const SOUBOR = 'file://' + path.resolve(__dirname, '..', 'index.html');
   check('leží nad modaly i překryvy', odhlasen.zIndex > 9999, String(odhlasen.zIndex));
 
   const popis = await page.evaluate(() => document.querySelector('.brana-popis').textContent.trim());
-  check('podtitulek sedí', popis === 'Evidence skladu pro tvůj resell', popis);
+  check('podtitulek sedí', popis === 'Pro tvůj resell', popis);
 
   // Tlačítka a pole musí reagovat na najetí myší, ne jen tam ležet
   const reakce = await page.evaluate(() => {
@@ -163,11 +163,13 @@ const SOUBOR = 'file://' + path.resolve(__dirname, '..', 'index.html');
       email: document.getElementById('resetEmail').value,
       maHeslo: !!reset.querySelector('input[type="password"]'),
       tlacitka: Array.from(reset.querySelectorAll('button')).map(b => b.textContent.trim()),
+      pokyn: reset.children[1].textContent.replace(/\s+/g, ' ').trim(),
     };
   });
   check('přihlašovací panel se schová', obnova.authSkryty);
   check('a ukáže se obnova hesla', obnova.resetVidet);
   check('pole na heslo tam není', !obnova.maHeslo, 'v obnově hesla nemá co dělat');
+  check('pokyn je krátký', obnova.pokyn === 'Zadej tvůj přihlašovací email', obnova.pokyn);
   check('napsaný e-mail se přenese', obnova.email === 'kdo@si.cz', obnova.email);
   check('jde odeslat odkaz', obnova.tlacitka.some(t => /poslat odkaz/i.test(t)), JSON.stringify(obnova.tlacitka));
   check('a vrátit se zpět', obnova.tlacitka.some(t => /zpět na přihlášení/i.test(t)), JSON.stringify(obnova.tlacitka));
