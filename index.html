@@ -14911,7 +14911,7 @@ function jeTvarEmailu(s) {
 
    Co jde: ohlídat tvar adresy a neslibovat doručení. Kdyby se ochrana
    v konzoli vypnula, Firebase začne posílat auth/user-not-found a
-   hláška níž se přepne na rovnou zprávu sama. */
+   neregistrovaná adresa se odmítne sama, beze změny v kódu. */
 function doForgotPassword() {
   var email = (document.getElementById('resetEmail')?.value || '').trim();
   var zpr = document.getElementById('resetZprava');
@@ -14923,15 +14923,16 @@ function doForgotPassword() {
     zpr.style.display = 'block';
   }
   if (!email) { hlaska('Zadej e-mail, na který ti máme odkaz poslat.', true); return; }
-  if (!jeTvarEmailu(email)) { hlaska('Tohle není platný e-mail. Zkontroluj překlep.', true); return; }
+  if (!jeTvarEmailu(email)) { hlaska('Neplatný email', true); return; }
   if (!window._fbFns || !window._fbAuth) { hlaska('Firebase není připojeno.', true); return; }
   if (btn) { btn.textContent = 'Odesílám…'; btn.disabled = true; }
   if (zpr) zpr.style.display = 'none';
 
   function selhalo(e) {
     var kod = (e && e.code) || '';
-    if (kod === 'auth/user-not-found') hlaska('Tenhle e-mail tu není zaregistrovaný.', true);
-    else if (kod === 'auth/invalid-email') hlaska('Tohle není platný e-mail. Zkontroluj překlep.', true);
+    // Neregistrovaný i pokažený e-mail hlásí totéž — z pohledu člověka
+    // u formuláře je to stejná situace: takhle se přihlásit nepůjde
+    if (kod === 'auth/user-not-found' || kod === 'auth/invalid-email') hlaska('Neplatný email', true);
     else if (kod === 'auth/too-many-requests') hlaska('Moc pokusů po sobě. Zkus to za chvíli.', true);
     else hlaska('Odkaz se nepodařilo odeslat. Zkus to za chvíli.', true);
   }

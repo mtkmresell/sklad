@@ -207,17 +207,24 @@ const SOUBOR = 'file://' + path.resolve(__dirname, '..', 'index.html');
     const z = document.getElementById('resetZprava');
     return { text: z.textContent, videt: getComputedStyle(z).display !== 'none', odeslano };
   });
-  check('rozbitá adresa se zastaví hned', /překlep/i.test(spatnyTvar.text) && spatnyTvar.videt,
-    spatnyTvar.text);
+  check('rozbitá adresa se zastaví hned',
+    spatnyTvar.text === 'Neplatný email' && spatnyTvar.videt, spatnyTvar.text);
 
   // Hláška po odeslání nesmí tvrdit, že odkaz dorazil
   const zdroj0 = require('fs').readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
   check('úspěch doručení neslibuje',
     /Pokud je ' \+ email \+ ' zaregistrovaný/.test(zdroj0) && !/Odkaz jsme poslali na/.test(zdroj0),
     'jinak by člověk čekal na odkaz, který nemusí přijít');
-  check('a neregistrovaný e-mail má vlastní hlášku, až to Firebase dovolí',
-    /auth\/user-not-found/.test(zdroj0) && /není zaregistrovaný/.test(zdroj0),
-    'aby stačilo vypnout ochranu v konzoli');
+  /* Čte se tělo samotné funkce, ne celý soubor — auth/user-not-found
+     je i v doLogin, takže hledání přes celý index.html by prošlo
+     i tehdy, kdyby ho obnova hesla přestala rozlišovat. */
+  const telo = await page.evaluate(() => String(doForgotPassword));
+  check('a neregistrovaný e-mail se odmítne, až to Firebase dovolí',
+    /auth\/user-not-found/.test(telo), 'aby stačilo vypnout ochranu v konzoli');
+  check('hláška je jen „Neplatný email“',
+    (telo.match(/'Neplatný email'/g) || []).length === 2
+      && !/není zaregistrovaný/.test(telo) && !/Zkontroluj překlep\./.test(telo),
+    'u tvaru adresy i u odmítnutí od Firebase stejná');
 
   const zpatky = await page.evaluate(() => {
     zpetNaPrihlaseni();

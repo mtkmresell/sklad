@@ -151,7 +151,9 @@ jinak by si kdokoli přes formulář zjistil, které adresy tu mají účet.
 Spolehlivá odpověď by chtěla servisní klíč na serveru, a ten tenhle
 projekt schválně nemá. Ohlídá se proto aspoň tvar adresy a hláška po
 odeslání **neslibuje doručení**. Kdyby se ochrana v konzoli vypnula,
-`auth/user-not-found` se už zpracovává a hláška se přepne sama.
+`auth/user-not-found` se už zpracovává a neregistrovaná adresa se
+odmítne sama. Odmítnutí zní vždycky „Neplatný email“ — pokažený
+i neregistrovaný e-mail jsou z pohledu člověka u formuláře totéž.
 
 Dvě věci se snadno rozbijí: `.mo.open` má animaci, která roztmívá pozadí
 do `rgba(0,0,0,0.82)` — brána si ji ruší přes `.mo.brana.open`, jinak by
