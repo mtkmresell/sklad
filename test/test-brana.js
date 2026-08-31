@@ -54,6 +54,31 @@ const SOUBOR = 'file://' + path.resolve(__dirname, '..', 'index.html');
   check('kryje celé okno', odhlasen.sirka && odhlasen.vyska);
   check('leží nad modaly i překryvy', odhlasen.zIndex > 9999, String(odhlasen.zIndex));
 
+  const popis = await page.evaluate(() => document.querySelector('.brana-popis').textContent.trim());
+  check('podtitulek sedí', popis === 'Evidence skladu pro tvůj resell', popis);
+
+  // Tlačítka a pole musí reagovat na najetí myší, ne jen tam ležet
+  const reakce = await page.evaluate(() => {
+    const styl = (sel, prop) => {
+      const pravidla = Array.from(document.styleSheets).flatMap(s => {
+        try { return Array.from(s.cssRules); } catch (e) { return []; }
+      });
+      const r = pravidla.find(x => x.selectorText === sel);
+      return r ? r.style.getPropertyValue(prop) : '';
+    };
+    return {
+      tabHover: !!styl('.brana-tab:hover', 'color'),
+      tlacitkoHover: !!styl('.brana-hl:hover', 'transform'),
+      poleFocus: !!styl('.brana-inp:focus', 'box-shadow'),
+      odkazHover: !!styl('.brana-odkaz:hover', 'color'),
+      prechod: !!styl('.brana-hl', 'transition'),
+    };
+  });
+  check('záložky reagují na najetí', reakce.tabHover);
+  check('hlavní tlačítko taky', reakce.tlacitkoHover && reakce.prechod);
+  check('pole se rozsvítí při psaní', reakce.poleFocus);
+  check('odkazy reagují', reakce.odkazHover);
+
   // Co je pod bránou, nesmí jít trefit
   const podBranou = await page.evaluate(() => {
     const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
@@ -84,8 +109,98 @@ const SOUBOR = 'file://' + path.resolve(__dirname, '..', 'index.html');
     return Array.from(g.querySelectorAll('button')).map(b => b.textContent.trim());
   });
   check('tlačítko Zrušit tam není', !zadneZrusit.some(t => /zrušit/i.test(t)), JSON.stringify(zadneZrusit));
-  check('přihlásit se dá', zadneZrusit.some(t => /přihlásit/i.test(t)), JSON.stringify(zadneZrusit));
+  check('přihlásit se dá', zadneZrusit.some(t => t === 'Přihlásit se'), JSON.stringify(zadneZrusit));
   check('registrace zůstala', zadneZrusit.some(t => /registrace/i.test(t)), JSON.stringify(zadneZrusit));
+
+  // ══════════════════════════════════════════════════════════════
+  /* Okno nesmí při přepnutí záložky podskočit. Řádek se souhlasem
+     proto střídá řádek se zapomenutým heslem a oba jsou na jednu
+     řádku — dřív byl souhlas na tři a okno se viditelně zvětšilo. */
+  section('2b) Přepnutí na registraci oknem nehne');
+  const vyskyZalozek = await page.evaluate(async () => {
+    const box = document.getElementById('branaFormular');
+    const zmer = () => Math.round(box.getBoundingClientRect().height);
+    switchAuthTab('login');
+    await new Promise(r => setTimeout(r, 260));
+    const prihlaseni = zmer();
+    switchAuthTab('register');
+    await new Promise(r => setTimeout(r, 260));
+    const registrace = zmer();
+    const souhlas = document.getElementById('registerConsentWrap');
+    const forgot = document.getElementById('loginForgot');
+    const r = {
+      prihlaseni, registrace,
+      souhlasVidet: getComputedStyle(souhlas).display !== 'none',
+      forgotSkryty: getComputedStyle(forgot).display === 'none',
+      souhlasText: souhlas.textContent.replace(/\s+/g, ' ').trim(),
+      souhlasRadku: Math.round(souhlas.getBoundingClientRect().height),
+    };
+    switchAuthTab('login');
+    return r;
+  });
+  check('při registraci se ukáže souhlas', vyskyZalozek.souhlasVidet);
+  check('a zapomenuté heslo se schová', vyskyZalozek.forgotSkryty);
+  check('výška okna se nezmění', Math.abs(vyskyZalozek.prihlaseni - vyskyZalozek.registrace) <= 4,
+    vyskyZalozek.prihlaseni + 'px vs ' + vyskyZalozek.registrace + 'px');
+  check('souhlas je na jednu řádku', vyskyZalozek.souhlasRadku <= 26,
+    vyskyZalozek.souhlasRadku + 'px | ' + vyskyZalozek.souhlasText);
+  check('souhlas je krátký', vyskyZalozek.souhlasText === 'Souhlasím se zpracováním osobních údajů',
+    vyskyZalozek.souhlasText);
+
+  // ══════════════════════════════════════════════════════════════
+  /* Zapomenuté heslo má vlastní panel. Vyplňovat e-mail v přihlášení
+     a teprve pak klikat na odkaz je naruby. */
+  section('2c) Obnova hesla je vlastní obrazovka');
+  const obnova = await page.evaluate(() => {
+    document.getElementById('loginEmail').value = 'kdo@si.cz';
+    otevriObnovuHesla();
+    const auth = document.getElementById('branaAuth');
+    const reset = document.getElementById('branaReset');
+    return {
+      authSkryty: getComputedStyle(auth).display === 'none',
+      resetVidet: getComputedStyle(reset).display !== 'none',
+      // E-mail napsaný v přihlášení se přenese, ať se nepíše dvakrát
+      email: document.getElementById('resetEmail').value,
+      maHeslo: !!reset.querySelector('input[type="password"]'),
+      tlacitka: Array.from(reset.querySelectorAll('button')).map(b => b.textContent.trim()),
+    };
+  });
+  check('přihlašovací panel se schová', obnova.authSkryty);
+  check('a ukáže se obnova hesla', obnova.resetVidet);
+  check('pole na heslo tam není', !obnova.maHeslo, 'v obnově hesla nemá co dělat');
+  check('napsaný e-mail se přenese', obnova.email === 'kdo@si.cz', obnova.email);
+  check('jde odeslat odkaz', obnova.tlacitka.some(t => /poslat odkaz/i.test(t)), JSON.stringify(obnova.tlacitka));
+  check('a vrátit se zpět', obnova.tlacitka.some(t => /zpět na přihlášení/i.test(t)), JSON.stringify(obnova.tlacitka));
+
+  const bezEmailu = await page.evaluate(() => {
+    document.getElementById('resetEmail').value = '';
+    doForgotPassword();
+    const z = document.getElementById('resetZprava');
+    return { videt: getComputedStyle(z).display !== 'none', text: z.textContent };
+  });
+  check('bez e-mailu se ozve', bezEmailu.videt && /e-mail/i.test(bezEmailu.text), bezEmailu.text);
+
+  const zpatky = await page.evaluate(() => {
+    zpetNaPrihlaseni();
+    return {
+      auth: getComputedStyle(document.getElementById('branaAuth')).display !== 'none',
+      reset: getComputedStyle(document.getElementById('branaReset')).display === 'none',
+    };
+  });
+  check('Zpět vede na přihlášení', zpatky.auth && zpatky.reset);
+
+  // Přepnutí záložky nesmí nechat oba panely viset přes sebe
+  const zalozkaZObnovy = await page.evaluate(() => {
+    otevriObnovuHesla();
+    switchAuthTab('register');
+    const r = {
+      auth: getComputedStyle(document.getElementById('branaAuth')).display !== 'none',
+      reset: getComputedStyle(document.getElementById('branaReset')).display === 'none',
+    };
+    switchAuthTab('login');
+    return r;
+  });
+  check('záložka z obnovy taky vrátí formulář', zalozkaZObnovy.auth && zalozkaZObnovy.reset);
 
   // ══════════════════════════════════════════════════════════════
   section('3) Přihlášený projde');

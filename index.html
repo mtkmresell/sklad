@@ -606,6 +606,38 @@ select:hover{border-color:var(--accent);}
 .mo.brana.open .brana-karta{animation:branaKarta 0.22s ease forwards;}
 @keyframes branaKarta{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.mo.brana.open .brana-karta{animation:none;}}
+/* Záložky, pole a tlačítka brány. Je to první, co člověk z aplikace
+   uvidí, tak ať to na najetí myší reaguje. */
+.brana-tab{flex:1;background:none;color:var(--muted);border:none;border-radius:6px;
+  font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:7px;cursor:pointer;
+  transition:background 0.18s ease,color 0.18s ease;}
+.brana-tab:hover{color:var(--text);}
+.brana-tab.akt{background:var(--accent);color:#000;font-weight:600;}
+.brana-tab.akt:hover{color:#000;}
+.brana-popisek{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;
+  text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;}
+.brana-inp{width:100%;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;
+  font-size:13px;padding:10px 12px;outline:none;box-sizing:border-box;
+  transition:border-color 0.18s ease,box-shadow 0.18s ease;}
+.brana-inp:hover{border-color:#3d3d3d;}
+.brana-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(200,255,0,0.12);}
+.brana-hl{width:100%;background:var(--accent);color:#000;border:none;
+  border-radius:var(--radius-sm);font-family:inherit;font-weight:600;font-size:14px;
+  padding:12px;cursor:pointer;
+  transition:transform 0.12s ease,box-shadow 0.18s ease,opacity 0.18s ease;}
+.brana-hl:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(200,255,0,0.22);}
+.brana-hl:active{transform:translateY(0);box-shadow:none;}
+.brana-hl:disabled{opacity:0.55;cursor:default;transform:none;box-shadow:none;}
+.brana-odkaz{font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;
+  background:none;border:none;font-family:inherit;padding:0;transition:color 0.15s ease;}
+.brana-odkaz:hover{color:var(--accent);}
+.brana-panel{animation:branaPanel 0.2s ease;}
+@keyframes branaPanel{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){
+  .brana-panel{animation:none;}
+  .brana-hl:hover{transform:none;}
+}
 .brana-karta{width:100%;max-width:376px;}
 .brana-znacka{font-family:Syne,sans-serif;font-size:34px;font-weight:800;
   letter-spacing:-0.02em;text-align:center;margin-bottom:7px;line-height:1;}
@@ -1263,34 +1295,57 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 <div id="moLogin" class="mo brana open">
   <div class="brana-karta">
     <div class="brana-znacka">SKLAD<span>.</span></div>
-    <div class="brana-popis">Evidence skladu pro reselling</div>
+    <div class="brana-popis">Evidence skladu pro tvůj resell</div>
 
     <div id="branaCekani" class="brana-cekani"></div>
 
     <div id="branaFormular" class="brana-box" style="display:none;">
-      <div style="display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:20px;">
-        <button id="authTabLogin" onclick="switchAuthTab('login')" style="flex:1;background:var(--accent);color:#000;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:7px;cursor:pointer;">Přihlášení</button>
-        <button id="authTabRegister" onclick="switchAuthTab('register')" style="flex:1;background:none;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:7px;cursor:pointer;">Registrace</button>
+      <!-- Přihlášení a registrace.
+           Řádek se souhlasem střídá řádek se zapomenutým heslem, oba jsou
+           na jednu řádku — okno tak při přepnutí záložky nepodskočí. -->
+      <div id="branaAuth" class="brana-panel">
+        <div style="display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:20px;">
+          <button id="authTabLogin" class="brana-tab akt" onclick="switchAuthTab('login')">Přihlášení</button>
+          <button id="authTabRegister" class="brana-tab" onclick="switchAuthTab('register')">Registrace</button>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="brana-popisek" for="loginEmail">E-mail</label>
+          <input type="email" id="loginEmail" class="brana-inp" placeholder="vas@email.cz" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div style="margin-bottom:8px;">
+          <label class="brana-popisek" for="loginPass">Heslo</label>
+          <input type="password" id="loginPass" class="brana-inp" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div id="loginForgot" style="text-align:right;margin-bottom:15px;">
+          <button type="button" class="brana-odkaz" onclick="otevriObnovuHesla()">Zapomenuté heslo?</button>
+        </div>
+        <div id="registerConsentWrap" style="display:none;margin-bottom:15px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);line-height:1.5;">
+            <input type="checkbox" id="registerConsent" style="width:14px;height:14px;flex-shrink:0;accent-color:var(--accent);">
+            <span>Souhlasím se <span onclick="event.preventDefault();event.stopPropagation();openPrivacyPolicy();" style="color:var(--accent);text-decoration:underline;cursor:pointer;">zpracováním osobních údajů</span></span>
+          </label>
+        </div>
+        <div id="loginError" style="font-size:12px;color:var(--danger);margin-bottom:12px;display:none;"></div>
+        <button onclick="doLogin()" class="brana-hl" id="btnDoLogin">Přihlásit se</button>
       </div>
-      <div style="margin-bottom:12px;">
-        <label style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">E-mail</label>
-        <input type="email" id="loginEmail" placeholder="vas@email.cz" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;outline:none;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" onkeydown="if(event.key==='Enter')doLogin()">
+
+      <!-- Obnova hesla má vlastní panel. Vyplňovat e-mail v přihlášení
+           a pak teprve klikat na odkaz je naruby. -->
+      <div id="branaReset" class="brana-panel" style="display:none;">
+        <div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;margin-bottom:6px;">Obnova hesla</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:18px;">
+          Zadej e-mail, kterým se přihlašuješ. Pošleme na něj odkaz na nastavení nového hesla.
+        </div>
+        <div style="margin-bottom:15px;">
+          <label class="brana-popisek" for="resetEmail">E-mail</label>
+          <input type="email" id="resetEmail" class="brana-inp" placeholder="vas@email.cz" onkeydown="if(event.key==='Enter')doForgotPassword()">
+        </div>
+        <div id="resetZprava" style="font-size:12px;color:var(--danger);margin-bottom:12px;display:none;"></div>
+        <button onclick="doForgotPassword()" class="brana-hl" id="btnDoReset">Poslat odkaz</button>
+        <div style="text-align:center;margin-top:14px;">
+          <button type="button" class="brana-odkaz" onclick="zpetNaPrihlaseni()">Zpět na přihlášení</button>
+        </div>
       </div>
-      <div style="margin-bottom:8px;">
-        <label style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">Heslo</label>
-        <input type="password" id="loginPass" placeholder="••••••••" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;outline:none;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" onkeydown="if(event.key==='Enter')doLogin()">
-      </div>
-      <div id="loginForgot" style="text-align:right;margin-bottom:16px;">
-        <span onclick="doForgotPassword()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;">Zapomenuté heslo?</span>
-      </div>
-      <div id="loginError" style="font-size:12px;color:var(--danger);margin-bottom:12px;display:none;"></div>
-      <div id="registerConsentWrap" style="display:none;margin-bottom:14px;">
-        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);line-height:1.5;">
-          <input type="checkbox" id="registerConsent" style="margin-top:2px;width:14px;height:14px;flex-shrink:0;accent-color:var(--accent);">
-          <span>Souhlasím se <span onclick="event.preventDefault();event.stopPropagation();openPrivacyPolicy();" style="color:var(--accent);text-decoration:underline;cursor:pointer;">zpracováním osobních údajů</span> za účelem poskytování služby Sklad.</span>
-        </label>
-      </div>
-      <button onclick="doLogin()" class="btn-pri" style="width:100%;flex:none;padding:12px;font-size:14px;" id="btnDoLogin">Přihlásit se</button>
     </div>
 
     <div id="branaBezCloudu" style="display:none;text-align:center;font-size:12px;color:var(--muted);line-height:1.6;margin-top:18px;"></div>
@@ -14745,12 +14800,13 @@ function _spustSkladPosluchace() {
 }
 function switchAuthTab(tab) {
   var isLogin = tab === 'login';
-  document.getElementById('authTabLogin').style.background = isLogin ? 'var(--accent)' : 'none';
-  document.getElementById('authTabLogin').style.color = isLogin ? '#000' : 'var(--muted)';
-  document.getElementById('authTabLogin').style.fontWeight = isLogin ? '600' : '500';
-  document.getElementById('authTabRegister').style.background = !isLogin ? 'var(--accent)' : 'none';
-  document.getElementById('authTabRegister').style.color = !isLogin ? '#000' : 'var(--muted)';
-  document.getElementById('authTabRegister').style.fontWeight = !isLogin ? '600' : '500';
+  zpetNaPrihlaseni(true);   // z obnovy hesla zpátky, ať se panely nepřekrývají
+  var zal = document.getElementById('authTabLogin');
+  var zar = document.getElementById('authTabRegister');
+  if (zal) zal.classList.toggle('akt', isLogin);
+  if (zar) zar.classList.toggle('akt', !isLogin);
+  /* Řádek se zapomenutým heslem a řádek se souhlasem se navzájem
+     střídají a oba jsou na jednu řádku — okno tak nemění výšku. */
   var forgot = document.getElementById('loginForgot');
   if (forgot) forgot.style.display = isLogin ? '' : 'none';
   var btn = document.getElementById('btnDoLogin');
@@ -14761,6 +14817,44 @@ function switchAuthTab(tab) {
   if (consentWrap) consentWrap.style.display = isLogin ? 'none' : '';
   var consentCb = document.getElementById('registerConsent');
   if (consentCb && isLogin) consentCb.checked = false;
+}
+
+/* Obnova hesla je vlastní panel, ne akce nad přihlašovacím formulářem.
+   Vyplnit e-mail v přihlášení a teprve pak kliknout na odkaz je naruby;
+   člověk, který zapomněl heslo, chce rovnou obrazovku, kde zadá e-mail. */
+function otevriObnovuHesla() {
+  var auth = document.getElementById('branaAuth');
+  var reset = document.getElementById('branaReset');
+  if (!auth || !reset) return;
+  var napsany = (document.getElementById('loginEmail') || {}).value || '';
+  auth.style.display = 'none';
+  reset.style.display = '';
+  _prehrajPanel(reset);
+  var zpr = document.getElementById('resetZprava');
+  if (zpr) { zpr.style.display = 'none'; zpr.textContent = ''; }
+  var e = document.getElementById('resetEmail');
+  if (e) { e.value = napsany.trim(); setTimeout(function() { e.focus(); }, 60); }
+}
+
+function zpetNaPrihlaseni(bezZaostreni) {
+  var auth = document.getElementById('branaAuth');
+  var reset = document.getElementById('branaReset');
+  if (!auth || !reset) return;
+  if (reset.style.display === 'none' && auth.style.display !== 'none') return;
+  reset.style.display = 'none';
+  auth.style.display = '';
+  if (!bezZaostreni) {
+    _prehrajPanel(auth);
+    var e = document.getElementById('loginEmail');
+    if (e) setTimeout(function() { e.focus(); }, 60);
+  }
+}
+
+// Animace se pustí znovu jen tím, že se třída sundá a hned vrátí
+function _prehrajPanel(el) {
+  el.classList.remove('brana-panel');
+  void el.offsetWidth;
+  el.classList.add('brana-panel');
 }
 
 function doRegister() {
@@ -14799,15 +14893,26 @@ function doRegister() {
 }
 
 function doForgotPassword() {
-  var email = (document.getElementById('loginEmail')?.value || '').trim();
-  var errEl = document.getElementById('loginError');
-  if (!email) { if(errEl){errEl.textContent='Zadej e-mail pro reset hesla.';errEl.style.display='block';} return; }
-  if (!window._fbFns || !window._fbAuth) return;
+  var email = (document.getElementById('resetEmail')?.value || '').trim();
+  var zpr = document.getElementById('resetZprava');
+  var btn = document.getElementById('btnDoReset');
+  function hlaska(text, jeChyba) {
+    if (!zpr) return;
+    zpr.style.color = jeChyba ? 'var(--danger)' : 'var(--accent)';
+    zpr.textContent = text;
+    zpr.style.display = 'block';
+  }
+  if (!email) { hlaska('Zadej e-mail, na který ti máme odkaz poslat.', true); return; }
+  if (!window._fbFns || !window._fbAuth) { hlaska('Firebase není připojeno.', true); return; }
+  if (btn) { btn.textContent = 'Odesílám…'; btn.disabled = true; }
+  if (zpr) zpr.style.display = 'none';
   import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(function(m){
-    m.sendPasswordResetEmail(window._fbAuth, email)
-      .then(function(){ if(errEl){errEl.style.color='var(--accent)';errEl.textContent='Reset odkaz odeslán na '+email;errEl.style.display='block';} })
-      .catch(function(){ if(errEl){errEl.style.color='var(--danger)';errEl.textContent='Nepodařilo se odeslat reset e-mail.';errEl.style.display='block';} });
-  });
+    return m.sendPasswordResetEmail(window._fbAuth, email)
+      .then(function(){ hlaska('Odkaz jsme poslali na ' + email + '.', false); })
+      .catch(function(){ hlaska('Odkaz se nepodařilo odeslat. Zkontroluj e-mail.', true); });
+  })
+    .catch(function(){ hlaska('Odkaz se nepodařilo odeslat. Zkontroluj e-mail.', true); })
+    .then(function(){ if (btn) { btn.textContent = 'Poslat odkaz'; btn.disabled = false; } });
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -14895,6 +15000,7 @@ function openAuthModal() {
   var form = document.getElementById('branaFormular');
   if (cekani) cekani.style.display = 'none';
   if (form) form.style.display = '';
+  zpetNaPrihlaseni(true);   // ne uprostřed obnovy hesla
   if (g) g.classList.add('open');
   setTimeout(function(){ if(emailEl) emailEl.focus(); }, 100);
 }

@@ -137,6 +137,11 @@ aplikace by při každém načtení blikla. Zavírá ji jen JS, a to ve třech s
   stejně žádná data neukáže. Skutečný zámek nad daty jsou pravidla
   Firestore, brána řeší to, co člověk uvidí.
 
+Formulář má tři panely: přihlášení, registrace a **obnova hesla**. Ta je
+schválně vlastní obrazovka — vyplňovat e-mail v přihlášení a teprve pak
+klikat na odkaz je naruby. Řádek se souhlasem střídá řádek se zapomenutým
+heslem a oba jsou na jednu řádku, aby okno při přepnutí záložky nepodskočilo.
+
 Dvě věci se snadno rozbijí: `.mo.open` má animaci, která roztmívá pozadí
 do `rgba(0,0,0,0.82)` — brána si ji ruší přes `.mo.brana.open`, jinak by
 aplikace pod ní prosvítala (a protože animace přebíjí obyčejné deklarace,
