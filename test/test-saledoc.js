@@ -77,8 +77,14 @@ const SEED = [
   check('má nadpis a číslo', /Prodejní doklad/.test(t) && /2026-001/.test(t), t.slice(0, 100));
   check('obsahuje název i SKU položky', /Nike Dunk Low Panda/.test(t) && /DD1391-100/.test(t), t.slice(0, 200));
   check('obsahuje velikost a způsob platby', /43/.test(t) && /Revolut/.test(t), t.slice(0, 300));
-  const datumOcek = await page.evaluate(() => fmtDate('2026-07-15'));
-  check('uvádí datum prodeje', t.includes(datumOcek), 'čekáno ' + datumOcek + ' | ' + t.slice(0, 160));
+  /* Datum na dokladu je datum vyplacení, ne datum prodeje. V daňové
+     evidenci se příjem počítá dnem, kdy peníze dorazily — na tom stojí,
+     do kterého měsíce prodej spadne. */
+  const datumPayout = await page.evaluate(() => fmtDate('2026-07-25'));
+  const datumProdeje = await page.evaluate(() => fmtDate('2026-07-15'));
+  check('uvádí datum vyplacení', t.includes(datumPayout), 'čekáno ' + datumPayout + ' | ' + t.slice(0, 160));
+  check('a ne datum prodeje', !t.includes(datumProdeje), 'našlo se ' + datumProdeje);
+  check('popisek je jen „Datum“', /Datum(?!\s*prodeje)/.test(t) && !/Datum prodeje/.test(t), t.slice(0, 160));
   check('uvádí cenu', /5 ?200/.test(t.replace(/[  ]/g, ' ')), t.slice(0, 400));
   check('má právní větu o DPH', /není daňovým dokladem/.test(t), t.slice(-260));
   check('podpisy jsou vypnuté, dokud si je nezapneš', !/Podpis prodávajícího/.test(t), t.slice(-200));
@@ -146,9 +152,34 @@ const SEED = [
 
   // ══════════════════════════════════════════════════════════════
   section('5) Eurový prodej');
+  /* Kupující platil eura, tak jsou na dokladu eura. Přepočet na koruny
+     by se tvářil jako závazný údaj, a přitom je jen orientační — účetní
+     si měsíc přepočítá kurzem, se kterým pracuje sám. */
   h = await doklad('p3'); t = text(h);
-  check('ukáže eura i korunový přepočet',
-    /200 €/.test(t) && /5 ?000/.test(t.replace(/[  ]/g, ' ')), t.slice(0, 400));
+  check('ukáže eura', /200 €/.test(t), t.slice(0, 400));
+  check('korunový přepočet na dokladu není',
+    !/5 ?000/.test(t.replace(/[\u00a0\u202f]/g, ' ')) && !/Kč/.test(t),
+    'přepočet nemá co dělat na dokladu | ' + t.slice(0, 400));
+
+  // Korunový prodej se pořád ukazuje v korunách
+  h = await doklad('p1'); t = text(h);
+  check('korunový prodej zůstává v korunách',
+    /5 ?200/.test(t.replace(/[\u00a0\u202f]/g, ' ')) && /Kč/.test(t), t.slice(0, 400));
+
+  /* Dokud payout nedorazil, zbývá datum prodeje jako to nejlepší,
+     co víme — doklad jde vystavit i k čekajícímu prodeji. */
+  const bezPayoutu = await page.evaluate(() => {
+    const it = items.find(i => i.id === 'p2');
+    const puvodni = it.payoutDate;
+    it.payoutDate = ''; it.saleState = 'waiting';
+    window.__doklad = null;
+    openSaleDocument('p2');
+    const h = window.__doklad;
+    it.payoutDate = puvodni; it.saleState = 'paid';
+    return { h: h, ocek: fmtDate('2026-08-02') };
+  });
+  check('bez payoutu se použije datum prodeje',
+    text(bezPayoutu.h).includes(bezPayoutu.ocek), 'čekáno ' + bezPayoutu.ocek);
 
   // ══════════════════════════════════════════════════════════════
   section('6) Kdy doklad nejde vystavit');

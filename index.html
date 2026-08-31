@@ -588,6 +588,41 @@ select:hover{border-color:var(--accent);}
   white-space:nowrap; flex-shrink:0;
 }
 @media(prefers-reduced-motion:reduce){ .cs-hledani-text::after { animation:none; } }
+
+/* ── PŘIHLAŠOVACÍ BRÁNA ───────────────────────────────────────────────
+   Bez přihlášení se z aplikace nesmí nic ukázat, ani na okamžik. Brána
+   je proto neprůhledná přes celou obrazovku a leží nad vším ostatním —
+   nad modaly (z-index 200) i nad překryvy (9999). */
+.brana{position:fixed;inset:0;z-index:100000;background:var(--bg);display:none;
+  align-items:center;justify-content:center;padding:24px;}
+/* Brána si musí zrušit animaci, kterou má .mo.open — ta roztmívá pozadí
+   do rgba(0,0,0,0.82), takže by aplikace pod bránou prosvítala. Navíc
+   animace přebíjí obyčejné deklarace, takže bez tohohle by neplatilo
+   ani background výš. Prolíná se proto jen karta, ne pozadí.
+
+   Selektor je schválně přes .mo.brana.open, ne .brana.open: pravidlo
+   .mo.open je v souboru níž, takže při stejné váze by vyhrálo ono. */
+.mo.brana.open{display:flex;animation:none;background:var(--bg);backdrop-filter:none;}
+.mo.brana.open .brana-karta{animation:branaKarta 0.22s ease forwards;}
+@keyframes branaKarta{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.mo.brana.open .brana-karta{animation:none;}}
+.brana-karta{width:100%;max-width:376px;}
+.brana-znacka{font-family:Syne,sans-serif;font-size:34px;font-weight:800;
+  letter-spacing:-0.02em;text-align:center;margin-bottom:7px;line-height:1;}
+.brana-znacka span{color:var(--accent);}
+.brana-popis{text-align:center;font-size:10px;color:var(--muted);margin-bottom:26px;
+  font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:1.4px;}
+.brana-box{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:26px;}
+/* Než Firebase odpoví, kdo je přihlášený, ukazuje se jen tenký proužek.
+   Kdyby se rovnou ukázal formulář, blikl by pokaždé i majiteli, který
+   přihlášený je — jen se to ještě nestihlo ověřit. */
+.brana-cekani{height:2px;width:130px;margin:26px auto;background:var(--surface2);
+  border-radius:2px;overflow:hidden;}
+.brana-cekani::after{content:'';display:block;height:100%;width:38%;
+  background:var(--accent);animation:branaPosun 1.15s ease-in-out infinite;}
+@keyframes branaPosun{from{transform:translateX(-110%)}to{transform:translateX(370%)}}
+@media(prefers-reduced-motion:reduce){.brana-cekani::after{animation:none;width:100%;opacity:0.4;}}
 .cs-opt {
   padding:8px 12px; font-size:13px; font-family:'DM Sans',sans-serif;
   color:var(--muted); cursor:pointer; transition:background 0.1s, color 0.1s;
@@ -1171,8 +1206,11 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 .cum-line-anim { animation: cumLineDraw 1.2s cubic-bezier(0.4,0,0.2,1) forwards; }
 
 </style>
-<!-- Firebase SDK -->
-<script type="module">
+<!-- Firebase SDK.
+     onerror hlásí, že se modul vůbec nenačetl (bez signálu, blokovaná
+     síť). Přihlašovací brána podle toho pozná, že nemá koho ověřovat,
+     a nenechá aplikaci viset na čekacím proužku. -->
+<script type="module" onerror="window._fbSelhalo=1">
   // FIREBASE CONFIG — vyplň po vytvoření projektu (viz návod)
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, deleteUser }
@@ -1220,6 +1258,45 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 </script>
 </head>
 <body onclick="void 0">
+<!-- Přihlašovací brána — bez přihlášení se aplikace neukáže.
+     Zrušit tu schválně není: není kam odejít. -->
+<div id="moLogin" class="mo brana open">
+  <div class="brana-karta">
+    <div class="brana-znacka">SKLAD<span>.</span></div>
+    <div class="brana-popis">Evidence skladu pro reselling</div>
+
+    <div id="branaCekani" class="brana-cekani"></div>
+
+    <div id="branaFormular" class="brana-box" style="display:none;">
+      <div style="display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:20px;">
+        <button id="authTabLogin" onclick="switchAuthTab('login')" style="flex:1;background:var(--accent);color:#000;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:7px;cursor:pointer;">Přihlášení</button>
+        <button id="authTabRegister" onclick="switchAuthTab('register')" style="flex:1;background:none;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:7px;cursor:pointer;">Registrace</button>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">E-mail</label>
+        <input type="email" id="loginEmail" placeholder="vas@email.cz" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;outline:none;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div style="margin-bottom:8px;">
+        <label style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">Heslo</label>
+        <input type="password" id="loginPass" placeholder="••••••••" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:10px 12px;outline:none;box-sizing:border-box;transition:border-color 0.2s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <div id="loginForgot" style="text-align:right;margin-bottom:16px;">
+        <span onclick="doForgotPassword()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;">Zapomenuté heslo?</span>
+      </div>
+      <div id="loginError" style="font-size:12px;color:var(--danger);margin-bottom:12px;display:none;"></div>
+      <div id="registerConsentWrap" style="display:none;margin-bottom:14px;">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);line-height:1.5;">
+          <input type="checkbox" id="registerConsent" style="margin-top:2px;width:14px;height:14px;flex-shrink:0;accent-color:var(--accent);">
+          <span>Souhlasím se <span onclick="event.preventDefault();event.stopPropagation();openPrivacyPolicy();" style="color:var(--accent);text-decoration:underline;cursor:pointer;">zpracováním osobních údajů</span> za účelem poskytování služby Sklad.</span>
+        </label>
+      </div>
+      <button onclick="doLogin()" class="btn-pri" style="width:100%;flex:none;padding:12px;font-size:14px;" id="btnDoLogin">Přihlásit se</button>
+    </div>
+
+    <div id="branaBezCloudu" style="display:none;text-align:center;font-size:12px;color:var(--muted);line-height:1.6;margin-top:18px;"></div>
+  </div>
+</div>
+
 <div id="sklad-tip"></div>
 
 <header>
@@ -1737,8 +1814,8 @@ function cleanupOverlays() {
     // Zavři fixed overlaye (tracking, confirm atd.)
     cleanupOverlays();
     document.querySelectorAll('div[style*="position:fixed"][style*="inset:0"][style*="z-index:9999"]').forEach(function(el) { el.remove(); });
-    // Zavři modaly
-    document.querySelectorAll('.mo.open').forEach(function(m) { m.classList.remove('open'); });
+    // Zavři modaly — kromě přihlašovací brány, ta se Escapem obejít nedá
+    document.querySelectorAll('.mo.open:not(.brana)').forEach(function(m) { m.classList.remove('open'); });
     // Zavři cs-drop
     document.querySelectorAll('.cs-drop.open').forEach(function(d) { d.classList.remove('open'); });
     document.querySelectorAll('.cs-btn.open').forEach(function(b) { b.classList.remove('open'); });
@@ -8295,10 +8372,23 @@ function openSaleDocument(id) {
   var p = getSeller();
   var cislo = saleDocNumber(it);
   var kupujici = it.linkedCustomerId ? (customers.find(function(c){ return c.id === it.linkedCustomerId; }) || null) : null;
+  /* Částka jen v té měně, ve které prodej opravdu proběhl. Přepočet na Kč
+     na doklad nepatří — kupující platil eura a účetní si je na konci
+     měsíce přepočítá sám kurzem, se kterým pracuje. Kdyby tu koruny byly,
+     tvářily by se jako závazný údaj, a přitom by to byl jen orientační
+     přepočet. */
   var cena = it.sellCurrency === 'EUR'
-    ? (it.sellPriceOrig || 0) + ' € (' + czk(it.sellPrice || 0) + ')'
+    ? (getSellOrig(it) || 0).toLocaleString('cs') + ' €'
     : czk(it.sellPrice || 0);
-  var datum = fmtDate(it.saleDate) || fmtDate(_dnesISO());
+
+  /* Datum na dokladu je datum vyplacení, ne datum prodeje.
+     V daňové evidenci se příjem počítá dnem, kdy peníze dorazily —
+     na tom stojí, do kterého měsíce a roku prodej spadne. Dokud payout
+     nedorazil, zbývá jen datum prodeje jako to nejlepší, co víme.
+
+     Vybírá se ze syrových dat, ne z fmtDate — ta vrací pomlčku, a ta by
+     jako pravdivá hodnota ukončila řadu hned na prvním prázdném poli. */
+  var datum = fmtDate(it.payoutDate || it.saleDate || _dnesISO());
 
   /* Kdo je kupující. U komisních eshopů a platforem jsou to jejich
      fakturační údaje ze Správy platforem — prodává se přece jim.
@@ -8351,7 +8441,7 @@ function openSaleDocument(id) {
   h += '</style></head><body>';
 
   h += '<div class="hl"><div><h1>Prodejní doklad</h1><div class="cislo">č. ' + escHtml(cislo) + '</div></div>';
-  h += '<div style="text-align:right;"><div class="nadpis">Datum prodeje</div><div style="font-weight:700;">' + escHtml(datum) + '</div></div></div>';
+  h += '<div style="text-align:right;"><div class="nadpis">Datum</div><div style="font-weight:700;">' + escHtml(datum) + '</div></div></div>';
 
   h += '<div class="strany">';
   h += '<div class="strana"><div class="nadpis">Prodávající</div>';
@@ -14720,6 +14810,79 @@ function doForgotPassword() {
   });
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   PŘIHLAŠOVACÍ BRÁNA
+
+   Bez přihlášení se z aplikace neukáže nic. Brána stojí nad vším a jde
+   z ní jen jedním směrem — dovnitř. Tlačítko Zrušit tu proto není.
+
+   Tři stavy:
+     čekání   — Firebase se ještě neozval, kdo je přihlášený. Ukazuje se
+                jen proužek. Kdyby tu rovnou svítil formulář, blikl by
+                při každém načtení i majiteli, který přihlášený je.
+     formulář — Firebase odpověděl, že nikdo. Přihlašování a registrace.
+     bez cloudu — Firebase se vůbec nenačetl (nemá signál, blokuje ho
+                síť). Ověřit se nemá kde, a zamčená appka by v tu chvíli
+                znamenala, že se majitel nedostane ani ke svým datům
+                v localStorage. Proto se brána zvedne a aplikace běží
+                lokálně; cizímu člověku stejně žádná data neukáže.
+                Skutečný zámek nad daty jsou pravidla Firestore, brána
+                řeší to, co člověk uvidí.
+══════════════════════════════════════════════════════════════════════ */
+var _BRANA_CEKANI_MS = 6000;   // dokud se Firebase neozve ani chybou
+
+function _branaStav() {
+  if (window._fbUser) return 'pryc';
+  if (window._fbAuthZnamy) return 'formular';
+  if (window._fbSelhalo || window._fbReady === false) return 'bezCloudu';
+  return 'cekani';
+}
+
+function _branaObnov() {
+  var g = document.getElementById('moLogin');
+  if (!g) return;
+  var stav = _branaStav();
+  var cekani = document.getElementById('branaCekani');
+  var form = document.getElementById('branaFormular');
+  var pozn = document.getElementById('branaBezCloudu');
+
+  if (stav === 'pryc' || stav === 'bezCloudu') { g.classList.remove('open'); return; }
+
+  g.classList.add('open');
+  if (cekani) cekani.style.display = stav === 'cekani' ? '' : 'none';
+  if (form) form.style.display = stav === 'formular' ? '' : 'none';
+  if (pozn) pozn.style.display = 'none';
+  if (stav === 'formular' && !g._zaostreno) {
+    g._zaostreno = true;
+    var e = document.getElementById('loginEmail');
+    if (e) setTimeout(function() { e.focus(); }, 60);
+  }
+}
+
+/* Hlídač pro případ, že se Firebase neozve vůbec — ani uživatelem, ani
+   chybou při načítání. Bez něj by brána visela na proužku donekonečna. */
+(function _branaHlidac() {
+  var start = Date.now();
+  var t = setInterval(function() {
+    if (_branaStav() !== 'cekani') { clearInterval(t); _branaObnov(); return; }
+    if (Date.now() - start > _BRANA_CEKANI_MS) {
+      window._fbSelhalo = 1;
+      clearInterval(t);
+    }
+    _branaObnov();
+  }, 200);
+})();
+
+document.addEventListener('DOMContentLoaded', _branaObnov);
+document.addEventListener('fb-auth', function(e) {
+  window._fbAuthZnamy = true;
+  if (!(e.detail && e.detail.user)) {
+    var g = document.getElementById('moLogin');
+    if (g) g._zaostreno = false;
+  }
+  _branaObnov();
+});
+
 function openAuthModal() {
   var emailEl = document.getElementById('loginEmail');
   var passEl = document.getElementById('loginPass');
@@ -14727,7 +14890,12 @@ function openAuthModal() {
   if(emailEl) emailEl.value = '';
   if(passEl) passEl.value = '';
   if(errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
-  document.getElementById('moLogin').classList.add('open');
+  var g = document.getElementById('moLogin');
+  var cekani = document.getElementById('branaCekani');
+  var form = document.getElementById('branaFormular');
+  if (cekani) cekani.style.display = 'none';
+  if (form) form.style.display = '';
+  if (g) g.classList.add('open');
   setTimeout(function(){ if(emailEl) emailEl.focus(); }, 100);
 }
 
@@ -14779,20 +14947,46 @@ function handleCloudAuthBtn() {
   }
 }
 
+/* Uvítání po prvním přihlášení do prázdného skladu.
+
+   Řádky se skládají přes grid, ne přes flex. Flex totiž udělá z každého
+   vnořeného <b> a <kbd> samostatnou položku a rozhodí je do vlastních
+   sloupců — věta se pak rozpadne na útržky vedle sebe. Ikona je proto
+   jedna buňka a celý text druhá. */
 function showOnboarding() {
   var ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:32px;width:90%;max-width:420px;font-family:\'DM Sans\',sans-serif;">' +
-    '<div style="font-family:Syne,sans-serif;font-size:22px;font-weight:800;margin-bottom:6px;">Vítej v Skladu!</div>' +
-    '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Tvůj osobní nástroj pro správu resell skladu. Sleduj nákupy, prodeje, platformy a zisky na jednom místě.</div>' +
-    '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;">' +
-      '<div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="color:var(--accent);font-size:16px;">+</span> Přidávej položky tlačítkem <b>+ Přidat</b> nebo zkratkou <kbd style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:11px;">N</kbd></div>' +
-      '<div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="color:var(--accent);font-size:16px;">→</span> Prodej položky přesune do záložky <b>Čeká</b>, pak do <b>Prodáno</b></div>' +
-      '<div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="color:var(--accent);font-size:16px;">☁</span> Data se automaticky ukládají do cloudu</div>' +
-    '</div>' +
-    '<button onclick="this.closest(\'div[style*=fixed]\').remove()" style="width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">Začít</button>' +
-  '</div>';
+  ov.id = 'onboardOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;'
+    + 'align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+
+  function radek(ikona, text) {
+    return '<div class="onb-radek" style="display:grid;grid-template-columns:20px 1fr;gap:12px;align-items:start;'
+      + 'font-size:13px;line-height:1.65;">'
+      + '<span style="color:var(--accent);font-size:15px;line-height:1.5;text-align:center;">' + ikona + '</span>'
+      + '<div>' + text + '</div></div>';
+  }
+  var kbd = 'background:var(--surface2);border:1px solid var(--border);border-radius:4px;'
+    + 'padding:1px 6px;font-size:11px;font-family:\'DM Mono\',monospace;';
+
+  ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);'
+    + 'border-radius:var(--radius);padding:32px;width:100%;max-width:440px;'
+    + 'font-family:\'DM Sans\',sans-serif;">'
+    + '<div style="font-family:Syne,sans-serif;font-size:24px;font-weight:800;margin-bottom:8px;">'
+    + 'Vítej ve <span style="color:var(--accent);">Skladu</span></div>'
+    + '<div style="font-size:13px;color:var(--muted);margin-bottom:26px;line-height:1.65;">'
+    + 'Evidence nákupů, prodejů a zisků na jednom místě.</div>'
+    + '<div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px;">'
+    + radek('+', 'Položky přidáš tlačítkem <b>+ Přidat</b> nebo klávesou <kbd style="' + kbd + '">N</kbd>')
+    + radek('→', 'Prodaná položka se přesune do <b>Čeká</b> a po vyplacení do <b>Prodáno</b>')
+    + radek('☁', 'Data se ukládají do cloudu — najdeš je na mobilu i na počítači')
+    + '</div>'
+    + '<button id="onboardStart" style="width:100%;background:var(--accent);color:#000;border:none;'
+    + 'border-radius:var(--radius-sm);padding:13px;font-size:14px;font-weight:700;cursor:pointer;'
+    + 'font-family:inherit;">Začít</button>'
+    + '</div>';
   document.body.appendChild(ov);
+  var btn = document.getElementById('onboardStart');
+  if (btn) btn.onclick = function() { ov.remove(); };
 }
 
 function deleteAccount() {
@@ -17774,38 +17968,6 @@ rebuildBrandTables();
   obs.observe(document.body, { childList: true, subtree: true });
 })();
 </script>
-
-<!-- Login modal -->
-<div id="moLogin" class="mo" onclick="if(event.target===this)cm('moLogin')">
-  <div class="modal" style="max-width:360px;padding:28px;">
-    <div style="display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:20px;">
-      <button id="authTabLogin" onclick="switchAuthTab('login')" style="flex:1;background:var(--accent);color:#000;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;padding:6px;cursor:pointer;">Přihlášení</button>
-      <button id="authTabRegister" onclick="switchAuthTab('register')" style="flex:1;background:none;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:6px;cursor:pointer;">Registrace</button>
-    </div>
-    <div style="margin-bottom:12px;">
-      <label style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">E-mail</label>
-      <input type="email" id="loginEmail" placeholder="vas@email.cz" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;outline:none;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <div style="margin-bottom:8px;">
-      <label style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:5px;">Heslo</label>
-      <input type="password" id="loginPass" placeholder="••••••••" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:9px 12px;outline:none;box-sizing:border-box;" onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <div id="loginForgot" style="text-align:right;margin-bottom:16px;">
-      <span onclick="doForgotPassword()" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;">Zapomenuté heslo?</span>
-    </div>
-    <div id="loginError" style="font-size:12px;color:var(--danger);margin-bottom:12px;display:none;"></div>
-    <div id="registerConsentWrap" style="display:none;margin-bottom:14px;">
-      <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;color:var(--muted);line-height:1.5;">
-        <input type="checkbox" id="registerConsent" style="margin-top:2px;width:14px;height:14px;flex-shrink:0;accent-color:var(--accent);">
-        <span>Souhlasím se <span onclick="event.preventDefault();event.stopPropagation();openPrivacyPolicy();" style="color:var(--accent);text-decoration:underline;cursor:pointer;">zpracováním osobních údajů</span> za účelem poskytování služby Sklad.</span>
-      </label>
-    </div>
-    <div style="display:flex;gap:8px;">
-      <button onclick="cm('moLogin')" class="btn-sec" style="flex:1;">Zrušit</button>
-      <button onclick="doLogin()" class="btn-pri" style="flex:2;" id="btnDoLogin">Přihlásit se</button>
-    </div>
-  </div>
-</div>
 
 <!-- KALKULAČKA MARŽE -->
 <div id="moCalc" style="display:none;position:fixed;bottom:80px;right:20px;z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;width:280px;box-shadow:0 8px 32px #000a;">

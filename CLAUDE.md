@@ -121,6 +121,39 @@ Dvě věci se nesmí rozbít:
 Velikosti se schválně neporovnávají, na Instagramu se neuvádí.
 `test-instagram.js` hlídá hlavně tu druhou půlku — co se spárovat **nesmí**.
 
+### Přihlašovací brána
+
+Bez přihlášení se z aplikace neukáže nic (`PŘIHLAŠOVACÍ BRÁNA`). Brána je
+otevřená rovnou v HTML a stojí na začátku `<body>` — kdyby ji zvedal až JS,
+aplikace by při každém načtení blikla. Zavírá ji jen JS, a to ve třech stavech:
+
+- **čekání** — Firebase se ještě neozval. Ukazuje se jen proužek. Formulář
+  by tu blikl i majiteli, který přihlášený je.
+- **formulář** — Firebase odpověděl, že nikdo.
+- **bez cloudu** — Firebase se vůbec nenačetl (`onerror` na modulu, nebo
+  se do `_BRANA_CEKANI_MS` neozve nic). **Brána se zvedne a aplikace běží
+  lokálně.** Ověřovat se nemá kde a zamčená appka by znamenala, že se
+  majitel nedostane ani ke svým datům v `localStorage`; cizímu člověku
+  stejně žádná data neukáže. Skutečný zámek nad daty jsou pravidla
+  Firestore, brána řeší to, co člověk uvidí.
+
+Dvě věci se snadno rozbijí: `.mo.open` má animaci, která roztmívá pozadí
+do `rgba(0,0,0,0.82)` — brána si ji ruší přes `.mo.brana.open`, jinak by
+aplikace pod ní prosvítala (a protože animace přebíjí obyčejné deklarace,
+neplatilo by ani `background`). A globální Escape zavírá `.mo.open`,
+takže brána musí zůstat vyjmutá přes `:not(.brana)`.
+`test-brana.js` hlídá obojí i uvítací okno.
+
+### Prodejní doklad
+
+Datum na dokladu je **datum vyplacení**, ne datum prodeje — v daňové
+evidenci se příjem počítá dnem, kdy peníze dorazily. Popisek je proto
+jen „Datum". Dokud payout nedorazil, použije se datum prodeje.
+
+Částka je **jen v měně, ve které prodej proběhl**. Přepočet eur na koruny
+na doklad nepatří: kupující platil eura a účetní si měsíc přepočítá sám.
+Hlídá to `test-saledoc.js`.
+
 ### Fotky
 
 V paměti a v `localStorage` je fotka v položce jako `imgUrl` (data URI). Do cloudu jde
@@ -143,6 +176,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | automatické zálohy | `AUTOMATICKÉ SNAPSHOTY` |
 | profily (Podnikání/Osobní) | `PROFILY` |
 | pohled účetního | `POHLED ÚČETNÍHO` |
+| přihlašovací brána | `PŘIHLAŠOVACÍ BRÁNA` |
 | limit identifikované osoby | `RETAILEŘI & LIMIT` |
 | animace | `ANIMACE` (v CSS) |
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
@@ -226,7 +260,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 47 souborů
+node test/run.js              # kontrola syntaxe + všech 48 souborů
 node test/run.js archive      # jen vybrané
 ```
 
