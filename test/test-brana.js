@@ -169,7 +169,7 @@ const SOUBOR = 'file://' + path.resolve(__dirname, '..', 'index.html');
   check('přihlašovací panel se schová', obnova.authSkryty);
   check('a ukáže se obnova hesla', obnova.resetVidet);
   check('pole na heslo tam není', !obnova.maHeslo, 'v obnově hesla nemá co dělat');
-  check('pokyn je krátký', obnova.pokyn === 'Zadej tvůj přihlašovací email', obnova.pokyn);
+  check('pokyn je krátký', obnova.pokyn === 'Zadej svůj přihlašovací email', obnova.pokyn);
   check('napsaný e-mail se přenese', obnova.email === 'kdo@si.cz', obnova.email);
   check('jde odeslat odkaz', obnova.tlacitka.some(t => /poslat odkaz/i.test(t)), JSON.stringify(obnova.tlacitka));
   check('a vrátit se zpět', obnova.tlacitka.some(t => /zpět na přihlášení/i.test(t)), JSON.stringify(obnova.tlacitka));
@@ -181,6 +181,43 @@ const SOUBOR = 'file://' + path.resolve(__dirname, '..', 'index.html');
     return { videt: getComputedStyle(z).display !== 'none', text: z.textContent };
   });
   check('bez e-mailu se ozve', bezEmailu.videt && /e-mail/i.test(bezEmailu.text), bezEmailu.text);
+
+  /* Firebase má zapnutou ochranu proti vyzrazení e-mailů, takže na reset
+     neexistujícího účtu odpoví, jako by odkaz odešel. Zjistit se to
+     z prohlížeče nedá — co jde, je ohlídat tvar adresy a neslibovat
+     doručení, aby člověk nečekal na odkaz, který nikdy nedorazí. */
+  const tvar = await page.evaluate(() => {
+    const spatne = ['bezzavinace.cz', 'a@b', 'kdo@ si.cz', '@si.cz', 'kdo@si.', ''];
+    const dobre = ['kdo@si.cz', 'michal.novak+sklad@example.co.uk'];
+    return {
+      spatne: spatne.filter(e => jeTvarEmailu(e)),
+      dobre: dobre.filter(e => !jeTvarEmailu(e)),
+    };
+  });
+  check('rozbité adresy neprojdou', tvar.spatne.length === 0, JSON.stringify(tvar.spatne));
+  check('a normální ano', tvar.dobre.length === 0, JSON.stringify(tvar.dobre));
+
+  const spatnyTvar = await page.evaluate(() => {
+    document.getElementById('resetEmail').value = 'bezzavinace.cz';
+    let odeslano = false;
+    const puvodni = window._fbAuth;
+    window._fbAuth = { _test: 1 };
+    doForgotPassword();
+    window._fbAuth = puvodni;
+    const z = document.getElementById('resetZprava');
+    return { text: z.textContent, videt: getComputedStyle(z).display !== 'none', odeslano };
+  });
+  check('rozbitá adresa se zastaví hned', /překlep/i.test(spatnyTvar.text) && spatnyTvar.videt,
+    spatnyTvar.text);
+
+  // Hláška po odeslání nesmí tvrdit, že odkaz dorazil
+  const zdroj0 = require('fs').readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+  check('úspěch doručení neslibuje',
+    /Pokud je ' \+ email \+ ' zaregistrovaný/.test(zdroj0) && !/Odkaz jsme poslali na/.test(zdroj0),
+    'jinak by člověk čekal na odkaz, který nemusí přijít');
+  check('a neregistrovaný e-mail má vlastní hlášku, až to Firebase dovolí',
+    /auth\/user-not-found/.test(zdroj0) && /není zaregistrovaný/.test(zdroj0),
+    'aby stačilo vypnout ochranu v konzoli');
 
   const zpatky = await page.evaluate(() => {
     zpetNaPrihlaseni();

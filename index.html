@@ -1334,7 +1334,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
       <div id="branaReset" class="brana-panel" style="display:none;">
         <div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;margin-bottom:6px;">Obnova hesla</div>
         <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:18px;">
-          Zadej tvůj přihlašovací email
+          Zadej svůj přihlašovací email
         </div>
         <div style="margin-bottom:15px;">
           <label class="brana-popisek" for="resetEmail">E-mail</label>
@@ -14892,6 +14892,26 @@ function doRegister() {
     .finally(function(){ if(btn){btn.textContent='Registrovat';btn.disabled=false;} });
 }
 
+/* Tvar e-mailu. Nechytí překlep v doméně, ale chytí to, co člověk
+   splete nejčastěji — chybějící zavináč, mezeru, useknutou koncovku. */
+function jeTvarEmailu(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
+}
+
+/* ── Proč obnova hesla nepozná neregistrovaný e-mail ──────────────────
+   Firebase má zapnutou ochranu proti vyzrazení e-mailů (Authentication
+   → Settings → User actions). Kvůli ní se na reset hesla neexistujícího
+   účtu tváří, že odkaz odešel, a stejně tak neřekne „tenhle účet
+   neexistuje“ ani při přihlášení. Je to schválně: jinak by si kdokoli
+   přes formulář zjistil, které adresy tu mají účet.
+
+   Z prohlížeče se to tedy zjistit nedá a obcházet se to nemá čím —
+   spolehlivá odpověď by chtěla servisní klíč na serveru, a ten tenhle
+   projekt schválně nemá.
+
+   Co jde: ohlídat tvar adresy a neslibovat doručení. Kdyby se ochrana
+   v konzoli vypnula, Firebase začne posílat auth/user-not-found a
+   hláška níž se přepne na rovnou zprávu sama. */
 function doForgotPassword() {
   var email = (document.getElementById('resetEmail')?.value || '').trim();
   var zpr = document.getElementById('resetZprava');
@@ -14903,15 +14923,28 @@ function doForgotPassword() {
     zpr.style.display = 'block';
   }
   if (!email) { hlaska('Zadej e-mail, na který ti máme odkaz poslat.', true); return; }
+  if (!jeTvarEmailu(email)) { hlaska('Tohle není platný e-mail. Zkontroluj překlep.', true); return; }
   if (!window._fbFns || !window._fbAuth) { hlaska('Firebase není připojeno.', true); return; }
   if (btn) { btn.textContent = 'Odesílám…'; btn.disabled = true; }
   if (zpr) zpr.style.display = 'none';
+
+  function selhalo(e) {
+    var kod = (e && e.code) || '';
+    if (kod === 'auth/user-not-found') hlaska('Tenhle e-mail tu není zaregistrovaný.', true);
+    else if (kod === 'auth/invalid-email') hlaska('Tohle není platný e-mail. Zkontroluj překlep.', true);
+    else if (kod === 'auth/too-many-requests') hlaska('Moc pokusů po sobě. Zkus to za chvíli.', true);
+    else hlaska('Odkaz se nepodařilo odeslat. Zkus to za chvíli.', true);
+  }
+
   import('https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js').then(function(m){
     return m.sendPasswordResetEmail(window._fbAuth, email)
-      .then(function(){ hlaska('Odkaz jsme poslali na ' + email + '.', false); })
-      .catch(function(){ hlaska('Odkaz se nepodařilo odeslat. Zkontroluj e-mail.', true); });
+      /* Doručení se neslibuje — Firebase nám neřekne, jestli účet
+         existuje, a věta „odkaz jsme poslali“ by nechala člověka
+         čekat na něco, co nemusí nikdy přijít. */
+      .then(function(){ hlaska('Pokud je ' + email + ' zaregistrovaný, odkaz je na cestě. Nedorazil? Zkontroluj překlep a složku se spamem.', false); })
+      .catch(selhalo);
   })
-    .catch(function(){ hlaska('Odkaz se nepodařilo odeslat. Zkontroluj e-mail.', true); })
+    .catch(selhalo)
     .then(function(){ if (btn) { btn.textContent = 'Poslat odkaz'; btn.disabled = false; } });
 }
 

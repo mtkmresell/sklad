@@ -142,6 +142,17 @@ schválně vlastní obrazovka — vyplňovat e-mail v přihlášení a teprve pa
 klikat na odkaz je naruby. Řádek se souhlasem střídá řádek se zapomenutým
 heslem a oba jsou na jednu řádku, aby okno při přepnutí záložky nepodskočilo.
 
+**Obnova hesla nepozná neregistrovaný e-mail** a nejde to obejít.
+Firebase má zapnutou ochranu proti vyzrazení e-mailů (Authentication →
+Settings → User actions), takže na reset neexistujícího účtu odpoví
+`HTTP 200`, jako by odkaz odešel, a při přihlášení vrací obecné
+`INVALID_LOGIN_CREDENTIALS` místo `EMAIL_NOT_FOUND`. Je to schválně:
+jinak by si kdokoli přes formulář zjistil, které adresy tu mají účet.
+Spolehlivá odpověď by chtěla servisní klíč na serveru, a ten tenhle
+projekt schválně nemá. Ohlídá se proto aspoň tvar adresy a hláška po
+odeslání **neslibuje doručení**. Kdyby se ochrana v konzoli vypnula,
+`auth/user-not-found` se už zpracovává a hláška se přepne sama.
+
 Dvě věci se snadno rozbijí: `.mo.open` má animaci, která roztmívá pozadí
 do `rgba(0,0,0,0.82)` — brána si ji ruší přes `.mo.brana.open`, jinak by
 aplikace pod ní prosvítala (a protože animace přebíjí obyčejné deklarace,
