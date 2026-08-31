@@ -5993,6 +5993,7 @@ function changeWaitState(id, newState) {
   if (idx === -1) return;
   if (newState === 'completed') {
     var _itForCache = items[idx];
+    markReklamacePayout(items[idx]);
     items[idx].saleState = 'paid';
     items[idx].waitState = 'completed';
     items[idx].payoutDate = new Date().toISOString().slice(0,10);
@@ -8425,10 +8426,21 @@ function _dat(v) {
 }
 
 // Jak rychle která platforma opravdu platí (medián dnů prodej → payout)
+/* Zapamatuje, že se payout vyplácel z reklamace.
+
+   Ztracený balík se řeší týdny a do toho, jak rychle platí daná platforma,
+   nemá co mluvit — za zdržení nemůže ona, ale dopravce. Bez téhle značky
+   by to po vyplacení nešlo poznat: waitState přejde na 'completed'
+   a stopa po reklamaci zmizí. */
+function markReklamacePayout(it) {
+  if (it && it.waitState === 'reklamace') it.zReklamace = 1;
+}
+
 function payoutSpeedStats() {
   var podle = {};
   (items || []).forEach(function(it) {
     if (it.saleState !== 'paid') return;
+    if (it.zReklamace) return;                  // reklamaci platforma neovlivní
     var a = _dat(it.saleDate), b = _dat(it.payoutDate);
     if (!a || !b) return;
     var d = _dneMezi(a, b);
@@ -10275,6 +10287,7 @@ function openBulkPayoutModal(bulkId) {
     // Ulož payout na bulk záznam
     var bulkIdx = items.findIndex(function(x){ return x.id===bulkId; });
     if(bulkIdx !== -1) {
+      markReklamacePayout(items[bulkIdx]);
       items[bulkIdx].saleState = 'paid';
       items[bulkIdx].waitState = 'completed';
       items[bulkIdx].payoutDate = dateVal;
@@ -10284,6 +10297,7 @@ function openBulkPayoutModal(bulkId) {
     getBulkItems(bulkId).forEach(function(it){
       var idx2 = items.findIndex(function(x){ return x.id===it.id; });
       if(idx2 !== -1) {
+        markReklamacePayout(items[idx2]);
         items[idx2].saleState = 'paid';
         items[idx2].waitState = 'completed';
         items[idx2].payoutDate = dateVal;
@@ -16278,6 +16292,7 @@ async function confirmPayout(itemId) {
     var _br = await fetchRateForDate(it.buyDate);
     if (_br) it.buyRateEur = _br;
   }
+  markReklamacePayout(it);
   it.saleState = 'paid';
   it.waitState = 'completed';
   it.payoutDate = dateVal;

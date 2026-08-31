@@ -93,6 +93,78 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
   check('vrátí se na sklad', vraceni.stav === 'stock', vraceni.stav);
   check('a stav reklamace zmizí', !vraceni.ws, String(vraceni.ws));
 
+  /* ══════════════════════════════════════════════════════════════
+     Ztracený balík se řeší týdny. Kdyby se ta doba počítala do toho,
+     jak rychle daná platforma platí, vypadalo by to, že platí mizerně —
+     a přitom za zdržení nemůže ona, ale dopravce. */
+  section('5b) Vyplacená reklamace nekazí statistiku platformy');
+  const rychlost = await page.evaluate(() => {
+    localStorage.clear();
+    const den = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+    items = [
+      // tři poctivé payouty po sedmi dnech
+      { id: 'p1', saleState: 'paid', soldWhere: 'StockX', saleDate: den(40), payoutDate: den(33), tags: [] },
+      { id: 'p2', saleState: 'paid', soldWhere: 'StockX', saleDate: den(30), payoutDate: den(23), tags: [] },
+      { id: 'p3', saleState: 'paid', soldWhere: 'StockX', saleDate: den(20), payoutDate: den(13), tags: [] },
+      // reklamace vyplacená po sto dnech — nesmí se do mediánu započítat
+      { id: 'r1', saleState: 'paid', soldWhere: 'StockX', saleDate: den(120), payoutDate: den(20),
+        zReklamace: 1, tags: [] },
+    ];
+    const s = payoutSpeedStats()['StockX'];
+    return { median: s && s.median, n: s && s.n, max: s && s.max };
+  });
+  check('reklamace se nezapočítá', rychlost.n === 3, 'vzorků: ' + rychlost.n);
+  check('medián zůstává sedm dní', rychlost.median === 7, String(rychlost.median));
+  check('a nejdelší payout není ta reklamace', rychlost.max === 7, String(rychlost.max));
+
+  /* Značka se musí nasadit v okamžiku vyplacení — potom už to nejde
+     poznat, protože waitState přejde na 'completed'. Cest k vyplacení
+     je několik a stačí zapomenout na jednu. */
+  section('5c) Značka se nasadí ve všech cestách vyplacení');
+  const znacky = await page.evaluate(() => {
+    localStorage.clear();
+    const out = {};
+
+    // a) tlačítko ✓ Vyplaceno u čekajícího prodeje
+    items = [{ id: 'a', saleState: 'waiting', waitState: 'reklamace', saleDate: '2026-08-01', tags: [] }];
+    changeWaitState('a', 'completed');
+    out.tlacitko = !!items[0].zReklamace;
+
+    // b) běžný payout se značkou zůstat nesmí
+    items = [{ id: 'b', saleState: 'waiting', waitState: 'payout', saleDate: '2026-08-01', tags: [] }];
+    changeWaitState('b', 'completed');
+    out.bezneNeznaci = !items[0].zReklamace;
+
+    // c) přímé nastavení pomocníkem
+    var kus = { waitState: 'reklamace' };
+    markReklamacePayout(kus);
+    out.pomocnik = !!kus.zReklamace;
+    return out;
+  });
+  check('tlačítko vyplaceno značku nasadí', znacky.tlacitko === true);
+  check('běžný payout ji nenasadí', znacky.bezneNeznaci === true, 'jinak by se vyřadily i poctivé prodeje');
+  check('pomocník funguje samostatně', znacky.pomocnik === true);
+
+  /* Cest k vyplacení je několik — tlačítko u čekajícího, potvrzovací
+     okno s datem, a u balíku zvlášť hlavička a zvlášť kusy. Stačí
+     zapomenout na jednu a reklamace se v ní ztratí bez povšimnutí,
+     protože se to pozná až za měsíce na pokřiveném mediánu.
+
+     Kontroluje se proto blízkost: před každým nastavením 'completed'
+     musí značkovač být, ne jen někde v souboru. */
+  const pokryti = require('fs').readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+  const mista = [];
+  const re = /waitState\s*=\s*'completed'/g;
+  let m;
+  while ((m = re.exec(pokryti)) !== null) {
+    const pred = pokryti.slice(Math.max(0, m.index - 250), m.index);
+    mista.push({ pozice: m.index, maZnacku: /markReklamacePayout\(/.test(pred) });
+  }
+  check('cest k vyplacení je víc než jedna', mista.length >= 4, 'nalezeno: ' + mista.length);
+  check('před každou je značkovač',
+    mista.every(x => x.maZnacku),
+    'bez značky: ' + mista.filter(x => !x.maZnacku).map(x => x.pozice).join(', '));
+
   // ══════════════════════════════════════════════════════════════
   section('6) Jak je reklamace vidět');
   const odznak = await page.evaluate(() => waitStateBadge({ id: 'x', waitState: 'reklamace' }));
