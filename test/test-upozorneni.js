@@ -227,6 +227,43 @@ function prodanoPred(ted, dnu) {
   shoda('neznámé místo padá na 14 dní', await kdyPayout('Neznámý bazar', NASTAVENI),
     [14, 21, 28, 35, 42, 49, 56]);
 
+  /* Reklamace běží podle vlastní třicetidenní lhůty a od vlastního data.
+     Kdyby se počítala podle lhůty platformy, mail by upomínal osmý den
+     u něčeho, co poběží dva měsíce — a to je přesně ten druh upozornění,
+     po kterém se přestane číst zbytek. */
+  sekce('4a2) Reklamace má vlastní lhůtu');
+  const kdyReklamace = async (extra) => {
+    const dny = [];
+    for (let ceka = 0; ceka <= 60; ceka++) {
+      nastavSklad([Object.assign({
+        id: 'r', name: 'Ztracená bota', saleState: 'waiting', waitState: 'reklamace',
+        soldWhere: 'StockX',                       // lhůta platformy je 7 dní
+        saleDate: prodanoPred(RANO_LETO, 200),     // prodáno dávno
+        reklamaceOd: prodanoPred(RANO_LETO, ceka),
+      }, extra || {})]);
+      if ((await cron(RANO_LETO)).length) dny.push(ceka);
+    }
+    return dny;
+  };
+  shoda('ozve se po 30 dnech, pak po týdnech', await kdyReklamace(),
+    [30, 37, 44, 51, 58]);
+
+  nastavSklad([
+    { id: 'r', name: 'Ztracená bota', saleState: 'waiting', waitState: 'reklamace',
+      soldWhere: 'StockX', saleDate: prodanoPred(RANO_LETO, 200),
+      reklamaceOd: prodanoPred(RANO_LETO, 30) },
+  ]);
+  const rek = (await cron(RANO_LETO))[0] || {};
+  ok('ve zprávě je poznat, že jde o reklamaci', /reklamace/.test(rek.text || ''), rek.text);
+  ok('a mluví o reklamační lhůtě', /reklamační lhůta 30 dní/.test(rek.text || ''), rek.text);
+
+  // Bez data reklamace se počítá od prodeje — jinak by starý kus mlčel navždy
+  nastavSklad([
+    { id: 'r', name: 'Bez data', saleState: 'waiting', waitState: 'reklamace',
+      soldWhere: 'StockX', saleDate: prodanoPred(RANO_LETO, 30) },
+  ]);
+  ok('bez data reklamace se bere datum prodeje', (await cron(RANO_LETO)).length === 1);
+
   sekce('4b) Co je ve zprávě o payoutu vidět');
   nastavSklad([
     { id: 'w1', name: 'Yeezy Slide', saleState: 'waiting', soldWhere: 'StockX',
@@ -683,6 +720,12 @@ function prodanoPred(ted, dnu) {
   const teloFn = /function getPayoutDays[\s\S]*?\n\}/.exec(app);
   const zalohaApp = teloFn && [...teloFn[0].matchAll(/return\s+(\d+);/g)].pop();
   const zalohaWrk = /VYCHOZI_PAYOUT\s*=\s*(\d+)/.exec(wrk);
+
+  // Reklamační lhůta je taky na dvou místech
+  const lhutaApp = /REKLAMACNI_LHUTA\s*=\s*(\d+)/.exec(app);
+  const lhutaWrk = /REKLAMACNI_LHUTA\s*=\s*(\d+)/.exec(wrk);
+  ok('aplikace reklamační lhůtu má', !!lhutaApp);
+  shoda('a konektor má tutéž', lhutaWrk && lhutaWrk[1], lhutaApp && lhutaApp[1]);
   ok('getPayoutDays v aplikaci pořád je', !!zalohaApp, teloFn && teloFn[0].slice(0, 80));
   shoda('i poslední záchrana sedí',
     zalohaWrk && zalohaWrk[1], zalohaApp && zalohaApp[1]);

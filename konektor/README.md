@@ -134,6 +134,12 @@ odkazu projdou jen adresy začínající `http` nebo `https`; `javascript:`
 v href by z upozornění udělal zbraň. V prosté textové verzi zůstane jen
 číslo, adresa by řádek rozbila.
 
+**Reklamace má vlastní lhůtu.** Ztracený balík řeší dopravce, ne
+platforma, takže se u něj nepočítá lhůta místa prodeje, ale třicet dní
+od `reklamaceOd` — data, kdy se prodej jako reklamace označil. Musí to
+být totéž číslo jako `REKLAMACNI_LHUTA` v aplikaci, jinak by mail
+upomínal jindy, než co ukazuje odhad na obrazovce; test to porovnává.
+
 **Zásilka se počítá od `sentAt`** — data, které si aplikace zapíše při
 přechodu do stavu „odesláno". Kusy označené dřív, než tohle pole vzniklo,
 ho nemají a počítají se od data prodeje; bývá to týž nebo následující

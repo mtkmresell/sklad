@@ -54,6 +54,13 @@ U čekajících je ještě `waitState`: `sending` → `sent` → `payout` → `c
 označený. Nedá se do něj procyklovat, nastavuje se ručně v úpravě položky;
 `test-reklamace.js` to hlídá.
 
+Reklamace se ale **počítá jinak než ostatní payouty**: běží jí vlastní
+třicetidenní lhůta (`REKLAMACNI_LHUTA`) od `reklamaceOd`, ne lhůta
+platformy od data prodeje — za zdržení nemůže platforma, ale dopravce.
+Ze stejného důvodu se vyplacená reklamace (`zReklamace`) nezapočítává do
+`payoutSpeedStats()`; jedna stodenní by z poctivého mediánu udělala
+nesmysl. Ta třicítka je i v konektoru, `test-upozorneni.js` je porovnává.
+
 ### Cloud (Firestore, kolekce `users/{uid}/sklad`)
 
 | dokument | obsah |

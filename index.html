@@ -5759,7 +5759,7 @@ async function saveSell() {
     });
   }
   trackSoldWhereFreq(soldWherePlat);
-  markSentAt(items[idx], items[idx].waitState);
+  oznacCasyStavu(items[idx], items[idx].waitState);
   // Historie cen — skutečná prodejní cena uzavírá vývoj
   logPrice(items[idx], sp, spOrigCur, spOrigCur === 'EUR' ? spOrig : null, true);
   sv(); renderStats(); renderItems(); cm('moSell');
@@ -6003,7 +6003,7 @@ function changeWaitState(id, newState) {
     }
   } else {
     items[idx].waitState = newState;
-    markSentAt(items[idx], newState);
+    oznacCasyStavu(items[idx], newState);
   }
   sv(); renderStats(); renderItems();
 }
@@ -6019,6 +6019,25 @@ function markSentAt(it, newState) {
   } else {
     delete it.sentAt;
   }
+}
+
+/* Datum, kdy se z prodeje stala reklamace. Od něj se počítá třicetidenní
+   reklamační lhůta — ne od data prodeje, které může být měsíce staré,
+   a ne podle lhůty platformy, protože reklamaci řeší dopravce. */
+function markReklamaceOd(it, newState) {
+  if (!it) return;
+  if (newState === 'reklamace') {
+    if (!it.reklamaceOd) it.reklamaceOd = new Date().toISOString().slice(0, 10);
+  } else {
+    delete it.reklamaceOd;
+  }
+}
+
+// Jedno místo pro všechna data, která se u změny stavu zapisují —
+// ať se na jedno z nich nezapomene v některé ze čtyř cest
+function oznacCasyStavu(it, newState) {
+  markSentAt(it, newState);
+  markReklamaceOd(it, newState);
 }
 
 function _cleanBulkOnDelete(id) {
@@ -6563,7 +6582,7 @@ async function saveItem(){
       // Samotný dopravce bez čísla i bez vlastní URL je jen předvolba selectu — neukládej ho
       if (!_merged.trackingNum && !_merged.trackingUrl) delete _merged.trackingCarrier;
       items[i] = _merged;
-      markSentAt(items[i], items[i].waitState);
+      oznacCasyStavu(items[i], items[i].waitState);
       // Zákazník byl napojen/odpojen/změněn — přepočti statistiky obou stran
       var _newLinkedCustomerId = items[i].linkedCustomerId || '';
       if (_newLinkedCustomerId !== _oldLinkedCustomerId) {
@@ -8426,6 +8445,9 @@ function _dat(v) {
 }
 
 // Jak rychle která platforma opravdu platí (medián dnů prodej → payout)
+// Zákonná lhůta na vyřízení reklamace u dopravce
+var REKLAMACNI_LHUTA = 30;
+
 /* Zapamatuje, že se payout vyplácel z reklamace.
 
    Ztracený balík se řeší týdny a do toho, jak rychle platí daná platforma,
@@ -8463,6 +8485,18 @@ function payoutEstimate(it, rychlosti) {
   var zaklad = _dat(it.saleDate);
   if (!zaklad) return null;
   var plat = (it.soldWhere || '').trim() || '—';
+
+  /* U reklamace neplatí lhůta platformy — peníze řeší dopravce a běží
+     třicetidenní reklamační lhůta od chvíle, kdy se to jako reklamace
+     označilo. Může se to vyřešit dřív i později, ale předpověď se musí
+     o něco opřít a tohle je poctivější než tvrdit „za týden" u něčeho,
+     co poběží dva měsíce. */
+  if (it.waitState === 'reklamace') {
+    var odKdy = _dat(it.reklamaceOd) || zaklad;
+    var dRek = new Date(odKdy.getTime());
+    dRek.setDate(dRek.getDate() + REKLAMACNI_LHUTA);
+    return { datum: dRek, dnu: REKLAMACNI_LHUTA, zdroj: 'reklamace', plat: plat };
+  }
   var r = rychlosti && rychlosti[plat];
   var dnu, zdroj;
   if (r && r.n >= 3) { dnu = r.median; zdroj = 'historie'; }
@@ -9808,7 +9842,7 @@ function saveBulkSell() {
         soldWhere: soldWhere,
         platforms: []
       });
-      markSentAt(items[idx2], waitState);
+      oznacCasyStavu(items[idx2], waitState);
     }
   });
 

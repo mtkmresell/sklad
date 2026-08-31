@@ -435,6 +435,12 @@ const PAYOUT_OPAKOVANI = 7;
 const VYCHOZI_PAYOUT_SKUPIN = { platforms: 7, eshopy: 21, local: 3 };
 const VYCHOZI_PAYOUT = 14;
 
+/* U reklamace neplatí lhůta platformy — peníze řeší dopravce a běží
+   třicetidenní reklamační lhůta od chvíle, kdy se to jako reklamace
+   označilo. Musí to být stejné číslo jako REKLAMACNI_LHUTA v aplikaci,
+   jinak by mail upomínal jindy, než co ukazuje odhad na obrazovce. */
+const REKLAMACNI_LHUTA = 30;
+
 /* Zásilka bývá doručená za dva tři dny. Když je po pěti pořád na cestě,
    je čas se po ní podívat — u ztraceného balíku se reklamuje snáz, dokud
    je čerstvý. Pak jednou týdně, dokud se to nevyřeší. */
@@ -591,13 +597,18 @@ function payoutBlok(polozky, dnes, skupiny) {
     const prodano = denZData(it.saleDate);
     if (prodano === null) continue;
 
-    const ceka = Math.round((dnes - prodano) / DEN);
-    const ocekavano = ocekavanyPayout(it.soldWhere, skupiny);
+    /* Reklamace se počítá od svého vlastního data a s vlastní lhůtou —
+       za zdržení nemůže platforma, ale dopravce. */
+    const vReklamaci = it.waitState === 'reklamace';
+    const odKdy = vReklamaci && denZData(it.reklamaceOd) !== null
+      ? denZData(it.reklamaceOd) : prodano;
+    const ceka = Math.round((dnes - odKdy) / DEN);
+    const ocekavano = vReklamaci ? REKLAMACNI_LHUTA : ocekavanyPayout(it.soldWhere, skupiny);
     // Poprvé v den, kdy měly peníze dorazit, pak každý týden dál
     if (ceka < ocekavano) continue;
     if ((ceka - ocekavano) % PAYOUT_OPAKOVANI !== 0) continue;
 
-    nalezy.push({ ceka, ocekavano, po: ceka - ocekavano,
+    nalezy.push({ ceka, ocekavano, po: ceka - ocekavano, reklamace: vReklamaci,
       nazev: it.name || it.id, kde: it.soldWhere || '', prodano });
   }
   if (!nalezy.length) return null;
@@ -611,10 +622,10 @@ function payoutBlok(polozky, dnes, skupiny) {
     polozky: nalezy.map(n => ({
       hlavni: n.nazev,
       vedlejsi: [
-        n.kde || 'bez místa prodeje',
+        (n.kde || 'bez místa prodeje') + (n.reklamace ? ' · reklamace' : ''),
         'prodáno ' + formatDne(n.prodano),
-        n.po === 0 ? 'lhůta ' + dnu(n.ocekavano) + ' vyprší dnes'
-          : 'o ' + dnu(n.po) + ' přes lhůtu ' + n.ocekavano + ' dní',
+        n.po === 0 ? (n.reklamace ? 'reklamační lhůta ' : 'lhůta ') + dnu(n.ocekavano) + ' vyprší dnes'
+          : 'o ' + dnu(n.po) + ' přes ' + (n.reklamace ? 'reklamační ' : '') + 'lhůtu ' + n.ocekavano + ' dní',
       ].join(' · '),
       // Co je po lhůtě, ať jde vidět dřív než se to přečte
       pozor: n.po > 0,
