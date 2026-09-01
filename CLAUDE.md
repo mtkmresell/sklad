@@ -316,6 +316,12 @@ uložený zisk má přednost před dopočítaným, ať report ukazuje totéž co
 obrazovka. Vzorec je tím pádem na dvou místech — tady a v `_itemProfit()`.
 CRM se čte **jen prvního** a jdou z něj jen počty, nikdy jména.
 
+**Inzerát na Bazoši žije dva měsíce** (`BAZOS_EXPIRY_MS` v aplikaci,
+`BAZOS_PLATNOST` v konektoru — obojí 60 dní). Bazoš to má napsané
+v mailu, který posílá při smazání: „po 2 měsíčním uložení". Ta dvě
+čísla porovnává `test-upozorneni.js`; aplikace je drží v milisekundách
+a konektor ve dnech, takže samo by se to neshodlo.
+
 Tři věci se hlásí schválně jinak, než by se čekalo. **Inzerát až v den
 vypršení**, ne dopředu — Bazoš ho archivuje a nahodí se jedním kliknutím,
 takže předem se nedá dělat nic než ho smazat a vystavit znovu. **Pondělní

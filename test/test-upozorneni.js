@@ -726,6 +726,19 @@ function prodanoPred(ted, dnu) {
   const lhutaWrk = /REKLAMACNI_LHUTA\s*=\s*(\d+)/.exec(wrk);
   ok('aplikace reklamační lhůtu má', !!lhutaApp);
   shoda('a konektor má tutéž', lhutaWrk && lhutaWrk[1], lhutaApp && lhutaApp[1]);
+  /* Platnost inzerátu na Bazoši je taky na dvou místech. Aplikace ji
+     drží v milisekundách, konektor ve dnech — jinak by se to porovnalo
+     samo a nikoho by nenapadlo, že tu hlídač chybí. Bazoš inzerát maže
+     po dvou měsících; kdyby se čísla rozešla, aplikace by odškrtávala
+     jindy, než by mail upozorňoval. */
+  const bazosApp = /BAZOS_EXPIRY_MS\s*=\s*(\d+)\s*\*\s*24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/.exec(app);
+  const bazosWrk = /BAZOS_PLATNOST\s*=\s*(\d+)/.exec(wrk);
+  ok('aplikace platnost inzerátu má', !!bazosApp, bazosApp && bazosApp[0]);
+  ok('konektor taky', !!bazosWrk, bazosWrk && bazosWrk[0]);
+  shoda('a je to stejný počet dní', bazosWrk && bazosWrk[1], bazosApp && bazosApp[1]);
+  ok('dva měsíce, ne jeden — Bazoš maže po dvou',
+    bazosApp && +bazosApp[1] >= 55 && +bazosApp[1] <= 62, bazosApp && bazosApp[1]);
+
   ok('getPayoutDays v aplikaci pořád je', !!zalohaApp, teloFn && teloFn[0].slice(0, 80));
   shoda('i poslední záchrana sedí',
     zalohaWrk && zalohaWrk[1], zalohaApp && zalohaApp[1]);
