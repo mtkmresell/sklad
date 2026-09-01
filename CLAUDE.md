@@ -101,6 +101,16 @@ Jeden seznam, ze kterého se odvozuje mazání při odhlášení, stavba balíč
 **Nové nastavení přidej jen tam** — nikam jinam se nic dopisovat nemusí. Dřív se to
 psalo na tři místa a pětkrát se na jedno zapomnělo.
 
+`test-syncsettings.js` prohání **každou položku seznamu** cestou do cloudu a zpět —
+vzorky se vyrábějí ze seznamu, ne ručně, takže nově přidané nastavení je pokryté
+samo. Ruční seznam vzorků tuhle chybu jednou propustil.
+
+Hlavní dokument se zapisuje **celý** (`batch.set` bez merge), takže `null` v poli
+znamená smazáno pro všechna zařízení. Zařízení, které `keep` nastavení nemá, proto
+zapíše zpátky to, co naposledy vidělo v cloudu (`_cloudNastaveni`) — bez toho by
+mobil bez daného nastavení umazal, co zapsal počítač. Při odhlášení se ta paměť
+maže, jinak by se vylila do dokumentu cizího účtu.
+
 ### Instagram
 
 Na Instagramu se příspěvek nikdy nemaže. Když se kus prodá a za rok naskladní
@@ -180,10 +190,14 @@ toho dne. „kurz ČNB" se napíše **jen když ten uložený opravdu z ČNB je*
 (`payoutRateCnb`); u starších prodejů pochází z kurzovního API a tvrdit
 u nich ČNB by účetní odhalil jedním kliknutím.
 
-`fetchRateForDate()` bere ČNB jako první zdroj, kurzovní API zůstala
+`fetchRateForDate()` (kurz ke dni nákupu/payoutu) i `fetchCnbRate()`
+(dnešní kurz pro odhady) berou ČNB jako první zdroj, kurzovní API zůstala
 jako záloha. **Dosažitelnost ČNB z prohlížeče nebyla ověřena** — z vývojového
 prostředí je cnb.cz blokovaná. Kdyby ji CORS odmítl, spadne se na zálohu
-a všechno funguje jako dřív, jen se nikde nenapíše ČNB.
+a všechno funguje jako dřív, jen se nikde nenapíše ČNB. V *Nastavení*
+je u kurzu vidět, odkud přišel — dokud tam stálo jen číslo, nikdo si
+nevšiml, že `fetchCnbRate()` má ČNB jen ve jméně a ve skutečnosti ji
+nikdy nevolala.
 
 Kam poslat peníze, se bere z `ÚDAJE U ZPŮSOBU VYPLACENÍ` — u eurového
 prodeje IBAN, jinak číslo účtu, a když ten správný chybí, ten druhý.

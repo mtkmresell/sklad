@@ -1961,11 +1961,22 @@ function syncLocalOnlyKeys() { return [SK, SK + '_savedAt', SK + '_dirty', SK_SN
 // Doplní do cloudového balíčku všechna nastavení ze seznamu.
 // Chybějící klíč pošle jako null — aby čerstvé zařízení nepřepsalo cloud
 // výchozími hodnotami jen tím, že si je ještě nikdy neuložilo.
+/* Poslední nastavení viděná v cloudu. Slouží jako záchrana proti tomu,
+   aby zařízení, které nějaké nastavení nemá, přepsalo cloud prázdnem —
+   hlavní dokument se zapisuje celý, takže null v poli znamená smazáno
+   pro všechna ostatní zařízení. Týká se jen `keep` nastavení; u nich
+   je „nemám to" skoro vždycky nevědomost, ne úmyslné vymazání. */
+var _cloudNastaveni = {};
+
 function syncSettingsToPayload(out) {
   syncSettings().forEach(function(s) {
     var raw = null;
     try { raw = localStorage.getItem(s.key); } catch(e) {}
-    if (raw === null || raw === '') { out[s.field] = null; return; }
+    if (raw === null || raw === '') {
+      var znameZCloudu = s.keep ? _cloudNastaveni[s.field] : undefined;
+      out[s.field] = (znameZCloudu === undefined || znameZCloudu === null) ? null : znameZCloudu;
+      return;
+    }
     if (s.shape === 'text') { out[s.field] = raw; return; }
     if (s.shape === 'number') { var n = parseFloat(raw); out[s.field] = isFinite(n) ? n : null; return; }
     try { out[s.field] = JSON.parse(raw); } catch(e) { out[s.field] = null; }
@@ -1984,6 +1995,8 @@ function syncSettingsToPayload(out) {
 function applySyncSettings(data) {
   syncSettings().forEach(function(s) {
     var v = data[s.field];
+    // Zapamatuj si, co v cloudu je — i to, co si tohle zařízení neuloží
+    if (s.keep && v !== undefined && v !== null) _cloudNastaveni[s.field] = v;
     if (v === undefined || v === null) return;
     var ulozit;
     if (s.shape === 'number') {
@@ -8274,8 +8287,21 @@ function openMissingListings() {
 let eurRate = parseFloat(localStorage.getItem('eurRate')) || 25.0;
 let autoRate = localStorage.getItem('autoRate') !== 'false'; // default ON
 
+/* Dnešní kurz pro odhady u nezaplacených položek.
+
+   Jméno téhle funkce dlouho lhalo: jmenovala se fetchCnbRate, ale ČNB
+   se v ní nikdy nevyskytla — brala kurz z kurzovních API. Teď se ČNB
+   zkouší první a to, odkud kurz nakonec je, se ukáže v nastavení.
+   Na uložené kurzy u konkrétních nákupů a payoutů tohle nesahá. */
 async function fetchCnbRate(manual=false) {
   var apis = [
+    async function() {
+      var r = await fetch(cnbKurzUrl(new Date().toISOString().slice(0, 10)));
+      if (!r.ok) throw new Error('err');
+      var kurz = parseCnbKurz(await r.text());
+      if (kurz) { _kurzZdroj = 'cnb'; return kurz; }
+      throw new Error('no rate');
+    },
     async function() {
       var r = await fetch('https://open.er-api.com/v6/latest/EUR');
       if (!r.ok) throw new Error('err');
@@ -8291,6 +8317,7 @@ async function fetchCnbRate(manual=false) {
       throw new Error('no rate');
     }
   ];
+  _kurzZdroj = '';
   for (var i = 0; i < apis.length; i++) {
     try {
       var rate = await apis[i]();
@@ -8298,6 +8325,7 @@ async function fetchCnbRate(manual=false) {
         eurRate = rate;
         localStorage.setItem('eurRate', eurRate);
         localStorage.setItem('eurRateDate', Date.now());
+        localStorage.setItem('eurRateZdroj', _kurzZdroj === 'cnb' ? 'cnb' : 'api');
         renderStats();
         if (manual) updateRateInfoUI();
         return;
@@ -8316,7 +8344,11 @@ function updateRateInfoUI() {
   const infoEl = document.getElementById('eurRateInfo');
   const autoEl = document.getElementById('autoRateInfo');
   if (d) {
-    const txt = `Poslední aktualizace: ${d} — kurz: ${eurRate} Kč`;
+    /* Odkud kurz je, se ukazuje schválně: dokud tu stálo jen číslo,
+       nikdo si nevšiml, že ČNB v aplikaci nikdy nebyla. */
+    const zdroj = localStorage.getItem('eurRateZdroj') === 'cnb'
+      ? 'ČNB' : 'kurzovní API — ČNB se nepodařilo načíst';
+    const txt = `Poslední aktualizace: ${d} — kurz: ${eurRate} Kč (${zdroj})`;
     if (infoEl) infoEl.textContent = txt;
     if (autoEl) autoEl.textContent = txt;
   }
@@ -14909,6 +14941,9 @@ document.addEventListener('fb-auth', function(e) {
   // Zapomeň stav archivů i cache, ať se nepřenese mezi účty
   _archiveHashes = {}; _archiveCache = null; _cloudIncomplete = false; _photoHashes = {};
   _archivesBlocked = false; _itemCacheLoaded = false;
+  /* Zapamatovaná nastavení z cloudu taky — jinak by se po přehlášení
+     vylila do dokumentu cizího účtu. */
+  _cloudNastaveni = {};
 
   if (!(e.detail && e.detail.user)) {
     clearSkladLocalStorage();

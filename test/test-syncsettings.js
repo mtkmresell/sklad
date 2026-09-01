@@ -101,8 +101,68 @@ const SEED = [{ id: 'i1', name: 'Bota', category: 'sneakers', buyPrice: 1000, bu
     JSON.stringify(kolecko.payload));
 
   // ══════════════════════════════════════════════════════════════
+  /* Tohle je ta důležitá kontrola. Vzorky výš jsou psané ručně, takže
+     nově přidané nastavení by v nich chybělo a nikdo by si nevšiml, že
+     se nesynchronizuje — přesně tak se to už několikrát stalo. Tady se
+     vzorek vyrobí pro KAŽDOU položku seznamu automaticky. */
+  section('3b) Každé nastavení ze seznamu projde cestou tam a zpět');
+  const vsechna = await page.evaluate(() => {
+    clearSkladLocalStorage();
+    const vzorek = (s) => s.shape === 'number' ? '4242'
+      : s.shape === 'text' ? JSON.stringify({ _test: s.field })
+      : JSON.stringify([s.field + '_hodnota']);
+    const pred = {};
+    syncSettings().forEach(s => { pred[s.key] = vzorek(s); localStorage.setItem(s.key, pred[s.key]); });
+    const payload = _buildCloudPayload();
+    // Co se do balíčku vůbec nedostalo
+    const chybiVBalicku = syncSettings().filter(s => payload[s.field] === undefined || payload[s.field] === null)
+      .map(s => s.field);
+    clearSkladLocalStorage();
+    applySyncSettings(JSON.parse(JSON.stringify(payload)));
+    /* Tabulky velikostí se do balíčku dopisují z paměti, ne
+       z localStorage — obecný vzorek jim proto neprojde. */
+    const zPameti = ['steTables', 'steBrandOrder'];
+    const nevratilo = syncSettings().filter(s => zPameti.indexOf(s.field) === -1).filter(s => {
+      const po = localStorage.getItem(s.key);
+      if (po === null) return true;
+      try { return JSON.stringify(JSON.parse(po)) !== JSON.stringify(JSON.parse(pred[s.key])); }
+      catch (e) { return po !== pred[s.key]; }
+    }).map(s => s.field);
+    return { chybiVBalicku, nevratilo, pocet: syncSettings().length };
+  });
+  check('každé nastavení se dostane do balíčku', !vsechna.chybiVBalicku.length,
+    'nedostalo se: ' + JSON.stringify(vsechna.chybiVBalicku));
+  check('a vrátí se z něj beze změny', !vsechna.nevratilo.length,
+    'nevrátilo se: ' + JSON.stringify(vsechna.nevratilo));
+  check('kontroluje se celý seznam', vsechna.pocet >= 14, String(vsechna.pocet));
+
+  /* Zařízení, které nastavení nemá, ho nesmí smazat ostatním. Hlavní
+     dokument se zapisuje celý, takže null v poli = smazáno pro všechny. */
+  section('3c) Zařízení bez nastavení ho cloudu nesmaže');
+  const nesmaze = await page.evaluate(() => {
+    clearSkladLocalStorage();
+    // Z cloudu dorazí hodnota, kterou si tohle zařízení neuloží
+    applySyncSettings({ payoutDetail: { Revolut: { ucet: '123/0100' } },
+      paymentOpts: ['Fio'], igPosts: ['Jordan 4 Black Cat'] });
+    // A teď se odsud ukládá — nesmí to přijít o to, co v cloudu bylo
+    localStorage.removeItem('sklad_payout_detail_v1');
+    const payload = _buildCloudPayload();
+    return {
+      payoutDetail: payload.payoutDetail,
+      paymentOpts: payload.paymentOpts,
+    };
+  });
+  check('cizí hodnota se do balíčku vrátí, ne null',
+    !!nesmaze.payoutDetail && !!nesmaze.payoutDetail.Revolut,
+    JSON.stringify(nesmaze.payoutDetail));
+  check('platí to i pro ostatní nastavení',
+    Array.isArray(nesmaze.paymentOpts) && nesmaze.paymentOpts.indexOf('Fio') !== -1,
+    JSON.stringify(nesmaze.paymentOpts));
+
+  // ══════════════════════════════════════════════════════════════
   section('4) Čerstvé zařízení nepřepíše cloud prázdnem');
   const cerstve = await page.evaluate(() => {
+    _cloudNastaveni = {};                        // zařízení, které cloud ještě nevidělo
     clearSkladLocalStorage();                    // jako po odhlášení
     const prazdny = _buildCloudPayload();
     // Tabulky velikostí se dopisují z paměti, takže nulové nikdy nejsou
@@ -133,6 +193,16 @@ const SEED = [{ id: 'i1', name: 'Bota', category: 'sneakers', buyPrice: 1000, bu
   });
   check('nenastavené klíče jdou do cloudu jako null, ne jako výchozí hodnoty',
     !cerstve.chybi.length, 'nenulové: ' + JSON.stringify(cerstve.chybi));
+
+  /* Zapamatovaná nastavení z cloudu nesmí přežít odhlášení — po
+     přehlášení by se vylila do dokumentu cizího účtu. */
+  const poOdhlaseni = await page.evaluate(() => {
+    _cloudNastaveni = {};
+    applySyncSettings({ payoutDetail: { Revolut: { ucet: '123/0100' } } });
+    document.dispatchEvent(new CustomEvent('fb-auth', { detail: { user: null } }));
+    return JSON.stringify(_cloudNastaveni);
+  });
+  check('odhlášení zapomene i nastavení viděná v cloudu', poOdhlaseni === '{}', poOdhlaseni);
   check('prázdný cloud nepřepíše načtené hodnoty',
     cerstve.poNacteni.pay === 1 && cerstve.poNacteni.wish === 1 && cerstve.poNacteni.an === 2 && cerstve.poNacteni.ret === 1,
     JSON.stringify(cerstve.poNacteni));
