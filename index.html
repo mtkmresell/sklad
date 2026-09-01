@@ -8453,24 +8453,118 @@ async function fetchCnbRate(manual=false) {
 function updateRateInfoUI() {
   const ts = parseInt(localStorage.getItem('eurRateDate')||0);
   const d = ts ? new Date(ts).toLocaleString('cs') : null;
+  /* Jeden řádek, ne dva. Dřív se stejný text psal do eurRateInfo
+     i autoRateInfo a v automatickém režimu svítily oba pod sebou. */
   const infoEl = document.getElementById('eurRateInfo');
-  const autoEl = document.getElementById('autoRateInfo');
-  if (d) {
-    /* Odkud kurz je, se ukazuje schválně: dokud tu stálo jen číslo,
-       nikdo si nevšiml, že ČNB v aplikaci nikdy nebyla. */
-    const zdroj = localStorage.getItem('eurRateZdroj') === 'cnb'
-      ? 'ČNB' : 'kurzovní API — ČNB se nepodařilo načíst';
-    const txt = `Poslední aktualizace: ${d} — kurz: ${eurRate} Kč (${zdroj})`;
-    if (infoEl) infoEl.textContent = txt;
-    if (autoEl) autoEl.textContent = txt;
+  if (!infoEl) return;
+  const zdrojKod = localStorage.getItem('eurRateZdroj');
+  /* Odkud kurz je, se ukazuje schválně: dokud tu stálo jen číslo,
+     nikdo si nevšiml, že ČNB v aplikaci nikdy nebyla. */
+  const zdroj = zdrojKod === 'cnb' ? 'ČNB'
+    : zdrojKod === 'rucne' ? 'zadáno ručně'
+    : 'kurzovní API — ČNB se nepodařilo načíst';
+  infoEl.textContent = d
+    ? 'Poslední aktualizace: ' + d + ' — ' + eurRate + ' Kč (' + zdroj + ')'
+    : 'Kurz se zatím nestahoval.';
+  const velky = document.getElementById('kurzVelky');
+  if (velky) velky.textContent = eurRate + ' Kč';
+  const znacka = document.getElementById('kurzZdroj');
+  if (znacka) {
+    znacka.textContent = zdrojKod === 'cnb' ? 'ČNB' : zdrojKod === 'rucne' ? 'ručně' : 'kurzovní API';
+    znacka.style.color = zdrojKod === 'cnb' ? 'var(--accent)' : 'var(--muted)';
   }
 }
 
 function toggleCourseMode() {
-  const auto = document.getElementById('autoCourseChk').checked;
-  document.getElementById('manualRateWrap').style.display = auto ? 'none' : '';
-  document.getElementById('autoRateInfo').style.display = auto ? '' : 'none';
-  document.getElementById('btnRefreshRate').style.display = auto ? '' : 'none';
+  const chk = document.getElementById('autoCourseChk');
+  if (!chk) return;
+  const auto = chk.checked;
+  const rucni = document.getElementById('manualRateWrap');
+  const btn = document.getElementById('btnRefreshRate');
+  if (rucni) rucni.style.display = auto ? 'none' : '';
+  if (btn) btn.style.display = auto ? '' : 'none';
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   KURZY MĚN
+
+   Všechno kolem kurzu na jednom místě: dnešní kurz a odkud je, cesta
+   k ČNB přes konektor a přepočet uložených kurzů u hotových prodejů.
+   Dřív to bylo rozsypané mezi nastavením a tlačítkem v Nástrojích
+   a nebylo poznat, že spolu ty věci souvisí.
+══════════════════════════════════════════════════════════════════════ */
+function openKurzyMen() {
+  var ov = document.createElement('div');
+  ov.id = 'kurzyOverlay';
+  ov.className = 'mo open';
+  ov.style.zIndex = '350';
+  ov.innerHTML = '<div class="modal" style="max-width:520px;">'
+    + '<div class="mh"><div class="mt2">Kurzy měn</div>'
+    + '<button class="xb" id="kurzyClose">✕</button></div>'
+
+    // ── Kolik je dneska
+    + '<div class="fs"><div class="fs-title">Dnešní kurz</div>'
+    + '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">'
+    + '<span style="font-size:13px;color:var(--muted);">1 € =</span>'
+    + '<span id="kurzVelky" style="font-family:Syne,sans-serif;font-size:24px;font-weight:800;">—</span>'
+    + '<span id="kurzZdroj" style="font-family:\'DM Mono\',monospace;font-size:11px;'
+    + 'border:1px solid var(--border);border-radius:5px;padding:2px 8px;color:var(--muted);"></span>'
+    + '</div>'
+    + '<div id="eurRateInfo" style="font-size:11px;color:var(--muted2);margin-top:8px;font-family:\'DM Mono\',monospace;line-height:1.6;"></div>'
+    + '<div style="margin-top:12px;">'
+    + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">'
+    + '<input type="checkbox" id="autoCourseChk" onchange="toggleCourseMode()" style="width:16px;height:16px;accent-color:var(--accent);">'
+    + 'Stahovat kurz automaticky</label></div>'
+    + '<div id="manualRateWrap" style="margin-top:10px;">'
+    + '<div style="display:flex;align-items:center;gap:10px;">'
+    + '<span style="font-size:13px;color:var(--muted);white-space:nowrap;">1 € =</span>'
+    + '<input type="number" id="eurRateInput" step="0.01" placeholder="25.00" class="brana-inp" style="width:120px;font-weight:700;">'
+    + '<span style="font-size:13px;color:var(--muted);">Kč</span></div></div>'
+    + '<button class="btn-sec" id="btnRefreshRate" data-action="fetchrate" style="margin-top:12px;padding:8px 14px;font-size:12px;">Aktualizovat kurz</button>'
+    + '</div>'
+
+    // ── Odkud se kurz bere
+    + '<div class="fs"><div class="fs-title">Zdroj kurzu ČNB</div>'
+    + '<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:10px;">'
+    + 'V daňové evidenci je závazný denní kurz ČNB. Prohlížeč si ho ale sám stáhnout '
+    + 'nesmí, stahuje ho konektor. Vlož jeho adresu — token sem nepatří, ten zůstává '
+    + 'v Cloudflare.</div>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+    + '<input type="text" id="konektorUrlInput" class="brana-inp" style="flex:1;min-width:200px;" '
+    + 'placeholder="https://sklad.tvuj-ucet.workers.dev">'
+    + '<button class="btn-sec" data-action="zkusitkonektor" style="flex:none;padding:8px 14px;font-size:12px;white-space:nowrap;">Vyzkoušet</button>'
+    + '</div>'
+    + '<div id="konektorStav" style="font-size:11px;color:var(--muted2);margin-top:8px;font-family:\'DM Mono\',monospace;line-height:1.6;"></div>'
+    + '</div>'
+
+    // ── Uložené kurzy u hotových prodejů
+    + '<div class="fs"><div class="fs-title">Uložené kurzy u položek</div>'
+    + '<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:10px;">'
+    + 'Každý nákup i payout v eurech má uložený kurz ke svému dni a zpětně se nepřepočítává. '
+    + 'Tímhle je přepočítáš na kurzy ČNB — hodí se u prodejů z doby, kdy kurzy chodily odjinud.</div>'
+    + '<button class="btn-sec" id="btnRecalcRates" onclick="recalcAllRates()" style="padding:8px 14px;font-size:12px;">Přepočítat kurzy ČNB</button>'
+    + '<div id="recalcRatesStatus" style="display:none;font-size:11px;color:var(--muted);margin-top:10px;font-family:\'DM Mono\',monospace;line-height:1.6;"></div>'
+    + '</div>'
+
+    + '<div style="display:flex;gap:8px;margin-top:4px;">'
+    + '<button class="btn-sec" id="kurzyBack" style="flex:1;">Zpět</button>'
+    + '<button class="btn-pri" data-action="savesettings" style="flex:2;">Uložit</button>'
+    + '</div></div>';
+
+  document.body.appendChild(ov);
+
+  document.getElementById('autoCourseChk').checked = autoRate;
+  document.getElementById('eurRateInput').value = eurRate;
+  document.getElementById('konektorUrlInput').value = getKonektorUrl();
+  document.getElementById('konektorStav').textContent = getKonektorUrl()
+    ? '' : 'Nenastaveno — kurzy chodí z kurzovního API, ne z ČNB.';
+  toggleCourseMode();
+  updateRateInfoUI();
+
+  function zpet() { ov.remove(); openSettings(); }
+  document.getElementById('kurzyClose').addEventListener('click', zpet);
+  document.getElementById('kurzyBack').addEventListener('click', zpet);
+  ov.addEventListener('click', function(e) { if (e.target === ov) zpet(); });
 }
 
 // ── WISHLIST ──
@@ -9249,35 +9343,33 @@ function openGlobalSearch() {
 }
 
 function openSettings() {
-  document.getElementById('autoCourseChk').checked = autoRate;
-  document.getElementById('eurRateInput').value = eurRate;
-  var _ku = document.getElementById('konektorUrlInput');
-  if (_ku) _ku.value = getKonektorUrl();
-  var _ks = document.getElementById('konektorStav');
-  if (_ks) _ks.textContent = getKonektorUrl() ? '' : 'Nenastaveno — kurzy chodí z kurzovního API, ne z ČNB.';
-  document.getElementById('manualRateWrap').style.display = autoRate ? 'none' : '';
-  document.getElementById('autoRateInfo').style.display = autoRate ? '' : 'none';
-  document.getElementById('btnRefreshRate').style.display = autoRate ? '' : 'none';
-  updateRateInfoUI();
+  // Kurzy mají vlastní okno — viz openKurzyMen()
   document.getElementById('moSettings').classList.add('open');
   renderSnapshotUI();
 }
 
+// Uložení nastavení kurzů z okna Kurzy měn
 function saveSettings() {
-  autoRate = document.getElementById('autoCourseChk').checked;
-  localStorage.setItem('autoRate', autoRate);
+  var chk = document.getElementById('autoCourseChk');
+  if (chk) {
+    autoRate = chk.checked;
+    localStorage.setItem('autoRate', autoRate);
+  }
   if (!autoRate) {
-    const v = parseFloat(document.getElementById('eurRateInput').value);
+    const v = parseFloat((document.getElementById('eurRateInput') || {}).value);
     if (v && v > 0) {
       eurRate = v;
       localStorage.setItem('eurRate', v);
       localStorage.setItem('eurRateDate', Date.now());
+      localStorage.setItem('eurRateZdroj', 'rucne');
     }
   }
   var _ku = document.getElementById('konektorUrlInput');
   if (_ku) saveKonektorUrl(_ku.value);
-  cm('moSettings');
+  var ov = document.getElementById('kurzyOverlay');
+  if (ov) ov.remove();
   renderStats();
+  showToast('Nastavení kurzů uloženo.');
 }
 
 /* Zkouška spojení s konektorem. Bez ní se dá zjistit jedině tím, že
@@ -18141,47 +18233,6 @@ rebuildBrandTables();
     </div>
   </div>
 
-  <!-- Kurz EUR/CZK -->
-  <div class="fs">
-    <div class="fs-title">Kurz EUR/CZK</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-      <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;">
-        <input type="checkbox" id="autoCourseChk" onchange="toggleCourseMode()" style="width:16px;height:16px;accent-color:var(--accent);">
-        Automatický kurz ČNB
-      </label>
-    </div>
-    <div id="autoRateInfo" style="font-size:12px;color:var(--muted);margin-bottom:12px;font-family:monospace;display:none;"></div>
-    <div id="manualRateWrap">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Ručně nastavený kurz:</div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-size:13px;color:var(--muted);white-space:nowrap;">1 € =</span>
-        <input type="number" id="eurRateInput" step="0.01" placeholder="25.00" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:15px;padding:8px 10px;outline:none;width:110px;font-weight:700;">
-        <span style="font-size:13px;color:var(--muted);">Kč</span>
-      </div>
-    </div>
-    <div style="font-size:11px;color:var(--muted2);margin-top:10px;font-family:monospace;" id="eurRateInfo"></div>
-
-    <!-- Cesta ke kurzu ČNB. Prohlížeč na cnb.cz nedosáhne (CORS),
-         musí to jít přes server konektoru. -->
-    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
-      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px;">
-        Kurz ČNB si prohlížeč sám stáhnout nesmí, stahuje ho konektor.
-        Vlož jeho adresu — token sem nepatří, ten zůstává v Cloudflare.
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input type="text" id="konektorUrlInput" placeholder="https://sklad.tvuj-ucet.workers.dev"
-          style="flex:1;min-width:220px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;">
-        <button class="btn-sec" data-action="zkusitkonektor" style="flex:none;padding:8px 14px;font-size:12px;white-space:nowrap;">Vyzkoušet</button>
-      </div>
-      <div id="konektorStav" style="font-size:11px;color:var(--muted2);margin-top:8px;font-family:'DM Mono',monospace;line-height:1.6;"></div>
-    </div>
-
-    <div style="display:flex;gap:8px;margin-top:14px;">
-      <button class="btn-sec" id="btnRefreshRate" data-action="fetchrate" style="display:none;">Aktualizovat kurz</button>
-      <button class="btn-pri" data-action="savesettings">Uložit</button>
-    </div>
-  </div>
-
   <!-- Nástroje -->
   <div class="fs" style="margin-top:4px;">
     <div class="fs-title">Nástroje</div>
@@ -18192,12 +18243,11 @@ rebuildBrandTables();
       <button class="btn-sec" data-action="openexport" onclick="cm('moSettings')">Export</button>
       <button class="btn-sec" onclick="openDropdownsEditor()">Dropdowny</button>
       <button class="btn-sec" onclick="cm('moSettings');openRetailersMgr()">Retaileři &amp; EU limit</button>
-      <button class="btn-sec" id="btnRecalcRates" onclick="recalcAllRates()">Přepočítat kurzy ČNB</button>
+      <button class="btn-sec" onclick="cm('moSettings');openKurzyMen()">Kurzy měn</button>
       <button class="btn-sec" onclick="cm('moSettings');openItemCacheMgr()">Databáze našeptávače</button>
       <button class="btn-sec" onclick="cm('moSettings');openIgMgr()">Posty na Instagramu</button>
       <button class="btn-sec" onclick="cm('moSettings');openSellerSettings()">Údaje pro doklad</button>
     </div>
-    <div id="recalcRatesStatus" style="display:none;font-size:11px;color:var(--muted);margin-top:8px;font-family:monospace;"></div>
   </div>
 
   <!-- Cloud Sync -->

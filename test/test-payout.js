@@ -277,6 +277,156 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
   check('a bere se jako ČNB', zKonektoru.zdroj === 'cnb', zKonektoru.zdroj);
   check('pamatuje se, že byl z ČNB', zKonektoru.zapamatovano === '1', String(zKonektoru.zapamatovano));
 
+  // ══════════════════════════════════════════════════════════════
+  /* Všechno kolem kurzu je v jednom okně. Dřív to bylo rozsypané mezi
+     nastavením a tlačítkem v Nástrojích a nebylo poznat, že to spolu
+     souvisí. */
+  section('9) Okno Kurzy měn');
+  const kurzyOkno = await page.evaluate(async () => {
+    localStorage.setItem('eurRate', '24.16');
+    localStorage.setItem('eurRateDate', String(Date.now()));
+    localStorage.setItem('eurRateZdroj', 'cnb');
+    localStorage.setItem('autoRate', 'true');
+    eurRate = 24.16; autoRate = true;
+    saveKonektorUrl('https://sklad.ucet.workers.dev');
+    openKurzyMen();
+    await new Promise(r => setTimeout(r, 150));
+    const ov = document.getElementById('kurzyOverlay');
+    if (!ov) return { chyba: 'okno se neotevřelo' };
+    const je = (id) => !!document.getElementById(id);
+    // Text „Poslední aktualizace" smí být na jednom místě, ne na dvou
+    const radky = (ov.textContent.match(/Poslední aktualizace/g) || []).length;
+    return {
+      maVelkyKurz: (document.getElementById('kurzVelky') || {}).textContent,
+      maZnackuZdroje: (document.getElementById('kurzZdroj') || {}).textContent,
+      radkyAktualizace: radky,
+      adresaVyplnena: (document.getElementById('konektorUrlInput') || {}).value,
+      prepinac: je('autoCourseChk'), rucniPole: je('eurRateInput'),
+      aktualizovat: je('btnRefreshRate'), prepocitat: je('btnRecalcRates'),
+      vyzkouset: !!ov.querySelector('[data-action="zkusitkonektor"]'),
+      // V automatickém režimu se ruční pole schovává
+      rucniSkryte: getComputedStyle(document.getElementById('manualRateWrap')).display === 'none',
+    };
+  });
+  check('okno se otevřelo', !kurzyOkno.chyba, kurzyOkno.chyba || '');
+  check('ukazuje dnešní kurz', kurzyOkno.maVelkyKurz === '24.16 Kč', kurzyOkno.maVelkyKurz);
+  check('a odkud je', kurzyOkno.maZnackuZdroje === 'ČNB', kurzyOkno.maZnackuZdroje);
+  check('„Poslední aktualizace" je jen jednou', kurzyOkno.radkyAktualizace === 1,
+    kurzyOkno.radkyAktualizace + '× — dřív svítila dvakrát pod sebou');
+  check('adresa konektoru je předvyplněná',
+    kurzyOkno.adresaVyplnena === 'https://sklad.ucet.workers.dev', kurzyOkno.adresaVyplnena);
+  check('je tam přepínač i ruční kurz', kurzyOkno.prepinac && kurzyOkno.rucniPole);
+  check('tlačítko Vyzkoušet', kurzyOkno.vyzkouset);
+  check('tlačítko Aktualizovat kurz', kurzyOkno.aktualizovat);
+  check('i Přepočítat kurzy ČNB', kurzyOkno.prepocitat);
+  check('v automatickém režimu je ruční kurz schovaný', kurzyOkno.rucniSkryte);
+
+  // Ruční kurz se uloží a označí jako ruční
+  const rucni = await page.evaluate(async () => {
+    document.getElementById('autoCourseChk').checked = false;
+    toggleCourseMode();
+    const videt = getComputedStyle(document.getElementById('manualRateWrap')).display !== 'none';
+    document.getElementById('eurRateInput').value = '25.5';
+    saveSettings();
+    await new Promise(r => setTimeout(r, 100));
+    return {
+      videt,
+      kurz: eurRate,
+      zdroj: localStorage.getItem('eurRateZdroj'),
+      zavreno: !document.getElementById('kurzyOverlay'),
+    };
+  });
+  check('po vypnutí automatiky se ruční pole ukáže', rucni.videt);
+  check('ruční kurz se uloží', rucni.kurz === 25.5, String(rucni.kurz));
+  check('a označí se jako ruční', rucni.zdroj === 'rucne', String(rucni.zdroj));
+  check('Uložit okno zavře', rucni.zavreno);
+
+  // Zpět se vrací do nastavení, ne ven z aplikace
+  const zpet = await page.evaluate(async () => {
+    openKurzyMen();
+    await new Promise(r => setTimeout(r, 120));
+    document.getElementById('kurzyBack').click();
+    await new Promise(r => setTimeout(r, 120));
+    const r = {
+      kurzyZavrene: !document.getElementById('kurzyOverlay'),
+      nastaveniOtevrene: document.getElementById('moSettings').classList.contains('open'),
+    };
+    cm('moSettings');
+    return r;
+  });
+  check('Zpět zavře kurzy', zpet.kurzyZavrene);
+  check('a vrátí se do nastavení', zpet.nastaveniOtevrene, 'jinak by člověk vypadl ven');
+
+  // ══════════════════════════════════════════════════════════════
+  /* Celá cesta peněz najednou: kurz z konektoru → uložení u položky →
+     zisk → doklad. Jednotlivé kusy mají testy výš; tohle hlídá, že
+     do sebe zapadají. Nákup a payout mají schválně různé kurzy —
+     kdyby se použil jeden na obojí, zisk vyjde jinak. */
+  section('10) Celý řetěz od kurzu po doklad');
+  const retez = await page.evaluate(async () => {
+    const KURZY = { '2026-06-01': 24.80, '2026-08-12': 24.19 };
+    const puvodniFetch = window.fetch, puvodniOpen = window.open;
+    window.fetch = function (u) {
+      const m = /\/kurz\/(\d{4}-\d{2}-\d{2})/.exec(String(u));
+      if (m && KURZY[m[1]]) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ kurz: KURZY[m[1]], datum: m[1], zdroj: 'cnb' }) });
+      }
+      return Promise.reject(new Error('mimo ČNB: ' + u));
+    };
+    window.open = function () { return { document: { write: function (h) { window.__d = h; }, close: function () {} } }; };
+    saveKonektorUrl('https://sklad.ucet.workers.dev');
+    savePayoutDetails({ Revolut: { ucet: '123456789/0100', iban: 'CZ6508000000192000145399' } });
+    localStorage.setItem('sklad_seller_v1', JSON.stringify({ name: 'Michal Novák', ico: '12345678' }));
+    Object.keys(localStorage).filter(k => k.indexOf('eurRate_') === 0).forEach(k => localStorage.removeItem(k));
+
+    items = [{ id: 'e1', name: 'Jordan 4', category: 'sneakers', sku: 'CU1110', size: '43',
+      buyPrice: 400, buyCurrency: 'EUR', buyDate: '2026-06-01',
+      sellPriceOrig: 880, sellCurrency: 'EUR', sellPrice: 0, saleDate: '2026-08-05',
+      saleState: 'waiting', waitState: 'payout', soldWhere: 'Klekt', dateAdded: 3, tags: [] }];
+
+    // Vyplacení: kurz ke dni payoutu, nákup si drží kurz ke svému dni
+    const it = items[0];
+    const kurzP = await fetchRateForDate('2026-08-12');
+    const zdrojP = _kurzZdroj;
+    it.payoutRateEur = kurzP;
+    if (zdrojP === 'cnb') it.payoutRateCnb = 1;
+    it.buyRateEur = await fetchRateForDate('2026-06-01');
+    it.payoutDate = '2026-08-12'; it.saleState = 'paid'; it.waitState = 'completed';
+    it.payoutMethod = 'Revolut';
+    it.sellPrice = Math.round(880 * kurzP * 100) / 100;
+    it.profit = Math.round(it.sellPrice - 400 * it.buyRateEur);
+
+    window.__d = null; openSaleDocument('e1');
+    const html = window.__d || '';
+    const txt = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').replace(/[\u00a0\u202f]/g, ' ');
+    window.fetch = puvodniFetch; window.open = puvodniOpen;
+    saveKonektorUrl('');
+    return {
+      kurzP, zdrojP, kurzN: it.buyRateEur, prodejVKc: it.sellPrice, zisk: it.profit,
+      dokladKurz: /kurz ČNB 24,19 Kč\/€ k 12\.08\.2026/.test(txt),
+      dokladKc: /21 287,20 Kč/.test(txt),
+      dokladIban: /IBAN CZ6508000000192000145399/.test(txt),
+      dokladDatum: /Datum 12\.08\.2026/.test(txt),
+      dokladStrany: /Dodavatel/.test(txt) && /Odběratel/.test(txt),
+      bezPlatformy: !/Platforma/.test(txt),
+      odkazCnb: /href="https:\/\/www\.cnb\.cz[^"]*date=12\.08\.2026"/.test(html),
+    };
+  });
+  check('kurz payoutu přišel z ČNB přes konektor',
+    retez.kurzP === 24.19 && retez.zdrojP === 'cnb', JSON.stringify([retez.kurzP, retez.zdrojP]));
+  check('nákup si drží vlastní kurz ke svému dni', retez.kurzN === 24.8, String(retez.kurzN));
+  check('prodej v korunách sedí', retez.prodejVKc === 21287.2, String(retez.prodejVKc));
+  // 880 × 24,19 − 400 × 24,80 = 21 287,20 − 9 920 = 11 367,20
+  check('zisk počítá každou stranu svým kurzem', retez.zisk === 11367,
+    retez.zisk + ' — čekáno 11367 (880×24,19 − 400×24,80)');
+  check('doklad má datum vyplacení', retez.dokladDatum);
+  check('doklad má kurz ČNB i s datem', retez.dokladKurz);
+  check('doklad má přepočet na koruny', retez.dokladKc);
+  check('doklad odkazuje na kurzovní lístek ČNB', retez.odkazCnb);
+  check('doklad má IBAN, protože prodej byl v eurech', retez.dokladIban);
+  check('doklad má Dodavatele a Odběratele', retez.dokladStrany);
+  check('a místo prodeje na něm není', retez.bezPlatformy);
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');

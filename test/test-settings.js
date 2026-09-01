@@ -52,7 +52,7 @@ async function measure(browser, w, h) {
   check('desktop: mřížka má 4 sloupce', d.data.cols === 4, String(d.data.cols));
   check('desktop: nic nepřetéká z okna', !d.data.spill, '');
   check('popisky zůstaly beze změny',
-    JSON.stringify(d.data.labelsIntact) === JSON.stringify(['Správa platforem', 'Tabulky velikostí', 'Import', 'Export', 'Dropdowny', 'Retaileři & EU limit', 'Přepočítat kurzy ČNB', 'Databáze našeptávače', 'Posty na Instagramu', 'Údaje pro doklad']),
+    JSON.stringify(d.data.labelsIntact) === JSON.stringify(['Správa platforem', 'Tabulky velikostí', 'Import', 'Export', 'Dropdowny', 'Retaileři & EU limit', 'Kurzy měn', 'Databáze našeptávače', 'Posty na Instagramu', 'Údaje pro doklad']),
     JSON.stringify(d.data.labelsIntact));
   check('desktop: žádné JS chyby', d.errs.length === 0, JSON.stringify(d.errs.slice(0, 3)));
 

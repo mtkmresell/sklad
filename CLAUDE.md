@@ -206,7 +206,11 @@ toho dne. „kurz ČNB" se napíše **jen když ten uložený opravdu z ČNB je*
 (`payoutRateCnb`); u starších prodejů pochází z kurzovního API a tvrdit
 u nich ČNB by účetní odhalil jedním kliknutím.
 
-*Nastavení → Přepočítat kurzy ČNB* (`recalcAllRates`) přepočítá uložené
+Všechno kolem kurzu je v jednom okně: *Nastavení → Nástroje → Kurzy měn*
+(`KURZY MĚN`). Dnešní kurz i s tím, odkud je, adresa konektoru a přepočet
+uložených kurzů.
+
+*Přepočítat kurzy ČNB* (`recalcAllRates`) přepočítá uložené
 kurzy u všech eurových položek. Volá `fetchRateForDate(datum, true)` —
 vynucení přeskočí kurz zapamatovaný z doby, kdy se ČNB nevolala, jinak by
 se přepočet do ČNB nikdy nedostal a jen přepsal staré hodnoty týmiž.
@@ -261,6 +265,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
 | cashflow z payoutů | `CASHFLOW Z PAYOUTŮ` |
 | prodejní doklad | `PRODEJNÍ DOKLAD` |
+| kurzy měn (nástroj v nastavení) | `KURZY MĚN` |
 | údaje u způsobu vyplacení | `ÚDAJE U ZPŮSOBU VYPLACENÍ` |
 | typ dokladu u místa prodeje | `TYP DOKLADU U MÍSTA PRODEJE` |
 | analytika zákazníků a partnerů | `ANALYTIKA ZÁKAZNÍKŮ` |
