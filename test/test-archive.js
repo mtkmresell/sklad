@@ -34,6 +34,9 @@ const D = 'users/u1/sklad/';
   await page.goto('file://' + path.resolve(__dirname, '..', 'index.html'), { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3500);
   await page.evaluate(installFakeFirestore);
+  // Mechanika zápisu, ne souběh zařízení — ochranu „ještě jsem neviděl cloud“
+  // testuje test-zarizeni.js
+  await page.evaluate(() => window.__cloudUzVideny());
 
   const store = () => page.evaluate(() => Object.keys(window.__store).sort());
   const main = () => page.evaluate(() => window.__store['users/u1/sklad/data']);

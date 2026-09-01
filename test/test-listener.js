@@ -195,6 +195,7 @@ for (let i = 0; i < 4; i++) SEED.push({ id: 'p25_' + i, name: 'Prodáno 2025 ' +
     document.dispatchEvent(new CustomEvent('fb-auth', { detail: { user: window._fbUser } }));
   });
   await page.waitForTimeout(400);
+  await emit();          // po přihlášení musí dorazit snímek, jinak se ukládat nesmí
   const behemLetu = await page.evaluate(async () => {
     const S = 'sklad_v3';
     items = [{ id: 'z1', name: 'Boty', category: 'sneakers', buyPrice: 1000, buyCurrency: 'CZK',

@@ -21,6 +21,9 @@ const SEED = [{ id: 'i1', name: 'Bota', category: 'sneakers', buyPrice: 1000, bu
   await page.goto('file://' + path.resolve(__dirname, '..', 'index.html'), { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3500);
   await page.evaluate(installFakeFirestore);
+  // Mechanika zápisu, ne souběh zařízení — ochranu „ještě jsem neviděl cloud“
+  // testuje test-zarizeni.js
+  await page.evaluate(() => window.__cloudUzVideny());
 
   // ══════════════════════════════════════════════════════════════
   section('1) Seznam je úplný a konzistentní');
@@ -194,15 +197,6 @@ const SEED = [{ id: 'i1', name: 'Bota', category: 'sneakers', buyPrice: 1000, bu
   check('nenastavené klíče jdou do cloudu jako null, ne jako výchozí hodnoty',
     !cerstve.chybi.length, 'nenulové: ' + JSON.stringify(cerstve.chybi));
 
-  /* Zapamatovaná nastavení z cloudu nesmí přežít odhlášení — po
-     přehlášení by se vylila do dokumentu cizího účtu. */
-  const poOdhlaseni = await page.evaluate(() => {
-    _cloudNastaveni = {};
-    applySyncSettings({ payoutDetail: { Revolut: { ucet: '123/0100' } } });
-    document.dispatchEvent(new CustomEvent('fb-auth', { detail: { user: null } }));
-    return JSON.stringify(_cloudNastaveni);
-  });
-  check('odhlášení zapomene i nastavení viděná v cloudu', poOdhlaseni === '{}', poOdhlaseni);
   check('prázdný cloud nepřepíše načtené hodnoty',
     cerstve.poNacteni.pay === 1 && cerstve.poNacteni.wish === 1 && cerstve.poNacteni.an === 2 && cerstve.poNacteni.ret === 1,
     JSON.stringify(cerstve.poNacteni));
@@ -274,6 +268,21 @@ const SEED = [{ id: 'i1', name: 'Bota', category: 'sneakers', buyPrice: 1000, bu
   check('wishlist z cloudu naplní i proměnnou v paměti',
     wish.poNacteni.pocet === 1 && wish.poNacteni.jmeno === 'Z cloudu', JSON.stringify(wish));
   check('prázdný wishlist z cloudu ten lokální nesmaže', wish.poPrazdnem === 1, JSON.stringify(wish));
+
+  // ══════════════════════════════════════════════════════════════
+  /* Až úplně na konci — odhlášení mění stav celé stránky, takže by
+     dalším sekcím podtrhlo nohy.
+
+     Zapamatovaná nastavení z cloudu nesmí odhlášení přežít: po
+     přehlášení by se vylila do dokumentu cizího účtu. */
+  section('9) Odhlášení zapomene i nastavení viděná v cloudu');
+  const poOdhlaseni = await page.evaluate(() => {
+    _cloudNastaveni = {};
+    applySyncSettings({ payoutDetail: { Revolut: { ucet: '123/0100' } } });
+    document.dispatchEvent(new CustomEvent('fb-auth', { detail: { user: null } }));
+    return JSON.stringify(_cloudNastaveni);
+  });
+  check('paměť cloudových nastavení se vyprázdní', poOdhlaseni === '{}', poOdhlaseni);
 
   check('žádné JS chyby', errs.length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();

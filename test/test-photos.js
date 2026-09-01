@@ -27,6 +27,9 @@ SEED.push({ id: 'p1', name: 'Prodáno', category: 'sneakers', buyPrice: 3000, bu
   await page.goto('file://' + path.resolve(__dirname, '..', 'index.html'), { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3500);
   await page.evaluate(installFakeFirestore);
+  // Mechanika zápisu, ne souběh zařízení — ochranu „ještě jsem neviděl cloud“
+  // testuje test-zarizeni.js
+  await page.evaluate(() => window.__cloudUzVideny());
 
   // Vyrobí zmenšenou fotku přesně tak, jak to dělá aplikace
   const fotka = await page.evaluate(() => new Promise(res => {

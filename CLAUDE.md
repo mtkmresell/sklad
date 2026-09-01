@@ -94,6 +94,14 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
 - Když aplikace nevidí cloud celý (`_cloudIncomplete`), **odmítne do něj zapsat**.
   Bez toho zařízení se starými daty přepsalo novější.
 - Rozhodčí při konfliktu je jediné `savedAt` v hlavním dokumentu.
+- **Dokud nedorazil první snímek, do cloudu se nezapisuje** (`_fbCloudReady`).
+  Zařízení do té chvíle netuší, co v cloudu je, a zápis by ho přepsal stavem
+  klidně o den starším. Takhle mizely prodeje i nově přidaná místa prodeje:
+  ráno se zapnula aplikace na druhém zařízení, člověk něco udělal dřív, než
+  Firestore odpověděl, a včerejšek přepsal dnešek. Žádný výpadek sítě k tomu
+  nebyl potřeba. Změna z toho okna se neztratí — zůstává v `localStorage`
+  s `_dirty` a po doletu snímku se buď doposílá, nebo o ní rozhodne
+  posluchač. Hlídá to `test-zarizeni.js`.
 - **Po doletu zápisu uklízí jen ten, který obsahuje současný stav.** Zápis
   letí po síti klidně vteřiny a uživatel mezitím pracuje dál; co udělá
   potom, v odeslaném balíčku není. `fbSaveToCloud` si proto pamatuje
@@ -326,7 +334,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 49 souborů
+node test/run.js              # kontrola syntaxe + všech 50 souborů
 node test/run.js archive      # jen vybrané
 ```
 

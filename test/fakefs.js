@@ -87,6 +87,11 @@ module.exports = function installFakeFirestore() {
     var v = window.__store['users/u1/sklad/' + name];
     return v ? clone(v) : undefined;
   };
+  /* Označí zařízení za takové, které už první snímek z cloudu dostalo.
+     Bez toho aplikace zápis odmítne — viz test-zarizeni.js, kde se
+     tahle ochrana testuje. Testy, které zkoumají jen mechaniku zápisu
+     (dávky, archivy, fotky), si tím zkrátí cestu. */
+  window.__cloudUzVideny = function() { _fbCloudReady = true; };
   // Zapomeň stav archivů, ať každý test začíná jako čerstvé zařízení
   window.__resetDevice = function() {
     _archiveHashes = {}; _archiveCache = null; _cloudIncomplete = false;

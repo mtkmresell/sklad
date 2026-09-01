@@ -3075,12 +3075,27 @@ function _commitArchiveState(written) {
 }
 
 var _fbCloudReady = false; // true až po prvním onSnapshot
+var _cekaNaPrvniSnimek = false; // někdo chtěl uložit dřív, než cloud odpověděl
 var _fbSaveCallId = 0;
 var _lastOwnSavedAt = null; // savedAt string našeho posledního cloudu — ignorujeme vlastní snapshot
 function fbSaveToCloud() {
   if (jeUctetni()) return;   // pohled účetního je jen ke čtení
   if (!window._fbUser || !window._fbDb || !window._fbFns) {
     console.warn('fbSaveToCloud: chybí', {user:!!window._fbUser, db:!!window._fbDb, fns:!!window._fbFns});
+    return;
+  }
+  /* Dokud nedorazil první snímek, tohle zařízení netuší, co v cloudu je.
+     Zápis by ho přepsal stavem, který může být klidně o den starší —
+     a přesně tak mizely prodeje i nově přidaná místa prodeje: člověk
+     ráno zapnul aplikaci na druhém zařízení, něco udělal dřív, než
+     Firestore stihl odpovědět, a včerejší stav přepsal ten dnešní.
+
+     Data se neztratí: zůstávají v localStorage s příznakem neuložených
+     změn a po doletu snímku se buď dopošlou, nebo se o nich rozhodne
+     v posluchači. */
+  if (!_fbCloudReady) {
+    _cekaNaPrvniSnimek = true;
+    console.warn('fbSaveToCloud: první snímek z cloudu ještě nedorazil — ukládám jen lokálně');
     return;
   }
   // Dokud nevíme, co v cloudu doopravdy je, nesmíme ho přepsat neúplným stavem —
@@ -15077,6 +15092,13 @@ function _spustSkladPosluchace() {
           // Ve všech ostatních případech vyhrává cloud — se zálohou lokálních dat
           saveSnapshot('před sync');
           if (_applyCloudData(data, archiveItems, cloud.photos)) showToast('Data synchronizována z cloudu (' + items.length + ' položek).');
+        }
+        /* Co vzniklo, než snímek dorazil, se teď doposílá. Když cloud
+           vyhrál, _applyCloudData příznak neuložených změn smazalo
+           a posílat není co; jinak je to změna, o kterou by se přišlo. */
+        if (_cekaNaPrvniSnimek) {
+          _cekaNaPrvniSnimek = false;
+          if (localStorage.getItem(SK+'_dirty')) setTimeout(fbSaveToCloud, 300);
         }
         // Cloud je srovnaný — teprve teď je bezpečné spustit auto-expiraci Bazoše
         setTimeout(bazosExpireCheckSafe, 1500);
