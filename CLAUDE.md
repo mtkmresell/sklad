@@ -212,14 +212,20 @@ vynucení přeskočí kurz zapamatovaný z doby, kdy se ČNB nevolala, jinak by
 se přepočet do ČNB nikdy nedostal a jen přepsal staré hodnoty týmiž.
 Po dokončení se říká, kolik kurzů opravdu z ČNB je.
 
+**Prohlížeč na cnb.cz nedosáhne** — CORS. Není to domněnka: v provozu
+prošlo ze 111 kurzů z ČNB **nula**. Kurz proto stahuje konektor, který
+má na to adresu `/kurz/RRRR-MM-DD` **mimo token** (kurzy jsou veřejná
+data a token do prohlížeče nepatří). Adresa konektoru se vyplňuje
+v *Nastavení → Kurz EUR/CZK*, klíč `sklad_konektor_url_v1`; z vloženého
+textu se bere jen schéma a doména, takže omylem vložený token do dotazu
+neprojde. Dokud adresa chybí, kurzy chodí z kurzovních API jako dřív
+a nikde se netvrdí ČNB.
+
 `fetchRateForDate()` (kurz ke dni nákupu/payoutu) i `fetchCnbRate()`
-(dnešní kurz pro odhady) berou ČNB jako první zdroj, kurzovní API zůstala
-jako záloha. **Dosažitelnost ČNB z prohlížeče nebyla ověřena** — z vývojového
-prostředí je cnb.cz blokovaná. Kdyby ji CORS odmítl, spadne se na zálohu
-a všechno funguje jako dřív, jen se nikde nenapíše ČNB. V *Nastavení*
-je u kurzu vidět, odkud přišel — dokud tam stálo jen číslo, nikdo si
-nevšiml, že `fetchCnbRate()` má ČNB jen ve jméně a ve skutečnosti ji
-nikdy nevolala.
+(dnešní kurz pro odhady) zkouší v pořadí: konektor → ČNB napřímo →
+kurzovní API. V *Nastavení* je u kurzu vidět, odkud přišel — dokud tam
+stálo jen číslo, nikdo si nevšiml, že `fetchCnbRate()` má ČNB jen ve
+jméně a ve skutečnosti ji nikdy nevolala.
 
 Kam poslat peníze, se bere z `ÚDAJE U ZPŮSOBU VYPLACENÍ` — u eurového
 prodeje IBAN, jinak číslo účtu, a když ten správný chybí, ten druhý.

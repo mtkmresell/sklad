@@ -273,6 +273,63 @@ function pozadavek(cesta, telo, metoda = 'POST') {
       if (casti.length === 3) zkomolene.push(d.p + ': ' + adresa);
     }
   }
+  /* ── Kurz ČNB pro aplikaci ────────────────────────────────────────
+     Prohlížeč na cnb.cz nedosáhne (CORS) — ověřeno v provozu, ze 111
+     kurzů prošlo z ČNB 0. Tahle adresa je jediná cesta, jak se aplikace
+     ke kurzu dostane, a schválně stojí mimo token. */
+  const LISTEK = '09.03.2026 #48\n'
+    + 'země|měna|množství|kód|kurz\n'
+    + 'Austrálie|dolar|1|AUD|14,321\n'
+    + 'EMU|euro|1|EUR|24,190\n'
+    + 'Maďarsko|forint|100|HUF|6,158\n';
+  let volanaAdresa = null;
+  const puvodniFetch = globalThis.fetch;
+  globalThis.fetch = async (u) => {
+    volanaAdresa = String(u);
+    if (volanaAdresa.indexOf('cnb.cz') === -1) throw new Error('jinam se chodit nemá');
+    return { ok: true, status: 200, text: async () => LISTEK };
+  };
+
+  const kurzOdp = await worker.fetch(pozadavek('/kurz/2026-03-09', null, 'GET'), ENV);
+  const kurzTelo = await kurzOdp.json();
+  ok('kurz jde i bez tokenu', kurzOdp.status === 200);
+  shoda('vrátí kurz eura', kurzTelo.kurz, 24.19);
+  shoda('a datum, ke kterému platí', kurzTelo.datum, '2026-03-09');
+  shoda('označený jako z ČNB', kurzTelo.zdroj, 'cnb');
+  ok('chodí se na ČNB a nikam jinam', /cnb\.cz.*denni_kurz\.txt/.test(volanaAdresa));
+  ok('datum se předává v českém tvaru', /date=09\.03\.2026/.test(volanaAdresa));
+  ok('prohlížeč to smí zavolat', kurzOdp.headers.get('Access-Control-Allow-Origin') === '*');
+  ok('minulý den se smí držet dlouho', /max-age=2592000/.test(kurzOdp.headers.get('Cache-Control') || ''));
+
+  // Rozbité datum se nikam neposílá
+  volanaAdresa = null;
+  const spatneDatum = await worker.fetch(pozadavek('/kurz/9.3.2026', null, 'GET'), ENV);
+  ok('rozbité datum se odmítne (400)', spatneDatum.status === 400);
+  ok('a na ČNB se ani nešlo', volanaAdresa === null);
+
+  // Z adresy nejde udělat průchozí proxy na cokoli jiného
+  const jinam = await worker.fetch(pozadavek('/kurz/https://example.com', null, 'GET'), ENV);
+  ok('cizí adresa se nepřipojí (400)', jinam.status === 400);
+
+  // Lístek bez eura je chyba, ne tichá nula
+  globalThis.fetch = async () => ({ ok: true, status: 200, text: async () => 'země|měna|množství|kód|kurz\n' });
+  const bezEura = await worker.fetch(pozadavek('/kurz/2026-03-09', null, 'GET'), ENV);
+  ok('lístek bez eura je chyba (502)', bezEura.status === 502);
+
+  // Výpadek ČNB se hlásí, ne aby se tvářil jako kurz
+  globalThis.fetch = async () => { throw new Error('spadlo to'); };
+  const vypadek = await worker.fetch(pozadavek('/kurz', null, 'GET'), ENV);
+  ok('výpadek ČNB je chyba (502)', vypadek.status === 502);
+  ok('a hláška řekne proč', /spadlo to/.test((await vypadek.json()).chyba || ''));
+  globalThis.fetch = puvodniFetch;
+
+  // Stejná logika jako v aplikaci — ať se ty dvě kopie nerozejdou
+  const appZdroj = require('fs').readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
+  ok('parsování lístku je v aplikaci i v konektoru',
+    /function parseCnbKurz/.test(appZdroj) && /function parseCnbKurz/.test(dokumenty[0].obsah));
+  ok('obě dělí množstvím',
+    /kurz \/ mnozstvi/.test(appZdroj) && /kurz \/ mnozstvi/.test(dokumenty[0].obsah));
+
   shoda('nikde není adresa bez jména účtu', zkomolene, []);
 
   console.log(selhalo ? selhalo + ' z ' + (proslo + selhalo) + ' kontrol selhalo' : 'OK (' + proslo + ' kontrol)');

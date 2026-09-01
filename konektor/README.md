@@ -86,6 +86,42 @@ Než adresu vložíš do Clauda, otevři ji v prohlížeči — musí přijít
 Na claude.ai jdi do **Customize → Connectors → „+"**, zadej jméno
 (třeba „Sklad") a tuhle adresu. Pole pro OAuth nech prázdná.
 
+## Kurz ČNB pro aplikaci
+
+V daňové evidenci je závazný denní kurz ČNB. Aplikace si ho ale
+z prohlížeče stáhnout **nemůže** — cnb.cz nepovoluje volání z cizí
+stránky (CORS). Není to domněnka: v provozu se ze 111 kurzů podařilo
+z ČNB získat **nula**. Aplikace proto celou dobu počítala kurzy
+z kurzovních API, i když se funkce jmenovala „ČNB".
+
+Worker žádné CORS neřeší, protože běží na serveru. Má proto adresu
+
+```
+https://sklad.TVUJ-UCET.workers.dev/kurz            → dnešní kurz
+https://sklad.TVUJ-UCET.workers.dev/kurz/2026-08-12 → kurz k datu
+```
+
+která vrátí `{"kurz":24.19,"datum":"2026-08-12","zdroj":"cnb"}`.
+
+**Tahle adresa schválně nemá token.** Volá ji aplikace z prohlížeče,
+takže by token musel ležet v ní — a ten samý token pouští přes `/mcp`
+ke všem datům skladu. Kurzy ČNB jsou veřejná data, není co chránit.
+Adresa je zato úzká: bere jen datum ve tvaru `RRRR-MM-DD` a chodí
+výhradně na ČNB, takže z ní nejde udělat průchozí proxy na cokoli
+jiného. Hlídá to `test-konektor.js`.
+
+### Zapojení
+
+1. Nasaď aktuální `worker.js` (Cloudflare → Worker → *Edit code* → vlož → *Deploy*).
+2. V aplikaci **Nastavení → Kurz EUR/CZK** vlož adresu workeru
+   (stačí `https://sklad.TVUJ-UCET.workers.dev`, bez tokenu) a dej *Vyzkoušet*.
+   Musí se ukázat dnešní kurz ČNB.
+3. Pak **Nastavení → Přepočítat kurzy ČNB** — po dokončení se říká, kolik
+   kurzů opravdu z ČNB je. Chceš tam vidět „všechny kurzy z ČNB".
+
+Dokud adresa vyplněná není, kurzy chodí z kurzovních API jako dřív
+a nikde se netvrdí, že jsou z ČNB.
+
 ## Upozornění e-mailem
 
 Aplikace je stránka v prohlížeči a sama od sebe nikdy nic nespustí. Worker

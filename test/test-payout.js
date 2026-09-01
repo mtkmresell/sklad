@@ -226,6 +226,57 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
   check('kurz už jednou z ČNB se z cache brát smí', cache.cnbZCache === 24.19, String(cache.cnbZCache));
   check('a pozná se to na zdroji', cache.zdroj === 'cnb', cache.zdroj);
 
+  // ══════════════════════════════════════════════════════════════
+  /* Prohlížeč na cnb.cz nedosáhne (CORS) — ověřeno v provozu, ze 111
+     kurzů prošlo z ČNB 0. Kurz proto stahuje konektor. */
+  section('8) Cesta ke kurzu přes konektor');
+  const konektor = await page.evaluate(async () => {
+    const zkus = (adresa, datum) => { saveKonektorUrl(adresa); return konektorKurzUrl(datum); };
+    return {
+      nenastaveno: zkus('', '2026-08-12'),
+      bezneho: zkus('https://sklad.ucet.workers.dev', '2026-08-12'),
+      bezData: zkus('https://sklad.ucet.workers.dev', ''),
+      bezSchematu: zkus('sklad.ucet.workers.dev', '2026-08-12'),
+      // Kdyby někdo vložil celou adresu i s tokenem, do dotazu na kurz
+      // se token dostat nesmí — jde přes prohlížeč a je veřejný
+      sTokenem: zkus('https://sklad.ucet.workers.dev/tajnytoken123/mcp', '2026-08-12'),
+      nesmysl: zkus('rozhodně ne adresa', '2026-08-12'),
+    };
+  });
+  check('bez nastavení se adresa nevyrábí', konektor.nenastaveno === '', konektor.nenastaveno);
+  check('adresa míří na /kurz s datem',
+    konektor.bezneho === 'https://sklad.ucet.workers.dev/kurz/2026-08-12', konektor.bezneho);
+  check('bez data se ptá na dnešek',
+    konektor.bezData === 'https://sklad.ucet.workers.dev/kurz', konektor.bezData);
+  check('chybějící https se doplní',
+    konektor.bezSchematu === 'https://sklad.ucet.workers.dev/kurz/2026-08-12', konektor.bezSchematu);
+  check('token se do dotazu nedostane', !/tajnytoken/.test(konektor.sTokenem), konektor.sTokenem);
+  check('a zbude z toho jen doména',
+    konektor.sTokenem === 'https://sklad.ucet.workers.dev/kurz/2026-08-12', konektor.sTokenem);
+  check('nesmysl adresu nevyrobí', konektor.nesmysl === '', konektor.nesmysl);
+
+  // Kurz z konektoru se bere jako ČNB a označí položku
+  const zKonektoru = await page.evaluate(async () => {
+    saveKonektorUrl('https://sklad.ucet.workers.dev');
+    const puvodni = window.fetch;
+    window.fetch = function (u) {
+      if (String(u).indexOf('/kurz/') !== -1) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ kurz: 24.19, datum: '2026-03-09', zdroj: 'cnb' }) });
+      }
+      return Promise.reject(new Error('jinam se chodit nemá'));
+    };
+    localStorage.removeItem('eurRate_2026-03-09');
+    localStorage.removeItem('eurRate_2026-03-09_cnb');
+    const kurz = await fetchRateForDate('2026-03-09');
+    const zdroj = _kurzZdroj;
+    window.fetch = puvodni;
+    saveKonektorUrl('');
+    return { kurz, zdroj, zapamatovano: localStorage.getItem('eurRate_2026-03-09_cnb') };
+  });
+  check('kurz z konektoru se použije', zKonektoru.kurz === 24.19, String(zKonektoru.kurz));
+  check('a bere se jako ČNB', zKonektoru.zdroj === 'cnb', zKonektoru.zdroj);
+  check('pamatuje se, že byl z ČNB', zKonektoru.zapamatovano === '1', String(zKonektoru.zapamatovano));
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');

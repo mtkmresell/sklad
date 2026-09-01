@@ -47,6 +47,85 @@ const FS_BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJEKT + '/da
 // odpoví se mu jeho vlastní — novější revize spolu zpětně vycházejí.
 const VERZE_PROTOKOLU = '2026-07-28';
 
+/* ══════════════════════════════════════════════════════════════════════
+   KURZ ČNB PRO APLIKACI
+
+   V daňové evidenci je závazný denní kurz ČNB. Aplikace si ho ale
+   z prohlížeče stáhnout nemůže — cnb.cz nepovoluje volání z cizí
+   stránky (CORS), takže ze 111 pokusů prošlo 0. Server žádné CORS
+   neřeší, tak to ČNB stáhne tudy.
+
+   ── Proč tahle adresa nemá token ─────────────────────────────────────
+   Volá se z prohlížeče, takže by token musel ležet v aplikaci — a ten
+   samý token pouští ke *všem* datům skladu přes /mcp. Kurzy ČNB jsou
+   veřejná data, není co chránit. Adresa proto stojí mimo token a je
+   schválně úzká: bere jen datum a chodí výhradně na ČNB, takže z ní
+   nejde udělat průchozí proxy na cokoli jiného.
+══════════════════════════════════════════════════════════════════════ */
+const CNB_KURZ_URL = 'https://www.cnb.cz/cs/financni-trhy/devizovy-trh/kurzy-devizoveho-trhu/kurzy-devizoveho-trhu/denni_kurz.txt';
+
+/* Kurz eura z textu denního lístku ČNB.
+   Formát: hlavička, pak řádky „země|měna|množství|kód|kurz" s desetinnou
+   čárkou. Množství je u eura 1, ale u jiných měn i 100 — dělí se jím,
+   ať se z toho nedá vyrobit stonásobek. Stejná logika je v aplikaci
+   (parseCnbKurz); test-shoda.js obě porovnává. */
+function parseCnbKurz(text) {
+  const radky = String(text || '').split('\n');
+  for (const radek of radky) {
+    const c = radek.split('|');
+    if (c.length < 5) continue;
+    if (c[3].trim().toUpperCase() !== 'EUR') continue;
+    const mnozstvi = parseFloat(c[2].replace(',', '.'));
+    const kurz = parseFloat(c[4].replace(',', '.'));
+    if (!(kurz > 0) || !(mnozstvi > 0)) return null;
+    return Math.round((kurz / mnozstvi) * 1000) / 1000;
+  }
+  return null;
+}
+
+// Hlavičky pro prohlížeč. Hvězdička je tu v pořádku — vydává se
+// veřejný kurz ČNB, nic osobního.
+const KURZ_HLAVICKY = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+};
+
+/* Obsluha /kurz a /kurz/RRRR-MM-DD.
+   Kurz minulého dne se už nezmění, tak se smí držet dlouho; dnešní
+   ČNB vydává kolem 14:30, proto krátce. */
+async function obsluzKurz(datumIso) {
+  const dnes = new Date().toISOString().slice(0, 10);
+  const den = datumIso || dnes;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(den)) {
+    return Response.json({ chyba: 'Datum musí být ve tvaru RRRR-MM-DD.' },
+      { status: 400, headers: KURZ_HLAVICKY });
+  }
+  const [r, m, d] = den.split('-');
+  let odpoved;
+  try {
+    odpoved = await fetch(CNB_KURZ_URL + '?date=' + d + '.' + m + '.' + r, {
+      headers: { 'User-Agent': 'sklad-konektor' },
+    });
+  } catch (e) {
+    return Response.json({ chyba: 'ČNB neodpověděla: ' + String((e && e.message) || e) },
+      { status: 502, headers: KURZ_HLAVICKY });
+  }
+  if (!odpoved.ok) {
+    return Response.json({ chyba: 'ČNB vrátila ' + odpoved.status },
+      { status: 502, headers: KURZ_HLAVICKY });
+  }
+  const kurz = parseCnbKurz(await odpoved.text());
+  if (!kurz) {
+    return Response.json({ chyba: 'V lístku ČNB k ' + den + ' není euro.' },
+      { status: 502, headers: KURZ_HLAVICKY });
+  }
+  return Response.json({ kurz, datum: den, zdroj: 'cnb' }, {
+    headers: Object.assign({
+      'Cache-Control': den < dnes ? 'public, max-age=2592000' : 'public, max-age=1800',
+    }, KURZ_HLAVICKY),
+  });
+}
+
 /* ── Rozbalení hodnot z Firestore ───────────────────────────────────── */
 function rozbal(v) {
   if (!v || typeof v !== 'object') return v;
@@ -1387,6 +1466,16 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const cesta = url.pathname.replace(/^\/+|\/+$/g, '').split('/');
+
+    /* Kurz ČNB stojí před kontrolou tokenu — volá ho aplikace
+       z prohlížeče a token tam nemá co dělat. Viz KURZ ČNB PRO APLIKACI. */
+    if (cesta[0] === 'kurz') {
+      if (request.method === 'OPTIONS') return new Response(null, { headers: KURZ_HLAVICKY });
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405, headers: KURZ_HLAVICKY });
+      }
+      return obsluzKurz(cesta[1] || '');
+    }
 
     // Bez platného tokenu se server tváří, že tu nic není
     if (!env.MCP_TOKEN || !shodujeSe(cesta[0] || '', env.MCP_TOKEN)) {

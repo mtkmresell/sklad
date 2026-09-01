@@ -1942,6 +1942,7 @@ function syncSettings() {
       apply: function() { buildCatSelects(); } },
     { key: SK_PAYMENT_OPTS, field: 'paymentOpts', shape: 'json', keep: true },
     { key: SK_PAYOUT_DETAIL, field: 'payoutDetail', shape: 'json', keep: true },
+    { key: SK_KONEKTOR_URL, field: 'konektorUrl', shape: 'text', keep: true },
     { key: SK_LOC_OPTS, field: 'locOpts', shape: 'json', keep: true },
     { key: SK_WISH, field: 'wishlist', shape: 'json', keep: true,
       apply: function(_, v) { wishItems = v; } },
@@ -5798,6 +5799,48 @@ function calcSellStats() {
    Datum se posílá jako DD.MM.RRRR. */
 var _kurzZdroj = '';   // odkud přišel poslední kurz z fetchRateForDate
 var CNB_KURZ_URL = 'https://www.cnb.cz/cs/financni-trhy/devizovy-trh/kurzy-devizoveho-trhu/kurzy-devizoveho-trhu/denni_kurz.txt';
+
+/* ══════════════════════════════════════════════════════════════════════
+   KURZ ČNB PŘES KONEKTOR
+
+   Prohlížeč na cnb.cz nedosáhne — server nepovoluje volání z cizí
+   stránky (CORS). Ověřeno v provozu: ze 111 kurzů prošlo z ČNB 0.
+   Obejít se to z aplikace nedá, potřebuje to prostředníka na serveru.
+
+   Tím je Cloudflare Worker z `konektor/`, který stejně běží kvůli
+   čtení skladu v chatu. Má na to adresu `/kurz/RRRR-MM-DD` mimo token —
+   kurzy ČNB jsou veřejná data a token do prohlížeče nepatří.
+
+   Adresa se vyplňuje v Nastavení. Dokud tam není, kurzy chodí
+   z kurzovních API jako dřív a nikde se netvrdí ČNB.
+══════════════════════════════════════════════════════════════════════ */
+var SK_KONEKTOR_URL = 'sklad_konektor_url_v1';
+
+function getKonektorUrl() {
+  try { return (localStorage.getItem(SK_KONEKTOR_URL) || '').trim(); } catch (e) { return ''; }
+}
+function saveKonektorUrl(u) {
+  try { localStorage.setItem(SK_KONEKTOR_URL, String(u || '').trim()); } catch (e) {}
+  try { _ioCloudSync(); } catch (e) {}
+}
+
+/* Adresa kurzu poskládaná ze základu konektoru. Bere se jen schéma
+   a doména — kdyby někdo vložil celou adresu i s tokenem, do dotazu
+   na kurz se token nedostane. */
+function konektorKurzUrl(dateStr) {
+  var zaklad = getKonektorUrl();
+  if (!zaklad) return '';
+  if (!/^https?:\/\//i.test(zaklad)) zaklad = 'https://' + zaklad;
+  var adresa;
+  try { adresa = new URL(zaklad); } catch (e) { return ''; }
+  /* new URL() nesmysl nezamítne — z „rozhodně ne adresa" udělá
+     punycode a tváří se, že je to doména. Musí se proto ohlídat tvar
+     jména, jinak by překlep tiše vyrobil adresu, na kterou nikdo
+     neodpoví, a vypadalo by to jako chyba konektoru. */
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(adresa.hostname)) return '';
+  var m = /^(\d{4}-\d{2}-\d{2})/.exec(String(dateStr || ''));
+  return adresa.origin + '/kurz' + (m ? '/' + m[1] : '');
+}
 function cnbKurzUrl(dateStr) {
   var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || ''));
   if (!m) return '';
@@ -5852,6 +5895,18 @@ async function fetchRateForDate(dateStr, vynutitCnb) {
      Který zdroj to nakonec byl, se pamatuje vedle kurzu — doklad podle
      toho pozná, jestli smí napsat „kurz ČNB". */
   var apis = [
+    // Přes konektor — jediná cesta k ČNB, která z prohlížeče projde
+    async function() {
+      var u = konektorKurzUrl(dateStr);
+      if (!u) throw new Error('konektor nenastaven');
+      var r = await fetch(u);
+      if (!r.ok) throw new Error('err');
+      var d = await r.json();
+      if (d && d.kurz > 0) { _kurzZdroj = 'cnb'; return d.kurz; }
+      throw new Error('no rate');
+    },
+    // Napřímo na ČNB — dnes to CORS neprojde, ale kdyby to ČNB povolila,
+    // funguje to i bez konektoru
     async function() {
       var r = await fetch(cnbKurzUrl(dateStr));
       if (!r.ok) throw new Error('err');
@@ -8341,9 +8396,19 @@ let autoRate = localStorage.getItem('autoRate') !== 'false'; // default ON
    zkouší první a to, odkud kurz nakonec je, se ukáže v nastavení.
    Na uložené kurzy u konkrétních nákupů a payoutů tohle nesahá. */
 async function fetchCnbRate(manual=false) {
+  var dnesIso = new Date().toISOString().slice(0, 10);
   var apis = [
     async function() {
-      var r = await fetch(cnbKurzUrl(new Date().toISOString().slice(0, 10)));
+      var u = konektorKurzUrl(dnesIso);
+      if (!u) throw new Error('konektor nenastaven');
+      var r = await fetch(u);
+      if (!r.ok) throw new Error('err');
+      var d = await r.json();
+      if (d && d.kurz > 0) { _kurzZdroj = 'cnb'; return d.kurz; }
+      throw new Error('no rate');
+    },
+    async function() {
+      var r = await fetch(cnbKurzUrl(dnesIso));
       if (!r.ok) throw new Error('err');
       var kurz = parseCnbKurz(await r.text());
       if (kurz) { _kurzZdroj = 'cnb'; return kurz; }
@@ -9186,6 +9251,10 @@ function openGlobalSearch() {
 function openSettings() {
   document.getElementById('autoCourseChk').checked = autoRate;
   document.getElementById('eurRateInput').value = eurRate;
+  var _ku = document.getElementById('konektorUrlInput');
+  if (_ku) _ku.value = getKonektorUrl();
+  var _ks = document.getElementById('konektorStav');
+  if (_ks) _ks.textContent = getKonektorUrl() ? '' : 'Nenastaveno — kurzy chodí z kurzovního API, ne z ČNB.';
   document.getElementById('manualRateWrap').style.display = autoRate ? 'none' : '';
   document.getElementById('autoRateInfo').style.display = autoRate ? '' : 'none';
   document.getElementById('btnRefreshRate').style.display = autoRate ? '' : 'none';
@@ -9205,8 +9274,43 @@ function saveSettings() {
       localStorage.setItem('eurRateDate', Date.now());
     }
   }
+  var _ku = document.getElementById('konektorUrlInput');
+  if (_ku) saveKonektorUrl(_ku.value);
   cm('moSettings');
   renderStats();
+}
+
+/* Zkouška spojení s konektorem. Bez ní se dá zjistit jedině tím, že
+   se přepočítají kurzy a počká se, co vypadne — a to trvá minuty. */
+async function zkusitKonektor() {
+  var stav = document.getElementById('konektorStav');
+  var pole = document.getElementById('konektorUrlInput');
+  if (!stav || !pole) return;
+  saveKonektorUrl(pole.value);
+  var u = konektorKurzUrl('');
+  if (!u) {
+    stav.style.color = 'var(--danger)';
+    stav.textContent = 'Vlož adresu konektoru, třeba https://sklad.tvuj-ucet.workers.dev';
+    return;
+  }
+  stav.style.color = 'var(--muted2)';
+  stav.textContent = 'Zkouším ' + u + ' …';
+  try {
+    var r = await fetch(u);
+    var d = await r.json().catch(function(){ return null; });
+    if (r.ok && d && d.kurz > 0) {
+      stav.style.color = 'var(--accent)';
+      stav.textContent = 'Funguje — kurz ČNB k ' + d.datum + ': ' + d.kurz + ' Kč/€';
+    } else {
+      stav.style.color = 'var(--danger)';
+      stav.textContent = 'Konektor odpověděl, ale kurz nedal: '
+        + ((d && d.chyba) || ('HTTP ' + r.status)) + '. Nasadil jsi novou verzi worker.js?';
+    }
+  } catch (e) {
+    stav.style.color = 'var(--danger)';
+    stav.textContent = 'Nepodařilo se spojit: ' + String((e && e.message) || e)
+      + '. Zkontroluj adresu a jestli je worker nasazený.';
+  }
 }
 
 autoRate = localStorage.getItem('autoRate') !== 'false';
@@ -9325,6 +9429,7 @@ document.addEventListener('click', function(e) {
   if (action === 'saveimgurl') { saveImgUrl(); return; }
   if (action === 'removeimg') { removeImg(); return; }
   if (action === 'fetchrate') { fetchCnbRate(true); return; }
+  if (action === 'zkusitkonektor') { zkusitKonektor(); return; }
   if (action === 'savesettings') { saveSettings(); return; }
   if (action === 'closeplatmgr') {
     /* Z detailu místa se vrací na seznam míst. Dřív tady bylo zavření
@@ -18055,6 +18160,22 @@ rebuildBrandTables();
       </div>
     </div>
     <div style="font-size:11px;color:var(--muted2);margin-top:10px;font-family:monospace;" id="eurRateInfo"></div>
+
+    <!-- Cesta ke kurzu ČNB. Prohlížeč na cnb.cz nedosáhne (CORS),
+         musí to jít přes server konektoru. -->
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+      <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px;">
+        Kurz ČNB si prohlížeč sám stáhnout nesmí, stahuje ho konektor.
+        Vlož jeho adresu — token sem nepatří, ten zůstává v Cloudflare.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="konektorUrlInput" placeholder="https://sklad.tvuj-ucet.workers.dev"
+          style="flex:1;min-width:220px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;">
+        <button class="btn-sec" data-action="zkusitkonektor" style="flex:none;padding:8px 14px;font-size:12px;white-space:nowrap;">Vyzkoušet</button>
+      </div>
+      <div id="konektorStav" style="font-size:11px;color:var(--muted2);margin-top:8px;font-family:'DM Mono',monospace;line-height:1.6;"></div>
+    </div>
+
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button class="btn-sec" id="btnRefreshRate" data-action="fetchrate" style="display:none;">Aktualizovat kurz</button>
       <button class="btn-pri" data-action="savesettings">Uložit</button>
