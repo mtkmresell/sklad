@@ -180,6 +180,52 @@ for (let i = 0; i < 4; i++) SEED.push({ id: 'p25_' + i, name: 'Prodáno 2025 ' +
     poOdhlaseni.hashes === 0 && poOdhlaseni.cache === null && !poOdhlaseni.cacheFlag, JSON.stringify(poOdhlaseni));
   check('neúplnost se resetuje', !poOdhlaseni.neuplne, JSON.stringify(poOdhlaseni));
 
+  // ══════════════════════════════════════════════════════════════
+  /* Zápis do cloudu letí po síti klidně vteřiny a uživatel mezitím
+     pracuje dál. Co udělá potom, v odeslaném balíčku není — takže
+     po jeho doletu se NESMÍ uklidit příznak neuložených změn ani
+     vrátit čas zpátky.
+
+     Když se to stalo, aplikace si myslela, že je srovnaná, a cloud
+     o změně nevěděl. Při dalším startu vyhrál starší cloud a prodaná
+     položka se vrátila na sklad. */
+  section('9) Změna během letícího zápisu se neztratí');
+  await page.evaluate(() => {
+    window._fbUser = { uid: 'u1', email: 'x@y.cz' };
+    document.dispatchEvent(new CustomEvent('fb-auth', { detail: { user: window._fbUser } }));
+  });
+  await page.waitForTimeout(400);
+  const behemLetu = await page.evaluate(async () => {
+    const S = 'sklad_v3';
+    items = [{ id: 'z1', name: 'Boty', category: 'sneakers', buyPrice: 1000, buyCurrency: 'CZK',
+      saleState: 'stock', location: 'Doma', dateAdded: 1, buyDate: '2026-01-01', tags: [] }];
+    sv();
+    await new Promise(r => setTimeout(r, 900));
+    const pred = _lastOwnSavedAt;
+    fbSaveToCloud();                 // balíček se sebral teď
+    items[0].saleState = 'waiting';  // a hned nato uživatel prodává
+    sv();
+    const casZmeny = localStorage.getItem(S + '_savedAt');
+    // Počkej právě na dolet toho prvního zápisu
+    for (let i = 0; i < 200 && _lastOwnSavedAt === pred; i++) await new Promise(r => setTimeout(r, 5));
+    const hned = { dirty: localStorage.getItem(S + '_dirty'), savedAt: localStorage.getItem(S + '_savedAt') };
+    await new Promise(r => setTimeout(r, 1500));   // ať doběhne doháněcí zápis
+    const k = Object.keys(window.__store).find(x => /\/data$/.test(x));
+    const d = window.__store[k] || {};
+    return {
+      dirty: hned.dirty,
+      casSeVratil: new Date(hned.savedAt) < new Date(casZmeny),
+      vCloudu: ((d.itemsStock || d.items || [])[0] || {}).saleState,
+      vPameti: items[0].saleState,
+    };
+  });
+  check('příznak neuložených změn zůstane', behemLetu.dirty === '1',
+    'jinak aplikace zapomene, že cloud změnu nemá');
+  check('čas se nevrátí zpátky', !behemLetu.casSeVratil,
+    'starší razítko by při startu nechalo vyhrát starší cloud');
+  check('doháněcí zápis změnu dopraví', behemLetu.vCloudu === 'waiting', String(behemLetu.vCloudu));
+  check('a v paměti zůstane taky', behemLetu.vPameti === 'waiting', String(behemLetu.vPameti));
+
   check('žádné JS chyby', errs.length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();
   console.log(failures ? `\n${failures} TESTŮ SELHALO` : '\nVŠECHNY TESTY PROŠLY');

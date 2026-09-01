@@ -3098,6 +3098,10 @@ function fbSaveToCloud() {
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
   var payload = _buildCloudPayload();
   var ts = payload.savedAt;
+  /* Verze dat v okamžiku, kdy se balíček sebral. Zápis letí po síti
+     klidně vteřiny a uživatel mezitím dál pracuje — co udělá potom,
+     v tomhle balíčku není. */
+  var verzeOdeslani = _itemsVersion;
   // Timeout 10s — Firestore ve offline stavu nechá promise viset navždy
   function withTimeout(p) {
     return Promise.race([p, new Promise(function(_, reject) {
@@ -3105,10 +3109,22 @@ function fbSaveToCloud() {
     })]);
   }
   function done(written) {
-    localStorage.setItem(SK+'_savedAt', ts);
-    localStorage.removeItem(SK+'_dirty');
     _lastOwnSavedAt = ts;
     _commitArchiveState(written);
+    /* Uklidit po sobě smí jen zápis, který opravdu obsahuje současný
+       stav. Když se data mezitím změnila, tahle změna v cloudu není —
+       a smazat příznak neuložených změn by znamenalo, že o ní aplikace
+       zapomene. Při dalším startu by pak vyhrál starší cloud a změna
+       by zmizela; přesně tak se prodaná položka vracela na sklad.
+       Ze stejného důvodu se savedAt nesmí vrátit zpátky. */
+    if (_itemsVersion === verzeOdeslani) {
+      localStorage.setItem(SK+'_savedAt', ts);
+      localStorage.removeItem(SK+'_dirty');
+    } else if (window._fbUser) {
+      // Doháněcí zápis, ať novější stav dorazí i bez dalšího zásahu
+      if (_svCloudTimer) clearTimeout(_svCloudTimer);
+      _svCloudTimer = setTimeout(function() { fbSaveToCloud(); }, 400);
+    }
     if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-online';
   }
   function failed(e) {
@@ -5791,7 +5807,7 @@ function parseCnbKurz(text) {
   return null;
 }
 
-async function fetchRateForDate(dateStr) {
+async function fetchRateForDate(dateStr, vynutitCnb) {
   if (!dateStr) return null;
   var today = new Date().toISOString().slice(0, 10);
   var isToday = (dateStr === today);
@@ -5799,8 +5815,12 @@ async function fetchRateForDate(dateStr) {
   // Pro dnešní datum nikdy nepoužívej cache — ČNB aktualizuje ~14:00
   if (!isToday) {
     var cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      _kurzZdroj = localStorage.getItem(cacheKey + '_cnb') ? 'cnb' : '';
+    var byloZCnb = !!localStorage.getItem(cacheKey + '_cnb');
+    /* Kurzy zapamatované z doby, kdy aplikace ČNB nevolala, se při
+       vynuceném přepočtu musí stáhnout znovu — jinak by se přepočet
+       do ČNB nikdy nedostal a jen by přepsal staré hodnoty týmiž. */
+    if (cached && (byloZCnb || !vynutitCnb)) {
+      _kurzZdroj = byloZCnb ? 'cnb' : '';
       return parseFloat(cached);
     }
   }
@@ -5991,15 +6011,19 @@ async function recalcAllRates() {
   });
 
   // Fetch všechny kurzy paralelně
-  var rateMap = {};
+  var rateMap = {}, zdrojMap = {};
   var dateArr = Array.from(dates);
   if (status) status.textContent = 'Stahuji kurzy pro ' + dateArr.length + ' dat…';
-  await Promise.all(dateArr.map(async function(d){
-    var r = await fetchRateForDate(d);
-    if (r) rateMap[d] = r;
-  }));
+  // Postupně, ne paralelně — _kurzZdroj je jedna proměnná a souběh by ji přepsal
+  for (var di = 0; di < dateArr.length; di++) {
+    var d = dateArr[di];
+    var r = await fetchRateForDate(d, true);
+    if (r) { rateMap[d] = r; zdrojMap[d] = _kurzZdroj; }
+    if (status) status.textContent = 'Stahuji kurzy… ' + (di + 1) + '/' + dateArr.length;
+  }
 
   function getR(dateIso){ return dateIso ? (rateMap[dateIso.slice(0,10)] || eurRate || 25) : (eurRate || 25); }
+  function zCnb(dateIso){ return !!(dateIso && zdrojMap[dateIso.slice(0,10)] === 'cnb'); }
 
   // Přepočítej každou položku
   var updated = 0;
@@ -6016,6 +6040,8 @@ async function recalcAllRates() {
       if (pd) {
         var pr = getR(pd);
         if (pr && it.payoutRateEur !== pr) { it.payoutRateEur = pr; changed = true; }
+        // Doklad podle toho pozná, jestli smí u kurzu napsat ČNB
+        if (zCnb(pd)) it.payoutRateCnb = 1; else delete it.payoutRateCnb;
         // Přepočítej sellPrice v Kč
         var eurSell = it.sellPriceOrig || (it.sellCurrency === 'EUR' ? it.sellPrice : 0);
         if (eurSell && it.saleState !== 'stock') {
@@ -6038,7 +6064,13 @@ async function recalcAllRates() {
   });
 
   sv(); renderStats(); renderItems();
-  if (status) status.textContent = 'Hotovo — aktualizováno ' + updated + ' položek.';
+  var zCnbPocet = dateArr.filter(function(d){ return zdrojMap[d] === 'cnb'; }).length;
+  /* Kolik kurzů je opravdu z ČNB, se říká schválně — dokud tu stálo
+     jen „hotovo", nebylo poznat, že tlačítko mělo ČNB jen v názvu. */
+  var kolik = zCnbPocet === dateArr.length
+    ? 'všechny kurzy z ČNB'
+    : zCnbPocet + ' z ' + dateArr.length + ' kurzů z ČNB, zbytek z kurzovního API';
+  if (status) status.textContent = 'Hotovo — aktualizováno ' + updated + ' položek (' + kolik + ').';
   if (btn) { btn.disabled = false; btn.textContent = 'Přepočítat kurzy ČNB'; }
   showToast('Kurzy přepočítány: ' + updated + ' položek.');
 }

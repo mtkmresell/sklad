@@ -94,6 +94,14 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
 - Když aplikace nevidí cloud celý (`_cloudIncomplete`), **odmítne do něj zapsat**.
   Bez toho zařízení se starými daty přepsalo novější.
 - Rozhodčí při konfliktu je jediné `savedAt` v hlavním dokumentu.
+- **Po doletu zápisu uklízí jen ten, který obsahuje současný stav.** Zápis
+  letí po síti klidně vteřiny a uživatel mezitím pracuje dál; co udělá
+  potom, v odeslaném balíčku není. `fbSaveToCloud` si proto pamatuje
+  `_itemsVersion` z okamžiku odeslání a příznak `_dirty` smaže (a `savedAt`
+  posune) jen tehdy, když se verze nezměnila — jinak naplánuje doháněcí
+  zápis. Bez toho si aplikace myslela, že je srovnaná, cloud o změně
+  nevěděl a při dalším startu vyhrál starší cloud: **prodaná položka se
+  vracela na sklad**. Hlídá to `test-listener.js`, sekce 9.
 
 ### Nastavení: `syncSettings()`
 
@@ -189,6 +197,12 @@ vyplacení, nikdy dopočítaný dnešním, a datum odkazuje na denní kurz ČNB
 toho dne. „kurz ČNB" se napíše **jen když ten uložený opravdu z ČNB je**
 (`payoutRateCnb`); u starších prodejů pochází z kurzovního API a tvrdit
 u nich ČNB by účetní odhalil jedním kliknutím.
+
+*Nastavení → Přepočítat kurzy ČNB* (`recalcAllRates`) přepočítá uložené
+kurzy u všech eurových položek. Volá `fetchRateForDate(datum, true)` —
+vynucení přeskočí kurz zapamatovaný z doby, kdy se ČNB nevolala, jinak by
+se přepočet do ČNB nikdy nedostal a jen přepsal staré hodnoty týmiž.
+Po dokončení se říká, kolik kurzů opravdu z ČNB je.
 
 `fetchRateForDate()` (kurz ke dni nákupu/payoutu) i `fetchCnbRate()`
 (dnešní kurz pro odhady) berou ČNB jako první zdroj, kurzovní API zůstala

@@ -199,6 +199,33 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
   check('množství se vydělí', cnb.forint === 0.062, String(cnb.forint));
   check('z nesmyslu nic', cnb.nesmysl === null, String(cnb.nesmysl));
 
+  // ══════════════════════════════════════════════════════════════
+  /* Kurzy zapamatované z doby, kdy aplikace ČNB nevolala, leží
+     v localStorage. Bez vynucení by je přepočet vzal z cache a jen
+     přepsal staré hodnoty týmiž — do ČNB by se nikdy nedostal. */
+  section('7) Vynucený přepočet nevezme starý kurz z cache');
+  const cache = await page.evaluate(async () => {
+    const den = '2026-03-04';
+    localStorage.setItem('eurRate_' + den, '99.99');      // kurz z kurzovního API
+    localStorage.removeItem('eurRate_' + den + '_cnb');
+    const bezVynuceni = await fetchRateForDate(den);
+    // S vynucením se cache přeskočí a zkusí se ČNB; ta je v testu
+    // nedostupná, takže se spadne na zálohu — hlavně že to není 99.99
+    const sVynucenim = await fetchRateForDate(den, true);
+
+    // Kurz, o kterém víme, že z ČNB je, se z cache brát smí
+    const den2 = '2026-03-05';
+    localStorage.setItem('eurRate_' + den2, '24.19');
+    localStorage.setItem('eurRate_' + den2 + '_cnb', '1');
+    const cnbZCache = await fetchRateForDate(den2, true);
+    return { bezVynuceni, sVynucenim, cnbZCache, zdroj: _kurzZdroj };
+  });
+  check('bez vynucení se cache použije', cache.bezVynuceni === 99.99, String(cache.bezVynuceni));
+  check('s vynucením se starý kurz z cache nebere', cache.sVynucenim !== 99.99,
+    'jinak by přepočet do ČNB nikdy nedošel');
+  check('kurz už jednou z ČNB se z cache brát smí', cache.cnbZCache === 24.19, String(cache.cnbZCache));
+  check('a pozná se to na zdroji', cache.zdroj === 'cnb', cache.zdroj);
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');
