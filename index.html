@@ -1941,6 +1941,7 @@ function syncSettings() {
     { key: SK_CUSTOM_CATS, field: 'customCats', shape: 'json', keep: true,
       apply: function() { buildCatSelects(); } },
     { key: SK_PAYMENT_OPTS, field: 'paymentOpts', shape: 'json', keep: true },
+    { key: SK_PAYOUT_DETAIL, field: 'payoutDetail', shape: 'json', keep: true },
     { key: SK_LOC_OPTS, field: 'locOpts', shape: 'json', keep: true },
     { key: SK_WISH, field: 'wishlist', shape: 'json', keep: true,
       apply: function(_, v) { wishItems = v; } },
@@ -5257,6 +5258,112 @@ function savePaymentOpts(arr) {
   try { _ioCloudSync(); } catch(e){}
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ÚDAJE U ZPŮSOBU VYPLACENÍ
+
+   Ke každé možnosti z „Payout na" se dá dopsat, kam peníze chodí —
+   číslo účtu a IBAN. Na prodejním dokladu pak nestojí jen „Revolut",
+   ale účet, na který má kupující poslat peníze; bez něj je doklad
+   k zaplacení nepoužitelný.
+
+   Eurový prodej bere IBAN, korunový číslo účtu. Když ten správný
+   chybí, použije se ten druhý — půl údaje je pořád lepší než nic.
+
+   Klíčem je název možnosti, stejně jako u fakturačních údajů platforem.
+   Přejmenování v editoru dropdownů proto musí údaje přenést s sebou. */
+var SK_PAYOUT_DETAIL = 'sklad_payout_detail_v1';
+var PAYOUT_PROFILY = { '': 'Neurčeno', business: 'Podnikání', personal: 'Osobní' };
+
+function getPayoutDetails() {
+  try { var s = localStorage.getItem(SK_PAYOUT_DETAIL); if (s) return JSON.parse(s) || {}; } catch(e){}
+  return {};
+}
+function savePayoutDetails(o) {
+  try { localStorage.setItem(SK_PAYOUT_DETAIL, JSON.stringify(o || {})); } catch(e){}
+  try { _ioCloudSync(); } catch(e){}
+}
+function getPayoutDetail(nazev, vsechny) {
+  var d = (vsechny || getPayoutDetails())[nazev];
+  return d || { ucet: '', iban: '', profil: '', pozn: '' };
+}
+
+/* Co se vypíše na doklad: u eur IBAN, jinak číslo účtu.
+   Vrací { popis, hodnota } nebo null, když není co ukázat. */
+function payoutUcetProDoklad(it) {
+  if (!it || !it.payoutMethod && !it.paymentMethod) return null;
+  var d = getPayoutDetail(it.payoutMethod || it.paymentMethod);
+  // Pořadí rozhoduje: první vyplněný vyhrává, druhý je záloha
+  var poradi = it.sellCurrency === 'EUR' ? ['iban', 'ucet'] : ['ucet', 'iban'];
+  for (var i = 0; i < poradi.length; i++) {
+    if (d[poradi[i]]) {
+      return { popis: poradi[i] === 'iban' ? 'IBAN' : 'Číslo účtu', hodnota: d[poradi[i]] };
+    }
+  }
+  return null;
+}
+
+
+/* Okno s údaji jednoho způsobu vyplacení.
+
+   Ukládá se rovnou, ne až s celým editorem — stejná lekce jako u správy
+   platforem: z detailu vede Zpět a kdo zavře editor jinudy, přišel by
+   o vyplněné údaje, aniž by mu to něco řeklo. */
+function openPayoutDetail(nazev, poUlozeni) {
+  var d = getPayoutDetail(nazev);
+  var ov = document.createElement('div');
+  ov.id = 'payoutDetailOv';
+  ov.className = 'mo open';
+  ov.style.zIndex = '400';
+
+  var pole = function(id, popis, hodnota, placeholder) {
+    return '<div class="fi full" style="margin-bottom:12px;"><label>' + popis + '</label>'
+      + '<input type="text" id="' + id + '" value="' + escHtml(hodnota || '')
+      + '" placeholder="' + escHtml(placeholder || '') + '"></div>';
+  };
+
+  ov.innerHTML = '<div class="modal" style="max-width:420px;">'
+    + '<div class="mh"><div>'
+    + '<div style="font-family:\'DM Mono\',monospace;font-size:10px;text-transform:uppercase;'
+    + 'letter-spacing:1px;color:var(--muted2);margin-bottom:3px;">Payout na</div>'
+    + '<div class="mt2">' + escHtml(nazev) + '</div></div>'
+    + '<button class="xb" id="pdxClose">✕</button></div>'
+    + '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:16px;">'
+    + 'Na prodejní doklad se vypíše jedno z toho — u eurového prodeje IBAN, jinak číslo účtu.'
+    + '</div>'
+    + pole('pyUcet', 'Číslo účtu', d.ucet, '123456789/0100')
+    + pole('pyIban', 'IBAN', d.iban, 'CZ65 0800 0000 1920 0014 5399')
+    + '<div class="fi full" style="margin-bottom:12px;"><label>Patří k</label>'
+    + '<select id="pyProfil">'
+    + Object.keys(PAYOUT_PROFILY).map(function(k) {
+        return '<option value="' + k + '"' + (d.profil === k ? ' selected' : '') + '>' + PAYOUT_PROFILY[k] + '</option>';
+      }).join('')
+    + '</select></div>'
+    + pole('pyPozn', 'Poznámka', d.pozn, 'jen pro tebe, na doklad nejde')
+    + '<div style="display:flex;gap:8px;margin-top:18px;">'
+    + '<button class="btn-sec" id="pyBack" style="flex:1;">Zpět</button>'
+    + '<button class="btn-pri" id="pySave" style="flex:2;">Uložit</button>'
+    + '</div></div>';
+
+  document.body.appendChild(ov);
+  initCustomSelect(document.getElementById('pyProfil'));
+
+  function zavri() { ov.remove(); if (poUlozeni) poUlozeni(); }
+  function uloz() {
+    var hod = function(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    var vse = getPayoutDetails();
+    var novy = { ucet: hod('pyUcet'), iban: hod('pyIban'), profil: hod('pyProfil'), pozn: hod('pyPozn') };
+    // Prázdný záznam se neukládá, ať se nastavení nezanáší prázdnými objekty
+    if (novy.ucet || novy.iban || novy.profil || novy.pozn) vse[nazev] = novy;
+    else delete vse[nazev];
+    savePayoutDetails(vse);
+    zavri();
+  }
+  document.getElementById('pySave').addEventListener('click', uloz);
+  document.getElementById('pyBack').addEventListener('click', uloz);
+  document.getElementById('pdxClose').addEventListener('click', uloz);
+  ov.addEventListener('click', function(e) { if (e.target === ov) uloz(); });
+  setTimeout(function() { var e = document.getElementById('pyUcet'); if (e) e.focus(); }, 60);
+}
 
 // --- Editor dropdownů ---
 function openDropdownsEditor() {
@@ -5279,7 +5386,9 @@ function openDropdownsEditor() {
       saveOpts: savePaymentOpts,
       defaults: function() { return [...PAYMENT_OPTS_DEFAULT]; },
       // Způsob platby se v historii dat ukládá pod oběma názvy polí
-      itemFields: ['payoutMethod', 'paymentMethod']
+      itemFields: ['payoutMethod', 'paymentMethod'],
+      // Jen tady má smysl dopsat, kam peníze chodí
+      maDetail: true
     }
   ];
 
@@ -5449,6 +5558,15 @@ function openDropdownsEditor() {
           });
         });
       });
+      /* Údaje o účtu visí na názvu, tak se musí přejmenovat s ním —
+         jinak by po přejmenování zmizely z dokladu, aniž by kdo tušil proč. */
+      if (cfg.maDetail && renames.length) {
+        var det = getPayoutDetails(), zmena = false;
+        renames.forEach(function(r) {
+          if (det[r.orig] && !det[r.val]) { det[r.val] = det[r.orig]; delete det[r.orig]; zmena = true; }
+        });
+        if (zmena) savePayoutDetails(det);
+      }
       // Ulož nový seznam názvů (val). Smazané položky se do dat nepropisují — hodnota tam zůstane.
       cfg.saveOpts(state[ci].map(function(e){ return e.val; }));
     });
@@ -5517,6 +5635,37 @@ function openDropdownsEditor() {
         }
       });
 
+      /* Tlačítko na detail — kam u téhle možnosti chodí peníze.
+         Ukazuje, jestli už je něco vyplněné, ať je vidět, co zbývá. */
+      var detailBtn = null;
+      if (configs[ci].maDetail) {
+        var vyplneno = (function() {
+          var d = getPayoutDetail(entry.val);
+          return !!(d.ucet || d.iban);
+        })();
+        detailBtn = document.createElement('button');
+        detailBtn.className = '_de_detail';
+        detailBtn.dataset.nazev = entry.val;
+        detailBtn.textContent = vyplneno ? 'Účet ✓' : 'Účet';
+        detailBtn.title = 'Číslo účtu a IBAN pro doklad';
+        detailBtn.style.cssText = 'background:none;border:1px solid ' + (vyplneno ? '#c8ff0030' : 'var(--border)')
+          + ';color:' + (vyplneno ? 'var(--accent)' : 'var(--muted)')
+          + ';cursor:pointer;font-size:11px;font-family:inherit;padding:3px 9px;border-radius:5px;'
+          + 'line-height:1.4;flex-shrink:0;transition:all 0.15s;';
+        detailBtn.addEventListener('mouseover', function() { this.style.borderColor = 'var(--accent)'; this.style.color = 'var(--accent)'; });
+        detailBtn.addEventListener('mouseout', function() {
+          this.style.borderColor = vyplneno ? '#c8ff0030' : 'var(--border)';
+          this.style.color = vyplneno ? 'var(--accent)' : 'var(--muted)';
+        });
+        detailBtn.addEventListener('mousedown', function() { row.draggable = false; });
+        detailBtn.addEventListener('click', (function(ci_, i_) {
+          return function(e) {
+            e.stopPropagation();
+            openPayoutDetail(state[ci_][i_].val, function() { renderSection(ci_); });
+          };
+        })(ci, i));
+      }
+
       var del = document.createElement('button');
       del.style.cssText = 'background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:0 2px;line-height:1;transition:color 0.15s;flex-shrink:0;';
       del.textContent = '✕';
@@ -5558,6 +5707,7 @@ function openDropdownsEditor() {
 
       row.appendChild(handle);
       row.appendChild(lbl);
+      if (detailBtn) row.appendChild(detailBtn);
       row.appendChild(del);
       list.appendChild(row);
     });
@@ -5600,6 +5750,34 @@ function calcSellStats() {
 
 // Fetchne historický kurz EUR/CZK pro dané datum (ISO formát YYYY-MM-DD)
 // Vrátí Promise<number> — kurz nebo null pokud se nepodaří
+/* Adresa denního kurzu ČNB pro daný den — ta prostá textová stránka.
+   Datum se posílá jako DD.MM.RRRR. */
+var _kurzZdroj = '';   // odkud přišel poslední kurz z fetchRateForDate
+var CNB_KURZ_URL = 'https://www.cnb.cz/cs/financni-trhy/devizovy-trh/kurzy-devizoveho-trhu/kurzy-devizoveho-trhu/denni_kurz.txt';
+function cnbKurzUrl(dateStr) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || ''));
+  if (!m) return '';
+  return CNB_KURZ_URL + '?date=' + m[3] + '.' + m[2] + '.' + m[1];
+}
+
+/* Vytáhne kurz eura z textu denního kurzu ČNB.
+   Formát: hlavička, pak řádky „země|měna|množství|kód|kurz" s desetinnou
+   čárkou. Množství je u eura 1, ale u jiných měn i 100 — dělí se jím,
+   ať se z toho nedá vyrobit stonásobek. */
+function parseCnbKurz(text) {
+  var radky = String(text || '').split('\n');
+  for (var i = 0; i < radky.length; i++) {
+    var c = radky[i].split('|');
+    if (c.length < 5) continue;
+    if (c[3].trim().toUpperCase() !== 'EUR') continue;
+    var mnozstvi = parseFloat(c[2].replace(',', '.'));
+    var kurz = parseFloat(c[4].replace(',', '.'));
+    if (!(kurz > 0) || !(mnozstvi > 0)) return null;
+    return Math.round((kurz / mnozstvi) * 1000) / 1000;
+  }
+  return null;
+}
+
 async function fetchRateForDate(dateStr) {
   if (!dateStr) return null;
   var today = new Date().toISOString().slice(0, 10);
@@ -5608,7 +5786,10 @@ async function fetchRateForDate(dateStr) {
   // Pro dnešní datum nikdy nepoužívej cache — ČNB aktualizuje ~14:00
   if (!isToday) {
     var cached = localStorage.getItem(cacheKey);
-    if (cached) return parseFloat(cached);
+    if (cached) {
+      _kurzZdroj = localStorage.getItem(cacheKey + '_cnb') ? 'cnb' : '';
+      return parseFloat(cached);
+    }
   }
   // Cleanup starých cache záznamů (max 60)
   try {
@@ -5617,7 +5798,19 @@ async function fetchRateForDate(dateStr) {
       rateKeys.sort().slice(0, rateKeys.length-60).forEach(function(k){ localStorage.removeItem(k); });
     }
   } catch(e) {}
+  /* ČNB je první v řadě — v daňové evidenci je závazný její denní kurz.
+     Kurzovní API zůstávají jako záloha: kdyby ČNB nešla načíst (starý
+     den bez kurzu, výpadek, blokovaná síť), aplikace běží dál jako dřív.
+     Který zdroj to nakonec byl, se pamatuje vedle kurzu — doklad podle
+     toho pozná, jestli smí napsat „kurz ČNB". */
   var apis = [
+    async function() {
+      var r = await fetch(cnbKurzUrl(dateStr));
+      if (!r.ok) throw new Error('err');
+      var kurz = parseCnbKurz(await r.text());
+      if (kurz) { _kurzZdroj = 'cnb'; return kurz; }
+      throw new Error('no rate');
+    },
     async function() {
       var r = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@' + dateStr + '/v1/currencies/eur.json');
       if (!r.ok) throw new Error('err');
@@ -5633,12 +5826,19 @@ async function fetchRateForDate(dateStr) {
       throw new Error('no rate');
     }
   ];
+  _kurzZdroj = '';
   for (var i = 0; i < apis.length; i++) {
     try {
       var rate = await apis[i]();
       if (rate && rate > 0) {
         // Dnešní datum necachuj — zítra bude historický a uloží se automaticky
-        if (!isToday) { try { localStorage.setItem(cacheKey, rate); } catch(e) {} }
+        if (!isToday) {
+          try {
+            localStorage.setItem(cacheKey, rate);
+            if (_kurzZdroj === 'cnb') localStorage.setItem(cacheKey + '_cnb', '1');
+            else localStorage.removeItem(cacheKey + '_cnb');
+          } catch(e) {}
+        }
         return rate;
       }
     } catch(e) {}
@@ -8487,6 +8687,8 @@ function openSaleDocument(id) {
   h += 'td.k{color:#666;width:38%;}';
   h += '.celkem{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid #111;padding-top:12px;margin-top:4px;}';
   h += '.celkem .c{font-size:22px;font-weight:800;}';
+  h += '.prepocet{text-align:right;margin-top:6px;font-size:11px;color:#888;line-height:1.6;}';
+  h += '.prepocet a{color:#888;}';
   h += '.pozn{margin-top:28px;padding-top:14px;border-top:1px solid #eee;font-size:11px;color:#777;}';
   h += '.podpisy{display:flex;gap:60px;margin-top:44px;}';
   h += '.podpis{flex:1;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#888;}';
@@ -8499,14 +8701,14 @@ function openSaleDocument(id) {
   h += '<div style="text-align:right;"><div class="nadpis">Datum</div><div style="font-weight:700;">' + escHtml(datum) + '</div></div></div>';
 
   h += '<div class="strany">';
-  h += '<div class="strana"><div class="nadpis">Prodávající</div>';
+  h += '<div class="strana"><div class="nadpis">Dodavatel</div>';
   h += '<div class="jmeno">' + escHtml(p.name || '—') + '</div>';
   if (p.address) h += '<div>' + escHtml(p.address).replace(/\n/g, '<br>') + '</div>';
   if (p.ico) h += '<div>IČO: ' + escHtml(p.ico) + '</div>';
   if (p.email) h += '<div>' + escHtml(p.email) + '</div>';
   if (p.phone) h += '<div>' + escHtml(p.phone) + '</div>';
   h += '</div>';
-  h += '<div class="strana"><div class="nadpis">Kupující</div>';
+  h += '<div class="strana"><div class="nadpis">Odběratel</div>';
   h += '<div class="jmeno">' + escHtml(kupujiciJmeno) + '</div>';
   kontakt.forEach(function(k) { h += '<div>' + escHtml(k) + '</div>'; });
   h += '</div></div>';
@@ -8515,12 +8717,43 @@ function openSaleDocument(id) {
   h += _dokladRadek('Název', it.name || '—');
   h += _dokladRadek('SKU', it.sku);
   h += _dokladRadek('Velikost', it.size);
-  h += _dokladRadek('Způsob platby', it.paymentMethod);
-  h += _dokladRadek('Platforma', it.soldWhere);
+  h += _dokladRadek('Způsob platby', it.payoutMethod || it.paymentMethod);
+  /* Kam poslat peníze. Bez účtu je doklad k zaplacení nepoužitelný;
+     u eur se bere IBAN, u korun číslo účtu — viz payoutUcetProDoklad.
+     Místo prodeje tu naopak nestojí: odběratel je vypsaný nahoře. */
+  var ucet = payoutUcetProDoklad(it);
+  if (ucet) h += _dokladRadek(ucet.popis, ucet.hodnota);
   h += _dokladRadek('Doručení', kupujici && kupujici.pickup ? kupujici.pickup : '');
   h += '</tbody></table>';
 
   h += '<div class="celkem"><div style="font-weight:700;">Celkem k úhradě</div><div class="c">' + escHtml(cena) + '</div></div>';
+
+  /* Přepočet na koruny — drobně pod částkou, ne jako druhá hlavní částka.
+     Závazná je pořád ta v eurech, kterou kupující platil; tohle je jen
+     opora pro účetnictví.
+
+     Kurz se bere ten uložený ke dni vyplacení, nikdy se nepočítá zpětně
+     dnešním. Datum odkazuje na denní kurz ČNB pro ten den, ať si to jde
+     ověřit. „kurz ČNB" se napíše jen tehdy, když ten uložený opravdu
+     z ČNB je — u starších prodejů pochází z kurzovního API a tvrdit
+     u nich ČNB by byla lež, kterou účetní odhalí jedním kliknutím. */
+  if (it.sellCurrency === 'EUR') {
+    var kurz = it.payoutRateEur || it.profitRateEur || 0;
+    var denKurzu = it.payoutDate || it.saleDate || '';
+    if (kurz > 0) {
+      var vKc = Math.round((getSellOrig(it) || 0) * kurz * 100) / 100;
+      var popisKurzu = (it.payoutRateCnb ? 'kurz ČNB ' : 'kurz ')
+        + kurz.toLocaleString('cs', { minimumFractionDigits: 2, maximumFractionDigits: 3 })
+        + ' Kč/€ k ' + fmtDate(denKurzu);
+      var odkaz = cnbKurzUrl(denKurzu);
+      h += '<div class="prepocet">'
+        + escHtml(vKc.toLocaleString('cs', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + ' Kč<br>'
+        + (odkaz
+            ? '<a href="' + escHtml(odkaz) + '" target="_blank" rel="noopener">(' + escHtml(popisKurzu) + ')</a>'
+            : '(' + escHtml(popisKurzu) + ')')
+        + '</div>';
+    }
+  }
 
   h += '<div class="pozn">';
   h += p.note ? escHtml(p.note).replace(/\n/g, '<br>') + '<br><br>' : '';
@@ -10332,7 +10565,8 @@ function _ocistiPoBulku(ch) {
   ch.sellPrice = 0;
   ch.soldWhere = '';
   ['saleDate', 'payoutDate', 'saleRef', 'profit', 'roi', 'sellCurrency',
-   'sellPriceOrig', 'actualSell', 'payoutMethod', 'payoutRateEur', 'profitRateEur'].forEach(function(k) {
+   'sellPriceOrig', 'actualSell', 'payoutMethod', 'payoutRateEur', 'payoutRateCnb',
+   'profitRateEur'].forEach(function(k) {
     delete ch[k];
   });
   try { clearTracking(ch); } catch(e) {}
@@ -16824,10 +17058,13 @@ async function confirmPayout(itemId) {
   }
   var it = items.find(function(x){return x.id===itemId;});
   if (!it) return;
-  // Fetch kurz ČNB pro datum vyplacení
+  // Kurz ke dni vyplacení
   var payoutRate = await fetchRateForDate(dateVal);
-  if (!payoutRate) payoutRate = it.profitRateEur || eurRate || 25;
+  var zCnb = (_kurzZdroj === 'cnb');
+  if (!payoutRate) { payoutRate = it.profitRateEur || eurRate || 25; zCnb = false; }
   it.payoutRateEur = payoutRate;
+  // Doklad podle toho pozná, jestli smí u kurzu napsat ČNB
+  if (zCnb) it.payoutRateCnb = 1; else delete it.payoutRateCnb;
   // Fetch buyRateEur pokud chybí a položka je v EUR
   if (it.buyCurrency === 'EUR' && it.buyDate && !it.buyRateEur) {
     var _br = await fetchRateForDate(it.buyDate);

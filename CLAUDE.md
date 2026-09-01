@@ -168,9 +168,28 @@ Datum na dokladu je **datum vyplacení**, ne datum prodeje — v daňové
 evidenci se příjem počítá dnem, kdy peníze dorazily. Popisek je proto
 jen „Datum". Dokud payout nedorazil, použije se datum prodeje.
 
-Částka je **jen v měně, ve které prodej proběhl**. Přepočet eur na koruny
-na doklad nepatří: kupující platil eura a účetní si měsíc přepočítá sám.
-Hlídá to `test-saledoc.js`.
+Strany jsou **Dodavatel a Odběratel**, ne Prodávající a Kupující — tak
+to má účetní na všem ostatním, co mu chodí. Místo prodeje na dokladu
+není: odběratel je vypsaný nahoře.
+
+Závazná částka je **v měně, ve které prodej proběhl**. Přepočet na
+koruny je pod ní, ale **drobně** — dřív byl stejně výrazný jako hlavní
+suma a vypadalo to, že jsou částky dvě. Kurz je ten uložený ke dni
+vyplacení, nikdy dopočítaný dnešním, a datum odkazuje na denní kurz ČNB
+toho dne. „kurz ČNB" se napíše **jen když ten uložený opravdu z ČNB je**
+(`payoutRateCnb`); u starších prodejů pochází z kurzovního API a tvrdit
+u nich ČNB by účetní odhalil jedním kliknutím.
+
+`fetchRateForDate()` bere ČNB jako první zdroj, kurzovní API zůstala
+jako záloha. **Dosažitelnost ČNB z prohlížeče nebyla ověřena** — z vývojového
+prostředí je cnb.cz blokovaná. Kdyby ji CORS odmítl, spadne se na zálohu
+a všechno funguje jako dřív, jen se nikde nenapíše ČNB.
+
+Kam poslat peníze, se bere z `ÚDAJE U ZPŮSOBU VYPLACENÍ` — u eurového
+prodeje IBAN, jinak číslo účtu, a když ten správný chybí, ten druhý.
+Údaje visí na názvu možnosti, takže **přejmenování v editoru dropdownů
+je musí přenést s sebou**, jinak by z dokladu zmizely bez vysvětlení.
+Hlídá to `test-saledoc.js` a `test-payout.js`.
 
 ### Fotky
 
@@ -200,6 +219,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
 | cashflow z payoutů | `CASHFLOW Z PAYOUTŮ` |
 | prodejní doklad | `PRODEJNÍ DOKLAD` |
+| údaje u způsobu vyplacení | `ÚDAJE U ZPŮSOBU VYPLACENÍ` |
 | typ dokladu u místa prodeje | `TYP DOKLADU U MÍSTA PRODEJE` |
 | analytika zákazníků a partnerů | `ANALYTIKA ZÁKAZNÍKŮ` |
 | zdroj poptávky u prodeje | `ZDROJ POPTÁVKY` |
@@ -278,7 +298,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 48 souborů
+node test/run.js              # kontrola syntaxe + všech 49 souborů
 node test/run.js archive      # jen vybrané
 ```
 

@@ -18,6 +18,7 @@ const SEED = [
   { id: 'p3', name: 'Eurová bota', category: 'sneakers', buyPrice: 100, buyCurrency: 'EUR',
     sellPrice: 5000, sellPriceOrig: 200, sellCurrency: 'EUR', profit: 2000, saleState: 'paid',
     saleDate: '2026-08-05', payoutDate: '2026-08-12', soldWhere: 'Klekt',
+    payoutRateEur: 24.19, payoutRateCnb: 1, paymentMethod: 'Revolut',
     dateAdded: 3, buyDate: '2026-06-01', tags: [] },
   { id: 's1', name: 'Na skladě', category: 'sneakers', buyPrice: 1000, buyCurrency: 'CZK',
     saleState: 'stock', location: 'Doma', dateAdded: 4, buyDate: '2026-06-01', tags: [] },
@@ -152,14 +153,17 @@ const SEED = [
 
   // ══════════════════════════════════════════════════════════════
   section('5) Eurový prodej');
-  /* Kupující platil eura, tak jsou na dokladu eura. Přepočet na koruny
-     by se tvářil jako závazný údaj, a přitom je jen orientační — účetní
-     si měsíc přepočítá kurzem, se kterým pracuje sám. */
+  /* Závazná je částka v měně, kterou kupující platil. Přepočet na
+     koruny je na dokladu taky, ale drobně pod ní (viz 5b) — nikdy ne
+     jako druhá hlavní suma. */
   h = await doklad('p3'); t = text(h);
   check('ukáže eura', /200 €/.test(t), t.slice(0, 400));
-  check('korunový přepočet na dokladu není',
-    !/5 ?000/.test(t.replace(/[\u00a0\u202f]/g, ' ')) && !/Kč/.test(t),
-    'přepočet nemá co dělat na dokladu | ' + t.slice(0, 400));
+  check('celková částka je jen v eurech', (function () {
+    const c = /<div class="celkem">[\s\S]*?<\/div><\/div>/.exec(h);
+    return !!c && /200 €/.test(c[0]) && !/Kč/.test(c[0]);
+  })(), 'koruny patří pod částku, ne do ní');
+  check('a stará verze s korunami v závorce je pryč',
+    !/€ \(/.test(t), t.slice(0, 400));
 
   // Korunový prodej se pořád ukazuje v korunách
   h = await doklad('p1'); t = text(h);
@@ -180,6 +184,69 @@ const SEED = [
   });
   check('bez payoutu se použije datum prodeje',
     text(bezPayoutu.h).includes(bezPayoutu.ocek), 'čekáno ' + bezPayoutu.ocek);
+
+  // ══════════════════════════════════════════════════════════════
+  /* Kupující platil eura, ale účetnictví se vede v korunách. Přepočet
+     tedy na dokladu je — jen drobně pod částkou, ne jako druhá hlavní
+     suma, a s kurzem ke dni vyplacení, ne dnešním. */
+  section('5b) Přepočet na koruny');
+  h = await doklad('p3'); t = text(h).replace(/[\u00a0\u202f]/g, ' ');
+  check('koruny jsou na dokladu drobně', /4 838(,00)? Kč/.test(t), t.slice(0, 500));
+  check('kurz i jeho datum', /24,19 Kč\/€ k 12\.08\.2026/.test(t), t.slice(0, 500));
+  check('u kurzu z ČNB se to i napíše', /kurz ČNB 24,19/.test(t), t.slice(0, 500));
+  check('odkazuje na denní kurz ČNB toho dne',
+    /href="https:\/\/www\.cnb\.cz[^"]*denni_kurz\.txt\?date=12\.08\.2026"/.test(h),
+    'aby si to účetní ověřil');
+  check('přepočet je menší než hlavní částka', (function () {
+    const c = /\.celkem \.c\{font-size:(\d+)px/.exec(h);
+    const pp = /\.prepocet\{[^}]*font-size:(\d+)px/.exec(h);
+    return c && pp && Number(pp[1]) < Number(c[1]);
+  })(), 'dřív to bylo moc výrazné');
+
+  // Cizí kurz se za ČNB nevydává
+  const bezCnb = await page.evaluate(() => {
+    const it = items.find(i => i.id === 'p3');
+    delete it.payoutRateCnb;
+    window.__doklad = null; openSaleDocument('p3');
+    it.payoutRateCnb = 1;
+    return window.__doklad;
+  });
+  check('kurz odjinud se za ČNB nevydává',
+    !/kurz ČNB/.test(text(bezCnb)) && /kurz 24,19/.test(text(bezCnb).replace(/[\u00a0\u202f]/g, ' ')),
+    text(bezCnb).slice(0, 400));
+
+  // Korunový prodej žádný přepočet nepotřebuje
+  h = await doklad('p1'); t = text(h);
+  check('u korunového prodeje přepočet není', !/Kč\/€/.test(t), t.slice(0, 400));
+
+  // ══════════════════════════════════════════════════════════════
+  /* Kam poslat peníze. Bez účtu je doklad k zaplacení nepoužitelný.
+     Místo prodeje naopak odešlo — odběratel je vypsaný nahoře. */
+  section('5c) Účet a strany dokladu');
+  const ucty = await page.evaluate(() => {
+    savePayoutDetails({ Revolut: { ucet: '123456789/0100', iban: 'CZ6508000000192000145399', profil: 'business' } });
+    const vysl = {};
+    window.__doklad = null; openSaleDocument('p1'); vysl.czk = window.__doklad;
+    window.__doklad = null; openSaleDocument('p3'); vysl.eur = window.__doklad;
+    savePayoutDetails({ Revolut: { iban: 'CZ6508000000192000145399' } });
+    window.__doklad = null; openSaleDocument('p1'); vysl.jenIban = window.__doklad;
+    savePayoutDetails({});
+    window.__doklad = null; openSaleDocument('p1'); vysl.nic = window.__doklad;
+    return vysl;
+  });
+  check('korunový prodej ukáže číslo účtu',
+    /Číslo účtu 123456789\/0100/.test(text(ucty.czk)), text(ucty.czk).slice(0, 400));
+  check('eurový prodej ukáže IBAN',
+    /IBAN CZ6508000000192000145399/.test(text(ucty.eur)), text(ucty.eur).slice(0, 400));
+  check('když chybí číslo účtu, použije se IBAN',
+    /IBAN CZ6508000000192000145399/.test(text(ucty.jenIban)), text(ucty.jenIban).slice(0, 400));
+  check('bez vyplněných údajů se řádek nevypíše',
+    !/Číslo účtu|IBAN/.test(text(ucty.nic)), text(ucty.nic).slice(0, 400));
+
+  h = await doklad('p1'); t = text(h);
+  check('strany jsou Dodavatel a Odběratel', /Dodavatel/.test(t) && /Odběratel/.test(t), t.slice(0, 300));
+  check('a ne Prodávající s Kupujícím', !/Prodávající|Kupující/.test(t), t.slice(0, 300));
+  check('místo prodeje na dokladu není', !/Platforma/.test(t), t.slice(0, 400));
 
   // ══════════════════════════════════════════════════════════════
   section('6) Kdy doklad nejde vystavit');
