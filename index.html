@@ -3078,7 +3078,36 @@ function _commitArchiveState(written) {
 var _fbCloudReady = false; // true až po prvním onSnapshot
 var _cekaNaPrvniSnimek = false; // někdo chtěl uložit dřív, než cloud odpověděl
 var _fbSaveCallId = 0;
-var _lastOwnSavedAt = null; // savedAt string našeho posledního cloudu — ignorujeme vlastní snapshot
+/* Razítka zápisů, které jsme poslali my sami. Ozvěna vlastního zápisu
+   se pak nemá čím tvářit jako cizí změna.
+
+   Je to seznam, ne jedno razítko: zápisů může letět víc po sobě
+   (běžný zápis a hned za ním doháněcí) a ozvěny nedorazí nutně
+   v pořadí. Když si aplikace pamatovala jen ten poslední, ozvěna toho
+   dřívějšího vypadala jako změna odjinud — načetla se znovu a vyskočila
+   hláška „Synchronizováno.". Při čilé práci jich tak naskákaly desítky. */
+var _vlastniZapisy = [];
+var _lastOwnSavedAt = null;   // to poslední, jen pro čitelnost jinde
+function _zapamatujVlastniZapis(ts) {
+  if (!ts) return;
+  _lastOwnSavedAt = ts;
+  _vlastniZapisy.push(ts);
+  if (_vlastniZapisy.length > 12) _vlastniZapisy.shift();
+}
+function _jeNasZapis(ts) { return !!ts && _vlastniZapisy.indexOf(ts) !== -1; }
+
+/* Levný otisk skladu — na porovnání „změnilo se něco?" stačí. Celý
+   JSON by u tisíce položek běžel při každém snímku zbytečně dlouho. */
+function _otiskPolozek() {
+  var it = items || [];
+  var h = it.length + ':';
+  for (var i = 0; i < it.length; i++) {
+    var x = it[i] || {};
+    h += (x.id || '') + (x.saleState || '') + (x.waitState || '')
+      + (x.sellPrice || '') + (x.payoutDate || '') + (x.name || '').length + '|';
+  }
+  return h;
+}
 function fbSaveToCloud() {
   if (jeUctetni()) return;   // pohled účetního je jen ke čtení
   if (!window._fbUser || !window._fbDb || !window._fbFns) {
@@ -3118,6 +3147,13 @@ function fbSaveToCloud() {
      klidně vteřiny a uživatel mezitím dál pracuje — co udělá potom,
      v tomhle balíčku není. */
   var verzeOdeslani = _itemsVersion;
+  /* Razítko se hlásí za vlastní hned, ne až po potvrzení zápisu.
+     Firestore ohlásí zápis posluchači okamžitě, dávno před tím, než
+     dorazí potvrzení ze serveru — a do té chvíle aplikace vlastní
+     ozvěnu nepoznala, brala ji jako změnu odjinud, načetla ji znovu
+     a vypsala „Synchronizováno.". Při běžné práci se tak hlášky
+     sypaly jedna za druhou. */
+  _zapamatujVlastniZapis(ts);
   // Timeout 10s — Firestore ve offline stavu nechá promise viset navždy
   function withTimeout(p) {
     return Promise.race([p, new Promise(function(_, reject) {
@@ -3125,7 +3161,7 @@ function fbSaveToCloud() {
     })]);
   }
   function done(written) {
-    _lastOwnSavedAt = ts;
+    _zapamatujVlastniZapis(ts);
     _commitArchiveState(written);
     /* Uklidit po sobě smí jen zápis, který opravdu obsahuje současný
        stav. Když se data mezitím změnila, tahle změna v cloudu není —
@@ -3253,7 +3289,7 @@ function fbForceUploadToCloud() {
   function done(written) {
     localStorage.setItem(SK+'_savedAt', payload.savedAt);
     localStorage.removeItem(SK+'_dirty');
-    _lastOwnSavedAt = payload.savedAt;
+    _zapamatujVlastniZapis(payload.savedAt);
     _commitArchiveState(written);
     _fbCloudReady = true;
     if (dot) dot.className = 'fb-status fb-online';
@@ -15302,10 +15338,15 @@ function _spustSkladPosluchace() {
       } else {
         // Subsequent snapshot — přišla změna z jiného zařízení
         if (!_fbCloudReady) _fbCloudReady = true;
-        // Ignoruj pokud jsme to MY sami právě uložili (stejný savedAt string)
-        var isOwnSave = _lastOwnSavedAt && data.savedAt === _lastOwnSavedAt;
-        if (!isOwnSave && cloudTime > localTime + 500) {
-          if (_applyCloudData(data, archiveItems, cloud.photos)) showToast('Synchronizováno.');
+        // Ozvěnu vlastního zápisu ignoruj — a to kteréhokoli, ne jen posledního
+        if (!_jeNasZapis(data.savedAt) && cloudTime > localTime + 500) {
+          /* Hlásit se má jen skutečná změna. Snímek může dorazit i tehdy,
+             když se položky nezměnily (jiný dokument v kolekci, opakované
+             doručení), a hláška při každém takovém doručení je jen šum. */
+          var predtim = _otiskPolozek();
+          if (_applyCloudData(data, archiveItems, cloud.photos) && _otiskPolozek() !== predtim) {
+            showToast('Synchronizováno.');
+          }
         }
       }
       // Našeptávač jede ze stejného snímku — nezávisle na tom, jestli se data měnila

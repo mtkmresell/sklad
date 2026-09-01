@@ -102,6 +102,15 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
   nebyl potřeba. Změna z toho okna se neztratí — zůstává v `localStorage`
   s `_dirty` a po doletu snímku se buď doposílá, nebo o ní rozhodne
   posluchač. Hlídá to `test-zarizeni.js`.
+- **Razítko vlastního zápisu se hlásí před odesláním, ne po potvrzení.**
+  Firestore ohlásí zápis posluchači okamžitě, dávno před tím, než dorazí
+  potvrzení ze serveru. Dokud se razítko zapisovalo do `_vlastniZapisy`
+  až v `done()`, aplikace vlastní ozvěnu nepoznala: brala ji jako změnu
+  odjinud, znovu načetla data a vypsala „Synchronizováno." — při běžné
+  práci se hlášky sypaly jedna za druhou. Pamatuje se **víc razítek**,
+  protože zápisů letí víc po sobě a ozvěny nemusí dorazit v pořadí.
+  A hlásí se jen skutečná změna položek (`_otiskPolozek`). Hlídá to
+  `test-zarizeni.js`, sekce 6.
 - **Po doletu zápisu uklízí jen ten, který obsahuje současný stav.** Zápis
   letí po síti klidně vteřiny a uživatel mezitím pracuje dál; co udělá
   potom, v odeslaném balíčku není. `fbSaveToCloud` si proto pamatuje

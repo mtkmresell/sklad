@@ -160,6 +160,97 @@ async function zarizeni(browser, opts) {
   check('a nic se nezapisovalo', necinne.commits === 0, String(necinne.commits));
   await p3.close();
 
+  // ══════════════════════════════════════════════════════════════
+  /* Firestore ohlásí zápis posluchači OKAMŽITĚ, dávno před tím, než
+     dorazí potvrzení ze serveru. Dokud se razítko hlásilo za vlastní
+     až po potvrzení, aplikace tu ozvěnu nepoznala: brala ji jako změnu
+     odjinud, načetla ji znovu a vypsala „Synchronizováno." — a při
+     běžné práci se hlášky sypaly jedna za druhou. */
+  section('6) Vlastní ozvěna se nehlásí jako cizí změna');
+  const p4 = await zarizeni(browser, { items: VCEREJSI, savedAt: '2026-08-30T08:00:00.000Z', cloud: CLOUD_DOMA });
+  p4.on('pageerror', e => errs.push('PAGEERROR(4): ' + e.message));
+  const ozveny = await p4.evaluate(async () => {
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 700));
+    const hlasky = [];
+    const orig = window.showToast;
+    window.showToast = function (m) { hlasky.push(m); return orig.apply(this, arguments); };
+    /* Kolikrát se posluchač pustil do načítání dat. Vlastní ozvěna se
+       nemá načítat vůbec — samotné mlčení hlášky by mohla zajistit
+       i pojistka „hlas se jen při skutečné změně", a ta by tenhle
+       problém jen schovala. */
+    let nacteni = 0;
+    const origApply = window._applyCloudData;
+    window._applyCloudData = function () { nacteni++; return origApply.apply(this, arguments); };
+
+    // Ozvěna hned při zápisu, potvrzení až o 900 ms později
+    const puvodni = window._fbFns.writeBatch;
+    let zapisu = 0;
+    window._fbFns.writeBatch = function (db) {
+      const bt = puvodni(db);
+      const c = bt.commit.bind(bt);
+      bt.commit = function () {
+        return c().then(function (v) {
+          zapisu++;
+          window.__emitSnapshot();
+          return new Promise(res => setTimeout(() => res(v), 900));
+        });
+      };
+      return bt;
+    };
+    /* Změna během letícího zápisu: verze se rozejde, done() neposune
+       lokální razítko a od té chvíle cloud utíká dopředu — právě
+       tehdy přestane chránit i pojistka na 500 ms. */
+    items[0].name = 'první'; sv();
+    await new Promise(r => setTimeout(r, 600));
+    items[0].name = 'druhá během letu'; sv();
+    await new Promise(r => setTimeout(r, 2500));
+    for (let i = 0; i < 4; i++) {
+      items[0].note = 'úprava ' + i; sv();
+      await new Promise(r => setTimeout(r, 1600));
+    }
+    await new Promise(r => setTimeout(r, 1000));
+    window._fbFns.writeBatch = puvodni; window.showToast = orig;
+    window._applyCloudData = origApply;
+    return { zapisu, nacteni,
+      sync: hlasky.filter(h => /Synchronizováno/.test(h)).length, hlasky: hlasky.slice(0, 8) };
+  });
+  check('zápisů proběhlo víc po sobě', ozveny.zapisu >= 4, String(ozveny.zapisu));
+  check('vlastní ozvěna se vůbec nenačítá', ozveny.nacteni === 0,
+    ozveny.nacteni + '× načteno — aplikace bere vlastní zápis jako cizí změnu');
+  check('a nic se nehlásí', ozveny.sync === 0,
+    ozveny.sync + '× „Synchronizováno." | ' + JSON.stringify(ozveny.hlasky));
+  await p4.close();
+
+  // ══════════════════════════════════════════════════════════════
+  section('7) Cizí změna se ohlásí');
+  const p5 = await zarizeni(browser, { items: VCEREJSI, savedAt: '2026-08-30T08:00:00.000Z', cloud: CLOUD_DOMA });
+  p5.on('pageerror', e => errs.push('PAGEERROR(5): ' + e.message));
+  const cizi = await p5.evaluate(async () => {
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 800));
+    const hlasky = [];
+    const orig = window.showToast;
+    window.showToast = function (m) { hlasky.push(m); return orig.apply(this, arguments); };
+    // Druhé zařízení něco změnilo
+    const d = window.__store['users/u1/sklad/data'];
+    const kopie = JSON.parse(JSON.stringify(d));
+    kopie.savedAt = new Date(Date.now() + 60000).toISOString();
+    (kopie.itemsStock || kopie.items)[0].saleState = 'paid';
+    window.__store['users/u1/sklad/data'] = kopie;
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 800));
+    // A pak přijde tentýž snímek znovu, aniž by se co změnilo
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 500));
+    window.showToast = orig;
+    return { hlasky, stav: items[0].saleState };
+  });
+  check('cizí změna se načte', cizi.stav === 'paid', String(cizi.stav));
+  check('a ohlásí se právě jednou',
+    cizi.hlasky.filter(h => /Synchronizováno/.test(h)).length === 1, JSON.stringify(cizi.hlasky));
+  await p5.close();
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');
