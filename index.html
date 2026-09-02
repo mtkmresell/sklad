@@ -3108,7 +3108,22 @@ function _otiskPolozek() {
   }
   return h;
 }
-function fbSaveToCloud() {
+/* ── Kolik času dát zápisu a kolikrát to zkusit ───────────────────────
+   Deset vteřin bylo na mobilu málo. Firestore tam jede přes dlouhé
+   dotazování a na pomalé síti se potvrzení zápisu za deset vteřin
+   nestihne vrátit — přitom zápis většinou proběhne. Uživatel viděl
+   červenou a „Cloud nedostupný", ačkoli se nic zlého nedělo.
+
+   Horší bylo, že se po selhání nic nezkoušelo znovu: změna zůstala
+   ležet s příznakem neuložených změn, dokud člověk neudělal něco
+   dalšího. Na mobilu tak aplikace přestala synchronizovat a nedala
+   o tom vědět jinak než tou červenou tečkou. */
+var _ZAPIS_TIMEOUT_MS = 25000;
+var _ZAPIS_POKUSU = 3;
+var _ZAPIS_PAUZY = [2000, 6000];   // mezi pokusy
+
+function fbSaveToCloud(pokus) {
+  pokus = pokus || 0;
   if (jeUctetni()) return;   // pohled účetního je jen ke čtení
   if (!window._fbUser || !window._fbDb || !window._fbFns) {
     console.warn('fbSaveToCloud: chybí', {user:!!window._fbUser, db:!!window._fbDb, fns:!!window._fbFns});
@@ -3154,10 +3169,10 @@ function fbSaveToCloud() {
      a vypsala „Synchronizováno.". Při běžné práci se tak hlášky
      sypaly jedna za druhou. */
   _zapamatujVlastniZapis(ts);
-  // Timeout 10s — Firestore ve offline stavu nechá promise viset navždy
+  // Bez timeoutu nechá Firestore v offline stavu promise viset navždy
   function withTimeout(p) {
     return Promise.race([p, new Promise(function(_, reject) {
-      setTimeout(function() { reject(new Error('timeout')); }, 10000);
+      setTimeout(function() { reject(new Error('timeout')); }, _ZAPIS_TIMEOUT_MS);
     })]);
   }
   function done(written) {
@@ -3180,9 +3195,23 @@ function fbSaveToCloud() {
     if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-online';
   }
   function failed(e) {
+    console.warn('fbSaveToCloud pokus ' + (pokus + 1) + ' selhal:', e && e.message);
+    /* Zkusit znovu, než se začne strašit. Data jsou pořád v localStorage
+       s příznakem neuložených změn, takže se nemá co ztratit — jen to
+       chvíli trvá. Novější změna od uživatele má přednost: použije se
+       stejný časovač, takže tenhle pokus zahodí. */
+    if (pokus + 1 < _ZAPIS_POKUSU && window._fbUser) {
+      if (_svCloudTimer) clearTimeout(_svCloudTimer);
+      _svCloudTimer = setTimeout(function() {
+        fbSaveToCloud(pokus + 1);
+      }, _ZAPIS_PAUZY[Math.min(pokus, _ZAPIS_PAUZY.length - 1)]);
+      return;
+    }
     if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-error';
-    console.error('fbSaveToCloud chyba:', e);
-    showToast(e.message === 'timeout' ? 'Cloud nedostupný – data jsou uložena lokálně.' : 'Chyba uložení do cloudu!', 'err');
+    console.error('fbSaveToCloud se nepodařil ani napotřetí:', e);
+    showToast(e.message === 'timeout'
+      ? 'Cloud neodpovídá – změny jsou uložené a odešlou se, až se spojení srovná.'
+      : 'Chyba uložení do cloudu!', 'err');
   }
   // Starý způsob — všechno v jednom dokumentu (když pravidla archivy nepustí)
   function saveLegacy() {

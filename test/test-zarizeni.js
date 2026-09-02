@@ -251,6 +251,100 @@ async function zarizeni(browser, opts) {
     cizi.hlasky.filter(h => /Synchronizováno/.test(h)).length === 1, JSON.stringify(cizi.hlasky));
   await p5.close();
 
+  // ══════════════════════════════════════════════════════════════
+  /* Na mobilu jede Firestore přes dlouhé dotazování a na pomalé síti
+     se potvrzení zápisu nevrátí včas. Dřív se v tu chvíli jen rozsvítila
+     červená a nic se nezkusilo znovu — změna zůstala ležet, dokud
+     člověk neudělal něco dalšího, a aplikace přestala synchronizovat. */
+  section('8) Neúspěšný zápis se zkusí znovu');
+  const p6 = await zarizeni(browser, { items: VCEREJSI, savedAt: '2026-08-30T08:00:00.000Z', cloud: CLOUD_DOMA });
+  p6.on('pageerror', e => errs.push('PAGEERROR(6): ' + e.message));
+  const opakovani = await p6.evaluate(async () => {
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 700));
+    const hlasky = [];
+    const orig = window.showToast;
+    window.showToast = function (m) { if (/cloud/i.test(m)) hlasky.push(m); return orig.apply(this, arguments); };
+
+    // Síť vypadne, pak se srovná
+    window.__failWrites = true;
+    const pokusu = [];
+    const puvodni = window._fbFns.writeBatch;
+    window._fbFns.writeBatch = function (db) { pokusu.push(Date.now()); return puvodni(db); };
+
+    items[0].saleState = 'waiting';
+    sv();
+    await new Promise(r => setTimeout(r, 2600));       // první pokus selhal, druhý běží
+    const poPrvnim = {
+      pokusu: pokusu.length,
+      hlasek: hlasky.length,
+      tecka: (document.getElementById('fbStatusDot') || {}).className,
+    };
+    window.__failWrites = false;                        // spojení se srovnalo
+    await new Promise(r => setTimeout(r, 7000));
+    const d = window.__store['users/u1/sklad/data'];
+    window._fbFns.writeBatch = puvodni; window.showToast = orig;
+    return {
+      poPrvnim,
+      pokusuCelkem: pokusu.length,
+      hlasek: hlasky.length,
+      vCloudu: ((d.itemsStock || d.items || [])[0] || {}).saleState,
+      dirty: !!localStorage.getItem('sklad_v3_dirty'),
+      tecka: (document.getElementById('fbStatusDot') || {}).className,
+    };
+  });
+  check('po prvním selhání se zkusí znovu', opakovani.poPrvnim.pokusu >= 2,
+    opakovani.poPrvnim.pokusu + ' pokusů — dřív se nezkoušelo vůbec');
+  check('a hned se nestraší hláškou', opakovani.poPrvnim.hlasek === 0,
+    JSON.stringify(opakovani.poPrvnim));
+  check('když se spojení srovná, změna dojde', opakovani.vCloudu === 'waiting',
+    String(opakovani.vCloudu));
+  check('a příznak neuložených změn zmizí', !opakovani.dirty);
+  check('tečka je zase zelená', /fb-online/.test(opakovani.tecka || ''), opakovani.tecka);
+  await p6.close();
+
+  // ══════════════════════════════════════════════════════════════
+  /* Přesně mobilní případ: zápis nevisí na chybě, ale na tom, že se
+     potvrzení nevrátí. Musí se to nakonec říct — mlčet by znamenalo
+     tvářit se, že je uloženo. */
+  section('9) Zápis, co nedojde, se nakonec ohlásí');
+  const p7 = await zarizeni(browser, { items: VCEREJSI, savedAt: '2026-08-30T08:00:00.000Z', cloud: CLOUD_DOMA });
+  p7.on('pageerror', e => errs.push('PAGEERROR(7): ' + e.message));
+  const vzdal = await p7.evaluate(async () => {
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 700));
+    // Zkrácené lhůty, ať test neběží minutu
+    _ZAPIS_TIMEOUT_MS = 300; _ZAPIS_PAUZY = [100, 100];
+    const hlasky = [];
+    const orig = window.showToast;
+    window.showToast = function (m) { if (/cloud/i.test(m)) hlasky.push(m); return orig.apply(this, arguments); };
+    // Potvrzení se nikdy nevrátí — jako na pomalé mobilní síti
+    let pokusu = 0;
+    const puvodni = window._fbFns.writeBatch;
+    window._fbFns.writeBatch = function (db) {
+      const bt = puvodni(db);
+      bt.commit = function () { pokusu++; return new Promise(function () {}); };
+      return bt;
+    };
+    items[0].saleState = 'waiting';
+    sv();
+    await new Promise(r => setTimeout(r, 3000));
+    window._fbFns.writeBatch = puvodni; window.showToast = orig;
+    _ZAPIS_TIMEOUT_MS = 25000; _ZAPIS_PAUZY = [2000, 6000];
+    return {
+      pokusu, hlasky,
+      dirty: !!localStorage.getItem('sklad_v3_dirty'),
+      tecka: (document.getElementById('fbStatusDot') || {}).className,
+    };
+  });
+  check('zkusí se to třikrát', vzdal.pokusu === 3, vzdal.pokusu + ' pokusů');
+  check('a ozve se to až nakonec, jednou', vzdal.hlasky.length === 1, JSON.stringify(vzdal.hlasky));
+  check('hláška neslibuje, že je uloženo v cloudu',
+    /odešlou se|neodpovídá/i.test(vzdal.hlasky[0] || ''), String(vzdal.hlasky[0]));
+  check('změna zůstává neuložená', vzdal.dirty, 'jinak by se o ní zapomnělo');
+  check('a tečka je červená', /fb-error/.test(vzdal.tecka || ''), vzdal.tecka);
+  await p7.close();
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');

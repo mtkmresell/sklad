@@ -111,6 +111,13 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
   protože zápisů letí víc po sobě a ozvěny nemusí dorazit v pořadí.
   A hlásí se jen skutečná změna položek (`_otiskPolozek`). Hlídá to
   `test-zarizeni.js`, sekce 6.
+- **Neúspěšný zápis se zkusí znovu** (`_ZAPIS_POKUSU`, pauzy `_ZAPIS_PAUZY`)
+  a teprve pak se ozve. Timeout je `_ZAPIS_TIMEOUT_MS` = 25 s; deset vteřin
+  bylo na mobilu málo — Firestore tam jede přes dlouhé dotazování a potvrzení
+  se na pomalé síti nestihne vrátit, přitom zápis většinou proběhne. Dřív se
+  po selhání nezkoušelo nic: změna zůstala ležet s `_dirty`, dokud člověk
+  neudělal něco dalšího, takže aplikace na mobilu tiše přestala
+  synchronizovat. Hlídá to `test-zarizeni.js`, sekce 8 a 9.
 - **Po doletu zápisu uklízí jen ten, který obsahuje současný stav.** Zápis
   letí po síti klidně vteřiny a uživatel mezitím pracuje dál; co udělá
   potom, v odeslaném balíčku není. `fbSaveToCloud` si proto pamatuje
