@@ -138,6 +138,18 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
   zápis. Bez toho si aplikace myslela, že je srovnaná, cloud o změně
   nevěděl a při dalším startu vyhrál starší cloud: **prodaná položka se
   vracela na sklad**. Hlídá to `test-listener.js`, sekce 9.
+- **Nastavení se přebírá z každého snímku, nezávisle na souboji o položky.**
+  Dřív se načítalo jen uvnitř `_applyCloudData`, tedy jen když vyhrál cloud.
+  Stačilo tohle: na počítači přibylo místo prodeje, než snímek dorazil na
+  mobil, člověk na mobilu něco udělal (a posunul tím svoje razítko dopředu)
+  — snímek se zahodil **celý, i s nastavením**, mobil pak zapsal svůj starý
+  seznam a **nové místo prodeje zmizelo všem**. Takhle se opakovaně ztrácel
+  Instagram i to, co u míst prodeje viselo (typ dokladu, kategorie, čísla
+  účtů). Vlastní ozvěna se přeskakuje, souboj o položky zůstává nedotčený
+  a `keep` v `syncSettings()` hlídá, aby prázdná hodnota nic nepřepsala.
+  Když se nastavení opravdu změní, překreslí se — jinak by nové místo
+  leželo v `localStorage` a v nabídkách se objevilo až po obnovení stránky.
+  Hlídá to `test-zarizeni.js`, sekce 12.
 
 ### Nastavení: `syncSettings()`
 

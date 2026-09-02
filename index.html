@@ -3108,6 +3108,19 @@ function _otiskPolozek() {
   }
   return h;
 }
+/* Totéž pro nastavení — aby se po snímku překreslovalo jen tehdy, když
+   se nastavení opravdu změnilo. Bez toho by se buď překreslovalo pořád,
+   nebo (hůř) nové místo prodeje viselo v localStorage a v nabídkách se
+   objevilo až po obnovení stránky. */
+function _otiskNastaveni() {
+  var h = '';
+  syncSettings().forEach(function(s) {
+    var v = null;
+    try { v = localStorage.getItem(s.key); } catch(e) {}
+    h += s.field + '=' + (v == null ? '' : v) + '\n';
+  });
+  return h;
+}
 /* ── Kolik času dát zápisu a kolikrát to zkusit ───────────────────────
    Deset vteřin bylo na mobilu málo. Firestore tam jede přes dlouhé
    dotazování a na pomalé síti se potvrzení zápisu za deset vteřin
@@ -15395,6 +15408,29 @@ function _spustSkladPosluchace() {
       var localSavedAt = localStorage.getItem(SK+'_savedAt');
       var localTime = localSavedAt ? new Date(localSavedAt).getTime() : 0;
 
+      /* Nastavení se přebírá z KAŽDÉHO snímku, nezávisle na tom, kdo
+         vyhraje souboj o položky.
+
+         Dřív se načítalo jen uvnitř _applyCloudData, tedy jen když
+         vyhrál cloud. Stačilo tohle: na počítači přibylo místo prodeje,
+         než snímek dorazil na mobil, člověk na mobilu něco udělal
+         (a tím posunul svoje razítko dopředu) — snímek se proto zahodil
+         celý, i s nastavením. Mobil pak zapsal svůj starý seznam a nové
+         místo prodeje zmizelo všem. Opakovaně, protože se to dalo
+         spustit jakoukoli činností v nesprávnou chvíli.
+
+         Souboj o položky tím zůstává nedotčený: nastavení je malé,
+         nekonfliktní a `keep` v syncSettings hlídá, aby prázdná hodnota
+         nic nepřepsala. Vlastní ozvěnu přeskakujeme — nese naše vlastní
+         hodnoty, takže by to byla práce nazmar. */
+      var nastaveniZmenena = false;
+      if (!_jeNasZapis(data.savedAt)) {
+        var otiskNast = _otiskNastaveni();
+        try { applySyncSettings(data); }
+        catch (e) { console.warn('nastavení ze snímku:', e); }
+        nastaveniZmenena = _otiskNastaveni() !== otiskNast;
+      }
+
       if (jePrvni) {
         _fbCloudReady = true;
         // Zruš jakýkoli pending sv() cloud timer
@@ -15447,6 +15483,13 @@ function _spustSkladPosluchace() {
             showToast('Synchronizováno.');
           }
         }
+      }
+      /* Nové místo prodeje se musí objevit v nabídkách hned, ne až po
+         obnovení stránky — a filtry se stavějí z klíče, který o změně
+         v localStorage sám neví. */
+      if (nastaveniZmenena) {
+        window._lastFilterBuildKey = null;
+        try { renderItems(); } catch(e) { console.warn('překreslení po nastavení:', e); }
       }
       // Našeptávač jede ze stejného snímku — nezávisle na tom, jestli se data měnila
       try { _applyItemCacheDoc(cloud.cache, data.itemCache); } catch(e) { console.warn('cache našeptávače:', e); }

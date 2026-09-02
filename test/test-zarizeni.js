@@ -441,6 +441,76 @@ async function zarizeni(browser, opts) {
   check('a tečka zčervená', /fb-error/.test(bezZtraty.sDirty.tecka || ''), bezZtraty.sDirty.tecka);
   await p9.close();
 
+  // ══════════════════════════════════════════════════════════════
+  /* Přesně to, co majitele potkalo čtyřikrát po sobě: na počítači
+     přibude místo prodeje i s nastavením (typ dokladu, kategorie),
+     snímek doletí na mobil až potom, co na mobilu něco udělal — takže
+     jeho razítko je novější a snímek prohrál souboj o položky. Dřív se
+     zahodil celý, i s nastavením, a mobil pak zapsal svůj starý seznam
+     zpátky. Nové místo prodeje tím zmizelo všem. */
+  section('12) Nastavení se přebírá i ze snímku, který prohrál');
+  const NIC_NAVIC = Object.assign({}, CLOUD_DOMA, {
+    platGroups: JSON.stringify({ local: ['Vinted'], platCategories: {}, docTypes: {} }),
+    paymentOpts: ['Revolut', 'Fio Banka'],
+  });
+  const p10 = await zarizeni(browser, { items: VCEREJSI, savedAt: '2026-08-30T08:00:00.000Z', cloud: NIC_NAVIC });
+  p10.on('pageerror', e => errs.push('PAGEERROR(10): ' + e.message));
+  const pozdniSnimek = await p10.evaluate(async () => {
+    // Zařízení je srovnané podle cloudu — a Instagram zatím nikde není
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 1200));
+    const predtim = localStorage.getItem('sklad_plat_groups_v1') || '';
+
+    // Práce na mobilu — tím se jeho razítko dostane před cokoli v cloudu
+    items[0].note = 'práce na mobilu';
+    sv();
+    await new Promise(r => setTimeout(r, 1500));
+    const mojeRazitko = localStorage.getItem('sklad_v3_savedAt');
+
+    /* A teprve teď dorazí snímek zápisu z počítače: nese nové místo
+       prodeje i jeho nastavení, ale razítko má starší než mobil. */
+    const d = window.__store['users/u1/sklad/data'];
+    d.platGroups = JSON.stringify({
+      local: ['Vinted', 'Instagram'],
+      platCategories: { Instagram: ['sneakers'] },
+      docTypes: { Instagram: 'faktura' },
+    });
+    d.paymentOpts = ['Revolut', 'Fio Banka', 'Wise'];
+    // Položky v tom snímku jsou starší — o ty se mobil připravit nesmí
+    (d.itemsStock || d.items || []).forEach(x => { x.saleState = 'stock'; });
+    d.savedAt = new Date(new Date(mojeRazitko).getTime() - 1000).toISOString();
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 1200));
+
+    const poSnimku = {
+      predtim,
+      mista: localStorage.getItem('sklad_plat_groups_v1') || '',
+      lokalne: (getPlatGroups().local || []).slice(),
+      typDokladu: (getPlatGroups().docTypes || {}).Instagram,
+      platby: JSON.parse(localStorage.getItem('sklad_payment_opts_v1') || '[]'),
+      stav: items[0].saleState,
+    };
+
+    // A další zápis z mobilu ho nesmí smazat
+    items[0].note = 'ještě něco';
+    sv();
+    await new Promise(r => setTimeout(r, 1500));
+    poSnimku.vCloudu = (window.__store['users/u1/sklad/data'] || {}).platGroups || '';
+    return poSnimku;
+  });
+  check('Instagram na začátku opravdu nikde nebyl', !/Instagram/.test(pozdniSnimek.predtim),
+    pozdniSnimek.predtim.slice(0, 120));
+  check('nové místo prodeje se převzalo i z prohraného snímku',
+    pozdniSnimek.lokalne.indexOf('Instagram') !== -1, JSON.stringify(pozdniSnimek.lokalne));
+  check('i s nastavením u něj', pozdniSnimek.typDokladu === 'faktura', String(pozdniSnimek.typDokladu));
+  check('a ostatní nastavení taky', pozdniSnimek.platby.indexOf('Wise') !== -1,
+    JSON.stringify(pozdniSnimek.platby));
+  check('položky ale zůstaly naše — souboj o ně se nemění',
+    pozdniSnimek.stav === 'waiting', String(pozdniSnimek.stav));
+  check('a další zápis z mobilu Instagram nesmaže', /Instagram/.test(pozdniSnimek.vCloudu),
+    'přesně takhle mizel Instagram ze správy platforem');
+  await p10.close();
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');
