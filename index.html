@@ -3164,13 +3164,14 @@ function fbSaveToCloud(pokus) {
     if (dz) dz.className = 'fb-status fb-error';
     return;
   }
-  var callId = ++_fbSaveCallId;
-  var dot = document.getElementById('fbStatusDot');
-  if (dot) dot.className = 'fb-status fb-saving';
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'sklad', 'data');
   var payload = _buildCloudPayload();
   var ts = payload.savedAt;
+
+  var callId = ++_fbSaveCallId;
+  var dot = document.getElementById('fbStatusDot');
+  if (dot) dot.className = 'fb-status fb-saving';
   /* Verze dat v okamžiku, kdy se balíček sebral. Zápis letí po síti
      klidně vteřiny a uživatel mezitím dál pracuje — co udělá potom,
      v tomhle balíčku není. */
@@ -3200,8 +3201,11 @@ function fbSaveToCloud(pokus) {
     if (_itemsVersion === verzeOdeslani) {
       localStorage.setItem(SK+'_savedAt', ts);
       localStorage.removeItem(SK+'_dirty');
-    } else if (window._fbUser) {
-      // Doháněcí zápis, ať novější stav dorazí i bez dalšího zásahu
+    } else if (window._fbUser && localStorage.getItem(SK + '_dirty')) {
+      /* Doháněcí zápis, ať novější stav dorazí i bez dalšího zásahu —
+         ale jen když je co dohánět. Verze se zvedne i tehdy, když
+         se obsah nezměnil, a zbytečný zápis se pak na mobilu klidně
+         nepovede a hlásí potíž, přestože se nic neztratilo. */
       if (_svCloudTimer) clearTimeout(_svCloudTimer);
       _svCloudTimer = setTimeout(function() { fbSaveToCloud(); }, 400);
     }
@@ -3224,8 +3228,15 @@ function fbSaveToCloud(pokus) {
       }, _ZAPIS_PAUZY[Math.min(pokus, _ZAPIS_PAUZY.length - 1)]);
       return;
     }
-    if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-error';
     console.error('fbSaveToCloud se nepodařil ani napotřetí:', e);
+    /* Když nic nečeká na odeslání, tenhle zápis nenesl nic nového —
+       cloud má všechno. Rozsvítit červenou a strašit hláškou by bylo
+       matoucí: v Nastavení by vedle sebe stálo „Vše odesláno" a chyba. */
+    if (!localStorage.getItem(SK + '_dirty')) {
+      if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-online';
+      return;
+    }
+    if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-error';
     showToast(e.message === 'timeout'
       ? 'Cloud neodpovídá – změny jsou uložené a odešlou se, až se spojení srovná.'
       : 'Chyba uložení do cloudu!', 'err');

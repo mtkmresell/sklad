@@ -125,6 +125,11 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
   po selhání nezkoušelo nic: změna zůstala ležet s `_dirty`, dokud člověk
   neudělal něco dalšího, takže aplikace na mobilu tiše přestala
   synchronizovat. Hlídá to `test-zarizeni.js`, sekce 8 a 9.
+- **Neúspěch, po kterém nic nechybí, se nehlásí jako chyba.** Když
+  `_dirty` není nastavené, zápis nenesl nic nového — cloud má všechno
+  a červená tečka s hláškou by jen mátla: v *Nastavení* stálo vedle sebe
+  „Vše odesláno" a chyba. Ze stejného důvodu se doháněcí zápis plánuje
+  jen tehdy, když je co dohánět. Hlídá to `test-zarizeni.js`, sekce 11.
 - **Po doletu zápisu uklízí jen ten, který obsahuje současný stav.** Zápis
   letí po síti klidně vteřiny a uživatel mezitím pracuje dál; co udělá
   potom, v odeslaném balíčku není. `fbSaveToCloud` si proto pamatuje

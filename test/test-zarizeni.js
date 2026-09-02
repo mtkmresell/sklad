@@ -392,6 +392,55 @@ async function zarizeni(browser, opts) {
   check('a ukazuje i poslední potíž', /Poslední potíž/.test(vypis), vypis.slice(0, 200));
   await p8.close();
 
+  // ══════════════════════════════════════════════════════════════
+  /* Zápis, který nic nového nenesl, nemá čím uškodit — a nesmí proto
+     strašit. V Nastavení stálo vedle sebe „Vše odesláno" a červená
+     hláška o neúspěchu, což je matoucí a nepravdivé zároveň. */
+  section('11) Neúspěch bez ztráty se nehlásí jako chyba');
+  const p9 = await zarizeni(browser, { items: VCEREJSI, savedAt: '2026-08-30T08:00:00.000Z', cloud: CLOUD_DOMA });
+  p9.on('pageerror', e => errs.push('PAGEERROR(9): ' + e.message));
+  const bezZtraty = await p9.evaluate(async () => {
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 700));
+    _ZAPIS_TIMEOUT_MS = 200; _ZAPIS_PAUZY = [60, 60];
+    const orig = window.showToast; const hlasky = [];
+    window.showToast = function (m) { if (/cloud/i.test(m)) hlasky.push(m); return orig.apply(this, arguments); };
+    const puvodni = window._fbFns.writeBatch;
+    window._fbFns.writeBatch = function (db) {
+      const bt = puvodni(db);
+      bt.commit = function () { return new Promise(function () {}); };
+      return bt;
+    };
+    // Nic nečeká na odeslání — přesto se zápis pustí a nepovede se
+    localStorage.removeItem('sklad_v3_dirty');
+    fbSaveToCloud();
+    await new Promise(r => setTimeout(r, 1500));
+    const bezDirty = {
+      hlasek: hlasky.length,
+      tecka: (document.getElementById('fbStatusDot') || {}).className,
+    };
+    // A teď totéž, když se o změnu opravdu přijde
+    hlasky.length = 0;
+    localStorage.setItem('sklad_v3_dirty', '1');
+    fbSaveToCloud();
+    await new Promise(r => setTimeout(r, 1500));
+    const sDirty = {
+      hlasek: hlasky.length,
+      tecka: (document.getElementById('fbStatusDot') || {}).className,
+    };
+    window._fbFns.writeBatch = puvodni; window.showToast = orig;
+    _ZAPIS_TIMEOUT_MS = 25000; _ZAPIS_PAUZY = [2000, 6000];
+    return { bezDirty, sDirty };
+  });
+  check('bez čekajících změn se nestraší', bezZtraty.bezDirty.hlasek === 0,
+    JSON.stringify(bezZtraty.bezDirty));
+  check('a tečka zůstane zelená', /fb-online/.test(bezZtraty.bezDirty.tecka || ''),
+    bezZtraty.bezDirty.tecka);
+  check('když se ale o změnu přijde, ozve se to', bezZtraty.sDirty.hlasek === 1,
+    JSON.stringify(bezZtraty.sDirty));
+  check('a tečka zčervená', /fb-error/.test(bezZtraty.sDirty.tecka || ''), bezZtraty.sDirty.tecka);
+  await p9.close();
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');
