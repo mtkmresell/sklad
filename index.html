@@ -3118,6 +3118,19 @@ function _otiskPolozek() {
    ležet s příznakem neuložených změn, dokud člověk neudělal něco
    dalšího. Na mobilu tak aplikace přestala synchronizovat a nedala
    o tom vědět jinak než tou červenou tečkou. */
+/* Poslední potíž se zápisem — kvůli tomu, aby šla přečíst i na mobilu,
+   kde se do konzole prohlížeče nikdo nedostane. Ukazuje se v Nastavení
+   pod Cloud Sync. */
+var _posledniPotiz = null;
+function _zapisPotiz(text) {
+  _posledniPotiz = { kdy: new Date().toISOString(), text: String(text || '') };
+  try { localStorage.setItem('sklad_sync_potiz', JSON.stringify(_posledniPotiz)); } catch (e) {}
+}
+function getPosledniPotiz() {
+  if (_posledniPotiz) return _posledniPotiz;
+  try { var v = localStorage.getItem('sklad_sync_potiz'); return v ? JSON.parse(v) : null; } catch (e) { return null; }
+}
+
 var _ZAPIS_TIMEOUT_MS = 25000;
 var _ZAPIS_POKUSU = 3;
 var _ZAPIS_PAUZY = [2000, 6000];   // mezi pokusy
@@ -3193,8 +3206,12 @@ function fbSaveToCloud(pokus) {
       _svCloudTimer = setTimeout(function() { fbSaveToCloud(); }, 400);
     }
     if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-online';
+    _posledniPotiz = null;
+    try { localStorage.removeItem('sklad_sync_potiz'); } catch (e) {}
   }
   function failed(e) {
+    var duvod = (e && (e.code || e.message)) || String(e);
+    _zapisPotiz('zápis, pokus ' + (pokus + 1) + '/' + _ZAPIS_POKUSU + ': ' + duvod);
     console.warn('fbSaveToCloud pokus ' + (pokus + 1) + ' selhal:', e && e.message);
     /* Zkusit znovu, než se začne strašit. Data jsou pořád v localStorage
        s příznakem neuložených změn, takže se nemá co ztratit — jen to
@@ -3218,22 +3235,30 @@ function fbSaveToCloud(pokus) {
     withTimeout(fns.setDoc(docRef, _legacyPayload(payload))).then(function(){ done(null); }).catch(failed);
   }
   if (_archivesBlocked) { saveLegacy(); return; }
-  // Hlavní dokument a změněné archivy jdou v jedné dávce — buď projde všechno, nebo nic,
-  // takže se položka nemůže ztratit mezi dokumenty
-  var batch = fns.writeBatch(window._fbDb);
-  var written = _stageArchives(fns, batch, payload);   // doplní payload.archiveYears
-  batch.set(docRef, payload);
-  withTimeout(batch.commit())
-    .then(function(){ done(written); })
-    .catch(function(e){
-      if (_isPermissionError(e)) {
-        _archivesBlocked = true;
-        console.warn('Archivy nejsou povolené pravidly Firestore — ukládám postaru do jednoho dokumentu.');
-        saveLegacy();
-        return;
-      }
-      failed(e);
-    });
+  /* Chystání dávky se dělá v try — kdyby cokoli z toho vyhodilo výjimku
+     (skládání balíčku, archivy, fotky, nebo commit rovnou při volání),
+     zůstala by tečka žlutá napořád a uživatel by čekal na něco, co už
+     se nikdy nedokončí. Tady se aspoň ozve chyba a zkusí se to znovu. */
+  try {
+    // Hlavní dokument a změněné archivy jdou v jedné dávce — buď projde všechno,
+    // nebo nic, takže se položka nemůže ztratit mezi dokumenty
+    var batch = fns.writeBatch(window._fbDb);
+    var written = _stageArchives(fns, batch, payload);   // doplní payload.archiveYears
+    batch.set(docRef, payload);
+    withTimeout(batch.commit())
+      .then(function(){ done(written); })
+      .catch(function(e){
+        if (_isPermissionError(e)) {
+          _archivesBlocked = true;
+          console.warn('Archivy nejsou povolené pravidly Firestore — ukládám postaru do jednoho dokumentu.');
+          saveLegacy();
+          return;
+        }
+        failed(e);
+      });
+  } catch (e) {
+    failed(e);
+  }
 }
 
 // archiveItems: položky z ročních archivů (pole), null když se je nepodařilo načíst.
@@ -9411,6 +9436,40 @@ function openSettings() {
   // Kurzy mají vlastní okno — viz openKurzyMen()
   document.getElementById('moSettings').classList.add('open');
   renderSnapshotUI();
+  try { renderCloudSyncStatus(); } catch (e) {}
+}
+
+/* Stav synchronizace čitelný i na mobilu.
+
+   Do konzole prohlížeče se na telefonu nikdo nedostane, takže když se
+   něco pokazí, není z čeho poznat co. Tenhle výpis říká, jestli jsou
+   změny odeslané, kdy naposledy a co bylo naposledy za potíž. */
+function renderCloudSyncStatus() {
+  var el = document.getElementById('cloudSyncStatus');
+  if (!el) return;
+  if (!window._fbUser) {
+    el.innerHTML = '<span style="color:var(--muted);">Nepřihlášen — data jsou jen v tomhle prohlížeči.</span>';
+    return;
+  }
+  var neulozeno = !!localStorage.getItem(SK + '_dirty');
+  var kdy = localStorage.getItem(SK + '_savedAt');
+  var kdyText = kdy ? new Date(kdy).toLocaleString('cs') : 'zatím nikdy';
+  var potiz = getPosledniPotiz();
+
+  var h = '';
+  h += '<div>' + (neulozeno
+    ? '<span style="color:var(--warning);">● Změny čekají na odeslání</span>'
+    : '<span style="color:var(--accent);">● Vše odesláno</span>') + '</div>';
+  h += '<div style="color:var(--muted);margin-top:4px;">Naposledy uloženo: ' + escHtml(kdyText) + '</div>';
+  h += '<div style="color:var(--muted2);margin-top:2px;">'
+    + (_fbCloudReady ? 'cloud načtený' : 'čeká se na první snímek z cloudu')
+    + (_cloudIncomplete ? ' · neúplný' : '') + '</div>';
+  if (potiz) {
+    h += '<div style="color:var(--danger);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">'
+      + 'Poslední potíž ' + escHtml(new Date(potiz.kdy).toLocaleString('cs')) + ':<br>'
+      + escHtml(potiz.text) + '</div>';
+  }
+  el.innerHTML = h;
 }
 
 // Uložení nastavení kurzů z okna Kurzy měn

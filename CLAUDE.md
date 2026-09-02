@@ -111,6 +111,13 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
   protože zápisů letí víc po sobě a ozvěny nemusí dorazit v pořadí.
   A hlásí se jen skutečná změna položek (`_otiskPolozek`). Hlídá to
   `test-zarizeni.js`, sekce 6.
+- **Chystání dávky je v `try`.** Výjimka mezi rozsvícením žluté tečky
+  a odesláním (skládání balíčku, archivy, fotky) by ji nechala viset
+  napořád — `failed()` se k ní nedostane a člověk kouká na „ukládám" na
+  něco, co se nikdy nedokončí. Poslední potíž se zapamatuje
+  (`sklad_sync_potiz`) a je vidět v *Nastavení → Cloud Sync*; na mobilu
+  se do konzole prohlížeče nikdo nedostane, takže bez toho nejde zjistit,
+  co se pokazilo. Hlídá to `test-zarizeni.js`, sekce 10.
 - **Neúspěšný zápis se zkusí znovu** (`_ZAPIS_POKUSU`, pauzy `_ZAPIS_PAUZY`)
   a teprve pak se ozve. Timeout je `_ZAPIS_TIMEOUT_MS` = 25 s; deset vteřin
   bylo na mobilu málo — Firestore tam jede přes dlouhé dotazování a potvrzení

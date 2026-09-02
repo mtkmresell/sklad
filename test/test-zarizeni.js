@@ -345,6 +345,53 @@ async function zarizeni(browser, opts) {
   check('a tečka je červená', /fb-error/.test(vzdal.tecka || ''), vzdal.tecka);
   await p7.close();
 
+  // ══════════════════════════════════════════════════════════════
+  /* Výjimka při chystání zápisu nesmí nechat tečku viset na žluté.
+     Bez toho člověk kouká na „ukládám" na něco, co se nikdy nedokončí,
+     a nemá jak zjistit proč — na mobilu do konzole nevidí. */
+  section('10) Výjimka při zápisu nenechá viset žlutou');
+  const p8 = await zarizeni(browser, { items: VCEREJSI, savedAt: '2026-08-30T08:00:00.000Z', cloud: CLOUD_DOMA });
+  p8.on('pageerror', e => errs.push('PAGEERROR(8): ' + e.message));
+  const vyjimka = await p8.evaluate(async () => {
+    window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 700));
+    _ZAPIS_TIMEOUT_MS = 300; _ZAPIS_PAUZY = [80, 80];
+    const orig = window.showToast; const hlasky = [];
+    window.showToast = function (m) { if (/cloud/i.test(m)) hlasky.push(m); return orig.apply(this, arguments); };
+    // Chystání dávky spadne — jako když se něco pokazí ve skládání balíčku
+    const puvodni = window._fbFns.writeBatch;
+    window._fbFns.writeBatch = function () { throw new Error('rozbité chystání dávky'); };
+    items[0].saleState = 'waiting';
+    sv();
+    await new Promise(r => setTimeout(r, 2000));
+    window._fbFns.writeBatch = puvodni; window.showToast = orig;
+    _ZAPIS_TIMEOUT_MS = 25000; _ZAPIS_PAUZY = [2000, 6000];
+    return {
+      tecka: (document.getElementById('fbStatusDot') || {}).className,
+      hlasek: hlasky.length,
+      potiz: (getPosledniPotiz() || {}).text || '',
+      dirty: !!localStorage.getItem('sklad_v3_dirty'),
+    };
+  });
+  check('tečka nezůstane žlutá', !/fb-saving/.test(vyjimka.tecka || ''), vyjimka.tecka);
+  check('a skončí červená', /fb-error/.test(vyjimka.tecka || ''), vyjimka.tecka);
+  check('ozve se to', vyjimka.hlasek === 1, String(vyjimka.hlasek));
+  check('a důvod se zapamatuje pro nastavení',
+    /rozbité chystání dávky/.test(vyjimka.potiz), vyjimka.potiz);
+  check('změna zůstává neuložená', vyjimka.dirty);
+
+  // Výpis v nastavení musí jít přečíst i na mobilu
+  const vypis = await p8.evaluate(async () => {
+    openSettings();
+    await new Promise(r => setTimeout(r, 150));
+    const t = (document.getElementById('cloudSyncStatus') || {}).textContent || '';
+    cm('moSettings');
+    return t.replace(/\s+/g, ' ');
+  });
+  check('nastavení ukazuje, že změny čekají', /čekají na odeslání/.test(vypis), vypis.slice(0, 160));
+  check('a ukazuje i poslední potíž', /Poslední potíž/.test(vypis), vypis.slice(0, 200));
+  await p8.close();
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');
