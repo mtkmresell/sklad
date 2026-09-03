@@ -8242,6 +8242,44 @@ function fallbackCopy(text, cb) {
   document.body.removeChild(ta);
 }
 
+/* ── NÁZEV SOUBORU S NÁKUPNÍM DOKLADEM ───────────────────────────────
+   Doklady a faktury k nákupu leží v OneDrive a jmenují se
+   DD.MM.RR_kde_objednávka_SKU_velikost — třeba
+   03.09.26_Nike_C0415156_1544H-54_EU43. Skládat to u každého dokladu
+   ručně je otrava a detail položky se stejně otvírá právě proto, aby
+   se člověk podíval, jestli u ní doklad je. Klikne se tedy rovnou na
+   nadpis „Nákup" a název je ve schránce; tlačítko navíc by v detailu
+   jen zabíralo místo.
+
+   Co chybí, se vynechá — u SKU si to majitel doplní ručně a prázdné
+   místo mezi dvěma podtržítky by se muselo mazat. */
+function _doNazvu(t) {
+  return String(t == null ? '' : t)
+    .replace(/[\\/:*?"<>|]/g, '')   // znaky, které v názvu souboru být nesmí
+    .replace(/_/g, '-')             // podtržítko odděluje části, uvnitř nemá co dělat
+    .replace(/\s+/g, '')            // mezery taky ne — „Foot Locker" je FootLocker
+    .trim();
+}
+function _velikostDoNazvu(it) {
+  if (!it.size) return '';
+  // U bot je uložená evropská velikost, někdy i s americkou za lomítkem
+  var eu = _doNazvu(String(it.size).split(/ \/ US/i)[0]);
+  if (!eu) return '';
+  return (it.category === 'sneakers' ? 'EU' : '') + eu;
+}
+function nazevSouboruDokladu(it) {
+  var casti = [];
+  if (it.buyDate) {
+    var d = String(it.buyDate).slice(0, 10).split('-');   // RRRR-MM-DD → DD.MM.RR
+    if (d.length === 3 && d[0].length === 4) casti.push(d[2] + '.' + d[1] + '.' + d[0].slice(2));
+  }
+  casti.push(_doNazvu(it.buyWhere === 'Výkup' && it.from ? it.from : it.buyWhere));
+  casti.push(_doNazvu(String(it.orderNum || '').replace(/^#/, '')));
+  casti.push(_doNazvu(it.sku));
+  casti.push(_velikostDoNazvu(it));
+  return casti.filter(function(c) { return c; }).join('_');
+}
+
 var currentDetailId = null;
 
 function navigateDetail(dir) {
@@ -8363,11 +8401,19 @@ function openDetail(id) {
   // Bazos rows jsou dynamické — přidej je do sekce skladu
   bazosRows.forEach(function(r){ secStock.push(r[0]); });
 
-  function renderSection(title, keys) {
+  /* Nadpis sekce umí být i tlačítkem — s `kopie` se po kliknutí text
+     dostane do schránky. Používá to „Nákup" pro název souboru
+     s dokladem; tlačítko navíc by v detailu jen překáželo. */
+  function renderSection(title, keys, kopie) {
     var sRows = rows.filter(function(r){ return keys.indexOf(r[0]) !== -1; });
     if (!sRows.length) return '';
+    var nadpis = kopie
+      ? '<span data-action="copytext" data-text="'+encodeURIComponent(kopie)+'"'
+        + ' data-tip="Zkopírovat název souboru: '+escHtml(kopie)+'"'
+        + ' style="cursor:pointer;">'+title+'</span>'
+      : title;
     var out = '<div style="margin-bottom:4px;">';
-    out += '<div style="font-size:9px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);padding:10px 12px 5px;border-bottom:1px solid var(--border);">'+title+'</div>';
+    out += '<div style="font-size:9px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);padding:10px 12px 5px;border-bottom:1px solid var(--border);">'+nadpis+'</div>';
     out += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
     sRows.forEach(function(r) {
       var k=r[0], v=r[1], copyable=r[2];
@@ -8379,7 +8425,7 @@ function openDetail(id) {
   }
 
   var sectionsHtml = renderSection('Položka', secBase)
-    + renderSection('Nákup', secBuy)
+    + renderSection('Nákup', secBuy, nazevSouboruDokladu(it))
     + (isPaid ? renderSection('Prodej', secSell) : renderSection('Sklad', secStock))
     + renderSection('Faktura', secInvoice)
     + renderSection('Poznámka', secNote);

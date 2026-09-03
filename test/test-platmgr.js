@@ -116,14 +116,15 @@ function check(n, c, e) { console.log((c ? 'PASS' : 'FAIL') + ' — ' + n + (c |
   /* Místo pevného čekání se čeká na skutečný stav. Pevných 500 ms tu
      bylo léta a pod plnou sadou to jednou z tuctu nestihlo — což pak
      vypadalo, že se nastavení ztratilo, i když se jen ještě nenačetlo.
-     Když hodnota nedorazí ani za deset vteřin, spadne to tady s jasnou
-     hláškou místo záhadné neshody o dva řádky níž. */
+     Deset vteřin na to nestačilo taky: v celé sadě start jednou za čas
+     přeteče, samotný test projde vždycky. Čekání je proto štědré —
+     ztracené nastavení se pozná stejně, jen o chvíli později. */
   let nacetloSe = true;
   try {
     await page.waitForFunction(
-      () => (getPlatGroups().eshopy || []).includes('NovýEshop'), null, { timeout: 10000 });
+      () => (getPlatGroups().eshopy || []).includes('NovýEshop'), null, { timeout: 25000 });
   } catch (e) { nacetloSe = false; }
-  check('po znovunačtení se nastavení objeví do deseti vteřin', nacetloSe,
+  check('po znovunačtení se nastavení objeví', nacetloSe,
     'buď se ztratilo, nebo start trvá podezřele dlouho');
   const afterReload = await page.evaluate(() => {
     var g = getPlatGroups();

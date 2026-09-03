@@ -312,6 +312,22 @@ prodeje IBAN, jinak číslo účtu, a když ten správný chybí, ten druhý.
 je musí přenést s sebou**, jinak by z dokladu zmizely bez vysvětlení.
 Hlídá to `test-saledoc.js` a `test-payout.js`.
 
+### Název souboru s nákupním dokladem
+
+Nákupní doklady a faktury leží v OneDrive a jmenují se
+`DD.MM.RR_kde_objednávka_SKU_velikost` (`03.09.26_Nike_C0415156_1544H-54_EU43`).
+Skládá se to z položky, takže **klik na nadpis „Nákup" v detailu** dá název
+do schránky. Schválně nadpis a ne tlačítko — detail se otvírá právě proto,
+aby se člověk podíval, jestli u položky doklad je, a tlačítko navíc by tam
+jen zabíralo místo.
+
+Co chybí, se vynechá (u SKU se doplňuje ručně), ať v názvu nezůstane prázdné
+místo mezi podtržítky. Mřížka z čísla objednávky, mezery a znaky zakázané
+v názvech souborů jdou pryč; podtržítko uvnitř části se mění na pomlčku, aby
+se nepletlo s oddělovačem. `test-nazevdokladu.js` hlídá tvar do písmene —
+podle názvu se doklady v OneDrive hledají, takže odchylka je poznat až
+na hromadě souborů.
+
 ### Fotky
 
 V paměti a v `localStorage` je fotka v položce jako `imgUrl` (data URI). Do cloudu jde
@@ -342,6 +358,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
 | cashflow z payoutů | `CASHFLOW Z PAYOUTŮ` |
 | prodejní doklad | `PRODEJNÍ DOKLAD` |
+| název souboru s nákupním dokladem | `NÁZEV SOUBORU S NÁKUPNÍM DOKLADEM` |
 | kurzy měn (nástroj v nastavení) | `KURZY MĚN` |
 | údaje u způsobu vyplacení | `ÚDAJE U ZPŮSOBU VYPLACENÍ` |
 | typ dokladu u místa prodeje | `TYP DOKLADU U MÍSTA PRODEJE` |
@@ -428,7 +445,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 51 souborů
+node test/run.js              # kontrola syntaxe + všech 52 souborů
 node test/run.js archive      # jen vybrané
 ```
 
