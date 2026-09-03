@@ -151,6 +151,35 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
   leželo v `localStorage` a v nabídkách se objevilo až po obnovení stránky.
   Hlídá to `test-zarizeni.js`, sekce 12.
 
+### Úložiště prohlížeče
+
+`localStorage` má strop (na iPhonu kolem 5 MB) a při jeho překročení `setItem`
+**vyhodí výjimku**. Dokud se polykala prázdným `catch`, zařízení tiše přestalo
+ukládat: aplikace jela dál na tom, co měla v paměti, ale při dalším otevření
+se objevila kopie stará i několik týdnů — k nerozeznání od aktuálních dat.
+Majitel na to narazil na mobilu: otevřel sklad a viděl stav ze 20. 7.
+
+Proto se přes `_ulozLokal()` (`UKLÁDÁNÍ DO PROHLÍŽEČE`) zapisuje všechno
+podstatné — položky, razítko, nastavení. Když se nevejde:
+
+- **Obětují se zálohy.** Pět celých kopií skladu je zdaleka největší
+  položka v úložišti; jedna aktuální data jsou přednější než týden stará
+  záloha. Zálohy se ubírají po jedné, dokud se zápis nepovede.
+- **Razítko se posune, jen když položky opravdu prošly.** Jinak by
+  zařízení při dalším startu tvrdilo, že má novější data než cloud, a
+  nabídlo by, že jimi cloud přepíše — tou starou kopií.
+- **Když nepomůže nic, ozve se to** — jednou za spuštění (hláška při
+  každém ťuknutí by se přestala číst) a natrvalo v *Nastavení → Cloud
+  Sync*, kde je vidět i zabrané místo. Na mobilu se do konzole nikdo
+  nedostane, takže bez toho to nejde zjistit vůbec.
+
+A protože se aplikace vždycky nejdřív vykreslí z uložené kopie a teprve pak
+dorazí cloud, je nad obsahem **proužek** (`TOHLE NEJSOU ČERSTVÁ DATA`): když
+je kopie starší než `STARA_DATA_PO_MS` a cloud se ještě neozval, řekne, z kdy
+data jsou. Po `CLOUD_TICHO_MS` zčervená. Mizí, jakmile dorazí snímek.
+Bez toho se dá půl hodiny počítat marže z týden starého skladu a nic to
+nenaznačí. Hlídá to `test-uloziste.js`.
+
 ### Nastavení: `syncSettings()`
 
 Jeden seznam, ze kterého se odvozuje mazání při odhlášení, stavba balíčku i načítání.
@@ -297,6 +326,8 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | posluchač Firestore | `fb-auth` |
 | databáze našeptávače | `HISTORICKÝ CACHE POLOŽEK`, `SPRÁVA NAŠEPTÁVAČE` |
 | automatické zálohy | `AUTOMATICKÉ SNAPSHOTY` |
+| ukládání do prohlížeče | `UKLÁDÁNÍ DO PROHLÍŽEČE` |
+| proužek o staré kopii | `TOHLE NEJSOU ČERSTVÁ DATA` |
 | profily (Podnikání/Osobní) | `PROFILY` |
 | pohled účetního | `POHLED ÚČETNÍHO` |
 | přihlašovací brána | `PŘIHLAŠOVACÍ BRÁNA` |
@@ -391,7 +422,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 50 souborů
+node test/run.js              # kontrola syntaxe + všech 51 souborů
 node test/run.js archive      # jen vybrané
 ```
 

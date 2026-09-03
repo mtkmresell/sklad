@@ -1237,6 +1237,16 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 }
 .cum-line-anim { animation: cumLineDraw 1.2s cubic-bezier(0.4,0,0.2,1) forwards; }
 
+/* Proužek „tohle nejsou čerstvá data". Sedí hned pod hlavičkou a je
+   vidět, dokud se neozve cloud — bez něj se dá půl hodiny počítat
+   marže z týden starého skladu a nic to nenaznačí. */
+#stareDataPruh { padding: 8px 16px; font-size: 12.5px; font-weight: 500; text-align: center;
+  background: rgba(255,170,0,0.10); color: var(--warning);
+  border-bottom: 1px solid rgba(255,170,0,0.28); }
+#stareDataPruh.zle { background: rgba(255,68,68,0.10); color: var(--danger);
+  border-bottom-color: rgba(255,68,68,0.28); }
+#stareDataPruh b { font-weight: 700; }
+
 </style>
 <!-- Firebase SDK.
      onerror hlásí, že se modul vůbec nenačetl (bez signálu, blokovaná
@@ -1382,6 +1392,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <button class="add-btn" id="btnAdd" onclick="openAddModal()">+ Přidat</button>
   </div>
 </header>
+<div id="stareDataPruh" style="display:none;"></div>
 
 
 <div id="customersSection" style="display:none;">
@@ -2012,7 +2023,7 @@ function applySyncSettings(data) {
       if (s.keep && (!v || (Array.isArray(v) && !v.length))) return;
       ulozit = JSON.stringify(v);
     }
-    try { localStorage.setItem(s.key, ulozit); } catch(e) {}
+    _ulozLokal(s.key, ulozit);
     if (s.apply) { try { s.apply(ulozit, v); } catch(e) { console.warn('sync ' + s.field + ':', e); } }
   });
   if (data.freqMaps) {
@@ -2694,6 +2705,50 @@ function load(){
 }
 var _svCloudTimer = null;
 var _itemsVersion = 0;
+
+/* ── UKLÁDÁNÍ DO PROHLÍŽEČE ──────────────────────────────────────────
+   localStorage má strop (na iPhonu bývá kolem 5 MB) a při jeho
+   překročení setItem vyhodí výjimku. Dokud se ta výjimka polykala
+   prázdným catch, zařízení tiše přestalo ukládat: aplikace jela dál
+   na tom, co měla v paměti, ale při dalším otevření se objevila data
+   stará klidně několik týdnů — a než dorazil cloud, vypadala jako
+   platná. Když se navíc cloud neozval vůbec, člověk se na ta stará
+   čísla díval celou dobu a nic mu to neřeklo.
+
+   Nejvíc místa zabírají automatické zálohy — pět celých kopií skladu.
+   Když dojde místo, obětují se ony: aktuální data jsou přednější než
+   záloha stará týden. Až když ani to nepomůže, potíž se zapamatuje
+   a je vidět v Nastavení → Cloud Sync. */
+function _ulozLokal(klic, hodnota) {
+  try { localStorage.setItem(klic, hodnota); return true; } catch (e) {
+    // Uvolni místo nejstaršími zálohami a po každé to zkus znovu
+    for (var i = 0; i < SNAP_COUNT + 1; i++) {
+      var snaps = getSnapshots();
+      if (!snaps.length) break;
+      snaps.pop();
+      try {
+        if (snaps.length) localStorage.setItem(SK_SNAP, JSON.stringify(snaps));
+        else localStorage.removeItem(SK_SNAP);
+      } catch (e2) { try { localStorage.removeItem(SK_SNAP); } catch (e3) {} }
+      try { localStorage.setItem(klic, hodnota); return true; } catch (e4) {}
+    }
+    _zapisPotiz('Do úložiště prohlížeče se nepodařilo zapsat (' + klic + '): '
+      + (e && e.message ? e.message : e));
+    return false;
+  }
+}
+
+/* Ozve se jednou za spuštění. Kdyby to hlásilo pokaždé, při každé
+   změně by vyskočila hláška a přestala by se číst — a tahle je
+   důležitá: dokud se nevyřeší, zařízení si nic nepamatuje. */
+var _potizOhlasena = false;
+function _hlasPotizSUlozistem() {
+  if (_potizOhlasena) return;
+  _potizOhlasena = true;
+  showToast('Úložiště prohlížeče je plné — data zůstala jen v cloudu. '
+    + 'Podrobnosti v Nastavení → Cloud Sync.', 'err');
+}
+
 function sv(){
   // Účetní nic neukládá. Pravidla Firestore by zápis stejně odmítla, ale
   // bez tohohle by se lokálně nastavil příznak neuložených změn a aplikace
@@ -2701,12 +2756,17 @@ function sv(){
   if (jeUctetni()) return;
   _itemsVersion++;
   window._lastFilterBuildKey = null; // invalidate filter cache
-  try {
-    localStorage.setItem(SK, JSON.stringify(items));
+  /* Pořadí je záměrné: nejdřív položky, teprve pak razítko a příznak.
+     Kdyby se razítko zapsalo dřív a položky pak neprošly, zařízení by
+     si při dalším startu myslelo, že má novější data než cloud — a
+     nabídlo by, že jimi cloud přepíše. */
+  if (_ulozLokal(SK, JSON.stringify(items))) {
     // Zapisuj savedAt okamžitě — zajišťuje že refresh před Firebase .then() nepřepíše data
-    localStorage.setItem(SK+'_savedAt', new Date().toISOString());
-    localStorage.setItem(SK+'_dirty','1');
-  } catch(e) {}
+    _ulozLokal(SK+'_savedAt', new Date().toISOString());
+    _ulozLokal(SK+'_dirty','1');
+  } else {
+    _hlasPotizSUlozistem();
+  }
   // Automaticky ulož do cloudu pokud jsme přihlášeni (s 500ms debounce)
   if (window._fbUser && typeof fbSaveToCloud === 'function') {
     if (_svCloudTimer) clearTimeout(_svCloudTimer);
@@ -3291,9 +3351,15 @@ function _applyCloudData(data, archiveItems, photos) {
   var cloudItems = _mergeCloudItems(data, archiveItems === undefined ? [] : archiveItems);
   if (!cloudItems || !cloudItems.length) return false;
   items = _photoAttach(cloudItems, photos);
-  localStorage.setItem(SK, JSON.stringify(items));
-  if (data.savedAt) localStorage.setItem(SK+'_savedAt', data.savedAt);
-  localStorage.removeItem(SK+'_dirty');
+  /* Když se do prohlížeče zapsat nedá, razítko se posunout nesmí:
+     jinak by zařízení tvrdilo, že má data z dneška, a přitom by
+     v úložišti ležel týden starý sklad. */
+  if (_ulozLokal(SK, JSON.stringify(items))) {
+    if (data.savedAt) _ulozLokal(SK+'_savedAt', data.savedAt);
+    localStorage.removeItem(SK+'_dirty');
+  } else {
+    _hlasPotizSUlozistem();
+  }
   // Všechna nastavení podle jednoho seznamu — viz syncSettings()
   applySyncSettings(data);
   // Doplň definice kategorií chybějící pro klíče použité na položkách
@@ -3482,22 +3548,29 @@ var SNAP_COUNT = 5;
 function saveCloudSnapshot(cloudItems, label) {
   cloudItems = cloudItems || [];
   if (!cloudItems.length) return;
-  try {
-    var snaps = getSnapshots();
-    snaps.unshift({ ts: new Date().toISOString(), label: label||'', count: cloudItems.length, data: JSON.parse(JSON.stringify(cloudItems)) });
-    if (snaps.length > SNAP_COUNT) snaps = snaps.slice(0, SNAP_COUNT);
-    localStorage.setItem(SK_SNAP, JSON.stringify(snaps));
-  } catch(e) { console.warn('saveCloudSnapshot error', e); }
+  _ulozZalohu(cloudItems, label);
 }
 
 function saveSnapshot(label) {
   if (!items || !items.length) return;
+  _ulozZalohu(items, label);
+}
+
+/* Pět kopií celého skladu je zdaleka největší věc v úložišti prohlížeče.
+   Když se nevejdou, uloží se jich míň — jedna čerstvá záloha je pořád
+   lepší než výjimka a žádná. */
+function _ulozZalohu(data, label) {
   try {
     var snaps = getSnapshots();
-    var now = new Date().toISOString();
-    snaps.unshift({ ts: now, label: label||'', count: items.length, data: JSON.parse(JSON.stringify(items)) });
+    snaps.unshift({ ts: new Date().toISOString(), label: label||'', count: data.length,
+      data: JSON.parse(JSON.stringify(data)) });
     if (snaps.length > SNAP_COUNT) snaps = snaps.slice(0, SNAP_COUNT);
-    localStorage.setItem(SK_SNAP, JSON.stringify(snaps));
+    while (snaps.length) {
+      try { localStorage.setItem(SK_SNAP, JSON.stringify(snaps)); return; }
+      catch(e) { snaps.pop(); }
+    }
+    try { localStorage.removeItem(SK_SNAP); } catch(e) {}
+    console.warn('zálohu se nepodařilo uložit — v prohlížeči není místo');
   } catch(e) { console.warn('saveSnapshot error', e); }
 }
 
@@ -9488,12 +9561,34 @@ function renderCloudSyncStatus() {
   h += '<div style="color:var(--muted2);margin-top:2px;">'
     + (_fbCloudReady ? 'cloud načtený' : 'čeká se na první snímek z cloudu')
     + (_cloudIncomplete ? ' · neúplný' : '') + '</div>';
+  /* Kolik místa zabírá úložiště prohlížeče. Když je plné, přestane se
+     ukládat a aplikace pak při dalším otevření ukáže starou kopii —
+     bez tohohle řádku se to nedá z mobilu nijak zjistit. */
+  var mistoText = _mistoVUlozisti();
+  if (mistoText) h += '<div style="color:var(--muted2);margin-top:2px;">' + escHtml(mistoText) + '</div>';
   if (potiz) {
     h += '<div style="color:var(--danger);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">'
       + 'Poslední potíž ' + escHtml(new Date(potiz.kdy).toLocaleString('cs')) + ':<br>'
       + escHtml(potiz.text) + '</div>';
   }
   el.innerHTML = h;
+}
+
+/* Kolik místa zabírá to, co si aplikace ukládá v prohlížeči — a kolik
+   z toho jsou automatické zálohy, protože ty jsou zdaleka největší. */
+function _mistoVUlozisti() {
+  try {
+    var celkem = 0, zalohy = 0;
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      var v = localStorage.getItem(k) || '';
+      var b = (k.length + v.length) * 2;   // prohlížeč počítá v UTF-16
+      celkem += b;
+      if (k === SK_SNAP) zalohy = b;
+    }
+    var kB = function(b) { return Math.round(b / 1024).toLocaleString('cs') + ' kB'; };
+    return 'v prohlížeči zabráno ' + kB(celkem) + (zalohy ? ' (z toho zálohy ' + kB(zalohy) + ')' : '');
+  } catch (e) { return ''; }
 }
 
 // Uložení nastavení kurzů z okna Kurzy měn
@@ -15318,6 +15413,49 @@ function handleUserBadgeClick() {
   }
 }
 
+/* ── „TOHLE NEJSOU ČERSTVÁ DATA" ─────────────────────────────────────
+   Aplikace se vykreslí z toho, co má v prohlížeči, a teprve pak dorazí
+   cloud. To je správně — offline musí jít taky. Zlé je, když je uložená
+   kopie stará týdny (prohlížeč nemá místo, jiná záložka, jiný prohlížeč
+   na tomtéž telefonu) a cloud se neozve: člověk se dívá na starý sklad
+   a nic mu neřekne, že to není dnešek. Proužek to říká nahlas.
+
+   Ukazuje se jen přihlášenému a jen dokud nedorazí první snímek. */
+var STARA_DATA_PO_MS = 6 * 3600 * 1000;   // co je starší, už se bez cloudu brát nedá
+var CLOUD_TICHO_MS = 15000;               // po téhle době se z čekání stává problém
+var _stareDataTimer = null;
+function _stariDatUlozenych() {
+  var kdy = null;
+  try { kdy = localStorage.getItem(SK + '_savedAt'); } catch (e) {}
+  if (!kdy) return null;
+  var t = new Date(kdy).getTime();
+  if (!isFinite(t)) return null;
+  return { kdy: kdy, stari: Date.now() - t };
+}
+function ukazStaraData() {
+  var pruh = document.getElementById('stareDataPruh');
+  if (!pruh) return;
+  var s = _stariDatUlozenych();
+  if (!s || s.stari < STARA_DATA_PO_MS) return;
+  var kdyText = new Date(s.kdy).toLocaleString('cs', { day: 'numeric', month: 'numeric',
+    year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  pruh.className = '';
+  pruh.innerHTML = 'Vidíš uloženou kopii z <b>' + escHtml(kdyText) + '</b> — čekám na cloud…';
+  pruh.style.display = '';
+  if (_stareDataTimer) clearTimeout(_stareDataTimer);
+  _stareDataTimer = setTimeout(function() {
+    if (pruh.style.display === 'none') return;
+    pruh.className = 'zle';
+    pruh.innerHTML = 'Cloud se neozval. Tohle je uložená kopie z <b>' + escHtml(kdyText)
+      + '</b>, ne dnešní stav — nic tu teď needituj a radši obnov stránku.';
+  }, CLOUD_TICHO_MS);
+}
+function schovejStaraData() {
+  if (_stareDataTimer) { clearTimeout(_stareDataTimer); _stareDataTimer = null; }
+  var pruh = document.getElementById('stareDataPruh');
+  if (pruh) { pruh.style.display = 'none'; pruh.className = ''; }
+}
+
 var _fbUnsubscribe = null; // onSnapshot unsubscribe funkce
 
 document.addEventListener('fb-auth', function(e) {
@@ -15339,6 +15477,7 @@ document.addEventListener('fb-auth', function(e) {
 
   if (!(e.detail && e.detail.user)) {
     clearSkladLocalStorage();
+    schovejStaraData();
     items = [];
     renderStats(); renderItems();
     return;
@@ -15355,6 +15494,7 @@ document.addEventListener('fb-auth', function(e) {
 function _spustSkladPosluchace() {
     var fns = window._fbFns;
     var _firstSnapshot = true;
+    ukazStaraData();   // dokud cloud mlčí, ať je vidět, jak stará data to jsou
 
     // Posloucháme celou kolekci — hlavní dokument i archivy přijdou v jednom
     // konzistentním snímku a fungují stejně offline jako dřív jediný dokument
@@ -15378,6 +15518,7 @@ function _spustSkladPosluchace() {
         if (_firstSnapshot) {
           _firstSnapshot = false;
           _fbCloudReady = true;
+          schovejStaraData();   // cloud se ozval, jen v něm nic není
           if (items.length > 0) {
             fbSaveToCloud();
             showToast('Data nahrána do cloudu.');
@@ -15404,6 +15545,7 @@ function _spustSkladPosluchace() {
         showToast('Archiv prodejů zatím nedorazil — čekám na dosynchronizování.', 'err');
         return;
       }
+      schovejStaraData();   // celý snímek je tu, ať se dívá na cokoli
       var cloudTime = data.savedAt ? new Date(data.savedAt).getTime() : 0;
       var localSavedAt = localStorage.getItem(SK+'_savedAt');
       var localTime = localSavedAt ? new Date(localSavedAt).getTime() : 0;
