@@ -225,6 +225,37 @@ async function otevri(browser, errs, znacka) {
   check('u čerstvé kopie se neukáže vůbec', !cerstva, 'proužek u dnešních dat nemá co dělat');
   await p4.close();
 
+  // ══════════════════════════════════════════════════════════════
+  /* Pět kopií skladu je na mobilu víc místa než všechna ostatní data
+     dohromady — v provozu 3 409 kB ze 4 582 kB. Zálohy proto mají
+     vlastní strop: u velkého skladu jich zůstane míň, ale úložiště
+     kvůli nim nedojde. */
+  section('5) Zálohy nepřerostou svůj strop');
+  const p5 = await otevri(browser, errs, 5);
+  const strop = await p5.evaluate(async () => {
+    window.SNAP_STROP_ZNAKU = 6000;
+    localStorage.removeItem('sklad_v3_snapshots');
+    items = [{ id: 'a', name: 'x'.repeat(2500), saleState: 'stock', tags: [] }];
+    for (let i = 0; i < 5; i++) { saveSnapshot('test' + i); }
+    const snaps = getSnapshots();
+    const delka = (localStorage.getItem('sklad_v3_snapshots') || '').length;
+
+    // I když se jediná záloha do stropu nevejde, jedna zůstat musí
+    window.SNAP_STROP_ZNAKU = 10;
+    saveSnapshot('poslední');
+    const jedna = getSnapshots();
+    return { pocet: snaps.length, delka, nejnovejsi: (snaps[0] || {}).label,
+      nejstarsi: (snaps[snaps.length - 1] || {}).label,
+      jedna: jedna.length, jednaLabel: (jedna[0] || {}).label };
+  });
+  check('zálohy se do stropu vešly', strop.delka <= 6000, strop.delka + ' znaků');
+  check('a nezůstalo jich všech pět', strop.pocet < 5 && strop.pocet >= 1, String(strop.pocet));
+  check('drží se ty nejnovější', strop.nejnovejsi === 'test4', String(strop.nejnovejsi));
+  check('a nejstarší šly ven', strop.nejstarsi !== 'test0', String(strop.nejstarsi));
+  check('jedna záloha zůstane vždycky', strop.jedna === 1, String(strop.jedna));
+  check('a je to ta nejčerstvější', strop.jednaLabel === 'poslední', String(strop.jednaLabel));
+  await p5.close();
+
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();
   console.log(failures ? '\n' + failures + ' KONTROL SELHALO' : '\nVŠECHNY TESTY PROŠLY');

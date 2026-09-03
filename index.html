@@ -3542,6 +3542,18 @@ function fbLoadFromCloud(callback) {
 var SK_SNAP = 'sklad_v3_snapshots';
 var SNAP_COUNT = 5;
 
+/* Kolik místa smí zálohy zabrat. Pět kopií skladu o třech stech
+   položkách je přes 1,7 milionu znaků — a protože prohlížeč počítá
+   v UTF-16, jsou to přes 3 MB z pětimegového stropu. Na mobilu to
+   znamenalo, že tři čtvrtiny úložiště byly zálohy a na vlastní data
+   zbývalo sotva nic; při dalším růstu skladu se přestalo ukládat.
+
+   Proto se drží nejvýš pět záloh, ale zároveň se do stropu vejdou —
+   u malého skladu jich zůstane pět, u velkého dvě. Aspoň jedna zůstane
+   vždycky, i kdyby sama strop přerostla: skutečná záloha je cloud,
+   tohle je pojistka proti přepsání na tomhle zařízení. */
+var SNAP_STROP_ZNAKU = 1000000;
+
 // Záloha CLOUDOVÝCH dat předtím, než je přepíšeme lokálními — pojistka proti ztrátě
 // práce z jiného zařízení (snapshot jde do lokálního úložiště tohoto zařízení)
 // cloudItems = kompletní seznam z cloudu (hlavní dokument + archivy), ne surový dokument
@@ -3565,6 +3577,8 @@ function _ulozZalohu(data, label) {
     snaps.unshift({ ts: new Date().toISOString(), label: label||'', count: data.length,
       data: JSON.parse(JSON.stringify(data)) });
     if (snaps.length > SNAP_COUNT) snaps = snaps.slice(0, SNAP_COUNT);
+    // Nejstarší ven, dokud se zálohy nevejdou do svého stropu
+    while (snaps.length > 1 && JSON.stringify(snaps).length > SNAP_STROP_ZNAKU) snaps.pop();
     while (snaps.length) {
       try { localStorage.setItem(SK_SNAP, JSON.stringify(snaps)); return; }
       catch(e) { snaps.pop(); }

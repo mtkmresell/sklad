@@ -165,6 +165,12 @@ podstatné — položky, razítko, nastavení. Když se nevejde:
 - **Obětují se zálohy.** Pět celých kopií skladu je zdaleka největší
   položka v úložišti; jedna aktuální data jsou přednější než týden stará
   záloha. Zálohy se ubírají po jedné, dokud se zápis nepovede.
+- **Zálohy mají vlastní strop** (`SNAP_STROP_ZNAKU`), aby se do zdi
+  nenaráželo pořád dokola. V provozu zabíraly 3 409 kB ze 4 582 kB, tedy
+  tři čtvrtiny úložiště. Drží se nejvýš `SNAP_COUNT` záloh, ale jen
+  tolik, kolik se do stropu vejde — u velkého skladu jsou to dvě.
+  Jedna zůstane vždycky, i kdyby sama strop přerostla; skutečná záloha
+  je cloud, tohle je pojistka proti přepsání na tomhle zařízení.
 - **Razítko se posune, jen když položky opravdu prošly.** Jinak by
   zařízení při dalším startu tvrdilo, že má novější data než cloud, a
   nabídlo by, že jimi cloud přepíše — tou starou kopií.
