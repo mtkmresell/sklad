@@ -426,6 +426,33 @@ Medián je 12 řádků — soubor je velký, ale ne zanesený.
 Domluvené, ale zatím neudělané. **Připomeň je, dokud se nezavřou** — majitel
 o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
 
+**Napojení na komisní prodej Pikastore** (`pikastore.consignthem.com`).
+Aby se položky u nich vystavovaly a stahovaly samy podle stavu ve SKLADu.
+**Čeká na dokumentaci k jejich API** — majitel má zatím jen token a z
+vývojového prostředí je jejich doména blokovaná, takže se endpointy nedají
+zjistit. Nezačínej bez ní; hádané endpointy jsou horší než žádné.
+
+Dohodnutá pravidla (platí bez ohledu na to, jak API vypadá):
+
+- Vystaví se položka **na skladě**, s místem **Doma**, v kategorii
+  **sneakers nebo oblečení**, a **jen z podnikatelského profilu** —
+  osobní sbírka je víc než polovina skladu (113 ze 227 kusů) a poslat
+  ji na prodej by byl průšvih.
+- Cena je **cílová cena v korunách**. Ta je v `targetPrice` uložená vždy
+  v Kč; u eurové cílovky se přepočítá z `targetPriceEur` **dnešním**
+  kurzem — je to současná nabídková cena, ne historická transakce
+  (tohle je výjimka z pravidla „nikdy nepřepočítávej dnešním kurzem").
+  Bez cílové ceny se nevystaví a je to potřeba říct nahlas.
+- Změna cílové ceny se propíše i k nim.
+- Přesun do **Čeká** znamená stáhnout — **kromě prodeje na Pikastore**,
+  tam už stažené je a žádat o to znovu by byla chyba.
+- Návrat z Čeká na sklad znamená vystavit znovu.
+
+Rozhoduje **aplikace**, konektor je jen úzká propust k jejich API (token
+patří do trezoru Cloudflare, ne do prohlížeče — z prohlížeče to nepůjde
+kvůli CORS stejně jako u ČNB). Pravidla se **nesmí** zduplikovat do
+konektoru; tenhle projekt na dvou kopiích téhož už jednou dojel.
+
 **Doklady za měsíc v jednom souboru.** Typ dokladu u místa prodeje už
 existuje (`TYP DOKLADU U MÍSTA PRODEJE`), takže to, co tohle blokovalo, je
 vyřešené. Zbývá samotný export: sloučit doklady za měsíc do jednoho
