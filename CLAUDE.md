@@ -426,32 +426,47 @@ Medián je 12 řádků — soubor je velký, ale ne zanesený.
 Domluvené, ale zatím neudělané. **Připomeň je, dokud se nezavřou** — majitel
 o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
 
-**Napojení na komisní prodej Pikastore** (`pikastore.consignthem.com`).
-Aby se položky u nich vystavovaly a stahovaly samy podle stavu ve SKLADu.
-**Čeká na dokumentaci k jejich API** — majitel má zatím jen token a z
-vývojového prostředí je jejich doména blokovaná, takže se endpointy nedají
-zjistit. Nezačínej bez ní; hádané endpointy jsou horší než žádné.
+**Napojení na komisní prodej Pikastore** (`pikastore.consignthem.com`,
+API `consignthem.com/api/v1`). Čtecí půlka hotová — konektor umí `/me`
+i stránkovaný `/listings` a na `/<TOKEN>/pika` ukáže rozdíl mezi skladem
+a tím, co u nich visí. **Nic nezapisuje.**
 
-Dohodnutá pravidla (platí bez ohledu na to, jak API vypadá):
+Chybí dvě věci z jejich dokumentace, bez kterých se vystavovat nedá:
+**jaká pole bere `POST /listings`** a **jak se vystavení stáhne**
+(`PATCH` umí jen `price_cents`, `floor_cents`, `cost_cents`; stav
+`withdrawn` existuje, ale cesta k němu popsaná není). Nehádej to —
+u věci, která maže inzeráty, je hádání to nejhorší možné. Náhled proto
+vypisuje `pole_v_odpovedi`: jména polí, která jejich odpověď opravdu
+nese, ať je podle čeho párovat.
 
-- Vystaví se položka **na skladě**, s místem **Doma**, v kategorii
-  **sneakers nebo oblečení**, a **jen z podnikatelského profilu** —
-  osobní sbírka je víc než polovina skladu (113 ze 227 kusů) a poslat
-  ji na prodej by byl průšvih.
-- Cena je **cílová cena v korunách**. Ta je v `targetPrice` uložená vždy
-  v Kč; u eurové cílovky se přepočítá z `targetPriceEur` **dnešním**
-  kurzem — je to současná nabídková cena, ne historická transakce
-  (tohle je výjimka z pravidla „nikdy nepřepočítávej dnešním kurzem").
-  Bez cílové ceny se nevystaví a je to potřeba říct nahlas.
+Pravidla bydlí **v konektoru**, ne v aplikaci — aplikace běží jen když
+je otevřená, na cizí API kvůli CORS nedosáhne a token by musel ležet
+v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
+
+- Vystaví se položka **na skladě** v kategorii **sneakers nebo oblečení**.
+  Na profilu nezáleží (podnikatelský kus dostane fakturu, osobní kupní
+  smlouvu) a na místě uskladnění taky ne — i kus ležící u jiného
+  komisáře se dá prodat, majitel pošle štítek. Mimo jsou jen místa, kde
+  kus fyzicky není nebo není jeho: `PIKA_MISTA_MIMO`.
+- Cena je **cílová cena v korunách** (`targetPrice` je vždy v Kč);
+  u eurové cílovky se počítá z `targetPriceEur` **dnešním** kurzem —
+  je to současná nabídková cena, ne historická transakce. Bez ceny se
+  kus nevystaví a je vidět v náhledu.
 - Změna cílové ceny se propíše i k nim.
 - Přesun do **Čeká** znamená stáhnout — **kromě prodeje na Pikastore**,
-  tam už stažené je a žádat o to znovu by byla chyba.
-- Návrat z Čeká na sklad znamená vystavit znovu.
+  tam už stažené je.
 
-Rozhoduje **aplikace**, konektor je jen úzká propust k jejich API (token
-patří do trezoru Cloudflare, ne do prohlížeče — z prohlížeče to nepůjde
-kvůli CORS stejně jako u ČNB). Pravidla se **nesmí** zduplikovat do
-konektoru; tenhle projekt na dvou kopiích téhož už jednou dojel.
+**Peníze jsou v celých centech** a výdělek se počítá z
+`payout_basis_cents ?? price_cents`. Během slevové akce obchod zvedne
+cenu na pultě a původní dohodnutou drží `payout_basis_cents`; kdo počítá
+z ceny na pultě, po celou dobu akce vidí falešný rozdíl a hnal by se
+přeceňovat. Pole je v odpovědi pod **`data`**, ne `items` — špatný klíč
+nevrátí chybu, jen nula řádků. `test-pikastore.js` hlídá obojí.
+
+**Neplatný token se nezkouší dokola.** Po několika odmítnutích přestane
+API vracet `401` a začne vracet `429 too_many_failed_attempts` — to není
+o tempu volání a čekání to nespraví. Obojí končí stejně: ven s hláškou,
+že token nefunguje.
 
 **Doklady za měsíc v jednom souboru.** Typ dokladu u místa prodeje už
 existuje (`TYP DOKLADU U MÍSTA PRODEJE`), takže to, co tohle blokovalo, je
@@ -472,7 +487,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 52 souborů
+node test/run.js              # kontrola syntaxe + všech 53 souborů
 node test/run.js archive      # jen vybrané
 ```
 

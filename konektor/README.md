@@ -86,6 +86,31 @@ Než adresu vložíš do Clauda, otevři ji v prohlížeči — musí přijít
 Na claude.ai jdi do **Customize → Connectors → „+"**, zadej jméno
 (třeba „Sklad") a tuhle adresu. Pole pro OAuth nech prázdná.
 
+## Pikastore — komisní prodej
+
+Konektor umí číst z jejich API (ConsignThem). Adresa
+
+```
+https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/pika
+```
+
+otevřená v prohlížeči spočítá rozdíl mezi skladem a tím, co u nich visí:
+co u nich chybí, kde se liší cena, co visí navíc, co se prodalo a co
+nejde vystavit kvůli chybějící cílové ceně. **Nic nemění** — vystavovat
+a stahovat konektor zatím neumí.
+
+Potřebuje jedno tajemství navíc:
+
+```
+CONSIGNTHEM_TOKEN   klíč z jejich portálu
+```
+
+Bez něj adresa řekne, co doplnit, a na jejich API vůbec nesáhne.
+
+Náhled vypisuje i `pole_v_odpovedi` — jména polí, která jejich odpověď
+opravdu nese. Podle nich se pozná, jak párovat kusy (SKU, nebo název)
+a jestli je čím vystavení stáhnout; dokumentace to neuvádí.
+
 ## Kurz ČNB pro aplikaci
 
 V daňové evidenci je závazný denní kurz ČNB. Aplikace si ho ale

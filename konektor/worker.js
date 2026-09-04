@@ -462,6 +462,341 @@ async function zpracujZpravu(zprava, env) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   PIKASTORE — KOMISNÍ PRODEJ (API ConsignThem)
+
+   Cíl: co je ve SKLADu na skladě, ať u nich visí; co se přesune do
+   Čeká, ať zmizí. Bez ručního překlikávání.
+
+   ── Proč je to tady, a ne v aplikaci ─────────────────────────────────
+   Aplikace je stránka v prohlížeči: běží, jen když je otevřená, na cizí
+   API nedosáhne kvůli CORS a token by musel ležet v ní. Worker běží
+   pořád, CORS neřeší a tajemství má v trezoru Cloudflare. Rozhodovací
+   pravidla proto bydlí **jen tady** — druhá kopie v aplikaci by se
+   dřív nebo později rozešla, což tenhle projekt už jednou stálo data.
+
+   ── Zatím jen čte ────────────────────────────────────────────────────
+   Vystavovat a stahovat se ještě nedá: dokumentace neříká, jaká pole
+   bere POST /listings ani jak se vystavení stáhne (PATCH umí jen
+   price_cents, floor_cents a cost_cents; stav `withdrawn` existuje,
+   ale cesta k němu popsaná není). Hádat u věci, která maže cizí
+   inzeráty, se nebude. Do té doby je tu náhled na /<TOKEN>/pika:
+   spočítá rozdíl mezi skladem a jejich výpisem a **nic nezapíše**.
+
+   ── Co se u nich vystavuje ───────────────────────────────────────────
+   Položka na skladě v kategorii sneakers nebo oblečení, která je
+   fyzicky k dispozici. Na profilu nezáleží — podnikatelský kus dostane
+   fakturu, osobní kupní smlouvu. Na místě uskladnění taky ne: i kus
+   ležící u jiného komisáře se dá prodat, majitel pošle štítek a oni ho
+   odešlou. Mimo jsou jen místa, kde kus fyzicky není nebo není jeho:
+   na cestě, vrácený, k vrácení, zrušený.
+
+   ── Peníze ───────────────────────────────────────────────────────────
+   Jejich API počítá **v celých centech**, nikdy v desetinných číslech.
+   Výdělek se počítá z `payout_basis_cents ?? price_cents` — během
+   slevové akce obchod zvedne cenu na pultě a původní dohodnutou drží
+   `payout_basis_cents`; kdo počítá z ceny na pultě, nadhodnotí si
+   výdělek po celou dobu akce. Když chybí obojí, nic se nehádá.
+══════════════════════════════════════════════════════════════════════ */
+const PIKA_BASE = 'https://consignthem.com/api/v1';
+const PIKA_KATEGORIE = ['sneakers', 'obleceni'];
+/* Místa, ze kterých se prodávat nedá — kus tam buď fyzicky není,
+   nebo už není majitelův. Všechna ostatní (Doma i cizí sklad) se
+   vystavují. */
+const PIKA_MISTA_MIMO = ['Na cestě', 'Bude vráceno', 'Vráceno', 'Zrušeno'];
+const PIKA_STRANKA = 50;
+const PIKA_POKUSU = 3;          // kolikrát zkusit po chybě serveru
+const PIKA_NEJDELSI_CEKANI = 70; // vteřin celkem; Worker nemá běžet věčně
+
+function pikaChyba(text, kod) {
+  const e = new Error(text);
+  e.pikaKod = kod;
+  return e;
+}
+const pikaPockej = ms => new Promise(r => setTimeout(r, ms));
+
+/* Tělo chyby se čte opatrně — API vrací JSON, ale u 5xx může přijít
+   cokoli a rozbít se na tom nemá smysl. */
+async function pikaTelo(odpoved) {
+  try { return await odpoved.json(); } catch (e) { return null; }
+}
+
+/* Kolik vteřin počkat. `retry_after_s` v těle je u server_busy, hlavička
+   Retry-After u obojího. Čeká se přesně tolik, kolik řeknou: dřívější
+   pokus se počítá do stejného okna a jen si prodlouží zámek. */
+function pikaPauza(odpoved, telo) {
+  const zTela = telo && Number(telo.retry_after_s);
+  if (isFinite(zTela) && zTela > 0) return zTela;
+  const zHlavicky = Number(odpoved.headers.get('Retry-After'));
+  if (isFinite(zHlavicky) && zHlavicky > 0) return zHlavicky;
+  return 5;
+}
+
+/* Jedno volání jejich API. Token se bere z trezoru a nikdy nikam
+   nevypisuje — do logu nesmí ani hlavičky. */
+async function pikaVolej(env, cesta, moznosti) {
+  if (!env.CONSIGNTHEM_TOKEN) {
+    throw pikaChyba('Chybí tajemství CONSIGNTHEM_TOKEN — doplň ho ve Workeru '
+      + '(Settings → Variables and Secrets) a nasaď znovu.', 'nenastaveno');
+  }
+  const m = moznosti || {};
+  let cekano = 0;
+  for (let pokus = 1; ; pokus++) {
+    const odpoved = await fetch(PIKA_BASE + cesta, {
+      method: m.method || 'GET',
+      headers: Object.assign({
+        Authorization: 'Bearer ' + env.CONSIGNTHEM_TOKEN,
+        Accept: 'application/json',
+      }, m.headers || {}),
+      body: m.body,
+    });
+    if (odpoved.ok) return pikaTelo(odpoved);
+
+    const telo = await pikaTelo(odpoved);
+    const znacka = (telo && telo.error) || '';
+
+    /* Neplatný token. Opakování ho nespraví a jen si vyslouží zámek —
+       API po několika odmítnutích přestane vracet 401 a začne vracet
+       429 too_many_failed_attempts, což svádí hledat chybu v rychlosti
+       volání místo v tokenu. Obojí proto končí stejně: rovnou ven. */
+    if (odpoved.status === 401) {
+      throw pikaChyba('Pikastore token nebere (401) — je neplatný, vypršel nebo ho zrušili. '
+        + 'Vezmi nový v jejich portálu a přepiš tajemství ve Workeru.', 'token');
+    }
+    if (odpoved.status === 429 && znacka === 'too_many_failed_attempts') {
+      throw pikaChyba('Pikastore hlásí too_many_failed_attempts. Není to o tempu volání — '
+        + 'token nefunguje. Vezmi nový v jejich portálu.', 'token');
+    }
+    if (odpoved.status === 429) {
+      const pauza = pikaPauza(odpoved, telo);
+      if (cekano + pauza > PIKA_NEJDELSI_CEKANI) {
+        throw pikaChyba('Pikastore je zahlcený (' + (znacka || '429') + ') a čekat se má '
+          + pauza + ' s. Nechávám to na příští běh.', 'zahlceno');
+      }
+      await pikaPockej(pauza * 1000);
+      cekano += pauza;
+      continue;
+    }
+    if (odpoved.status >= 500) {
+      if (pokus >= PIKA_POKUSU) {
+        throw pikaChyba('Pikastore vrací ' + odpoved.status + ' ani na ' + PIKA_POKUSU
+          + '. pokus.', 'server');
+      }
+      await pikaPockej(pokus * 2000);
+      continue;
+    }
+    /* Ostatní 4xx jsou o tom, co jsme poslali — opakovat nemá co pomoct.
+       404 tu znamená „není to tvoje", ne „už to zmizelo"; smazat kvůli
+       němu vystavení by byla chyba. */
+    throw pikaChyba('Pikastore odmítl ' + cesta.split('?')[0] + ': ' + odpoved.status
+      + (znacka ? ' ' + znacka : '') + (telo && telo.detail ? ' — ' + telo.detail : ''), 'odmitnuto');
+  }
+}
+
+/* Kdo jsme. Volá se první — je to nejlevnější důkaz, že token žije,
+   a jediný zdroj store.id a consigner.id, které POST /listings vyžaduje
+   (z tokenu se neodvodí). */
+async function pikaKdoJsem(env) {
+  const o = await pikaVolej(env, '/me');
+  if (!o || !o.store || !o.consigner) {
+    throw pikaChyba('Odpověď /me nemá store a consigner — nečekaný tvar.', 'tvar');
+  }
+  return o;
+}
+
+/* Celý výpis vystavení. Bez parametru `status` chodí i rozpracované
+   (draft) — to je schválně, ať je vidět všechno, co u nich leží.
+   Kurzor pro příští běh je `server_time` z odpovědi, ne náš čas:
+   kdyby se hodiny lišily byť o vteřinu, tiše by se přeskočily řádky,
+   které se v té mezeře změnily, a nic by to neohlásilo. */
+async function pikaVypis(env, odKdy) {
+  const radky = [];
+  let stranka = 1, serverTime = null, celkem = null;
+  for (;;) {
+    const q = new URLSearchParams({ page: String(stranka), page_size: String(PIKA_STRANKA) });
+    if (odKdy) q.set('updated_since', odKdy);
+    const o = await pikaVolej(env, '/listings?' + q.toString());
+    /* Pole je pod `data`, ne `items`. Špatný klíč nevrátí chybu, jen
+       nula řádků — a sync by pak tvrdil, že u nich nevisí nic. */
+    if (!o || !Array.isArray(o.data)) {
+      throw pikaChyba('Odpověď /listings nemá pole `data` — nečekaný tvar, radši nic nedělám.', 'tvar');
+    }
+    radky.push(...o.data);
+    if (o.server_time) serverTime = o.server_time;
+    if (typeof o.total === 'number') celkem = o.total;
+    if (!o.data.length || celkem === null || radky.length >= celkem) break;
+    if (++stranka > 100) break;   // pojistka proti nekonečné stránkovací smyčce
+  }
+  return { radky, serverTime, celkem: celkem === null ? radky.length : celkem };
+}
+
+/* Dohodnutá cena v centech: během slevové akce drží původní částku
+   payout_basis_cents, cena na pultě je zvednutá. Když chybí obojí,
+   vrací se null — peníze se nehádají. */
+function pikaZaklad(r) {
+  if (!r) return null;
+  if (r.payout_basis_cents != null) return r.payout_basis_cents;
+  if (r.price_cents != null) return r.price_cents;
+  return null;
+}
+const pikaKc = c => (c == null ? null : Math.round(c) / 100);
+
+/* Má tenhle kus u nich viset? Viz hlavička sekce. */
+function pikaMaViset(it) {
+  if (stavPolozky(it) !== 'stock') return false;
+  if (PIKA_KATEGORIE.indexOf(it.category) === -1) return false;
+  return PIKA_MISTA_MIMO.indexOf(it.location || 'Doma') === -1;
+}
+
+/* Za kolik. Cílová cena je v `targetPrice` uložená vždycky v korunách;
+   u eurové cílovky se počítá z eurové částky **dnešním** kurzem — je to
+   současná nabídková cena, ne historická transakce. Bez kurzu nebo bez
+   cílové ceny se vrací null a kus se nevystaví. */
+function pikaCenaKc(it, kurz) {
+  if (it.targetCurrency === 'EUR' && it.targetPriceEur != null) {
+    const e = Number(it.targetPriceEur);
+    if (!kurz || !isFinite(e) || e <= 0) return null;
+    return Math.round(e * kurz);
+  }
+  const p = Number(it.targetPrice);
+  return isFinite(p) && p > 0 ? Math.round(p) : null;
+}
+
+/* Klíč na spárování kusu s jejich řádkem. Majitel páruje podle SKU,
+   a když není, podle názvu — velikost k tomu patří vždycky, jinak by
+   jedny tenisky spárovaly celou řadu velikostí.
+
+   Jména polí v jejich odpovědi dokumentace neuvádí, tak se zkouší
+   obvyklá a náhled ukáže, která tam doopravdy jsou. */
+function pikaText(v) {
+  return String(v == null ? '' : v).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+function pikaVelikost(v) {
+  return pikaText(v).replace(/^eu\s*/, '').replace(/[\s]/g, '');
+}
+function pikaKliceRadku(r) {
+  const p = r.product || r.item || {};
+  const sku = r.sku || r.style_id || r.styleId || p.sku || p.style_id || '';
+  const nazev = r.name || r.title || r.product_name || p.name || p.title || '';
+  const vel = pikaVelikost(r.size || p.size);
+  const klice = [];
+  if (sku) klice.push('sku:' + pikaText(sku) + '|' + vel);
+  if (nazev) klice.push('nazev:' + pikaText(nazev) + '|' + vel);
+  return klice;
+}
+function pikaKlicePolozky(it) {
+  const vel = pikaVelikost(it.size);
+  const klice = [];
+  if (it.sku) klice.push('sku:' + pikaText(it.sku) + '|' + vel);
+  if (it.name) klice.push('nazev:' + pikaText(it.name) + '|' + vel);
+  return klice;
+}
+
+/* Rozdíl mezi skladem a jejich výpisem. Jen počítá — nic neodesílá. */
+function pikaRozdil(polozky, radky, kurz) {
+  const mapa = new Map();
+  for (const r of radky) {
+    for (const k of pikaKliceRadku(r)) if (!mapa.has(k)) mapa.set(k, r);
+  }
+  const pouzite = new Set();
+  const chybi = [], jinaCena = [], bezCeny = [], sedi = [];
+  for (const it of polozky) {
+    if (!pikaMaViset(it)) continue;
+    const cena = pikaCenaKc(it, kurz);
+    const popis = {
+      nazev: it.name, sku: it.sku || null, velikost: it.size || null,
+      kategorie: it.category, misto: it.location || 'Doma',
+      osobni: jeOsobni(it), cena_kc: cena,
+    };
+    if (cena === null) { bezCeny.push(popis); continue; }
+    let radek = null;
+    for (const k of pikaKlicePolozky(it)) {
+      if (mapa.has(k)) { radek = mapa.get(k); pouzite.add(radek.id); break; }
+    }
+    if (!radek) { chybi.push(popis); continue; }
+    const uNich = pikaKc(pikaZaklad(radek));
+    if (uNich === null) {
+      jinaCena.push(Object.assign({ u_nich_kc: null, potiz: 'řádek nemá cenu' }, popis));
+    } else if (Math.round(uNich) !== cena) {
+      jinaCena.push(Object.assign({ u_nich_kc: uNich, stav_u_nich: radek.status }, popis));
+    } else {
+      sedi.push(popis);
+    }
+  }
+  /* Co u nich visí navíc. Nikdy z toho neplyne „smazat" — může to být
+     kus vystavený ručně nebo spárovaný jinak, než čekáme. */
+  const navic = radky.filter(r => !pouzite.has(r.id) && r.status !== 'sold' && r.status !== 'archived')
+    .map(r => ({ id: r.short_id || r.id, stav: r.status, velikost: r.size || null,
+      cena_kc: pikaKc(pikaZaklad(r)) }));
+  const prodano = radky.filter(r => r.status === 'sold')
+    .map(r => ({ id: r.short_id || r.id, velikost: r.size || null,
+      za_kc: pikaKc(pikaZaklad(r)), kdy: r.updated_at || null }));
+  return { chybi, jinaCena, bezCeny, sedi, navic, prodano };
+}
+
+/* Dnešní kurz eura pro přepočet eurových cílovek. Když ČNB neodpoví,
+   vrací se null a eurové kusy se do náhledu dostanou jako „bez ceny" —
+   raději než s hádaným číslem. */
+async function pikaKurz() {
+  try {
+    const d = new Date().toISOString().slice(0, 10).split('-');
+    const o = await fetch(CNB_KURZ_URL + '?date=' + d[2] + '.' + d[1] + '.' + d[0], {
+      headers: { 'User-Agent': 'sklad-konektor' },
+    });
+    if (!o.ok) return null;
+    return parseCnbKurz(await o.text());
+  } catch (e) { return null; }
+}
+
+/* Náhled na /<TOKEN>/pika — otevře se v prohlížeči a řekne, co by se
+   dělalo. Nic nezapisuje. */
+async function pikaNahled(env) {
+  const kdo = await pikaKdoJsem(env);
+  const { radky, serverTime, celkem } = await pikaVypis(env);
+  const token = await prihlas(env);
+  const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
+  const polozky = slozPolozky(data, archivy);
+  const kurz = await pikaKurz();
+  const r = pikaRozdil(polozky, radky, kurz);
+
+  const podleStavu = {};
+  for (const x of radky) podleStavu[x.status || '?'] = (podleStavu[x.status || '?'] || 0) + 1;
+
+  return {
+    stav: 'ok',
+    kdo: {
+      obchod: kdo.store && kdo.store.name,
+      jmeno: kdo.consigner && kdo.consigner.display_name,
+      mena: kdo.consigner && kdo.consigner.payout_currency,
+      opravneni: kdo.capabilities || [],
+      slevova_akce: kdo.active_sale
+        ? { nazev: kdo.active_sale.name, sleva_pct: (kdo.active_sale.pct_off_bp || 0) / 100,
+            do: kdo.active_sale.ends_at }
+        : null,
+    },
+    u_nich: {
+      celkem, podle_stavu: podleStavu, server_time: serverTime,
+      /* Jména polí, která jejich odpověď opravdu nese. Dokumentace je
+         neuvádí a párování podle SKU/názvu na nich stojí. */
+      pole_v_odpovedi: radky.length ? Object.keys(radky[0]).sort() : [],
+    },
+    ve_skladu: {
+      kurz_eur: kurz,
+      melo_by_viset: r.chybi.length + r.jinaCena.length + r.sedi.length,
+      sedi: r.sedi.length,
+    },
+    rozdil: {
+      chybi_u_nich: r.chybi,
+      jina_cena: r.jinaCena,
+      bez_cilove_ceny: r.bezCeny,
+      visi_navic: r.navic,
+      prodano_u_nich: r.prodano,
+    },
+    poznamka: 'Náhled — nic se u nich nezměnilo. Vystavovat a stahovat zatím neumíme, '
+      + 'chybí popis POST /listings a způsob, jak vystavení stáhnout.',
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    UPOZORNĚNÍ E-MAILEM
 
    Aplikace je stránka v prohlížeči — sama od sebe nikdy nic nespustí.
@@ -1482,7 +1817,7 @@ export default {
       return new Response('Not found', { status: 404 });
     }
     const co = cesta[1];
-    if (co !== 'mcp' && co !== 'nahled' && co !== 'test-mail') {
+    if (co !== 'mcp' && co !== 'nahled' && co !== 'test-mail' && co !== 'pika') {
       return new Response('Not found', { status: 404 });
     }
     // Chybějící tajemství se hlásí dřív než cokoli jiného — je to
@@ -1500,6 +1835,20 @@ export default {
     /* Náhled a zkušební mail. Obojí se otevírá v prohlížeči, protože ten
        umí jen GET — a bez toho by se dalo nastavení ověřit jedině čekáním
        do rána, jestli něco přijde. */
+    /* Náhled na komisní prodej. Otevírá se v prohlížeči a jen počítá —
+       u Pikastore se nic nemění. */
+    if (co === 'pika') {
+      try {
+        return Response.json(await pikaNahled(env));
+      } catch (e) {
+        return Response.json({
+          stav: 'chyba',
+          chyba: String((e && e.message) || e),
+          duvod: (e && e.pikaKod) || null,
+        }, { status: (e && e.pikaKod === 'nenastaveno') ? 500 : 502 });
+      }
+    }
+
     if (co === 'nahled' || co === 'test-mail') {
       const chybiMail = MAIL_TAJEMSTVI.filter(k => !env[k]);
       if (co === 'test-mail' && chybiMail.length) {
