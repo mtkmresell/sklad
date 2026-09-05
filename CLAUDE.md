@@ -54,6 +54,15 @@ U čekajících je ještě `waitState`: `sending` → `sent` → `payout` → `c
 označený. Nedá se do něj procyklovat, nastavuje se ručně v úpravě položky;
 `test-reklamace.js` to hlídá.
 
+Při přechodu do `payout` se zapíše **`dorucenoOd`** — „čeká na payout" znamená,
+že balík dorazil a je vyzvednutý, takže od té chvíle běží lhůta na peníze.
+V detailu je pak vidět, kolik dní to už je. Spočítat tu lhůtu za majitele nejde
+(každý kupující i platforma ji má jinou, čtyři dny i tři týdny), ale bez toho
+data se dalo zjistit jedině prokliknutím sledovacího čísla u dopravce.
+Reklamace ho schválně nedostane — ztracený balík doručený není a má vlastní
+lhůtu od `reklamaceOd`. Všechna tahle data zapisuje `oznacCasyStavu()`; nové
+přidávej **jen tam**, jinak je některá ze čtyř cest ke změně stavu minula.
+
 Reklamace se ale **počítá jinak než ostatní payouty**: běží jí vlastní
 třicetidenní lhůta (`REKLAMACNI_LHUTA`) od `reklamaceOd`, ne lhůta
 platformy od data prodeje — za zdržení nemůže platforma, ale dopravce.

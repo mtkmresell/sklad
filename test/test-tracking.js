@@ -176,6 +176,70 @@ const SEED = [
   check('opakované označení datum neposune', odeslano.nepresunuto === '2020-01-01', JSON.stringify(odeslano));
   check('vrácení do „odesílá se" datum smaže', odeslano.poVraceni === undefined, JSON.stringify(odeslano));
 
+  /* ── 11) Datum doručení ──────────────────────────────────────────
+     „Čeká na payout" znamená doručeno a vyzvednuto — od té chvíle běží
+     lhůta na peníze. Bez tohohle data se dalo zjistit jedině
+     prokliknutím sledovacího čísla u dopravce. */
+  const doruceno = await page.evaluate(() => {
+    const dnes = new Date().toISOString().slice(0, 10);
+    const it = { id: 'd1', name: 'Kus', saleState: 'waiting', waitState: 'sent' };
+
+    oznacCasyStavu(it, 'payout');
+    const poDoruceni = it.dorucenoOd;
+
+    // Opakované označení datum neposune — jinak by se odpočet resetoval
+    it.dorucenoOd = '2020-01-01';
+    oznacCasyStavu(it, 'payout');
+    const nepresunuto = it.dorucenoOd;
+
+    // Krok zpátky datum uklidí
+    oznacCasyStavu(it, 'sent');
+    const poVraceni = it.dorucenoOd;
+
+    /* Reklamace doručená není — ztracený balík má vlastní lhůtu
+       od reklamaceOd a datum doručení by u něj lhalo. */
+    const r = { id: 'd2', name: 'Ztracený', saleState: 'waiting', waitState: 'payout' };
+    oznacCasyStavu(r, 'payout');
+    oznacCasyStavu(r, 'reklamace');
+    return { poDoruceni, dnes, nepresunuto, poVraceni,
+      reklamaceMaDoruceno: r.dorucenoOd, reklamaceMaOd: !!r.reklamaceOd };
+  });
+  check('přechod na payout zapíše dnešní datum', doruceno.poDoruceni === doruceno.dnes,
+    JSON.stringify(doruceno));
+  check('opakované označení datum neposune', doruceno.nepresunuto === '2020-01-01',
+    JSON.stringify(doruceno));
+  check('krok zpátky datum smaže', doruceno.poVraceni === undefined, JSON.stringify(doruceno));
+  check('reklamace datum doručení nedostane', doruceno.reklamaceMaDoruceno === undefined,
+    'ztracený balík doručený není');
+  check('ale svoje datum má', doruceno.reklamaceMaOd, 'reklamaceOd chybí');
+
+  // A hlavně: v detailu to musí být vidět, protože kvůli tomu se detail otvírá
+  const vDetailu = await page.evaluate(async () => {
+    const den = 86400000;
+    items.push({ id: 'dd1', name: 'Doručený kus', category: 'sneakers', buyPrice: 1000,
+      buyCurrency: 'CZK', saleState: 'waiting', waitState: 'payout', location: 'Doma',
+      sellPrice: 3000, saleDate: new Date(Date.now() - 20 * den).toISOString().slice(0, 10),
+      dorucenoOd: new Date(Date.now() - 6 * den).toISOString().slice(0, 10),
+      dateAdded: 1, tags: [] });
+    openDetail('dd1');
+    await new Promise(r => setTimeout(r, 200));
+    const t = (document.getElementById('moDetail') || {}).textContent || '';
+    cm('moDetail');
+    // A kus bez toho data nesmí ukazovat prázdný řádek
+    items.push({ id: 'dd2', name: 'Bez data', category: 'sneakers', buyPrice: 1000,
+      buyCurrency: 'CZK', saleState: 'waiting', waitState: 'payout', location: 'Doma',
+      dateAdded: 1, tags: [] });
+    openDetail('dd2');
+    await new Promise(r => setTimeout(r, 200));
+    const t2 = (document.getElementById('moDetail') || {}).textContent || '';
+    cm('moDetail');
+    return { s: t.replace(/\s+/g, ' '), bez: t2.replace(/\s+/g, ' ') };
+  });
+  check('detail ukazuje, kolik dní je balík doručený', /Doručeno\s*před 6 dny/.test(vDetailu.s),
+    vDetailu.s.slice(0, 300));
+  check('a taky od kdy', /Doručeno[^|]*\d+\.\s*\d+\.\s*\d{4}/.test(vDetailu.s), vDetailu.s.slice(0, 300));
+  check('bez data doručení se řádek neukáže', !/Doručeno/.test(vDetailu.bez), vDetailu.bez.slice(0, 200));
+
   check('žádné JS chyby', errs.filter(e => !/keySplines/.test(e)).length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();
   console.log(failures ? `\n${failures} TESTŮ SELHALO` : '\nVŠECHNY TESTY PROŠLY');

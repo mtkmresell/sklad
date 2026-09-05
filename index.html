@@ -6682,11 +6682,30 @@ function markReklamaceOd(it, newState) {
   }
 }
 
+/* Datum doručení. „Čeká na payout" znamená, že balík dorazil a je
+   vyzvednutý — od té chvíle běží lhůta na peníze. Každý kupující i každá
+   platforma ji má jinou (čtyři dny, tři týdny), takže se nedá spočítat
+   za majitele; stačí ukázat, kolik dní to už je, a on pozná, jestli má
+   psát o peníze, nebo je ještě čas. Bez tohohle data se to dalo zjistit
+   jedině prokliknutím sledovacího čísla u dopravce.
+
+   Reklamace tu schválně není, i když se jinak chová jako payout —
+   ztracený balík doručený není a má vlastní lhůtu od `reklamaceOd`. */
+function markDoruceno(it, newState) {
+  if (!it) return;
+  if (newState === 'payout') {
+    if (!it.dorucenoOd) it.dorucenoOd = new Date().toISOString().slice(0, 10);
+  } else {
+    delete it.dorucenoOd;
+  }
+}
+
 // Jedno místo pro všechna data, která se u změny stavu zapisují —
 // ať se na jedno z nich nezapomene v některé ze čtyř cest
 function oznacCasyStavu(it, newState) {
   markSentAt(it, newState);
   markReklamaceOd(it, newState);
+  markDoruceno(it, newState);
 }
 
 function _cleanBulkOnDelete(id) {
@@ -8321,6 +8340,17 @@ function openDetail(id) {
   var daysInStock = null;
   if (!isPaid && !isWaiting) { var _pbd = parseBuyDate(it); if (_pbd) daysInStock = Math.floor((Date.now() - _pbd.getTime()) / 86400000); }
   var daysStr = daysInStock !== null ? daysInStock + ' dní' + (daysInStock > 90 ? ' !' : '') : null;
+  /* Jak dlouho je balík doručený. Lhůtu na peníze má každý kupující
+     i každá platforma jinou, takže se za majitele počítat nedá — číslo
+     dní mu stačí, aby poznal, jestli má psát o peníze. */
+  var dorucenoStr = null;
+  if (isWaiting && it.dorucenoOd) {
+    var _dnu = Math.floor((Date.now() - new Date(it.dorucenoOd + 'T12:00:00').getTime()) / 86400000);
+    if (_dnu >= 0) {
+      dorucenoStr = (_dnu === 0 ? 'dnes' : _dnu === 1 ? 'včera' : 'před ' + _dnu + ' dny')
+        + ' <span style="color:var(--muted2);font-size:11px;">· ' + fmtDate(it.dorucenoOd) + '</span>';
+    }
+  }
   // Tracking pro Čeká — stav "Odesláno"
   var trackingHtml = null;
   if (isWaiting && it.trackingNum) {
@@ -8359,6 +8389,7 @@ function openDetail(id) {
     ...(!isPaid ? [
       [((['Na cestě','Bude vráceno','Vráceno','Zrušeno'].includes(it.location)) ? 'Stav' : 'Sklad'), it.location||'Doma'],
       ...(daysStr ? [['Na skladě', daysStr, false]] : []),
+      ...(dorucenoStr ? [['Doručeno', dorucenoStr, false]] : []),
       ...(!isWaiting && it.targetPrice ? [['Cílová cena', (it.targetCurrency==='EUR'?targetEur(it)+' €':czk(it.targetPrice)), false]] : []),
       ...(priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
       ...(!isWaiting && it.stockIntent ? [['Strategie', intentBadge(it.stockIntent), false]] : []),
@@ -8394,7 +8425,7 @@ function openDetail(id) {
   // Rozdělení řádků do sekcí
   var secBase = ['Typ','Profil','SKU','Stav','Velikost'];
   var secBuy  = ['Nákupní cena','Datum nákupu','Kde koupeno','Číslo objednávky','Od koho (vykup)'];
-  var secStock= ['Sklad','Na skladě','Cílová cena','Vývoj ceny','Strategie','Sledování zásilky'];
+  var secStock= ['Sklad','Na skladě','Doručeno','Cílová cena','Vývoj ceny','Strategie','Sledování zásilky'];
   var secSell = ['Prodejní cena','Zisk','Datum prodeje','Datum vyplacení','Kde prodáno','Vývoj ceny','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
   var secNote = ['Poznámka'];
   var secInvoice = ['Faktura','Faktura vydaná'];
@@ -11067,7 +11098,8 @@ function openBulkEditModal(bulkId) {
       // Stav — propaguj na děti
       if (selectedWs !== items[idx].waitState) {
         items[idx].waitState = selectedWs;
-        getBulkItems(bulkId).forEach(function(ch){ var ci=items.findIndex(function(x){return x.id===ch.id;}); if(ci!==-1) items[ci].waitState=selectedWs; });
+        oznacCasyStavu(items[idx], selectedWs);
+        getBulkItems(bulkId).forEach(function(ch){ var ci=items.findIndex(function(x){return x.id===ch.id;}); if(ci!==-1) { items[ci].waitState=selectedWs; oznacCasyStavu(items[ci], selectedWs); } });
       }
       var newTrkCarrier = box.querySelector('#_beTrkCarrier').value.trim();
       var newTrkNum = sanitizeTrackNum(box.querySelector('#_beTrkNum').value.trim(), newTrkCarrier);
