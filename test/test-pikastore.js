@@ -101,7 +101,7 @@ const ME = {
   let pikaOdpovedi = null;  // scénář pro /listings a /me
   let cnbOdpoved = () => new Response('03.09.2026 #170\nzemě|měna|množství|kód|kurz\nEMU|euro|1|EUR|25,000\n');
 
-  function odpovezSklad(url) {
+  let odpovezSklad = function (url) {
     if (url.includes('identitytoolkit')) return Response.json({ idToken: 't', localId: 'u1' });
     if (url.includes(':batchGet')) {
       return Response.json([{ found: dok('users/u1/sklad/data', {
@@ -112,7 +112,7 @@ const ME = {
       return Response.json({ documents: [{ name: 'projects/x/databases/(default)/documents/users/u1/sklad/data' }] });
     }
     return Response.json({});
-  }
+  };
 
   global.fetch = async (vstup, init) => {
     // Worker volá fetch s řetězcem, s URL i s Requestem — vytáhni adresu ze všech
@@ -423,7 +423,54 @@ const ME = {
     !volani.some(x => x.url.includes('openapi') && x.init.headers && x.init.headers.Authorization),
     'openapi.json je veřejný, token tam nemá co dělat');
 
-  sekce('8) Adresa je pod tokenem');
+  sekce('8) Totéž jde zavolat jako nástroj MCP');
+  /* Adresu s tokenem musí člověk skládat ručně a token přitom prochází
+     schránkou. Přes nástroj se k témuž dostane ten, kdo napojení píše,
+     aniž by token kamkoli posílal. */
+  async function nastroj(name, args) {
+    const r = await bezLogu(() => worker.fetch(new Request(
+      'https://sklad.mtkm.workers.dev/' + ENV.MCP_TOKEN + '/mcp',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+          arguments: undefined, params: { name, arguments: args || {} } }) }), ENV));
+    const o = await r.json();
+    const text = o.result && o.result.content && o.result.content[0].text;
+    let data = null;
+    try { data = JSON.parse(text); } catch (e) { data = null; }
+    return { data, text, chyba: !!(o.result && o.result.isError) };
+  }
+
+  pikaOdpovedi = (url) => url.endsWith('/openapi.json')
+    ? Response.json(OPENAPI) : Response.json({ chyba: 'sem se nemá chodit' }, { status: 500 });
+  const nSmlouva = await nastroj('pika_smlouva', { cesty: ['post /listings'] });
+  ok('pika_smlouva vrátí kontrakt', !nSmlouva.chyba && nSmlouva.data && nSmlouva.data.verze === '1.4.2',
+    nSmlouva.text && nSmlouva.text.slice(0, 160));
+  shoda('a je v něm tělo zakládání',
+    nSmlouva.data && nSmlouva.data.cesty[0].telo.povinne,
+    ['store_id', 'consigner_id', 'price_cents']);
+
+  /* Kontrakt je veřejný a se skladem nemá nic společného, takže se
+     musí přečíst i tehdy, když přihlášení do cloudu selhává. Jinak by
+     rozbitý cloud zablokoval i psaní napojení. */
+  const puvodniSklad = odpovezSklad;
+  odpovezSklad = (u) => u.includes('identitytoolkit')
+    ? Response.json({ error: { message: 'INVALID_PASSWORD' } }, { status: 400 })
+    : Response.json({});
+  const smlouvaBezCloudu = await nastroj('pika_smlouva', { cesty: ['post /listings'] });
+  odpovezSklad = puvodniSklad;
+  ok('kontrakt se přečte i při rozbitém přihlášení do cloudu',
+    !smlouvaBezCloudu.chyba && smlouvaBezCloudu.data && smlouvaBezCloudu.data.verze === '1.4.2',
+    smlouvaBezCloudu.text && smlouvaBezCloudu.text.slice(0, 160));
+
+  pikaOdpovedi = scenarOk();
+  const nNahled = await nastroj('pika_nahled', {});
+  ok('pika_nahled vrátí rozdíl', !nNahled.chyba && nNahled.data && nNahled.data.stav === 'ok',
+    nNahled.text && nNahled.text.slice(0, 160));
+  ok('a je v něm i to, co u nich chybí',
+    nNahled.data && Array.isArray(nNahled.data.rozdil.chybi_u_nich),
+    JSON.stringify(nNahled.data && nNahled.data.rozdil).slice(0, 160));
+
+  sekce('9) Adresa je pod tokenem');
   const r404 = await bezLogu(() => worker.fetch(
     new Request('https://sklad.mtkm.workers.dev/spatny-token/pika'), ENV));
   ok('bez správného tokenu se nic neprozradí', r404.status === 404, String(r404.status));

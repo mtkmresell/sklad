@@ -170,7 +170,7 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   /* ── Seznam nástrojů ──────────────────────────────────────────────── */
   const seznam = (await rpc('tools/list')).result.tools;
   shoda('nástroje', seznam.map(t => t.name).sort(),
-    ['sklad_polozky', 'sklad_prodeje', 'sklad_souhrn', 'sklad_zakaznici']);
+    ['pika_nahled', 'pika_smlouva', 'sklad_polozky', 'sklad_prodeje', 'sklad_souhrn', 'sklad_zakaznici']);
   ok('každý nástroj má popis', seznam.every(t => t.description && t.description.length > 30));
   ok('každý nástroj má schéma', seznam.every(t => t.inputSchema && t.inputSchema.type === 'object'));
   ok('u zákazníků je varování na osobní údaje',

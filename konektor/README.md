@@ -111,6 +111,10 @@ Náhled vypisuje i `pole_v_odpovedi` — jména polí, která jejich odpověď
 opravdu nese — a jestli máš podepsané aktuální podmínky obchodu. Bez nich
 projde čtení, ale každý zápis skončí na `409 terms_acceptance_required`.
 
+Obojí jde i **jako nástroj v běžném chatu** — konektor nabízí
+`pika_nahled` a `pika_smlouva`, takže se nemusí skládat adresa
+s tokenem. Stačí říct „ukaž náhled Pikastore".
+
 Druhá adresa čte jejich veřejný kontrakt:
 
 ```

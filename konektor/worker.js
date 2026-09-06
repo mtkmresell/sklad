@@ -385,13 +385,48 @@ const NASTROJE = [
       },
     },
   },
+  /* Komisní prodej. Jako nástroje schválně — tyhle věci potřebuje
+     hlavně ten, kdo napojení píše, a přes nástroj se k nim dostane
+     bez skládání adres a bez posílání tokenu do chatu. */
+  {
+    name: 'pika_smlouva',
+    description: 'Přečte veřejný kontrakt (openapi.json) komisního prodeje Pikastore a vytáhne '
+      + 'z něj povinná pole, typy, výčty a klíče odpovědi. Je to podklad pro psaní napojení — '
+      + 'odsud se berou fakta místo hádání. Bez argumentu vrátí cesty, které napojení potřebuje.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cesty: {
+          type: 'array', items: { type: 'string' },
+          description: 'Např. ["post /listings", "get /sales"]. Bez toho výchozí sada.',
+        },
+      },
+    },
+  },
+  {
+    name: 'pika_nahled',
+    description: 'Rozdíl mezi skladem a komisním prodejem Pikastore: co u nich chybí, kde se '
+      + 'liší cena, co visí navíc, co se u nich prodalo a co nejde vystavit kvůli chybějící '
+      + 'cílové ceně. Ukáže i to, jestli jsou podepsané podmínky obchodu — bez nich projde '
+      + 'čtení, ale každý zápis skončí na 409. Nic u nich nemění.',
+    inputSchema: { type: 'object', properties: {} },
+  },
 ];
 
 /* ── Provedení nástroje ─────────────────────────────────────────────── */
 async function spustNastroj(jmeno, args, env) {
+  args = args || {};
+  /* Komisní prodej stojí před přihlášením do cloudu — kontrakt je
+     veřejný a ke čtení skladu se nedostane, takže by přihlašování
+     jen zdržovalo a padalo na nesouvisejícím nastavení. */
+  if (jmeno === 'pika_smlouva') {
+    const cesty = Array.isArray(args.cesty) && args.cesty.length ? args.cesty : PIKA_ZAJIMAVE;
+    return pikaSmlouva(cesty);
+  }
+  if (jmeno === 'pika_nahled') return pikaNahled(env);
+
   const token = await prihlas(env);
   const uid = env.SKLAD_UID;
-  args = args || {};
 
   if (jmeno === 'sklad_zakaznici') {
     const crm = await nactiCrm(token, uid);
