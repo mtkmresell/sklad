@@ -405,11 +405,31 @@ const NASTROJE = [
   },
   {
     name: 'pika_nahled',
-    description: 'Rozdíl mezi skladem a komisním prodejem Pikastore: co u nich chybí, kde se '
-      + 'liší cena, co visí navíc, co se u nich prodalo a co nejde vystavit kvůli chybějící '
-      + 'cílové ceně. Ukáže i to, jestli jsou podepsané podmínky obchodu — bez nich projde '
-      + 'čtení, ale každý zápis skončí na 409. Nic u nich nemění.',
+    description: 'Rozdíl mezi skladem a komisním prodejem Pikastore a plán, co by se u nich '
+      + 'udělalo: co vystavit, co vrátit do prodeje, co stáhnout, co přecenit. Ukáže i to, '
+      + 'jestli jsou podepsané podmínky obchodu — bez nich projde čtení, ale každý zápis '
+      + 'skončí na 409. Nic u nich nemění.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'pika_srovnat',
+    description: 'Srovná komisní prodej Pikastore se skladem — vystaví, co má viset, stáhne, '
+      + 'co se prodalo jinde, vrátí do prodeje, co se vrátilo na sklad, a dorovná ceny. '
+      + 'ZAPISUJE u nich. Bez provest: true jen ukáže plán, což je totéž co pika_nahled.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        provest: {
+          type: 'boolean',
+          description: 'true = opravdu to u nich provést. Výchozí false, tedy jen plán.',
+        },
+        publikovat: {
+          type: 'boolean',
+          description: 'true = nové kusy rovnou do prodeje, false = jako koncept k ruční '
+            + 'kontrole. Výchozí false.',
+        },
+      },
+    },
   },
 ];
 
@@ -424,6 +444,9 @@ async function spustNastroj(jmeno, args, env) {
     return pikaSmlouva(cesty);
   }
   if (jmeno === 'pika_nahled') return pikaNahled(env);
+  if (jmeno === 'pika_srovnat') {
+    return pikaNahled(env, { provest: !!args.provest, publikovat: !!args.publikovat });
+  }
 
   const token = await prihlas(env);
   const uid = env.SKLAD_UID;
@@ -727,46 +750,256 @@ function pikaKlicePolozky(it) {
   return klice;
 }
 
-/* Rozdíl mezi skladem a jejich výpisem. Jen počítá — nic neodesílá. */
-function pikaRozdil(polozky, radky, kurz) {
-  const mapa = new Map();
-  for (const r of radky) {
-    for (const k of pikaKliceRadku(r)) if (!mapa.has(k)) mapa.set(k, r);
+/* ── PLÁN: co se má u nich stát ──────────────────────────────────────
+   Nepracuje se s identitou jednoho kusu, ale s POČTY ve skupině
+   (stejné SKU nebo název + velikost). Důvod je prostý: majitel má dvě
+   stejná trička ve velikosti S a jejich odpověď nenese nic, čím by se
+   od sebe daly odlišit. Počty to obejdou — kolik kusů má viset proti
+   tomu, kolik jich visí.
+
+   Vedlejší užitek: prodej u nich se vyřeší sám. Jejich řádek přejde na
+   `sold` a vypadne z činných, majitel kus posune do Čeká a klesne i to,
+   kolik jich má viset — rozdíl vyjde nula a o stažení se nežádá, přesně
+   jak si majitel přál.
+
+   Stažený kus se přednostně **vrátí do prodeje** místo zakládání nového
+   (`activate`), takže návrat z Čeká na sklad nezaloží duplikát. */
+const PIKA_STAVY_CINNE = ['draft', 'listed'];
+/* Neplátce DPH — zvláštní režim pro použité zboží. Kdyby se majitel
+   stal plátcem, mění se tady a v README. */
+const PIKA_VAT_MODE = 'bazar';
+
+function pikaCondition(it) {
+  // Jejich stupnice je new | used | vnds; naše `vnds` nerozlišuje.
+  // Lepší stav, než o jakém víme, se tvrdit nebude.
+  const c = String(it.condition || '');
+  return (c === 'DS' || c === 'nove-stitky') ? 'new' : 'used';
+}
+function pikaPopisKusu(it, cena) {
+  return {
+    nazev: it.name, sku: it.sku || null, velikost: it.size || null,
+    kategorie: it.category, misto: it.location || 'Doma',
+    osobni: jeOsobni(it), cena_kc: cena === undefined ? null : cena,
+  };
+}
+/* Tělo pro založení kusu. master_product_id je nepovinné, takže kus,
+   který jejich katalog nezná, se založí přes custom_brand/model —
+   jinak by se dvanáct kusů bez SKU nedalo vystavit vůbec. */
+function pikaTeloZalozeni(it, cena, kdo, publikovat) {
+  const telo = {
+    store_id: kdo.store.id,
+    consigner_id: kdo.consigner.id,
+    size: String(it.size || '').trim(),
+    condition: pikaCondition(it),
+    price_cents: Math.round(cena * 100),
+    vat_mode: PIKA_VAT_MODE,
+    publish: !!publikovat,
+  };
+  if (it.sku) telo.style_code = String(it.sku);
+  if (it.brand) telo.custom_brand = String(it.brand);
+  if (it.name) telo.custom_model = String(it.name);
+  return telo;
+}
+
+/* Skupiny: klíč → co v ní máme a co u nich visí. Klíčů má kus víc
+   (SKU i název), aby se spárovalo i to, co u nich SKU nemá. */
+function pikaSkupiny(polozky, radky, kurz) {
+  const index = new Map();
+  const skupiny = [];
+  const bezCeny = [];
+  function skupinaProKlice(klice) {
+    for (const k of klice) if (index.has(k)) return index.get(k);
+    const s = { klice: [], chtene: [], jejich: [], znameKusu: 0 };
+    skupiny.push(s);
+    return s;
   }
-  const pouzite = new Set();
-  const chybi = [], jinaCena = [], bezCeny = [], sedi = [];
   for (const it of polozky) {
+    const klice = pikaKlicePolozky(it);
+    if (!klice.length) continue;
+    const s = skupinaProKlice(klice);
+    for (const k of klice) if (!index.has(k)) { index.set(k, s); s.klice.push(k); }
+    /* Počítá se každý kus, i prodaný a čekající — tím se pozná, že
+       tenhle model vůbec známe. Co neznáme, toho se nedotýkáme. */
+    s.znameKusu++;
     if (!pikaMaViset(it)) continue;
     const cena = pikaCenaKc(it, kurz);
-    const popis = {
-      nazev: it.name, sku: it.sku || null, velikost: it.size || null,
-      kategorie: it.category, misto: it.location || 'Doma',
-      osobni: jeOsobni(it), cena_kc: cena,
-    };
-    if (cena === null) { bezCeny.push(popis); continue; }
-    let radek = null;
-    for (const k of pikaKlicePolozky(it)) {
-      if (mapa.has(k)) { radek = mapa.get(k); pouzite.add(radek.id); break; }
+    if (cena === null) { bezCeny.push(pikaPopisKusu(it)); continue; }
+    s.chtene.push({ it, cena });
+  }
+  const cizi = [];
+  for (const r of radky) {
+    let s = null;
+    for (const k of pikaKliceRadku(r)) if (index.has(k)) { s = index.get(k); break; }
+    if (s) s.jejich.push(r); else cizi.push(r);
+  }
+  return { skupiny, cizi, bezCeny };
+}
+
+/* Z rozdílu udělá seznam úkonů. Nic neodesílá. */
+function pikaPlan(polozky, radky, kurz, kdo, volby) {
+  volby = volby || {};
+  const { skupiny, cizi, bezCeny } = pikaSkupiny(polozky, radky, kurz);
+  const vystavit = [], aktivovat = [], stahnout = [], precenit = [], sedi = [];
+
+  for (const s of skupiny) {
+    const cinne = s.jejich.filter(r => PIKA_STAVY_CINNE.indexOf(r.status) !== -1);
+    const stazene = s.jejich.filter(r => r.status === 'withdrawn');
+    const chteno = s.chtene.slice().sort((a, b) => a.cena - b.cena);
+
+    if (chteno.length > cinne.length) {
+      const chybi = chteno.length - cinne.length;
+      /* Nejdřív vrátit do prodeje, co u nich leží stažené — jinak by
+         každý návrat z Čeká zakládal nový kus vedle starého. */
+      let zAktivace = 0;
+      for (const r of stazene) {
+        if (zAktivace >= chybi) break;
+        aktivovat.push({ id: r.id, popis: r.short_id || r.id, klic: s.klice[0] });
+        zAktivace++;
+      }
+      for (let i = 0; i < chybi - zAktivace; i++) {
+        const c = chteno[cinne.length + zAktivace + i];
+        if (!c) break;
+        vystavit.push({ popis: pikaPopisKusu(c.it, c.cena),
+          telo: pikaTeloZalozeni(c.it, c.cena, kdo, volby.publikovat),
+          klic: s.klice[0], itemId: c.it.id });
+      }
+    } else if (chteno.length < cinne.length) {
+      /* Přebývá. Nejdřív ven s koncepty (nikdy nebyly v prodeji),
+         pak s nejnovějšími — starší kus už mohl nasbírat zhlédnutí. */
+      const poradi = cinne.slice().sort((a, b) => {
+        if (a.status !== b.status) return a.status === 'draft' ? -1 : 1;
+        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      });
+      for (let i = 0; i < cinne.length - chteno.length; i++) {
+        const r = poradi[i];
+        stahnout.push({ id: r.id, popis: r.short_id || r.id, klic: s.klice[0],
+          stav: r.status, duvod: 've skladu už není k prodeji' });
+      }
     }
-    if (!radek) { chybi.push(popis); continue; }
-    const uNich = pikaKc(pikaZaklad(radek));
-    if (uNich === null) {
-      jinaCena.push(Object.assign({ u_nich_kc: null, potiz: 'řádek nemá cenu' }, popis));
-    } else if (Math.round(uNich) !== cena) {
-      jinaCena.push(Object.assign({ u_nich_kc: uNich, stav_u_nich: radek.status }, popis));
-    } else {
-      sedi.push(popis);
+
+    /* Ceny u těch, co zůstávají. Řadí se podle ceny, ať se přeceňuje
+       co nejmíň — jinak by dvě stejné boty za různé ceny přehazovaly
+       cenu tam a zpět při každém běhu. */
+    const zustavaji = cinne.slice()
+      .sort((a, b) => (pikaZaklad(a) || 0) - (pikaZaklad(b) || 0))
+      .slice(0, chteno.length);
+    zustavaji.forEach((r, i) => {
+      const c = chteno[i];
+      if (!c) return;
+      const uNich = pikaKc(pikaZaklad(r));
+      if (uNich === null) {
+        precenit.push({ id: r.id, popis: r.short_id || r.id, z_kc: null, na_kc: c.cena,
+          potiz: 'jejich řádek nemá cenu' });
+      } else if (Math.round(uNich) !== c.cena) {
+        precenit.push({ id: r.id, popis: r.short_id || r.id, z_kc: uNich, na_kc: c.cena,
+          nazev: c.it.name, velikost: c.it.size || null });
+      } else {
+        sedi.push(pikaPopisKusu(c.it, c.cena));
+      }
+    });
+  }
+
+  /* Co u nich visí a ve skladu o tom není ani stopa — ruční vystavení,
+     kus z doby před evidencí, jiné párování. Hlásí se, ale nesahá se
+     na to: stáhnout cizí inzerát je horší chyba než nechat ho viset. */
+  const naviCizi = cizi.filter(r => PIKA_STAVY_CINNE.indexOf(r.status) !== -1)
+    .map(r => ({ id: r.short_id || r.id, stav: r.status, velikost: r.size || null,
+      nazev: r.name || null, sku: r.sku || null, cena_kc: pikaKc(pikaZaklad(r)) }));
+  const prodano = radky.filter(r => r.status === 'sold')
+    .map(r => ({ id: r.short_id || r.id, velikost: r.size || null, nazev: r.name || null,
+      za_kc: pikaKc(pikaZaklad(r)), kdy: r.updated_at || null }));
+
+  return { vystavit, aktivovat, stahnout, precenit, sedi, bezCeny,
+    visi_navic_nezname: naviCizi, prodano };
+}
+
+/* ── PROVEDENÍ ───────────────────────────────────────────────────────
+   Zápisy se dělají jen na výslovné vyžádání a s několika pojistkami.
+
+   **Idempotenční klíč se odvozuje z toho, co se posílá**, ne náhodně.
+   Když zápis vyprší v půli cesty a zopakuje se, dorazí týž klíč s týmž
+   tělem a jejich API vrátí původní výsledek místo druhého kusu. Kdyby
+   byl klíč náhodný, opakování by založilo duplikát — a dva stejné páry
+   ve výpisu vypadají přesně jako dva stejné páry ve výpisu, takže by
+   si toho nikdo nevšiml. (Jejich klíče žijí 24 hodin.)
+
+   **Strop na počet zápisů** je jednak kvůli jejich limitu 120 zápisů
+   za minutu, jednak proto, že Worker nemá běžet minuty. Co se nestihne,
+   dojede příští běh — plán se počítá znovu, takže se nic nezopakuje.
+
+   **Hromadné stahování se zarazí.** Když by plán chtěl stáhnout víc
+   kusů než PIKA_STROP_STAZENI, něco je špatně — typicky neúplná
+   odpověď z jejich strany nebo rozbité párování. Radši nic než
+   stažený sklad. */
+const PIKA_STROP_ZAPISU = 40;
+const PIKA_STROP_STAZENI = 10;
+
+/* Klíč tvaru UUID odvozený z těla. Stejné tělo dá stejný klíč. */
+function pikaOtisk(text) {
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    h1 = (h1 ^ text.charCodeAt(i)) >>> 0;
+    h1 = (h1 * 0x01000193) >>> 0;
+    h2 = (h2 + text.charCodeAt(i) * (i + 7)) >>> 0;
+    h2 = (h2 ^ (h2 << 5)) >>> 0;
+  }
+  const hex = (h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0')).repeat(2);
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-5' + hex.slice(13, 16)
+    + '-a' + hex.slice(17, 20) + '-' + hex.slice(20, 32);
+}
+
+async function pikaProved(env, plan) {
+  const hotovo = { vystaveno: [], aktivovano: [], stazeno: [], preceneno: [] };
+  const potize = [];
+  let zapisu = 0;
+  const zbyva = () => zapisu < PIKA_STROP_ZAPISU;
+
+  /* Stažení jde první: kus, který se ve skladu prodal, nemá u nich
+     viset ani o minutu déle než musí. */
+  for (const u of plan.stahnout) {
+    if (!zbyva()) break;
+    try {
+      await pikaVolej(env, '/listings/' + u.id + '/withdraw', { method: 'POST' });
+      hotovo.stazeno.push(u.popis); zapisu++;
+    } catch (e) { potize.push('stažení ' + u.popis + ': ' + e.message); if (e.pikaKod === 'token') break; }
+  }
+  for (const u of plan.aktivovat) {
+    if (!zbyva()) break;
+    try {
+      await pikaVolej(env, '/listings/' + u.id + '/activate', { method: 'POST' });
+      hotovo.aktivovano.push(u.popis); zapisu++;
+    } catch (e) { potize.push('vrácení do prodeje ' + u.popis + ': ' + e.message); if (e.pikaKod === 'token') break; }
+  }
+  for (const u of plan.precenit) {
+    if (!zbyva()) break;
+    try {
+      await pikaVolej(env, '/listings/' + u.id, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ price_cents: Math.round(u.na_kc * 100) }),
+      });
+      hotovo.preceneno.push(u.popis + ': ' + u.z_kc + ' → ' + u.na_kc + ' Kč'); zapisu++;
+    } catch (e) { potize.push('přecenění ' + u.popis + ': ' + e.message); if (e.pikaKod === 'token') break; }
+  }
+  for (const u of plan.vystavit) {
+    if (!zbyva()) break;
+    const telo = JSON.stringify(u.telo);
+    try {
+      const o = await pikaVolej(env, '/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': pikaOtisk(telo) },
+        body: telo,
+      });
+      hotovo.vystaveno.push((u.popis.nazev || '') + ' ' + (u.popis.velikost || '')
+        + ' → ' + ((o && (o.short_id || o.id)) || 'založeno')); zapisu++;
+    } catch (e) {
+      potize.push('vystavení ' + (u.popis.nazev || '') + ': ' + e.message);
+      if (e.pikaKod === 'token') break;
     }
   }
-  /* Co u nich visí navíc. Nikdy z toho neplyne „smazat" — může to být
-     kus vystavený ručně nebo spárovaný jinak, než čekáme. */
-  const navic = radky.filter(r => !pouzite.has(r.id) && r.status !== 'sold' && r.status !== 'archived')
-    .map(r => ({ id: r.short_id || r.id, stav: r.status, velikost: r.size || null,
-      cena_kc: pikaKc(pikaZaklad(r)) }));
-  const prodano = radky.filter(r => r.status === 'sold')
-    .map(r => ({ id: r.short_id || r.id, velikost: r.size || null,
-      za_kc: pikaKc(pikaZaklad(r)), kdy: r.updated_at || null }));
-  return { chybi, jinaCena, bezCeny, sedi, navic, prodano };
+  return { hotovo, potize, zapisu, strop: PIKA_STROP_ZAPISU,
+    zbylo: (plan.stahnout.length + plan.aktivovat.length + plan.precenit.length
+      + plan.vystavit.length) - zapisu };
 }
 
 /* Dnešní kurz eura pro přepočet eurových cílovek. Když ČNB neodpoví,
@@ -894,7 +1127,8 @@ async function pikaSmlouva(cesty) {
 
 /* Náhled na /<TOKEN>/pika — otevře se v prohlížeči a řekne, co by se
    dělalo. Nic nezapisuje. */
-async function pikaNahled(env) {
+async function pikaNahled(env, volby) {
+  volby = volby || {};
   const kdo = await pikaKdoJsem(env);
   /* Nepodepsané podmínky shodí každý zápis na 409 terms_acceptance_required,
      zatímco čtení chodí dál — je to tedy potíž, o které se jinak dozvíš až
@@ -911,12 +1145,12 @@ async function pikaNahled(env) {
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
   const polozky = slozPolozky(data, archivy);
   const kurz = await pikaKurz();
-  const r = pikaRozdil(polozky, radky, kurz);
+  const plan = pikaPlan(polozky, radky, kurz, kdo, { publikovat: !!volby.publikovat });
 
   const podleStavu = {};
   for (const x of radky) podleStavu[x.status || '?'] = (podleStavu[x.status || '?'] || 0) + 1;
 
-  return {
+  const odpoved = {
     stav: 'ok',
     kdo: {
       obchod: kdo.store && kdo.store.name,
@@ -931,25 +1165,58 @@ async function pikaNahled(env) {
     },
     u_nich: {
       celkem, podle_stavu: podleStavu, server_time: serverTime,
-      /* Jména polí, která jejich odpověď opravdu nese. Dokumentace je
-         neuvádí a párování podle SKU/názvu na nich stojí. */
       pole_v_odpovedi: radky.length ? Object.keys(radky[0]).sort() : [],
     },
     ve_skladu: {
       kurz_eur: kurz,
-      melo_by_viset: r.chybi.length + r.jinaCena.length + r.sedi.length,
-      sedi: r.sedi.length,
+      melo_by_viset: plan.vystavit.length + plan.aktivovat.length
+        + plan.precenit.length + plan.sedi.length,
+      sedi: plan.sedi.length,
     },
-    rozdil: {
-      chybi_u_nich: r.chybi,
-      jina_cena: r.jinaCena,
-      bez_cilove_ceny: r.bezCeny,
-      visi_navic: r.navic,
-      prodano_u_nich: r.prodano,
+    plan: {
+      vystavit: plan.vystavit.map(x => x.popis),
+      vratit_do_prodeje: plan.aktivovat.map(x => x.popis),
+      stahnout: plan.stahnout,
+      precenit: plan.precenit,
+      bez_cilove_ceny: plan.bezCeny,
+      visi_navic_nezname: plan.visi_navic_nezname,
+      prodano_u_nich: plan.prodano,
     },
-    poznamka: 'Náhled — nic se u nich nezměnilo. Vystavovat a stahovat zatím neumíme, '
-      + 'chybí popis POST /listings a způsob, jak vystavení stáhnout.',
   };
+
+  const ukonu = plan.vystavit.length + plan.aktivovat.length
+    + plan.stahnout.length + plan.precenit.length;
+  if (!volby.provest) {
+    odpoved.poznamka = ukonu
+      ? 'Náhled — nic se u nich nezměnilo. Provede se až s provest: true.'
+      : 'Sklad a komise sedí, není co dělat.';
+    return odpoved;
+  }
+
+  /* Od téhle chvíle se zapisuje. Dvě pojistky napřed. */
+  if (podminky && podminky.nezjisteno) {
+    odpoved.stav = 'nezapisovalo se';
+    odpoved.duvod = 'Nepodařilo se ověřit podmínky obchodu. Nepodepsané shodí každý zápis '
+      + 'na 409, tak se radši nic nezkoušelo.';
+    return odpoved;
+  }
+  if (plan.stahnout.length > PIKA_STROP_STAZENI) {
+    odpoved.stav = 'nezapisovalo se';
+    odpoved.duvod = 'Plán chce stáhnout ' + plan.stahnout.length + ' kusů, což je nad stropem '
+      + PIKA_STROP_STAZENI + '. Tolik naráz obvykle znamená neúplnou odpověď nebo rozbité '
+      + 'párování, ne skutečný úbytek skladu. Projdi si plán a řekni, jestli je v pořádku.';
+    return odpoved;
+  }
+  const vysledek = await pikaProved(env, plan);
+  odpoved.stav = vysledek.potize.length ? 'provedeno s potížemi' : 'provedeno';
+  odpoved.provedeno = vysledek.hotovo;
+  odpoved.zapisu = vysledek.zapisu;
+  if (vysledek.potize.length) odpoved.potize = vysledek.potize;
+  if (vysledek.zbylo > 0) {
+    odpoved.poznamka = 'Zbývá ' + vysledek.zbylo + ' úkonů — strop je ' + vysledek.strop
+      + ' zápisů na běh kvůli jejich limitu. Pusť to znovu, plán se přepočítá.';
+  }
+  return odpoved;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

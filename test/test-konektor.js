@@ -170,7 +170,7 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   /* ── Seznam nástrojů ──────────────────────────────────────────────── */
   const seznam = (await rpc('tools/list')).result.tools;
   shoda('nástroje', seznam.map(t => t.name).sort(),
-    ['pika_nahled', 'pika_smlouva', 'sklad_polozky', 'sklad_prodeje', 'sklad_souhrn', 'sklad_zakaznici']);
+    ['pika_nahled', 'pika_smlouva', 'pika_srovnat', 'sklad_polozky', 'sklad_prodeje', 'sklad_souhrn', 'sklad_zakaznici']);
   ok('každý nástroj má popis', seznam.every(t => t.description && t.description.length > 30));
   ok('každý nástroj má schéma', seznam.every(t => t.inputSchema && t.inputSchema.type === 'object'));
   ok('u zákazníků je varování na osobní údaje',
@@ -243,8 +243,23 @@ function pozadavek(cesta, telo, metoda = 'POST') {
 
   const zdroj = require('fs').readFileSync(path.resolve(__dirname, '..', 'konektor', 'worker.js'), 'utf8');
   ok('žádný commit', !/documents:commit/.test(zdroj));
-  ok('žádný PATCH', !/['"]PATCH['"]/.test(zdroj));
-  ok('žádný DELETE', !/['"]DELETE['"]/.test(zdroj));
+  /* Zápisové sloveso smí být v souboru jen v části o komisním prodeji —
+     tam se zapisuje do cizího API schválně. Do Firestore se zapisovat
+     nesmí nikde. Dřív se to hlídalo tím, že se PATCH ani DELETE nesměly
+     v souboru objevit vůbec; od napojení na Pikastore je ta podmínka
+     příliš hrubá, ale zrušit se nesmí — jen zúžit. */
+  const zacatekPika = zdroj.indexOf('PIKASTORE — KOMISNÍ PRODEJ');
+  const konecPika = zdroj.indexOf('UPOZORNĚNÍ E-MAILEM');
+  ok('části se v souboru našly', zacatekPika > 0 && konecPika > zacatekPika);
+  const mimoPika = [];
+  const re = /['"](PATCH|DELETE|PUT)['"]/g;
+  let m;
+  while ((m = re.exec(zdroj)) !== null) {
+    if (m.index < zacatekPika || m.index > konecPika) {
+      mimoPika.push(m[1] + ' na znaku ' + m.index);
+    }
+  }
+  shoda('zápisové sloveso jen v části o komisním prodeji', mimoPika, []);
 
   /* Do logu Workeru nesmí spadnout nic tajného. Dřív se to hlídalo tím,
      že se console nesměla použít vůbec — jenže cron bez logu je němý:

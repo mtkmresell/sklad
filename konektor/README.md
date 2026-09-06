@@ -111,6 +111,11 @@ Náhled vypisuje i `pole_v_odpovedi` — jména polí, která jejich odpověď
 opravdu nese — a jestli máš podepsané aktuální podmínky obchodu. Bez nich
 projde čtení, ale každý zápis skončí na `409 terms_acceptance_required`.
 
+Srovnání se pouští nástrojem `pika_srovnat`. **Bez `provest: true`
+jen ukáže plán**; s ním u nich vystaví, stáhne, vrátí do prodeje
+a přecení. Nové kusy jdou jako koncept, pokud se nepřidá
+`publikovat: true`.
+
 Obojí jde i **jako nástroj v běžném chatu** — konektor nabízí
 `pika_nahled` a `pika_smlouva`, takže se nemusí skládat adresa
 s tokenem. Stačí říct „ukaž náhled Pikastore".

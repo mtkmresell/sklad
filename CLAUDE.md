@@ -440,10 +440,37 @@ API `consignthem.com/api/v1`). Čtecí půlka hotová — konektor umí `/me`
 i stránkovaný `/listings` a na `/<TOKEN>/pika` ukáže rozdíl mezi skladem
 a tím, co u nich visí. **Nic nezapisuje.**
 
-Zbývá **tvar těla u `POST /listings`**. Cesty na stažení a vrácení do
-prodeje už známe (`POST /listings/{id}/withdraw`, `.../activate`).
-Nehádej pole — u věci, která stahuje inzeráty, je hádání to nejhorší
-možné; kontrakt se dá přečíst.
+Vystavování, stahování, vracení do prodeje i přeceňování **je
+napsané** (`pika_srovnat`). Zbývá to poprvé pustit proti jejich
+skutečnému API a pak zapojit na cron.
+
+**Pracuje se s počty ve skupině, ne s identitou kusu.** Majitel má dvě
+stejná trička ve velikosti S a jejich odpověď nenese nic, čím by se
+daly odlišit — v kontraktu není žádné pole pro cizí referenci. Skupina
+je SKU (nebo název) + velikost a srovnává se, kolik kusů má viset proti
+tomu, kolik jich visí. Prodej u nich se tím vyřeší sám: jejich řádek
+přejde na `sold`, majitel kus posune do Čeká, rozdíl vyjde nula a
+o stažení se nežádá. Návrat z Čeká přednostně **vrátí do prodeje**
+stažený kus (`activate`) místo zakládání nového.
+
+**Tři pojistky, které se nesmí odstranit:**
+- Nezapisuje se bez `provest: true`; jinak se vrátí jen plán.
+- **Hromadné stažení nad `PIKA_STROP_STAZENI` se zarazí.** Tolik kusů
+  naráz obvykle znamená neúplnou odpověď nebo rozbité párování, ne že
+  by se přes noc prodal celý sklad.
+- **Cizího vystavení, o kterém sklad neví, se to nedotkne.** Jen se
+  ohlásí. Stáhnout ručně vystavený inzerát je horší chyba než ho nechat
+  viset.
+
+**Idempotenční klíč se odvozuje z těla** (`pikaOtisk`), ne náhodně —
+opakovaný pokus po timeoutu tak vrátí původní kus místo druhého. Dva
+stejné páry ve výpisu totiž vypadají přesně jako dva stejné páry ve
+výpisu a nikdo si toho nevšimne. Klíče u nich žijí 24 hodin.
+
+Daňový režim je **`bazar`** (`PIKA_VAT_MODE`) — majitel není plátce
+DPH. Stav zboží: DS a „nové se štítky" jdou na jejich `new`, všechno
+ostatní na `used`; `vnds` se nepoužívá, protože evidence takový stupeň
+nerozlišuje a tvrdit lepší stav, než o jakém víme, je ta horší chyba.
 
 **Jejich `GET /openapi.json` je veřejný** a generovaný z jejich
 routování, takže se nemůže rozejít se skutečností. Vývojové prostředí
