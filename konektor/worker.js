@@ -498,6 +498,7 @@ async function zpracujZpravu(zprava, env) {
    výdělek po celou dobu akce. Když chybí obojí, nic se nehádá.
 ══════════════════════════════════════════════════════════════════════ */
 const PIKA_BASE = 'https://consignthem.com/api/v1';
+const PIKA_OPENAPI = PIKA_BASE + '/openapi.json';
 const PIKA_KATEGORIE = ['sneakers', 'obleceni'];
 /* Místa, ze kterých se prodávat nedá — kus tam buď fyzicky není,
    nebo už není majitelův. Všechna ostatní (Doma i cizí sklad) se
@@ -747,10 +748,129 @@ async function pikaKurz() {
   } catch (e) { return null; }
 }
 
+/* ── ČTENÍ JEJICH SMLOUVY ────────────────────────────────────────────
+   `GET /openapi.json` je veřejný a je generovaný z jejich vlastního
+   routování, takže se nemůže rozejít se skutečností. Vývojové prostředí
+   na jejich doménu nedosáhne (blokuje ji síťová politika), Worker ano —
+   tahle adresa proto vytáhne z kontraktu jen to podstatné k daným
+   cestám: povinná pole těla, typy, výčty a klíče odpovědi.
+
+   Je to nástroj k psaní kódu, ne provozní cesta. Ale je poctivější než
+   hádat, jaká pole `POST /listings` bere. */
+const PIKA_ZAJIMAVE = [
+  'post /listings',
+  'patch /listings/{id}',
+  'post /listings/{id}/withdraw',
+  'post /listings/{id}/activate',
+  'post /price-changes',
+  'post /master-products/resolve-skus',
+  'get /listings',
+  'get /sales',
+  'get /stores/consigner-terms/status',
+];
+
+function pikaRef(doc, ref) {
+  if (typeof ref !== 'string' || ref[0] !== '#') return null;
+  let u = doc;
+  for (const c of ref.slice(2).split('/')) {
+    if (!u) return null;
+    u = u[c.replace(/~1/g, '/').replace(/~0/g, '~')];
+  }
+  return u || null;
+}
+/* Rozbalí $ref a allOf. Hlouběji než pár úrovní se nechodí — na popis
+   polí to stačí a cyklický $ref by jinak zacyklil Worker. */
+function pikaUzel(doc, s, hloubka) {
+  hloubka = hloubka || 0;
+  if (!s || hloubka > 6) return null;
+  if (s.$ref) return pikaUzel(doc, pikaRef(doc, s.$ref), hloubka + 1);
+  if (Array.isArray(s.allOf)) {
+    const out = { type: 'object', properties: {}, required: [] };
+    for (const d of s.allOf) {
+      const r = pikaUzel(doc, d, hloubka + 1) || {};
+      Object.assign(out.properties, r.properties || {});
+      out.required.push(...(r.required || []));
+    }
+    return out;
+  }
+  return s;
+}
+function pikaTyp(doc, s) {
+  const r = pikaUzel(doc, s) || {};
+  if (Array.isArray(r.enum)) return 'výčet: ' + r.enum.slice(0, 12).map(String).join(' | ');
+  let t = r.type || (r.oneOf ? 'oneOf' : r.anyOf ? 'anyOf' : '?');
+  if (t === 'array') {
+    const p = pikaUzel(doc, r.items) || {};
+    t = 'pole<' + (p.type || (p.properties ? 'objekt' : '?')) + '>';
+  }
+  if (r.format) t += ' (' + r.format + ')';
+  if (r.nullable) t += ' | null';
+  return t;
+}
+function pikaPolePopis(doc, schema, strop) {
+  const s = pikaUzel(doc, schema);
+  if (!s) return null;
+  const props = s.properties || (s.items && (pikaUzel(doc, s.items) || {}).properties);
+  if (!props) return { typ: pikaTyp(doc, schema) };
+  const pole = {};
+  let i = 0;
+  for (const k of Object.keys(props)) {
+    if (++i > (strop || 60)) { pole['…'] = 'a další (' + (Object.keys(props).length - i + 1) + ')'; break; }
+    pole[k] = pikaTyp(doc, props[k]);
+  }
+  return { povinne: s.required || [], pole };
+}
+async function pikaSmlouva(cesty) {
+  const o = await fetch(PIKA_OPENAPI, { headers: { Accept: 'application/json' } });
+  if (!o.ok) throw pikaChyba('openapi.json vrátil ' + o.status, 'server');
+  const doc = await o.json();
+  const vysledek = [];
+  for (const zadani of cesty) {
+    const mezera = zadani.indexOf(' ');
+    const metoda = zadani.slice(0, mezera).toLowerCase();
+    const cesta = zadani.slice(mezera + 1);
+    const op = doc.paths && doc.paths[cesta] && doc.paths[cesta][metoda];
+    if (!op) { vysledek.push({ cesta, metoda, chyba: 'v kontraktu není' }); continue; }
+    const zaznam = { cesta, metoda, popis: op.summary || op.description || null };
+    const par = (op.parameters || []).map(p => {
+      const q = p.$ref ? pikaRef(doc, p.$ref) : p;
+      return q ? q.name + (q.required ? '*' : '') + ': ' + pikaTyp(doc, q.schema) : null;
+    }).filter(Boolean);
+    if (par.length) zaznam.parametry = par;
+    const telo = op.requestBody && op.requestBody.content
+      && (op.requestBody.content['application/json'] || {}).schema;
+    if (telo) zaznam.telo = pikaPolePopis(doc, telo);
+    const odp = op.responses && (op.responses['200'] || op.responses['201']);
+    const odpSchema = odp && odp.content && (odp.content['application/json'] || {}).schema;
+    if (odpSchema) {
+      const rozbaleno = pikaUzel(doc, odpSchema) || {};
+      /* Výpisy chodí v obálce { data, page, … } — zajímá nás, co nese
+         jeden řádek, protože podle toho se páruje se skladem. */
+      const vObalce = rozbaleno.properties && rozbaleno.properties.data;
+      zaznam.odpoved = pikaPolePopis(doc, vObalce || odpSchema);
+      if (vObalce) zaznam.odpoved.poznamka = 'jeden řádek z obálky data[]';
+    }
+    const chyby = Object.keys(op.responses || {}).filter(k => /^[45]/.test(k));
+    if (chyby.length) zaznam.stavy = chyby;
+    vysledek.push(zaznam);
+  }
+  return { zdroj: PIKA_OPENAPI, verze: (doc.info || {}).version || null, cesty: vysledek };
+}
+
 /* Náhled na /<TOKEN>/pika — otevře se v prohlížeči a řekne, co by se
    dělalo. Nic nezapisuje. */
 async function pikaNahled(env) {
   const kdo = await pikaKdoJsem(env);
+  /* Nepodepsané podmínky shodí každý zápis na 409 terms_acceptance_required,
+     zatímco čtení chodí dál — je to tedy potíž, o které se jinak dozvíš až
+     při prvním vystavení. Tvar odpovědi kontrakt nepopisuje, tak se
+     propouští, jak přišla; hádat se na ní nic nebude. */
+  let podminky = null;
+  try {
+    podminky = await pikaVolej(env, '/stores/consigner-terms/status');
+  } catch (e) {
+    podminky = { nezjisteno: String((e && e.message) || e) };
+  }
   const { radky, serverTime, celkem } = await pikaVypis(env);
   const token = await prihlas(env);
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
@@ -768,6 +888,7 @@ async function pikaNahled(env) {
       jmeno: kdo.consigner && kdo.consigner.display_name,
       mena: kdo.consigner && kdo.consigner.payout_currency,
       opravneni: kdo.capabilities || [],
+      podminky_obchodu: podminky,
       slevova_akce: kdo.active_sale
         ? { nazev: kdo.active_sale.name, sleva_pct: (kdo.active_sale.pct_off_bp || 0) / 100,
             do: kdo.active_sale.ends_at }
@@ -1839,6 +1960,14 @@ export default {
        u Pikastore se nic nemění. */
     if (co === 'pika') {
       try {
+        /* /pika/api vytáhne z jejich veřejného openapi.json popis cest,
+           podle kterých se píše zbytek napojení. Token na to není
+           potřeba a nikam se neposílá. */
+        if (cesta[2] === 'api') {
+          const zadane = (url.searchParams.get('cesty') || '').trim();
+          const seznam = zadane ? zadane.split(',').map(x => x.trim()).filter(Boolean) : PIKA_ZAJIMAVE;
+          return Response.json(await pikaSmlouva(seznam));
+        }
         return Response.json(await pikaNahled(env));
       } catch (e) {
         return Response.json({

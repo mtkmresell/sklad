@@ -8345,7 +8345,11 @@ function openDetail(id) {
      dní mu stačí, aby poznal, jestli má psát o peníze. */
   var dorucenoStr = null;
   if (isWaiting && it.dorucenoOd) {
-    var _dnu = Math.floor((Date.now() - new Date(it.dorucenoOd + 'T12:00:00').getTime()) / 86400000);
+    /* Počítá se v celých dnech kalendáře, od půlnoci místního dne.
+       Kotva v poledne dávala jiné číslo ráno a jiné večer. */
+    var _p = String(it.dorucenoOd).split('-');
+    var _od = new Date(+_p[0], +_p[1] - 1, +_p[2]);
+    var _dnu = Math.floor((Date.now() - _od.getTime()) / 86400000);
     if (_dnu >= 0) {
       dorucenoStr = (_dnu === 0 ? 'dnes' : _dnu === 1 ? 'včera' : 'před ' + _dnu + ' dny')
         + ' <span style="color:var(--muted2);font-size:11px;">· ' + fmtDate(it.dorucenoOd) + '</span>';

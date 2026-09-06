@@ -440,13 +440,25 @@ API `consignthem.com/api/v1`). Čtecí půlka hotová — konektor umí `/me`
 i stránkovaný `/listings` a na `/<TOKEN>/pika` ukáže rozdíl mezi skladem
 a tím, co u nich visí. **Nic nezapisuje.**
 
-Chybí dvě věci z jejich dokumentace, bez kterých se vystavovat nedá:
-**jaká pole bere `POST /listings`** a **jak se vystavení stáhne**
-(`PATCH` umí jen `price_cents`, `floor_cents`, `cost_cents`; stav
-`withdrawn` existuje, ale cesta k němu popsaná není). Nehádej to —
-u věci, která maže inzeráty, je hádání to nejhorší možné. Náhled proto
-vypisuje `pole_v_odpovedi`: jména polí, která jejich odpověď opravdu
-nese, ať je podle čeho párovat.
+Zbývá **tvar těla u `POST /listings`**. Cesty na stažení a vrácení do
+prodeje už známe (`POST /listings/{id}/withdraw`, `.../activate`).
+Nehádej pole — u věci, která stahuje inzeráty, je hádání to nejhorší
+možné; kontrakt se dá přečíst.
+
+**Jejich `GET /openapi.json` je veřejný** a generovaný z jejich
+routování, takže se nemůže rozejít se skutečností. Vývojové prostředí
+na jejich doménu **nedosáhne** (blokuje ji síťová politika), Worker ano:
+`/<TOKEN>/pika/api` z kontraktu vytáhne povinná pole, typy, výčty
+i klíče odpovědi pro `PIKA_ZAJIMAVE` (nebo pro cesty v `?cesty=`).
+Odsud se berou fakta, ne z paměti.
+
+**Podmínky obchodu se hlídají předem.** Nepodepsané shodí každý zápis
+na `409 terms_acceptance_required`, zatímco čtení chodí dál — jinak by
+se to zjistilo až při prvním vystavení. Náhled je proto ukazuje.
+
+**Změny jejich API jsou aditivní a bez ohlášení**: do odpovědí přibývají
+pole a do výčtů hodnoty. Klient na tom nesmí padat, a `test-pikastore.js`
+to hlídá podstrčenou odpovědí s neznámým polem i neznámým stavem.
 
 Pravidla bydlí **v konektoru**, ne v aplikaci — aplikace běží jen když
 je otevřená, na cizí API kvůli CORS nedosáhne a token by musel ležet

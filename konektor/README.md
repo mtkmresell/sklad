@@ -108,8 +108,19 @@ CONSIGNTHEM_TOKEN   klíč z jejich portálu
 Bez něj adresa řekne, co doplnit, a na jejich API vůbec nesáhne.
 
 Náhled vypisuje i `pole_v_odpovedi` — jména polí, která jejich odpověď
-opravdu nese. Podle nich se pozná, jak párovat kusy (SKU, nebo název)
-a jestli je čím vystavení stáhnout; dokumentace to neuvádí.
+opravdu nese — a jestli máš podepsané aktuální podmínky obchodu. Bez nich
+projde čtení, ale každý zápis skončí na `409 terms_acceptance_required`.
+
+Druhá adresa čte jejich veřejný kontrakt:
+
+```
+https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/pika/api
+```
+
+Vytáhne z `openapi.json` povinná pole, typy a výčty pro cesty, podle
+kterých se píše zbytek napojení; vlastní cesty se dají zadat přes
+`?cesty=post /listings,get /sales`. Token se na to nepoužívá —
+`openapi.json` je veřejný.
 
 ## Kurz ČNB pro aplikaci
 

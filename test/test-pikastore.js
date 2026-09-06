@@ -134,9 +134,12 @@ const ME = {
     return { stav: r.status, telo: await r.json() };
   }
   // Výchozí, zdravý scénář
-  function scenarOk(strankaPo = 50) {
+  function scenarOk(strankaPo = 50, podminky) {
     return (url) => {
       if (url.endsWith('/me')) return Response.json(ME);
+      if (url.includes('consigner-terms/status')) {
+        return podminky || Response.json({ accepted: true, version: '2026-01' });
+      }
       const q = new URL(url).searchParams;
       const strana = Number(q.get('page') || 1);
       const od = (strana - 1) * strankaPo;
@@ -178,6 +181,20 @@ const ME = {
   ok('nic se u nich nezměnilo',
     volani.filter(x => x.url.includes('consignthem') && (x.init.method || 'GET') !== 'GET').length === 0,
     JSON.stringify(volani.filter(x => x.url.includes('consignthem')).map(x => (x.init.method || 'GET') + ' ' + x.url)));
+
+  /* Nepodepsané podmínky obchodu shodí každý zápis na 409, zatímco
+     čtení chodí dál — takže se to jinak zjistí až při prvním vystavení. */
+  ok('je vidět, jestli jsou podepsané podmínky obchodu',
+    v.telo.kdo && v.telo.kdo.podminky_obchodu && v.telo.kdo.podminky_obchodu.accepted === true,
+    JSON.stringify(v.telo.kdo && v.telo.kdo.podminky_obchodu));
+
+  pikaOdpovedi = scenarOk(50, Response.json({ error: 'forbidden' }, { status: 403 }));
+  const bezPodminek = await pika();
+  ok('a když se to nezjistí, náhled kvůli tomu nespadne',
+    bezPodminek.stav === 200 && !!bezPodminek.telo.kdo.podminky_obchodu.nezjisteno,
+    JSON.stringify(bezPodminek.telo.kdo && bezPodminek.telo.kdo.podminky_obchodu));
+  pikaOdpovedi = scenarOk();
+  v = await pika();
 
   sekce('2) Peníze');
   /* L-2 má na pultě 7 000 (zvednuto slevovou akcí), dohodnuto 6 000 —
@@ -291,7 +308,122 @@ const ME = {
     konzole.filter(x => /CONSIGNTHEM|Authorization|headers/i.test(x)), []);
   ok('token není nikde natvrdo', !/Bearer\s+[A-Za-z0-9_-]{8,}/.test(zdroj));
 
-  sekce('6) Adresa je pod tokenem');
+  sekce('6) Tolerantní parsování');
+  /* Jejich smlouva slibuje aditivní změny: do odpovědí kdykoli přibudou
+     nová pole a do výčtů nové hodnoty, bez ohlášení. Klient na tom
+     nesmí padat — jinak se rozbije při první jejich novince a nebude to
+     jejich vada. */
+  pikaOdpovedi = (url) => {
+    if (url.endsWith('/me')) {
+      return Response.json(Object.assign({}, ME, {
+        novinka: { neco: 'co jsme nikdy neviděli' },
+        capabilities: ['listings:read', 'listings:write', 'neznama:schopnost'],
+      }));
+    }
+    const zvlastni = VYPIS.map(x => Object.assign({}, x, {
+      nove_pole: 'přibylo bez ohlášení',
+      vnorene: { a: [1, 2, { b: null }] },
+    }));
+    zvlastni[0] = Object.assign({}, zvlastni[0], { status: 'reserved_for_buyer' });
+    return Response.json({ data: zvlastni, page: 1, page_size: 50, total: zvlastni.length,
+      server_time: '2026-09-05T09:00:00.000Z', budouci_klic: 42 });
+  };
+  v = await pika();
+  ok('neznámá pole nevadí', v.stav === 200, JSON.stringify(v.telo).slice(0, 200));
+  ok('neznámá hodnota ve výčtu taky ne',
+    v.telo.u_nich && v.telo.u_nich.podle_stavu && v.telo.u_nich.podle_stavu.reserved_for_buyer === 1,
+    JSON.stringify(v.telo.u_nich));
+
+  sekce('7) Čtení jejich kontraktu');
+  /* Jejich openapi.json je veřejný a generovaný z jejich routování.
+     Vývojové prostředí na jejich doménu nedosáhne, Worker ano — tahle
+     adresa z kontraktu vytáhne, jaká pole která cesta bere. */
+  const OPENAPI = {
+    info: { version: '1.4.2' },
+    paths: {
+      '/listings': {
+        post: {
+          summary: 'Založení kusu',
+          requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/NewListing' } } } },
+          responses: { 201: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Listing' } } } },
+            403: {}, 409: {} },
+        },
+        get: {
+          summary: 'Moje kusy',
+          parameters: [{ name: 'updated_since', required: false, schema: { type: 'string', format: 'date-time' } }],
+          responses: { 200: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Obalka' } } } } },
+        },
+      },
+      '/listings/{id}/withdraw': {
+        post: { summary: 'Stažení kusu z prodeje', responses: { 200: {} } },
+      },
+    },
+    components: {
+      schemas: {
+        NewListing: {
+          type: 'object',
+          required: ['store_id', 'consigner_id', 'price_cents'],
+          properties: {
+            store_id: { type: 'string', format: 'uuid' },
+            consigner_id: { type: 'integer' },
+            price_cents: { type: 'integer' },
+            condition: { type: 'string', enum: ['DS', 'VNDS', 'used'] },
+            tags: { type: 'array', items: { type: 'string' } },
+          },
+        },
+        Listing: { allOf: [
+          { type: 'object', properties: { id: { type: 'string' } } },
+          { type: 'object', properties: { status: { type: 'string', enum: ['draft', 'listed'] } } },
+        ] },
+        Obalka: {
+          type: 'object',
+          properties: {
+            data: { type: 'array', items: { $ref: '#/components/schemas/Radek' } },
+            total: { type: 'integer' },
+          },
+        },
+        Radek: { type: 'object', properties: {
+          id: { type: 'string' }, sku: { type: 'string', nullable: true }, size: { type: 'string' },
+        } },
+      },
+    },
+  };
+  pikaOdpovedi = (url) => url.endsWith('/openapi.json')
+    ? Response.json(OPENAPI) : Response.json({ chyba: 'sem se nemá chodit' }, { status: 500 });
+  volani = [];
+  const rApi = await bezLogu(() => worker.fetch(
+    new Request('https://sklad.mtkm.workers.dev/' + ENV.MCP_TOKEN + '/pika/api'
+      + '?cesty=post /listings,get /listings,post /listings/{id}/withdraw,get /nic'), ENV));
+  const api = await rApi.json();
+  ok('kontrakt se přečte', rApi.status === 200 && api.verze === '1.4.2', JSON.stringify(api).slice(0, 160));
+  const zaloz = (api.cesty || []).find(x => x.cesta === '/listings' && x.metoda === 'post');
+  shoda('povinná pole zakládání sedí', zaloz && zaloz.telo.povinne,
+    ['store_id', 'consigner_id', 'price_cents']);
+  ok('typy se rozbalí přes $ref', zaloz && zaloz.telo.pole.store_id === 'string (uuid)',
+    JSON.stringify(zaloz && zaloz.telo.pole));
+  ok('výčty jsou vidět', zaloz && /DS \| VNDS \| used/.test(zaloz.telo.pole.condition || ''),
+    JSON.stringify(zaloz && zaloz.telo.pole));
+  ok('pole se pozná', zaloz && zaloz.telo.pole.tags === 'pole<string>',
+    JSON.stringify(zaloz && zaloz.telo.pole));
+  ok('allOf se slije dohromady', zaloz && zaloz.odpoved && zaloz.odpoved.pole
+    && zaloz.odpoved.pole.id && zaloz.odpoved.pole.status,
+    JSON.stringify(zaloz && zaloz.odpoved));
+  const vypisSch = (api.cesty || []).find(x => x.cesta === '/listings' && x.metoda === 'get');
+  ok('u výpisu se leze do obálky data[]',
+    vypisSch && vypisSch.odpoved && vypisSch.odpoved.pole && vypisSch.odpoved.pole.sku
+    === 'string | null', JSON.stringify(vypisSch && vypisSch.odpoved));
+  ok('parametry jsou vidět', vypisSch && (vypisSch.parametry || []).some(p => /updated_since/.test(p)),
+    JSON.stringify(vypisSch && vypisSch.parametry));
+  const stazeni = (api.cesty || []).find(x => x.cesta === '/listings/{id}/withdraw');
+  ok('cesta bez těla projde taky', stazeni && stazeni.popis === 'Stažení kusu z prodeje',
+    JSON.stringify(stazeni));
+  ok('neexistující cesta se řekne', (api.cesty || []).some(x => x.chyba === 'v kontraktu není'),
+    JSON.stringify(api.cesty && api.cesty.map(x => x.cesta)));
+  ok('kontrakt se čte bez tokenu',
+    !volani.some(x => x.url.includes('openapi') && x.init.headers && x.init.headers.Authorization),
+    'openapi.json je veřejný, token tam nemá co dělat');
+
+  sekce('8) Adresa je pod tokenem');
   const r404 = await bezLogu(() => worker.fetch(
     new Request('https://sklad.mtkm.workers.dev/spatny-token/pika'), ENV));
   ok('bez správného tokenu se nic neprozradí', r404.status === 404, String(r404.status));

@@ -215,11 +215,16 @@ const SEED = [
 
   // A hlavně: v detailu to musí být vidět, protože kvůli tomu se detail otvírá
   const vDetailu = await page.evaluate(async () => {
-    const den = 86400000;
+    /* Datum se skládá z místního kalendáře, ne z UTC — aplikace ho tak
+       i čte a přes půlnoc by se to jinak rozešlo o den. */
+    const predDny = (n) => {
+      const d = new Date(); d.setDate(d.getDate() - n);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+        + '-' + String(d.getDate()).padStart(2, '0');
+    };
     items.push({ id: 'dd1', name: 'Doručený kus', category: 'sneakers', buyPrice: 1000,
       buyCurrency: 'CZK', saleState: 'waiting', waitState: 'payout', location: 'Doma',
-      sellPrice: 3000, saleDate: new Date(Date.now() - 20 * den).toISOString().slice(0, 10),
-      dorucenoOd: new Date(Date.now() - 6 * den).toISOString().slice(0, 10),
+      sellPrice: 3000, saleDate: predDny(20), dorucenoOd: predDny(6),
       dateAdded: 1, tags: [] });
     openDetail('dd1');
     await new Promise(r => setTimeout(r, 200));
