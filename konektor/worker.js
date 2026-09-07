@@ -834,7 +834,16 @@ function pikaCenaNaPulte(payoutKc, provizeBp) {
      se vystavil za čistou částku, ze které si obchod ještě ukrojí. */
   if (!Number.isFinite(payoutKc) || payoutKc <= 0) return null;
   if (!Number.isFinite(provizeBp) || provizeBp < 0 || provizeBp >= 10000) return null;
-  return Math.round(payoutKc / (1 - provizeBp / 10000));
+  return pikaKoncovka(payoutKc / (1 - provizeBp / 10000));
+}
+/* Obchod chce ceny končící na 90 (10 990, 8 890). Zaokrouhluje se
+   **nahoru** — dolů by cena spadla pod dohodnutou a majiteli by po
+   provizi přišlo míň, než si řekl. Rozdíl je nejvýš stovka a jde
+   v jeho prospěch. */
+const PIKA_KONCOVKA = 90;
+function pikaKoncovka(kc) {
+  if (kc <= PIKA_KONCOVKA) return PIKA_KONCOVKA;
+  return Math.ceil((kc - PIKA_KONCOVKA) / 100) * 100 + PIKA_KONCOVKA;
 }
 
 /* Tělo pro založení kusu. master_product_id je nepovinné, takže kus,
@@ -937,8 +946,12 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
       bezProvize.push(pikaPopisKusu(c.it, c.cena));
       continue;
     }
+    /* Kolik z toho po provizi opravdu přijde. Po zaokrouhlení nahoru
+       to bývá o něco víc než cílovka — ať je vidět, že se neztrácí. */
+    const payout = Math.round(naPulte * (1 - provize.bp / 10000));
     vystavit.push({
-      popis: Object.assign(pikaPopisKusu(c.it, c.cena), { na_pulte_kc: naPulte }),
+      popis: Object.assign(pikaPopisKusu(c.it, c.cena),
+        { na_pulte_kc: naPulte, dostanes_kc: payout }),
       telo: pikaTeloZalozeni(c.it, naPulte, kdo, volby.publikovat),
       klic: s.klice[0], itemId: c.it.id,
     });

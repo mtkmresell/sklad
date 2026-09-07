@@ -206,13 +206,15 @@ const ME = {
   const osobni = (r.vystavit || []).find(x => x.nazev === 'Osobní kousek');
   ok('cílovka zůstává tím, co má přijít', osobni && osobni.cena_kc === 3000,
     JSON.stringify(osobni));
-  ok('a na pult jde částka i s provizí', osobni && osobni.na_pulte_kc === 4000,
-    '3000 / 0,75 = 4000 | ' + JSON.stringify(osobni));
+  ok('a na pult jde částka i s provizí', osobni && osobni.na_pulte_kc === 4090,
+    '3000 / 0,75 = 4000 → nahoru na koncovku 90 = 4090 | ' + JSON.stringify(osobni));
+  ok('a je vidět, kolik z toho přijde', osobni && osobni.dostanes_kc === 3068,
+    '4090 × 0,75 = 3067,5 | ' + JSON.stringify(osobni));
   const euro = (r.vystavit || []).find(x => x.nazev === 'Eurová cílovka');
   ok('eurová cílovka se přepočítá dnešním kurzem', euro && euro.cena_kc === 4750,
     '190 € × 25 = 4750 | ' + JSON.stringify(euro));
-  ok('a taky se navýší o provizi', euro && euro.na_pulte_kc === 6333,
-    '4750 / 0,75 = 6333 | ' + JSON.stringify(euro));
+  ok('a taky se navýší o provizi', euro && euro.na_pulte_kc === 6390,
+    '4750 / 0,75 = 6333 → nahoru na 6390 | ' + JSON.stringify(euro));
   ok('kurz je vidět', v.telo.ve_skladu && v.telo.ve_skladu.kurz_eur === 25,
     JSON.stringify(v.telo.ve_skladu));
 
@@ -533,8 +535,8 @@ const ME = {
   ok('když ten model nevisí, vystaví se právě jeden', (p.vystavit || []).length === 1,
     JSON.stringify(p.vystavit));
   ok('a na pult jde cílovka i s provizí',
-    p.vystavit[0] && p.vystavit[0].na_pulte_kc === 1000,
-    '750 / 0,75 = 1000 | ' + JSON.stringify(p.vystavit));
+    p.vystavit[0] && p.vystavit[0].na_pulte_kc === 1090,
+    '750 / 0,75 = 1000 → nahoru na 1090 | ' + JSON.stringify(p.vystavit));
 
   /* Když u nich nevisí vůbec nic, není odkud vzít provizi — a bez ní
      se cena na pultě spočítat nedá. Radši nic než kus vystavený za
@@ -583,7 +585,25 @@ const ME = {
   ok('jen se ohlásí', (p.visi_navic_nezname || []).length === 1
     && p.visi_navic_nezname[0].id === 'X-1', JSON.stringify(p.visi_navic_nezname));
 
-  sekce('10) Velikosti a názvy');
+  sekce('10) Koncovka ceny');
+  /* Obchod chce ceny končící na 90. Zaokrouhluje se nahoru — dolů by
+     cena spadla pod dohodnutou a majiteli by po provizi přišlo míň,
+     než si řekl. */
+  for (const [cilovka, naPulte] of [[750, 1090], [3000, 4090], [1500, 2090], [10000, 13390]]) {
+    scenarSeSkladem(
+      [{ id: 'k', name: 'Kus', sku: 'K-1', size: '42', category: 'sneakers',
+        saleState: 'stock', location: 'Doma', targetPrice: cilovka }],
+      [cizi]);
+    p = (await pika()).telo.plan;
+    const x = (p.vystavit || [])[0];
+    ok('cílovka ' + cilovka + ' → cena na pultě ' + naPulte,
+      x && x.na_pulte_kc === naPulte, JSON.stringify(x));
+    ok('a končí na 90', x && x.na_pulte_kc % 100 === 90, String(x && x.na_pulte_kc));
+    ok('a po provizi zbyde aspoň cílovka', x && x.dostanes_kc >= cilovka,
+      'dostane ' + (x && x.dostanes_kc) + ', chtěl ' + cilovka);
+  }
+
+  sekce('11) Velikosti a názvy');
   /* Ověřeno na skutečných datech: u nich „EU42" a „O/S", u nás „42"
      a „OS"; u čepic mají „M", evidence vede „M/L"; a názvy se liší
      pořadím slov i předsazeným „Air". Bez srovnání by se kus založil
@@ -617,7 +637,7 @@ const ME = {
   ok('zlomkovou velikost neslévá s celou', (p.vystavit || []).length === 1,
     '41 1/3 není 41 | ' + JSON.stringify(p.vystavit));
 
-  sekce('11) Zápisy');
+  sekce('12) Zápisy');
   let odeslane = [];
   const zapisovyScenar = (url, init) => {
     odeslane.push({ url, method: (init && init.method) || 'GET',
@@ -653,8 +673,8 @@ const ME = {
   shoda('tělo nese povinná pole a daňový režim',
     [telo.store_id, telo.consigner_id, telo.size, telo.vat_mode],
     [ME.store.id, ME.consigner.id, 'S', 'bazar']);
-  ok('cena na pultě je v haléřích a s provizí', telo.price_cents === 100000,
-    '750 Kč cílovka → 1000 Kč na pultě → 100000 haléřů | ' + JSON.stringify(telo));
+  ok('cena na pultě je v haléřích a s provizí', telo.price_cents === 109000,
+    '750 Kč cílovka → 1090 Kč na pultě → 109000 haléřů | ' + JSON.stringify(telo));
   ok('neznámý stav zboží je opatrně „used"', telo.condition === 'used', String(telo.condition));
   ok('a bez pokynu se nepublikuje', telo.publish === false, String(telo.publish));
   ok('idempotenční klíč má tvar UUID',
@@ -696,7 +716,7 @@ const ME = {
       return t && t.telo.custom_model === 'Kus' && t.telo.style_code === 'C-1';
     })(), JSON.stringify(odeslane.filter(x => x.method === 'POST')[0]));
 
-  sekce('12) Když něco selže, přijde mail');
+  sekce('13) Když něco selže, přijde mail');
   /* Srovnání běží na pozadí. Bez zprávy by se o zaseknutém kusu
      majitel dozvěděl leda tak, že by si toho všiml v jejich portálu. */
   let posta = [];
@@ -741,7 +761,7 @@ const ME = {
     JSON.stringify(bezPosty.mail));
   global.fetch = puvodniFetchMail;
 
-  sekce('13) Pojistky');
+  sekce('14) Pojistky');
   /* Hromadné stažení skoro vždycky znamená rozbité párování nebo
      neúplnou odpověď, ne že by se přes noc prodal celý sklad. */
   const mnoho = [];
@@ -771,7 +791,7 @@ const ME = {
 
   odpovezSklad = puvodniSklad;
 
-  sekce('12) Adresa je pod tokenem');
+  sekce('15) Adresa je pod tokenem');
   const r404 = await bezLogu(() => worker.fetch(
     new Request('https://sklad.mtkm.workers.dev/spatny-token/pika'), ENV));
   ok('bez správného tokenu se nic neprozradí', r404.status === 404, String(r404.status));

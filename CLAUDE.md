@@ -509,6 +509,10 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   ukrajovala z každého nového kusu. Bez známé provize se kus nevystaví.
   U eurové cílovky se nejdřív přepočte `targetPriceEur` **dnešním**
   kurzem (současná nabídková cena, ne historická transakce).
+- **Cena u nich musí končit na 90** (`PIKA_KONCOVKA`) — 10 990, 8 890.
+  Zaokrouhluje se **nahoru**: dolů by cena spadla pod dohodnutou
+  a majiteli by po provizi přišlo míň, než si řekl. V plánu je proto
+  vedle ceny na pultě i `dostanes_kc`, ať je vidět, že se nic neztrácí.
 - **Staré inzeráty se nikdy nepřeceňují.** Majitel si komis prochází
   sám a ceny upravuje podle situace; cílová cena se použije jen při
   zakládání. Proto v konektoru není žádný `PATCH /listings/{id}`.
