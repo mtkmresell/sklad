@@ -553,7 +553,8 @@ const ME = {
   }
   const radekTricko = (id, stav, cena) => ({ id, short_id: id, sku: 'T-1', size: 'S',
     status: stav, price_cents: cena, payout_basis_cents: null, commission_rate_bp: 2500,
-    created_at: '2026-08-01T00:00:00Z' });
+    master_product_id: 'mp-t-1', created_at: '2026-08-01T00:00:00Z',
+    updated_at: '2026-08-01T00:00:00Z' });
 
   scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000)]);
   let p = (await pika()).telo.plan;
@@ -608,6 +609,42 @@ const ME = {
   p = (await pika()).telo.plan;
   shoda('návrat na sklad vrátí stažený kus, nezaloží nový',
     [(p.vratit_do_prodeje || []).length, (p.vystavit || []).length], [1, 0]);
+
+  /* Stažený inzerát bez katalogového id je zmetek z dřívějška — nemá
+     u nich fotku ani SKU. Takový se neoživuje, založí se pořádně znovu. */
+  const bezKatalogu = Object.assign(radekTricko('T-C', 'withdrawn', 100000));
+  delete bezKatalogu.master_product_id;
+  scenarSeSkladem(DVOJCATA, [bezKatalogu]);
+  p = (await pika()).telo.plan;
+  shoda('zmetek bez katalogu se neoživuje, založí se znovu',
+    [(p.vratit_do_prodeje || []).length, (p.vystavit || []).length], [0, 1]);
+
+  /* Prodej u nich, o kterém sklad ještě neví. Kus je pořád veden doma,
+     ale fyzicky ho majitel nemá — vystavit ho znovu by znamenalo
+     prodat něco, co nemá, a podle jejich podmínek je za nedodání
+     pokuta od 200 Kč. */
+  const cerstvyProdej = Object.assign(radekTricko('T-P', 'sold', 100000),
+    { updated_at: new Date(Date.now() - 3600000).toISOString() });
+  scenarSeSkladem([DVOJCATA[0]], [cerstvyProdej]);
+  p = (await pika()).telo.plan;
+  shoda('po prodeji u nich se nevystavuje, dokud sklad nedožene',
+    [(p.vystavit || []).length, (p.ceka_na_sklad || []).length], [0, 1]);
+  ok('a řekne se proč', /sklad to ještě neví/.test(((p.ceka_na_sklad || [])[0] || {}).duvod || ''),
+    JSON.stringify(p.ceka_na_sklad));
+
+  // Se dvěma kusy doma a jedním čerstvým prodejem zbývá jeden — ten se vystaví
+  scenarSeSkladem(DVOJCATA, [cerstvyProdej]);
+  p = (await pika()).telo.plan;
+  ok('když doma zbývá další kus, vystaví se', (p.vystavit || []).length === 1,
+    JSON.stringify(p.vystavit));
+
+  // Starý prodej už brzdit nesmí
+  const staryProdej = Object.assign(radekTricko('T-S', 'sold', 100000),
+    { updated_at: '2026-01-01T00:00:00Z' });
+  scenarSeSkladem([DVOJCATA[0]], [staryProdej]);
+  p = (await pika()).telo.plan;
+  ok('starý prodej vystavování nebrzdí', (p.vystavit || []).length === 1,
+    JSON.stringify({ vystavit: p.vystavit, ceka: p.ceka_na_sklad }));
 
   // Cizí kus, o kterém sklad neví, se hlásí, ale nesahá se na něj
   scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000),
@@ -849,6 +886,21 @@ const ME = {
   const jenStazeni = odeslane.filter(x => x.method === 'POST');
   ok('s jen: stahnout se nic nevystavuje', jenStazeni.length === 1
     && /\/withdraw$/.test(jenStazeni[0].url), JSON.stringify(jenStazeni.map(x => x.url)));
+
+  /* Cílené stažení jednoho inzerátu — úklid po ruce, mimo plán. */
+  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000)], zapisovyScenar);
+  const nahledStazeni = await srovnat({ stahni: 'T-A' });
+  shoda('bez provest se jen ukáže, co by se stáhlo',
+    [nahledStazeni.stav, odeslane.filter(x => x.method === 'POST').length], ['nahled', 0]);
+  const cileneStazeni = await srovnat({ stahni: 'T-A', provest: true });
+  ok('s provest se stáhne právě ten jeden', cileneStazeni.stav === 'staženo',
+    JSON.stringify(cileneStazeni));
+  const poslane = odeslane.filter(x => x.method === 'POST');
+  ok('a nic jiného neodejde', poslane.length === 1 && /T-A\/withdraw$/.test(poslane[0].url),
+    JSON.stringify(poslane.map(x => x.url)));
+  const neznamy = await srovnat({ stahni: 'NENI', provest: true });
+  shoda('neznámé id se řekne, nic se nezkouší',
+    [neznamy.stav, odeslane.filter(x => x.method === 'POST').length], ['nenalezeno', 0]);
 
   sekce('15) Když něco selže, přijde mail');
   /* Srovnání běží na pozadí. Bez zprávy by se o zaseknutém kusu

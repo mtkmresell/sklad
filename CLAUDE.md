@@ -453,6 +453,20 @@ přejde na `sold`, majitel kus posune do Čeká, rozdíl vyjde nula a
 o stažení se nežádá. Návrat z Čeká přednostně **vrátí do prodeje**
 stažený kus (`activate`) místo zakládání nového.
 
+**Prodej u nich, o kterém sklad ještě neví, brzdí vystavování.** Než
+majitel prodaný kus přesune do Čeká, je pořád veden jako doma — a bez
+pojistky by se vystavil znovu kus, který fyzicky nemá. Kdyby ho někdo
+koupil, podle jejich podmínek je za nedodání pokuta od 200 Kč. Za
+nesrovnaný se bere prodej novější než razítko skladu **a ještě
+`PIKA_PO_PRODEJI_DNI` dní po něm**: samotné razítko nestačí, protože se
+posune i po změně, která s tím kusem nesouvisí. Našlo se to na ostrých
+datech — majiteli se během práce prodala čepice a plán ji chtěl
+vystavit znovu, přestože druhou v té velikosti neměl.
+
+**Stažený inzerát bez `master_product_id` se neoživuje.** Je to zmetek
+z doby před napojením na katalog — nemá fotku ani SKU. Založí se radši
+znovu pořádně.
+
 **Zapomenutá cílová cena není důvod ke stažení.** Kus doma bez cílovky
 se nevystaví — ale to, co za něj u nich visí, se nechá být. Našlo se to
 na skutečných datech: majitelovy SB Dunky ležely doma bez ceny a plán

@@ -437,6 +437,11 @@ const NASTROJE = [
           description: 'Nejvíc tolik zápisů v tomhle běhu. Hodí se na opatrný rozjezd — '
             + '„vystav zatím jeden kus". Zbytek dojede při dalším spuštění.',
         },
+        stahni: {
+          type: 'string',
+          description: 'Stáhne u nich jeden konkrétní inzerát podle id (uuid nebo short_id '
+            + 'z výpisu) a nic jiného neudělá. Pro úklid po ruce.',
+        },
       },
     },
   },
@@ -455,7 +460,7 @@ async function spustNastroj(jmeno, args, env) {
   if (jmeno === 'pika_nahled') return pikaNahled(env);
   if (jmeno === 'pika_srovnat') {
     return pikaNahled(env, { provest: !!args.provest, publikovat: !!args.publikovat,
-      jen: args.jen, nejvyse: args.nejvyse });
+      jen: args.jen, nejvyse: args.nejvyse, stahni: args.stahni });
   }
 
   const token = await prihlas(env);
@@ -799,6 +804,17 @@ function pikaKlicePolozky(it) {
    Stažený kus se přednostně **vrátí do prodeje** místo zakládání nového
    (`activate`), takže návrat z Čeká na sklad nezaloží duplikát. */
 const PIKA_STAVY_CINNE = ['draft', 'listed'];
+/* Jak dlouho po prodeji u nich se ten model nevystavuje znovu, i když
+   razítko skladu mezitím poskočilo. Razítko se hýbe i po nesouvisející
+   změně, takže samo o sobě nestačí. */
+const PIKA_PO_PRODEJI_DNI = 3;
+function pikaProdejCerstvy(r, razitkoSkladu) {
+  const kdy = Date.parse(r.updated_at || r.listed_at || '');
+  if (!Number.isFinite(kdy)) return false;
+  if (Date.now() - kdy < PIKA_PO_PRODEJI_DNI * 86400000) return true;
+  const raz = Date.parse(razitkoSkladu || '');
+  return Number.isFinite(raz) && kdy > raz;
+}
 /* Neplátce DPH — zvláštní režim pro použité zboží. Kdyby se majitel
    stal plátcem, mění se tady a v README. */
 const PIKA_VAT_MODE = 'bazar';
@@ -998,20 +1014,43 @@ function pikaSkupiny(polozky, radky, kurz) {
 /* Z rozdílu udělá seznam úkonů. Nic neodesílá. */
 function pikaPlan(polozky, radky, kurz, kdo, volby) {
   volby = volby || {};
+  const razitkoSkladu = volby.razitkoSkladu || null;
   const { skupiny, cizi, bezCeny } = pikaSkupiny(polozky, radky, kurz);
   const provize = pikaProvizeBp(radky);
   const vystavit = [], aktivovat = [], stahnout = [], sedi = [], bezProvize = [];
-  const neniVKatalogu = [];
+  const neniVKatalogu = [], cekaNaSklad = [];
 
   for (const s of skupiny) {
     const cinne = s.jejich.filter(r => PIKA_STAVY_CINNE.indexOf(r.status) !== -1);
-    const stazene = s.jejich.filter(r => r.status === 'withdrawn');
+    /* Vrátit do prodeje jde jen kus napojený na katalog. Inzerát bez
+       `master_product_id` nemá u nich fotku ani SKU — takový se radši
+       založí znovu pořádně, než aby se oživoval zmetek. */
+    const stazene = s.jejich.filter(r => r.status === 'withdrawn' && r.master_product_id);
+
+    /* Prodej u nich, o kterém sklad ještě neví. Než majitel kus
+       přesune do Čeká, je pořád veden jako doma — a bez tohohle by se
+       vystavil znovu kus, který už fyzicky nemá. Kdyby ho někdo koupil,
+       podle jejich podmínek je za nedodání pokuta od 200 Kč.
+
+       Za nesrovnaný se bere prodej novější než razítko skladu, a ještě
+       PIKA_PO_PRODEJI_DNI dní po něm — samotné razítko nestačí, protože
+       se posune i po změně, která s tímhle kusem nesouvisí. */
+    const nesrovnane = s.jejich.filter(r => r.status === 'sold'
+      && pikaProdejCerstvy(r, razitkoSkladu)).length;
 
     /* Majitel listuje **jeden kus na model a velikost**, i když jich má
        víc — tak to dělal ručně a chce to tak dál. Prodá-li se jinde,
        inzerát zůstane viset, dokud mu doma zbývá aspoň jeden kus;
        prodá-li se u nich, jejich řádek přejde na `sold`, činných je
        nula a vystaví se znovu. Přesně jak to dělal rukama. */
+    /* Kolik kusů je doma opravdu k dispozici. Co se u nich prodalo
+       a sklad o tom ještě neví, se odečte. */
+    const dostupne = Math.max(0, s.chtene.length - nesrovnane);
+    if (s.chtene.length && !dostupne) {
+      cekaNaSklad.push({ klic: s.klice[0], nazev: (s.chtene[0].it || {}).name || null,
+        duvod: 'u nich se to prodalo, sklad to ještě neví — počkám, až kus přesuneš' });
+      continue;
+    }
     if (!s.chtene.length && s.kusuBezCeny) {
       /* Doma něco je, jen bez ceny. Nevystavuje se ani nestahuje. */
       continue;
@@ -1069,7 +1108,7 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
       za_kc: pikaKc(pikaZaklad(r)), kdy: r.updated_at || null }));
 
   return { vystavit, aktivovat, stahnout, sedi, bezCeny, bezProvize, provize, neniVKatalogu,
-    visi_navic_nezname: naviCizi, prodano };
+    cekaNaSklad, visi_navic_nezname: naviCizi, prodano };
 }
 
 /* ── PROVEDENÍ ───────────────────────────────────────────────────────
@@ -1322,11 +1361,31 @@ async function pikaNahled(env, volby) {
     podminky = { nezjisteno: String((e && e.message) || e) };
   }
   const { radky, serverTime, celkem } = await pikaVypis(env);
+
+  /* Cílené stažení jednoho inzerátu. Dělá se úplně mimo plán — je to
+     úklid po ruce, ne synchronizace. */
+  if (volby.stahni) {
+    const hledany = pikaText(volby.stahni);
+    const radek = radky.find(r => pikaText(r.id) === hledany || pikaText(r.short_id) === hledany);
+    if (!radek) {
+      return { stav: 'nenalezeno', hledano: volby.stahni,
+        poznamka: 'Takový inzerát mezi tvými není. Zkontroluj id z výpisu.' };
+    }
+    if (!volby.provest) {
+      return { stav: 'nahled', stahlo_by_se: { id: radek.short_id || radek.id,
+        nazev: radek.name || null, velikost: radek.size || null, stav: radek.status },
+        poznamka: 'Provede se až s provest: true.' };
+    }
+    await pikaVolej(env, '/listings/' + radek.id + '/withdraw', { method: 'POST' });
+    return { stav: 'staženo', inzerat: { id: radek.short_id || radek.id,
+      nazev: radek.name || null, velikost: radek.size || null } };
+  }
   const token = await prihlas(env);
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
   const polozky = slozPolozky(data, archivy);
   const kurz = await pikaKurz();
-  const plan = pikaPlan(polozky, radky, kurz, kdo, { publikovat: !!volby.publikovat });
+  const plan = pikaPlan(polozky, radky, kurz, kdo,
+    { publikovat: !!volby.publikovat, razitkoSkladu: data.savedAt });
   /* Katalog až tady — potřebuje síť, a plán se počítá bez ní. */
   await pikaDoplnKatalog(env, plan);
 
@@ -1358,6 +1417,7 @@ async function pikaNahled(env, volby) {
     })(),
     ve_skladu: {
       kurz_eur: kurz,
+      sklad_ulozen: data.savedAt || null,
       melo_by_viset: plan.vystavit.length + plan.aktivovat.length + plan.sedi.length,
       uz_visi: plan.sedi.length,
       /* Provize z jejich vlastních dat. Z ní se počítá cena na pultě,
@@ -1372,6 +1432,7 @@ async function pikaNahled(env, volby) {
       bez_cilove_ceny: plan.bezCeny,
       bez_zname_provize: plan.bezProvize,
       neni_v_katalogu: plan.neniVKatalogu,
+      ceka_na_sklad: plan.cekaNaSklad,
       katalog_potiz: plan.katalogPotiz || null,
       visi_navic_nezname: plan.visi_navic_nezname,
       prodano_u_nich: plan.prodano,
