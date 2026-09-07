@@ -1234,6 +1234,12 @@ async function pikaNahled(env, volby) {
       celkem, podle_stavu: podleStavu, server_time: serverTime,
       pole_v_odpovedi: radky.length ? Object.keys(radky[0]).sort() : [],
     },
+    /* Chodí pošta? Když se něco nepovede, jinak se to majitel nedozví —
+       a jestli je nastavená, se z ničeho jiného nepozná. */
+    posta: (function () {
+      const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
+      return { nastavena: !chybi.length, chybi };
+    })(),
     ve_skladu: {
       kurz_eur: kurz,
       melo_by_viset: plan.vystavit.length + plan.aktivovat.length + plan.sedi.length,

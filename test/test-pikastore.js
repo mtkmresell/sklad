@@ -188,6 +188,11 @@ const ME = {
     v.telo.kdo && v.telo.kdo.podminky_obchodu && v.telo.kdo.podminky_obchodu.accepted === true,
     JSON.stringify(v.telo.kdo && v.telo.kdo.podminky_obchodu));
 
+  /* Jestli chodí pošta, se z ničeho jiného nepozná — a bez ní se
+     majitel o zaseknutém kusu nedozví. */
+  shoda('náhled řekne, že pošta nastavená není',
+    [v.telo.posta.nastavena, v.telo.posta.chybi], [false, ['RESEND_API_KEY', 'MAIL_KOMU']]);
+
   pikaOdpovedi = scenarOk(50, Response.json({ error: 'forbidden' }, { status: 403 }));
   const bezPodminek = await pika();
   ok('a když se to nezjistí, náhled kvůli tomu nespadne',
@@ -742,6 +747,8 @@ const ME = {
     try { return JSON.parse(o.result.content[0].text); } catch (e) { return null; }
   }
   const sPotizi = await srovnatSMailem({ provest: true }, MAIL_ENV);
+  ok('s nastavenou poštou to náhled potvrdí', sPotizi.posta && sPotizi.posta.nastavena === true,
+    JSON.stringify(sPotizi.posta));
   ok('potíž se vrátí ve výsledku', (sPotizi.potize || []).length === 1,
     JSON.stringify(sPotizi.potize));
   ok('a odejde mail', posta.length === 1, JSON.stringify(posta).slice(0, 200));
