@@ -860,7 +860,7 @@ function pikaKoncovka(kc) {
    který jejich katalog nezná, se založí přes custom_brand/model —
    jinak by se kusy bez SKU nedaly vystavit vůbec. */
 function pikaTeloZalozeni(it, cenaNaPulte, kdo, publikovat) {
-  const telo = {
+  return {
     store_id: kdo.store.id,
     consigner_id: kdo.consigner.id,
     size: String(it.size || '').trim(),
@@ -869,10 +869,93 @@ function pikaTeloZalozeni(it, cenaNaPulte, kdo, publikovat) {
     vat_mode: PIKA_VAT_MODE,
     publish: !!publikovat,
   };
-  if (it.sku) telo.style_code = String(it.sku);
-  if (it.brand) telo.custom_brand = String(it.brand);
-  if (it.name) telo.custom_model = String(it.name);
-  return telo;
+}
+
+/* ── KATALOG ─────────────────────────────────────────────────────────
+   Kus se **musí** vystavit přes jejich katalog (`master_product_id`).
+   Ověřeno ostrým pokusem: kus založený přes custom_brand/custom_model
+   nemá u nich ani fotku, ani SKU — a fotka prodává. Majitel je ručně
+   listuje přes katalog a automatika to má dělat stejně.
+
+   Bez katalogového id se proto kus **nevystaví** a jen se to řekne.
+   Prázdný inzerát je horší než žádný. */
+
+/* Odpověď resolve-skus kontrakt nepopisuje, tak se čte tolerantně:
+   mapa SKU → id, obálka data s toutéž mapou, nebo pole řádků. */
+function pikaMapaZOdpovedi(o) {
+  const mapa = new Map();
+  const pridej = (sku, id) => {
+    if (!sku || !id || typeof id !== 'string') return;
+    mapa.set(pikaText(sku), id);
+  };
+  const zRadku = (r) => {
+    if (!r || typeof r !== 'object') return;
+    pridej(r.sku || r.style_code || r.query,
+      r.master_product_id || r.id || (r.master_product && r.master_product.id));
+  };
+  const zObjektu = (obj) => {
+    for (const k of Object.keys(obj || {})) {
+      const v = obj[k];
+      if (typeof v === 'string') pridej(k, v);
+      else if (v && typeof v === 'object') pridej(k, v.master_product_id || v.id);
+    }
+  };
+  if (Array.isArray(o)) o.forEach(zRadku);
+  else if (o && Array.isArray(o.data)) o.data.forEach(zRadku);
+  else if (o && o.data && typeof o.data === 'object') zObjektu(o.data);
+  else if (o && typeof o === 'object') zObjektu(o);
+  return mapa;
+}
+async function pikaResolveSkus(env, skus) {
+  if (!skus.length) return new Map();
+  const o = await pikaVolej(env, '/master-products/resolve-skus', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skus }),
+  });
+  return pikaMapaZOdpovedi(o);
+}
+
+/* Hledání podle názvu — záchrana pro kusy bez SKU. Bere se jen jistá
+   shoda (stejná množina slov), jinak by se kus pověsil na cizí model
+   a majitel by prodával něco jiného, než si myslí. */
+async function pikaNajdiVKatalogu(env, nazev) {
+  if (!nazev) return null;
+  const o = await pikaVolej(env, '/master-products?' + new URLSearchParams({
+    q: String(nazev), page_size: '20', order: 'photo_first',
+  }).toString());
+  const radky = (o && Array.isArray(o.data)) ? o.data : [];
+  const hledany = pikaNazevKlic(nazev);
+  const shody = radky.filter(r => pikaNazevKlic(r.name) === hledany);
+  if (shody.length !== 1) return null;   // víc shod = nejistota, radši ručně
+  return shody[0];
+}
+
+/* Doplní katalogové id do plánu. Co se nenajde, ven z vystavování. */
+async function pikaDoplnKatalog(env, plan) {
+  if (!plan.vystavit.length) return;
+  const skus = [...new Set(plan.vystavit.map(x => x.popis.sku).filter(Boolean))];
+  let mapa = new Map();
+  try { mapa = await pikaResolveSkus(env, skus); }
+  catch (e) { plan.katalogPotiz = String((e && e.message) || e); }
+
+  const zustane = [];
+  for (const u of plan.vystavit) {
+    let id = u.popis.sku ? mapa.get(pikaText(u.popis.sku)) : null;
+    let podle = id ? 'SKU' : null;
+    if (!id) {
+      try {
+        const r = await pikaNajdiVKatalogu(env, u.popis.nazev);
+        if (r) { id = r.id; podle = 'název'; u.popis.katalog_nazev = r.name; }
+      } catch (e) { /* nenajde se — kus prostě nepůjde vystavit */ }
+    }
+    if (!id) { plan.neniVKatalogu.push(u.popis); continue; }
+    u.telo.master_product_id = id;
+    u.popis.katalog_id = id;
+    u.popis.spárováno_podle = podle;
+    zustane.push(u);
+  }
+  plan.vystavit = zustane;
 }
 
 /* Skupiny: klíč → co v ní máme a co u nich visí. Klíčů má kus víc
@@ -918,6 +1001,7 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
   const { skupiny, cizi, bezCeny } = pikaSkupiny(polozky, radky, kurz);
   const provize = pikaProvizeBp(radky);
   const vystavit = [], aktivovat = [], stahnout = [], sedi = [], bezProvize = [];
+  const neniVKatalogu = [];
 
   for (const s of skupiny) {
     const cinne = s.jejich.filter(r => PIKA_STAVY_CINNE.indexOf(r.status) !== -1);
@@ -984,7 +1068,7 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
     .map(r => ({ id: r.short_id || r.id, velikost: r.size || null, nazev: r.name || null,
       za_kc: pikaKc(pikaZaklad(r)), kdy: r.updated_at || null }));
 
-  return { vystavit, aktivovat, stahnout, sedi, bezCeny, bezProvize, provize,
+  return { vystavit, aktivovat, stahnout, sedi, bezCeny, bezProvize, provize, neniVKatalogu,
     visi_navic_nezname: naviCizi, prodano };
 }
 
@@ -1243,6 +1327,8 @@ async function pikaNahled(env, volby) {
   const polozky = slozPolozky(data, archivy);
   const kurz = await pikaKurz();
   const plan = pikaPlan(polozky, radky, kurz, kdo, { publikovat: !!volby.publikovat });
+  /* Katalog až tady — potřebuje síť, a plán se počítá bez ní. */
+  await pikaDoplnKatalog(env, plan);
 
   const podleStavu = {};
   for (const x of radky) podleStavu[x.status || '?'] = (podleStavu[x.status || '?'] || 0) + 1;
@@ -1285,6 +1371,8 @@ async function pikaNahled(env, volby) {
       stahnout: plan.stahnout,
       bez_cilove_ceny: plan.bezCeny,
       bez_zname_provize: plan.bezProvize,
+      neni_v_katalogu: plan.neniVKatalogu,
+      katalog_potiz: plan.katalogPotiz || null,
       visi_navic_nezname: plan.visi_navic_nezname,
       prodano_u_nich: plan.prodano,
     },

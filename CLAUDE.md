@@ -505,6 +505,15 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   smlouvu) a na místě uskladnění taky ne — i kus ležící u jiného
   komisáře se dá prodat, majitel pošle štítek. Mimo jsou jen místa, kde
   kus fyzicky není nebo není jeho: `PIKA_MISTA_MIMO`.
+- **Vystavuje se přes jejich katalog** (`master_product_id`). Ověřeno
+  ostrým pokusem: kus založený přes `custom_brand`/`custom_model` nemá
+  u nich **ani fotku, ani SKU** — a fotka prodává; majitel je ručně
+  listuje přes katalog. SKU se překládá dávkou přes
+  `POST /master-products/resolve-skus`, kus bez SKU se hledá podle
+  názvu (`GET /master-products?q=`) a bere se **jen jistá shoda** —
+  víc výsledků znamená nejistotu a pověsit kus na cizí model by
+  znamenalo prodávat něco jiného, než si majitel myslí. Co katalog
+  nezná, se **nevystaví** a jen se to řekne.
 - **Vystavuje se jeden kus na model a velikost**, i když jich má
   majitel víc — tak to dělal ručně a chce to tak dál. Prodá-li se kus
   jinde, inzerát visí dál, dokud doma zbývá aspoň jeden; prodá-li se

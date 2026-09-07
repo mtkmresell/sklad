@@ -99,6 +99,30 @@ const ME = {
 
   let volani = [];          // co všechno odešlo
   let pikaOdpovedi = null;  // scénář pro /listings a /me
+  /* Falešný katalog. Ve výchozím stavu najde všechno — kus se musí
+     vystavit přes master_product_id, jinak u nich nemá fotku ani SKU. */
+  let katalogNajde = true;
+  let katalogShod = 1;      // kolik řádků vrátí hledání podle názvu
+  function katalogOdpoved(url, init) {
+    if (url.includes('/master-products/resolve-skus')) {
+      const skus = JSON.parse((init && init.body) || '{}').skus || [];
+      const mapa = {};
+      if (katalogNajde) skus.forEach(x => { mapa[x] = 'mp-' + String(x).toLowerCase(); });
+      return Response.json({ data: mapa });
+    }
+    if (url.includes('/master-products')) {
+      const q = new URL(url).searchParams.get('q') || '';
+      const radky = [];
+      if (katalogNajde) {
+        for (let i = 0; i < katalogShod; i++) {
+          radky.push({ id: 'mp-nazev-' + i, sku: null, name: q,
+            primary_photo_url: 'https://x/' + i + '.jpg' });
+        }
+      }
+      return Response.json({ data: radky, page: 1, page_size: 20, total: radky.length });
+    }
+    return null;
+  }
   let cnbOdpoved = () => new Response('03.09.2026 #170\nzemě|měna|množství|kód|kurz\nEMU|euro|1|EUR|25,000\n');
 
   let odpovezSklad = function (url) {
@@ -135,7 +159,8 @@ const ME = {
   }
   // Výchozí, zdravý scénář
   function scenarOk(strankaPo = 50, podminky) {
-    return (url) => {
+    return (url, init) => {
+      const k = katalogOdpoved(url, init); if (k) return k;
       if (url.endsWith('/me')) return Response.json(ME);
       if (url.includes('consigner-terms/status')) {
         return podminky || Response.json({ accepted: true, version: '2026-01' });
@@ -178,9 +203,11 @@ const ME = {
     && r.visi_navic_nezname[0].id === 'L-3', JSON.stringify(r.visi_navic_nezname));
   ok('prodané se hlásí zvlášť', (r.prodano_u_nich || []).length === 1
     && r.prodano_u_nich[0].id === 'L-4', JSON.stringify(r.prodano_u_nich));
-  ok('nic se u nich nezměnilo',
-    volani.filter(x => x.url.includes('consignthem') && (x.init.method || 'GET') !== 'GET').length === 0,
-    JSON.stringify(volani.filter(x => x.url.includes('consignthem')).map(x => (x.init.method || 'GET') + ' ' + x.url)));
+  /* Hledání v katalogu je taky POST (resolve-skus), ale nic nemění —
+     měří se zápisy do jejich skladu, ne každý POST. */
+  const zapisyDoSkladu = volani.filter(x => x.url.includes('consignthem')
+    && (x.init.method || 'GET') !== 'GET' && !x.url.includes('master-products'));
+  shoda('nic se u nich nezměnilo', zapisyDoSkladu.map(x => (x.init.method || 'GET') + ' ' + x.url), []);
 
   /* Nepodepsané podmínky obchodu shodí každý zápis na 409, zatímco
      čtení chodí dál — takže se to jinak zjistí až při prvním vystavení. */
@@ -514,6 +541,7 @@ const ME = {
       return Response.json({});
     };
     pikaOdpovedi = (url, init) => {
+      const k = katalogOdpoved(url, init); if (k) return k;
       if (url.endsWith('/me')) return Response.json(ME);
       if (url.includes('consigner-terms/status')) return Response.json({ accepted: true });
       if (url.includes('/listings?')) {
@@ -715,11 +743,17 @@ const ME = {
     ok('stav zboží ' + nas + ' → ' + jejich, t && t.telo.condition === jejich,
       t && String(t.telo.condition));
   }
-  ok('a značka s modelem se posílají u kusu bez katalogu',
-    (function () {
-      const t = odeslane.filter(x => x.method === 'POST')[0];
-      return t && t.telo.custom_model === 'Kus' && t.telo.style_code === 'C-1';
-    })(), JSON.stringify(odeslane.filter(x => x.method === 'POST')[0]));
+  /* Kus se vystavuje přes jejich katalog. Ověřeno ostrým pokusem:
+     bez master_product_id nemá u nich ani fotku, ani SKU — a majitel
+     je ručně listuje přes katalog. */
+  ok('v těle je katalogové id', (function () {
+    const t = odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url))[0];
+    return t && t.telo.master_product_id === 'mp-c-1';
+  })(), JSON.stringify(odeslane.filter(x => /\/listings$/.test(x.url))[0]));
+  ok('a nic o vlastní značce a modelu', (function () {
+    const t = odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url))[0];
+    return t && !t.telo.custom_brand && !t.telo.custom_model && !t.telo.style_code;
+  })(), JSON.stringify(odeslane.filter(x => /\/listings$/.test(x.url))[0]));
 
   /* Kus doma bez cílové ceny se nedá vystavit — ale rozhodně to není
      důvod stáhnout to, co za něj u nich visí. Našlo se to na
@@ -737,7 +771,49 @@ const ME = {
   ok('jen se řekne, že cena chybí', (p.bez_cilove_ceny || []).length === 1,
     JSON.stringify(p.bez_cilove_ceny));
 
-  sekce('13) Opatrný rozjezd');
+  sekce('13) Katalog');
+  /* Ověřeno ostrým pokusem u nich: kus založený mimo katalog nemá ani
+     fotku, ani SKU — a fotka prodává. Bez katalogového id se proto
+     nevystavuje vůbec; prázdný inzerát je horší než žádný. */
+  const kusSSku = [{ id: 'ks', name: 'Kus s SKU', sku: 'KS-1', size: '42', category: 'sneakers',
+    saleState: 'stock', location: 'Doma', targetPrice: 1000 }];
+  scenarSeSkladem(kusSSku, [cizi], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  ok('kus se spáruje podle SKU', (p.vystavit || []).length === 1
+    && p.vystavit[0].katalog_id === 'mp-ks-1', JSON.stringify(p.vystavit));
+  ok('a je vidět, podle čeho', p.vystavit[0]['spárováno_podle'] === 'SKU',
+    JSON.stringify(p.vystavit[0]));
+
+  // Bez SKU se hledá podle názvu
+  katalogNajde = true;
+  const kusBezSku = [{ id: 'kb', name: 'Kus bez SKU', size: 'L', category: 'obleceni',
+    saleState: 'stock', location: 'Doma', targetPrice: 1000 }];
+  scenarSeSkladem(kusBezSku, [cizi], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  ok('kus bez SKU se najde podle názvu', (p.vystavit || []).length === 1
+    && p.vystavit[0]['spárováno_podle'] === 'název', JSON.stringify(p.vystavit));
+
+  /* Víc shod v katalogu = nejistota. Pověsit kus na cizí model by
+     znamenalo prodávat něco jiného, než si majitel myslí. */
+  katalogShod = 3;
+  scenarSeSkladem(kusBezSku, [cizi], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('při víc shodách se radši nevystaví',
+    [(p.vystavit || []).length, (p.neni_v_katalogu || []).length], [0, 1]);
+  katalogShod = 1;
+
+  // Katalog kus nezná vůbec
+  katalogNajde = false;
+  scenarSeSkladem(kusSSku, [cizi], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('co katalog nezná, se nevystaví',
+    [(p.vystavit || []).length, (p.neni_v_katalogu || []).length], [0, 1]);
+  const nic = await srovnat({ provest: true });
+  shoda('a opravdu se nic nezaloží',
+    odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url)).map(x => x.url), []);
+  katalogNajde = true;
+
+  sekce('14) Opatrný rozjezd');
   /* „Vystav zatím jeden kus a ukaž mi ho." Bez tohohle by první ostrý
      běh udělal celý plán najednou. */
   const triKusy = [
@@ -774,7 +850,7 @@ const ME = {
   ok('s jen: stahnout se nic nevystavuje', jenStazeni.length === 1
     && /\/withdraw$/.test(jenStazeni[0].url), JSON.stringify(jenStazeni.map(x => x.url)));
 
-  sekce('14) Když něco selže, přijde mail');
+  sekce('15) Když něco selže, přijde mail');
   /* Srovnání běží na pozadí. Bez zprávy by se o zaseknutém kusu
      majitel dozvěděl leda tak, že by si toho všiml v jejich portálu. */
   let posta = [];
@@ -821,7 +897,7 @@ const ME = {
     JSON.stringify(bezPosty.mail));
   global.fetch = puvodniFetchMail;
 
-  sekce('15) Pojistky');
+  sekce('16) Pojistky');
   /* Hromadné stažení skoro vždycky znamená rozbité párování nebo
      neúplnou odpověď, ne že by se přes noc prodal celý sklad. */
   const mnoho = [];
@@ -851,7 +927,7 @@ const ME = {
 
   odpovezSklad = puvodniSklad;
 
-  sekce('16) Adresa je pod tokenem');
+  sekce('17) Adresa je pod tokenem');
   const r404 = await bezLogu(() => worker.fetch(
     new Request('https://sklad.mtkm.workers.dev/spatny-token/pika'), ENV));
   ok('bez správného tokenu se nic neprozradí', r404.status === 404, String(r404.status));
