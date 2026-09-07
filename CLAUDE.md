@@ -453,6 +453,15 @@ přejde na `sold`, majitel kus posune do Čeká, rozdíl vyjde nula a
 o stažení se nežádá. Návrat z Čeká přednostně **vrátí do prodeje**
 stažený kus (`activate`) místo zakládání nového.
 
+**Zapomenutá cílová cena není důvod ke stažení.** Kus doma bez cílovky
+se nevystaví — ale to, co za něj u nich visí, se nechá být. Našlo se to
+na skutečných datech: majitelovy SB Dunky ležely doma bez ceny a plán
+je chtěl stáhnout z prodeje.
+
+**Rozjezd se dá omezit** (`jen`, `nejvyse` u `pika_srovnat`): „vystav
+zatím jeden kus a ukaž mi ho". Zbytek dojede při dalším spuštění, plán
+se přepočítá.
+
 **Tři pojistky, které se nesmí odstranit:**
 - Nezapisuje se bez `provest: true`; jinak se vrátí jen plán.
 - **Hromadné stažení nad `PIKA_STROP_STAZENI` se zarazí.** Tolik kusů

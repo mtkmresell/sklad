@@ -428,6 +428,15 @@ const NASTROJE = [
           description: 'true = nové kusy rovnou do prodeje, false = jako koncept k ruční '
             + 'kontrole. Výchozí false.',
         },
+        jen: {
+          type: 'string', enum: ['vse', 'vystavit', 'stahnout', 'aktivovat'],
+          description: 'Omezí běh na jeden druh úkonu. Výchozí vse.',
+        },
+        nejvyse: {
+          type: 'number',
+          description: 'Nejvíc tolik zápisů v tomhle běhu. Hodí se na opatrný rozjezd — '
+            + '„vystav zatím jeden kus". Zbytek dojede při dalším spuštění.',
+        },
       },
     },
   },
@@ -445,7 +454,8 @@ async function spustNastroj(jmeno, args, env) {
   }
   if (jmeno === 'pika_nahled') return pikaNahled(env);
   if (jmeno === 'pika_srovnat') {
-    return pikaNahled(env, { provest: !!args.provest, publikovat: !!args.publikovat });
+    return pikaNahled(env, { provest: !!args.provest, publikovat: !!args.publikovat,
+      jen: args.jen, nejvyse: args.nejvyse });
   }
 
   const token = await prihlas(env);
@@ -873,7 +883,7 @@ function pikaSkupiny(polozky, radky, kurz) {
   const bezCeny = [];
   function skupinaProKlice(klice) {
     for (const k of klice) if (index.has(k)) return index.get(k);
-    const s = { klice: [], chtene: [], jejich: [], znameKusu: 0 };
+    const s = { klice: [], chtene: [], jejich: [], znameKusu: 0, kusuBezCeny: 0 };
     skupiny.push(s);
     return s;
   }
@@ -887,7 +897,10 @@ function pikaSkupiny(polozky, radky, kurz) {
     s.znameKusu++;
     if (!pikaMaViset(it)) continue;
     const cena = pikaCenaKc(it, kurz);
-    if (cena === null) { bezCeny.push(pikaPopisKusu(it)); continue; }
+    /* Kus doma bez cílové ceny se nedá vystavit — ale rozhodně to
+       neznamená, že se má stáhnout to, co u nich za něj visí.
+       Zapomenutá cílovka není důvod k odstranění inzerátu. */
+    if (cena === null) { bezCeny.push(pikaPopisKusu(it)); s.kusuBezCeny++; continue; }
     s.chtene.push({ it, cena });
   }
   const cizi = [];
@@ -915,6 +928,10 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
        inzerát zůstane viset, dokud mu doma zbývá aspoň jeden kus;
        prodá-li se u nich, jejich řádek přejde na `sold`, činných je
        nula a vystaví se znovu. Přesně jak to dělal rukama. */
+    if (!s.chtene.length && s.kusuBezCeny) {
+      /* Doma něco je, jen bez ceny. Nevystavuje se ani nestahuje. */
+      continue;
+    }
     if (!s.chtene.length) {
       /* Nezbylo nic k prodeji — ven se vším, co u nich ještě visí. */
       for (const r of cinne) {
@@ -1006,29 +1023,42 @@ function pikaOtisk(text) {
     + '-a' + hex.slice(17, 20) + '-' + hex.slice(20, 32);
 }
 
-async function pikaProved(env, plan) {
+async function pikaProved(env, plan, volby) {
+  volby = volby || {};
   const hotovo = { vystaveno: [], aktivovano: [], stazeno: [] };
   const potize = [];
   let zapisu = 0;
-  const zbyva = () => zapisu < PIKA_STROP_ZAPISU;
+  /* Strop na jeden běh. Kromě jejich limitu 120 zápisů za minutu se
+     hodí i na opatrné rozjezdy: „udělej zatím jeden kus a ukaž mi ho". */
+  const strop = Math.min(
+    Number.isFinite(volby.nejvyse) && volby.nejvyse > 0 ? volby.nejvyse : PIKA_STROP_ZAPISU,
+    PIKA_STROP_ZAPISU);
+  const zbyva = () => zapisu < strop;
+  // Co se má dělat — bez omezení všechno
+  const smi = (druh) => !volby.jen || volby.jen === 'vse' || volby.jen === druh;
+  const ukony = {
+    stahnout: smi('stahnout') ? plan.stahnout : [],
+    aktivovat: smi('aktivovat') ? plan.aktivovat : [],
+    vystavit: smi('vystavit') ? plan.vystavit : [],
+  };
 
   /* Stažení jde první: kus, který se ve skladu prodal, nemá u nich
      viset ani o minutu déle než musí. */
-  for (const u of plan.stahnout) {
+  for (const u of ukony.stahnout) {
     if (!zbyva()) break;
     try {
       await pikaVolej(env, '/listings/' + u.id + '/withdraw', { method: 'POST' });
       hotovo.stazeno.push(u.popis); zapisu++;
     } catch (e) { potize.push('stažení ' + u.popis + ': ' + e.message); if (e.pikaKod === 'token') break; }
   }
-  for (const u of plan.aktivovat) {
+  for (const u of ukony.aktivovat) {
     if (!zbyva()) break;
     try {
       await pikaVolej(env, '/listings/' + u.id + '/activate', { method: 'POST' });
       hotovo.aktivovano.push(u.popis); zapisu++;
     } catch (e) { potize.push('vrácení do prodeje ' + u.popis + ': ' + e.message); if (e.pikaKod === 'token') break; }
   }
-  for (const u of plan.vystavit) {
+  for (const u of ukony.vystavit) {
     if (!zbyva()) break;
     const telo = JSON.stringify(u.telo);
     try {
@@ -1044,8 +1074,8 @@ async function pikaProved(env, plan) {
       if (e.pikaKod === 'token') break;
     }
   }
-  return { hotovo, potize, zapisu, strop: PIKA_STROP_ZAPISU,
-    zbylo: (plan.stahnout.length + plan.aktivovat.length + plan.vystavit.length) - zapisu };
+  return { hotovo, potize, zapisu, strop,
+    zbylo: (ukony.stahnout.length + ukony.aktivovat.length + ukony.vystavit.length) - zapisu };
 }
 
 /* Ohlášení potíží mailem. Volá se jen když se něco opravdu nepovedlo —
@@ -1284,7 +1314,7 @@ async function pikaNahled(env, volby) {
       + 'párování, ne skutečný úbytek skladu. Projdi si plán a řekni, jestli je v pořádku.';
     return odpoved;
   }
-  const vysledek = await pikaProved(env, plan);
+  const vysledek = await pikaProved(env, plan, volby);
   /* Co se nepovedlo, musí dojít mailem. Srovnání běží na pozadí —
      bez zprávy by se o zaseknutém kusu majitel dozvěděl leda tak, že
      by si toho někdy všiml v jejich portálu. */

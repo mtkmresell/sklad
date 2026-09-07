@@ -721,7 +721,60 @@ const ME = {
       return t && t.telo.custom_model === 'Kus' && t.telo.style_code === 'C-1';
     })(), JSON.stringify(odeslane.filter(x => x.method === 'POST')[0]));
 
-  sekce('13) Když něco selže, přijde mail');
+  /* Kus doma bez cílové ceny se nedá vystavit — ale rozhodně to není
+     důvod stáhnout to, co za něj u nich visí. Našlo se to na
+     skutečných datech: majitelovy SB Dunky ležely doma bez cílovky
+     a plán je chtěl stáhnout z prodeje. */
+  scenarSeSkladem(
+    [{ id: 'bc', name: 'Kus bez ceny', sku: 'BC-1', size: '42', category: 'sneakers',
+      saleState: 'stock', location: 'Doma' }],
+    [{ id: 'BC-L', short_id: 'BC-L', sku: 'BC-1', size: '42', status: 'listed',
+      price_cents: 500000, commission_rate_bp: 2500, created_at: '2026-08-01T00:00:00Z' }],
+    zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('zapomenutá cílovka inzerát nestahuje', (p.stahnout || []).map(x => x.popis), []);
+  shoda('a nic se nevystavuje', (p.vystavit || []).map(x => x.nazev), []);
+  ok('jen se řekne, že cena chybí', (p.bez_cilove_ceny || []).length === 1,
+    JSON.stringify(p.bez_cilove_ceny));
+
+  sekce('13) Opatrný rozjezd');
+  /* „Vystav zatím jeden kus a ukaž mi ho." Bez tohohle by první ostrý
+     běh udělal celý plán najednou. */
+  const triKusy = [
+    { id: 'p1', name: 'Kus A', sku: 'A-1', size: '42', category: 'sneakers',
+      saleState: 'stock', location: 'Doma', targetPrice: 1000 },
+    { id: 'p2', name: 'Kus B', sku: 'B-2', size: '43', category: 'sneakers',
+      saleState: 'stock', location: 'Doma', targetPrice: 2000 },
+    { id: 'p3', name: 'Kus C', sku: 'C-3', size: '44', category: 'sneakers',
+      saleState: 'stock', location: 'Doma', targetPrice: 3000 },
+  ];
+  // Jeden kus u nich visí navíc a ve skladu už není → chce se stáhnout
+  const kStazeni = { id: 'S-1', short_id: 'S-1', sku: 'A-1', size: '99', status: 'listed',
+    price_cents: 100000, commission_rate_bp: 2500, created_at: '2026-08-01T00:00:00Z' };
+  const naSklade = triKusy.concat([{ id: 'p4', name: 'Kus A', sku: 'A-1', size: '99',
+    category: 'sneakers', saleState: 'waiting', location: 'Doma', targetPrice: 1000 }]);
+
+  scenarSeSkladem(naSklade, [kStazeni], zapisovyScenar);
+  const plnyPlan = (await pika()).telo.plan;
+  shoda('plán chce tři vystavit a jeden stáhnout',
+    [(plnyPlan.vystavit || []).length, (plnyPlan.stahnout || []).length], [3, 1]);
+
+  const jedenKus = await srovnat({ provest: true, publikovat: true, jen: 'vystavit', nejvyse: 1 });
+  const zapsane = odeslane.filter(x => x.method === 'POST');
+  ok('s nejvyse 1 odejde jediný zápis', zapsane.length === 1,
+    JSON.stringify(zapsane.map(x => x.method + ' ' + x.url)));
+  ok('a je to vystavení, ne stažení', /\/listings$/.test(zapsane[0].url), zapsane[0].url);
+  ok('rovnou do prodeje, když se o to řekne', zapsane[0].telo.publish === true,
+    JSON.stringify(zapsane[0].telo));
+  ok('a řekne se, kolik zbývá', jedenKus.poznamka && /Zbývá 2/.test(jedenKus.poznamka),
+    jedenKus.poznamka);
+
+  await srovnat({ provest: true, jen: 'stahnout' });
+  const jenStazeni = odeslane.filter(x => x.method === 'POST');
+  ok('s jen: stahnout se nic nevystavuje', jenStazeni.length === 1
+    && /\/withdraw$/.test(jenStazeni[0].url), JSON.stringify(jenStazeni.map(x => x.url)));
+
+  sekce('14) Když něco selže, přijde mail');
   /* Srovnání běží na pozadí. Bez zprávy by se o zaseknutém kusu
      majitel dozvěděl leda tak, že by si toho všiml v jejich portálu. */
   let posta = [];
@@ -768,7 +821,7 @@ const ME = {
     JSON.stringify(bezPosty.mail));
   global.fetch = puvodniFetchMail;
 
-  sekce('14) Pojistky');
+  sekce('15) Pojistky');
   /* Hromadné stažení skoro vždycky znamená rozbité párování nebo
      neúplnou odpověď, ne že by se přes noc prodal celý sklad. */
   const mnoho = [];
@@ -798,7 +851,7 @@ const ME = {
 
   odpovezSklad = puvodniSklad;
 
-  sekce('15) Adresa je pod tokenem');
+  sekce('16) Adresa je pod tokenem');
   const r404 = await bezLogu(() => worker.fetch(
     new Request('https://sklad.mtkm.workers.dev/spatny-token/pika'), ENV));
   ok('bez správného tokenu se nic neprozradí', r404.status === 404, String(r404.status));
