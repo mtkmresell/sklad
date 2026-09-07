@@ -496,11 +496,33 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   smlouvu) a na místě uskladnění taky ne — i kus ležící u jiného
   komisáře se dá prodat, majitel pošle štítek. Mimo jsou jen místa, kde
   kus fyzicky není nebo není jeho: `PIKA_MISTA_MIMO`.
-- Cena je **cílová cena v korunách** (`targetPrice` je vždy v Kč);
-  u eurové cílovky se počítá z `targetPriceEur` **dnešním** kurzem —
-  je to současná nabídková cena, ne historická transakce. Bez ceny se
-  kus nevystaví a je vidět v náhledu.
-- Změna cílové ceny se propíše i k nim.
+- **Vystavuje se jeden kus na model a velikost**, i když jich má
+  majitel víc — tak to dělal ručně a chce to tak dál. Prodá-li se kus
+  jinde, inzerát visí dál, dokud doma zbývá aspoň jeden; prodá-li se
+  u nich, jejich řádek přejde na `sold`, činných je nula a vystaví se
+  znovu. Přebývající inzeráty na tutéž velikost se **nestahují** —
+  mohl je majitel vystavit schválně.
+- **Cílová cena je payout, ne cena na pultě.** Obchod si bere provizi,
+  takže na pult jde `cílovka / (1 − provize)`. Provize se čte
+  z `commission_rate_bp` na **jejich** řádcích, ne z čísla opsaného
+  z podmínek — kdyby ji majiteli změnili, opsaná pětadvacítka by tiše
+  ukrajovala z každého nového kusu. Bez známé provize se kus nevystaví.
+  U eurové cílovky se nejdřív přepočte `targetPriceEur` **dnešním**
+  kurzem (současná nabídková cena, ne historická transakce).
+- **Staré inzeráty se nikdy nepřeceňují.** Majitel si komis prochází
+  sám a ceny upravuje podle situace; cílová cena se použije jen při
+  zakládání. Proto v konektoru není žádný `PATCH /listings/{id}`.
+- **Velikosti a názvy se srovnávají** (`pikaVelikost`, `pikaNazevKlic`).
+  Ověřeno na skutečných datech: u nich „EU42" a „O/S", u nás „42“
+  a „OS“; u čepic mají „M“, evidence vede „M/L“; a názvy se liší
+  pořadím slov („Corteiz Snickers White Tee“ proti „Corteiz White
+  Snickers Tee“) i předsazeným „Air“. Bez toho by se kus založil
+  podruhé vedle toho, který u nich už visí. Zlomkové velikosti
+  (41 1/3) si lomítko musí udržet.
+- **Co se nepovede, přijde mailem** (`pikaOhlasPotize`). Srovnání běží
+  na pozadí; bez zprávy by se o zaseknutém kusu majitel dozvěděl leda
+  tak, že by si toho všiml v jejich portálu. Bez nastavené pošty
+  zůstane potíž aspoň ve výsledku volání.
 - Přesun do **Čeká** znamená stáhnout — **kromě prodeje na Pikastore**,
   tam už stažené je.
 

@@ -713,11 +713,11 @@ function pikaMaViset(it) {
 function pikaCenaKc(it, kurz) {
   if (it.targetCurrency === 'EUR' && it.targetPriceEur != null) {
     const e = Number(it.targetPriceEur);
-    if (!kurz || !isFinite(e) || e <= 0) return null;
+    if (!kurz || !Number.isFinite(e) || e <= 0) return null;
     return Math.round(e * kurz);
   }
   const p = Number(it.targetPrice);
-  return isFinite(p) && p > 0 ? Math.round(p) : null;
+  return Number.isFinite(p) && p > 0 ? Math.round(p) : null;
 }
 
 /* Klíč na spárování kusu s jejich řádkem. Majitel páruje podle SKU,
@@ -729,24 +729,48 @@ function pikaCenaKc(it, kurz) {
 function pikaText(v) {
   return String(v == null ? '' : v).toLowerCase().replace(/\s+/g, ' ').trim();
 }
+/* Velikosti se na obou stranách píšou různě. Ověřeno na skutečných
+   datech: u nich „EU42", u nás „42"; u nich „O/S", u nás „OS";
+   u čepic mají „M", zatímco evidence vede „M/L". Bez srovnání by se
+   kus založil podruhé vedle toho, který u nich už visí.
+
+   Zlomkové velikosti (41 1/3) musí lomítko udržet, jinak by se
+   „41 1/3" a „41" slily v jednu. */
+const PIKA_JEDNA_VELIKOST = ['os', 'o/s', 'onesize', 'one size', 'uni', 'universal', 'u'];
 function pikaVelikost(v) {
-  return pikaText(v).replace(/^eu\s*/, '').replace(/[\s]/g, '');
+  let s = pikaText(v).replace(/^eu\s*/, '').replace(/\s+/g, '');
+  if (PIKA_JEDNA_VELIKOST.indexOf(s) !== -1) return 'os';
+  // Rozsah dvou písmenných velikostí (s/m, l/xl) — bereme první část
+  const m = s.match(/^([a-z]{1,3})\/[a-z]{1,3}$/);
+  if (m) return m[1];
+  return s;
+}
+/* Název se u nich a u nás liší pořadím slov („Corteiz Snickers White
+   Tee" proti „Corteiz White Snickers Tee"), předsazeným „Air" a
+   závorkami kolem roku. Porovnává se proto množina slov, ne řetězec. */
+const PIKA_SLOVA_MIMO = ['air', 'the', 'wmns', 'w', 'gs', 'ps', 'td'];
+function pikaNazevKlic(v) {
+  const slova = pikaText(v)
+    .replace(/[()\[\].,''"`\-–—/]+/g, ' ')
+    .split(/\s+/)
+    .filter(x => x && PIKA_SLOVA_MIMO.indexOf(x) === -1);
+  return slova.sort().join(' ');
 }
 function pikaKliceRadku(r) {
   const p = r.product || r.item || {};
-  const sku = r.sku || r.style_id || r.styleId || p.sku || p.style_id || '';
-  const nazev = r.name || r.title || r.product_name || p.name || p.title || '';
+  const sku = r.sku || r.style_code || r.styleCode || p.sku || '';
+  const nazev = r.name || r.custom_model || r.title || p.name || '';
   const vel = pikaVelikost(r.size || p.size);
   const klice = [];
   if (sku) klice.push('sku:' + pikaText(sku) + '|' + vel);
-  if (nazev) klice.push('nazev:' + pikaText(nazev) + '|' + vel);
+  if (nazev) klice.push('nazev:' + pikaNazevKlic(nazev) + '|' + vel);
   return klice;
 }
 function pikaKlicePolozky(it) {
   const vel = pikaVelikost(it.size);
   const klice = [];
   if (it.sku) klice.push('sku:' + pikaText(it.sku) + '|' + vel);
-  if (it.name) klice.push('nazev:' + pikaText(it.name) + '|' + vel);
+  if (it.name) klice.push('nazev:' + pikaNazevKlic(it.name) + '|' + vel);
   return klice;
 }
 
@@ -782,16 +806,47 @@ function pikaPopisKusu(it, cena) {
     osobni: jeOsobni(it), cena_kc: cena === undefined ? null : cena,
   };
 }
+/* ── CENA NA PULTĚ ───────────────────────────────────────────────────
+   Cílová cena ve SKLADu je to, co má majiteli **přijít na účet**.
+   Obchod si z ceny na pultě bere provizi, takže na pult musí jít víc:
+
+       cena na pultě = cílová cena / (1 − provize)
+
+   Provize se bere z **jejich vlastních dat** (`commission_rate_bp` na
+   řádcích), ne z čísla opsaného z podmínek — kdyby ji majiteli změnili,
+   opsaná pětadvacítka by tiše okrádala každý nový kus. Když se sazba
+   z odpovědi nedá zjistit, kus se nevystaví a řekne se to; hádat se
+   peníze nebudou. */
+function pikaProvizeBp(radky) {
+  const pocty = new Map();
+  for (const r of radky) {
+    const bp = Number(r.commission_rate_bp);
+    if (!Number.isFinite(bp) || bp < 0 || bp >= 10000) continue;
+    pocty.set(bp, (pocty.get(bp) || 0) + 1);
+  }
+  let nej = null, nejPocet = 0;
+  for (const [bp, n] of pocty) if (n > nejPocet) { nej = bp; nejPocet = n; }
+  return { bp: nej, rozdeleni: Object.fromEntries(pocty) };
+}
+function pikaCenaNaPulte(payoutKc, provizeBp) {
+  /* Number.isFinite, ne isFinite — to druhé si null převede na nulu
+     a řekne „ano". Neznámá provize by pak vyšla jako nulová a kus by
+     se vystavil za čistou částku, ze které si obchod ještě ukrojí. */
+  if (!Number.isFinite(payoutKc) || payoutKc <= 0) return null;
+  if (!Number.isFinite(provizeBp) || provizeBp < 0 || provizeBp >= 10000) return null;
+  return Math.round(payoutKc / (1 - provizeBp / 10000));
+}
+
 /* Tělo pro založení kusu. master_product_id je nepovinné, takže kus,
    který jejich katalog nezná, se založí přes custom_brand/model —
-   jinak by se dvanáct kusů bez SKU nedalo vystavit vůbec. */
-function pikaTeloZalozeni(it, cena, kdo, publikovat) {
+   jinak by se kusy bez SKU nedaly vystavit vůbec. */
+function pikaTeloZalozeni(it, cenaNaPulte, kdo, publikovat) {
   const telo = {
     store_id: kdo.store.id,
     consigner_id: kdo.consigner.id,
     size: String(it.size || '').trim(),
     condition: pikaCondition(it),
-    price_cents: Math.round(cena * 100),
+    price_cents: Math.round(cenaNaPulte * 100),
     vat_mode: PIKA_VAT_MODE,
     publish: !!publikovat,
   };
@@ -839,63 +894,53 @@ function pikaSkupiny(polozky, radky, kurz) {
 function pikaPlan(polozky, radky, kurz, kdo, volby) {
   volby = volby || {};
   const { skupiny, cizi, bezCeny } = pikaSkupiny(polozky, radky, kurz);
-  const vystavit = [], aktivovat = [], stahnout = [], precenit = [], sedi = [];
+  const provize = pikaProvizeBp(radky);
+  const vystavit = [], aktivovat = [], stahnout = [], sedi = [], bezProvize = [];
 
   for (const s of skupiny) {
     const cinne = s.jejich.filter(r => PIKA_STAVY_CINNE.indexOf(r.status) !== -1);
     const stazene = s.jejich.filter(r => r.status === 'withdrawn');
-    const chteno = s.chtene.slice().sort((a, b) => a.cena - b.cena);
 
-    if (chteno.length > cinne.length) {
-      const chybi = chteno.length - cinne.length;
-      /* Nejdřív vrátit do prodeje, co u nich leží stažené — jinak by
-         každý návrat z Čeká zakládal nový kus vedle starého. */
-      let zAktivace = 0;
-      for (const r of stazene) {
-        if (zAktivace >= chybi) break;
-        aktivovat.push({ id: r.id, popis: r.short_id || r.id, klic: s.klice[0] });
-        zAktivace++;
-      }
-      for (let i = 0; i < chybi - zAktivace; i++) {
-        const c = chteno[cinne.length + zAktivace + i];
-        if (!c) break;
-        vystavit.push({ popis: pikaPopisKusu(c.it, c.cena),
-          telo: pikaTeloZalozeni(c.it, c.cena, kdo, volby.publikovat),
-          klic: s.klice[0], itemId: c.it.id });
-      }
-    } else if (chteno.length < cinne.length) {
-      /* Přebývá. Nejdřív ven s koncepty (nikdy nebyly v prodeji),
-         pak s nejnovějšími — starší kus už mohl nasbírat zhlédnutí. */
-      const poradi = cinne.slice().sort((a, b) => {
-        if (a.status !== b.status) return a.status === 'draft' ? -1 : 1;
-        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
-      });
-      for (let i = 0; i < cinne.length - chteno.length; i++) {
-        const r = poradi[i];
+    /* Majitel listuje **jeden kus na model a velikost**, i když jich má
+       víc — tak to dělal ručně a chce to tak dál. Prodá-li se jinde,
+       inzerát zůstane viset, dokud mu doma zbývá aspoň jeden kus;
+       prodá-li se u nich, jejich řádek přejde na `sold`, činných je
+       nula a vystaví se znovu. Přesně jak to dělal rukama. */
+    if (!s.chtene.length) {
+      /* Nezbylo nic k prodeji — ven se vším, co u nich ještě visí. */
+      for (const r of cinne) {
         stahnout.push({ id: r.id, popis: r.short_id || r.id, klic: s.klice[0],
-          stav: r.status, duvod: 've skladu už není k prodeji' });
+          stav: r.status, nazev: r.name || null, velikost: r.size || null,
+          duvod: 've skladu už není k prodeji' });
       }
+      continue;
     }
-
-    /* Ceny u těch, co zůstávají. Řadí se podle ceny, ať se přeceňuje
-       co nejmíň — jinak by dvě stejné boty za různé ceny přehazovaly
-       cenu tam a zpět při každém běhu. */
-    const zustavaji = cinne.slice()
-      .sort((a, b) => (pikaZaklad(a) || 0) - (pikaZaklad(b) || 0))
-      .slice(0, chteno.length);
-    zustavaji.forEach((r, i) => {
-      const c = chteno[i];
-      if (!c) return;
-      const uNich = pikaKc(pikaZaklad(r));
-      if (uNich === null) {
-        precenit.push({ id: r.id, popis: r.short_id || r.id, z_kc: null, na_kc: c.cena,
-          potiz: 'jejich řádek nemá cenu' });
-      } else if (Math.round(uNich) !== c.cena) {
-        precenit.push({ id: r.id, popis: r.short_id || r.id, z_kc: uNich, na_kc: c.cena,
-          nazev: c.it.name, velikost: c.it.size || null });
-      } else {
-        sedi.push(pikaPopisKusu(c.it, c.cena));
-      }
+    if (cinne.length) {
+      /* Něco už visí. Víc inzerátů na tutéž velikost se nestahuje —
+         mohl je majitel vystavit schválně a stáhnout mu je za zády
+         je horší chyba než je nechat být. Ceny se nesahají vůbec:
+         staré inzeráty si majitel prochází a přeceňuje sám. */
+      sedi.push(pikaPopisKusu(s.chtene[0].it, s.chtene[0].cena));
+      continue;
+    }
+    if (stazene.length) {
+      const r = stazene[0];
+      aktivovat.push({ id: r.id, popis: r.short_id || r.id, klic: s.klice[0],
+        nazev: r.name || null, velikost: r.size || null });
+      continue;
+    }
+    /* Vystavuje se nejlevnější z chtěných — u dvou stejných kusů
+       s různou cílovkou je to ten, který má odejít dřív. */
+    const c = s.chtene.slice().sort((a, b) => a.cena - b.cena)[0];
+    const naPulte = pikaCenaNaPulte(c.cena, provize.bp);
+    if (naPulte === null) {
+      bezProvize.push(pikaPopisKusu(c.it, c.cena));
+      continue;
+    }
+    vystavit.push({
+      popis: Object.assign(pikaPopisKusu(c.it, c.cena), { na_pulte_kc: naPulte }),
+      telo: pikaTeloZalozeni(c.it, naPulte, kdo, volby.publikovat),
+      klic: s.klice[0], itemId: c.it.id,
     });
   }
 
@@ -909,7 +954,7 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
     .map(r => ({ id: r.short_id || r.id, velikost: r.size || null, nazev: r.name || null,
       za_kc: pikaKc(pikaZaklad(r)), kdy: r.updated_at || null }));
 
-  return { vystavit, aktivovat, stahnout, precenit, sedi, bezCeny,
+  return { vystavit, aktivovat, stahnout, sedi, bezCeny, bezProvize, provize,
     visi_navic_nezname: naviCizi, prodano };
 }
 
@@ -949,7 +994,7 @@ function pikaOtisk(text) {
 }
 
 async function pikaProved(env, plan) {
-  const hotovo = { vystaveno: [], aktivovano: [], stazeno: [], preceneno: [] };
+  const hotovo = { vystaveno: [], aktivovano: [], stazeno: [] };
   const potize = [];
   let zapisu = 0;
   const zbyva = () => zapisu < PIKA_STROP_ZAPISU;
@@ -970,17 +1015,6 @@ async function pikaProved(env, plan) {
       hotovo.aktivovano.push(u.popis); zapisu++;
     } catch (e) { potize.push('vrácení do prodeje ' + u.popis + ': ' + e.message); if (e.pikaKod === 'token') break; }
   }
-  for (const u of plan.precenit) {
-    if (!zbyva()) break;
-    try {
-      await pikaVolej(env, '/listings/' + u.id, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ price_cents: Math.round(u.na_kc * 100) }),
-      });
-      hotovo.preceneno.push(u.popis + ': ' + u.z_kc + ' → ' + u.na_kc + ' Kč'); zapisu++;
-    } catch (e) { potize.push('přecenění ' + u.popis + ': ' + e.message); if (e.pikaKod === 'token') break; }
-  }
   for (const u of plan.vystavit) {
     if (!zbyva()) break;
     const telo = JSON.stringify(u.telo);
@@ -998,8 +1032,28 @@ async function pikaProved(env, plan) {
     }
   }
   return { hotovo, potize, zapisu, strop: PIKA_STROP_ZAPISU,
-    zbylo: (plan.stahnout.length + plan.aktivovat.length + plan.precenit.length
-      + plan.vystavit.length) - zapisu };
+    zbylo: (plan.stahnout.length + plan.aktivovat.length + plan.vystavit.length) - zapisu };
+}
+
+/* Ohlášení potíží mailem. Volá se jen když se něco opravdu nepovedlo —
+   mail o tom, že je všechno v pořádku, by se přestal číst.
+
+   Když pošta nastavená není, potíže zůstanou ve výsledku volání
+   a řekne se, že se mail poslat nedal; ztratit se nesmí ani tak. */
+async function pikaOhlasPotize(env, potize) {
+  const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
+  if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
+  const text = 'Při srovnávání skladu s komisním prodejem Pikastore se tohle nepovedlo:\n\n'
+    + potize.map(x => '· ' + x).join('\n')
+    + '\n\nZbytek proběhl. Co je v seznamu, zůstalo nedodělané — buď to sprav ručně '
+    + 'v jejich portálu, nebo pusť srovnání znovu.';
+  try {
+    await posliMail(env, { predmet: 'SKLAD × Pikastore: ' + potize.length
+      + (potize.length === 1 ? ' věc se nepovedla' : ' věcí se nepovedlo'), text });
+    return { odeslano: true, komu: env.MAIL_KOMU };
+  } catch (e) {
+    return { odeslano: false, duvod: String((e && e.message) || e) };
+  }
 }
 
 /* Dnešní kurz eura pro přepočet eurových cílovek. Když ČNB neodpoví,
@@ -1169,27 +1223,31 @@ async function pikaNahled(env, volby) {
     },
     ve_skladu: {
       kurz_eur: kurz,
-      melo_by_viset: plan.vystavit.length + plan.aktivovat.length
-        + plan.precenit.length + plan.sedi.length,
-      sedi: plan.sedi.length,
+      melo_by_viset: plan.vystavit.length + plan.aktivovat.length + plan.sedi.length,
+      uz_visi: plan.sedi.length,
+      /* Provize z jejich vlastních dat. Z ní se počítá cena na pultě,
+         aby majiteli po odečtení přišla cílová částka. */
+      provize_pct: plan.provize.bp === null ? null : plan.provize.bp / 100,
+      provize_rozdeleni_bp: plan.provize.rozdeleni,
     },
     plan: {
       vystavit: plan.vystavit.map(x => x.popis),
       vratit_do_prodeje: plan.aktivovat.map(x => x.popis),
       stahnout: plan.stahnout,
-      precenit: plan.precenit,
       bez_cilove_ceny: plan.bezCeny,
+      bez_zname_provize: plan.bezProvize,
       visi_navic_nezname: plan.visi_navic_nezname,
       prodano_u_nich: plan.prodano,
     },
   };
 
-  const ukonu = plan.vystavit.length + plan.aktivovat.length
-    + plan.stahnout.length + plan.precenit.length;
+  const ukonu = plan.vystavit.length + plan.aktivovat.length + plan.stahnout.length;
+  if (!ukonu) {
+    odpoved.poznamka = 'Sklad a komise sedí, není co dělat.';
+    return odpoved;
+  }
   if (!volby.provest) {
-    odpoved.poznamka = ukonu
-      ? 'Náhled — nic se u nich nezměnilo. Provede se až s provest: true.'
-      : 'Sklad a komise sedí, není co dělat.';
+    odpoved.poznamka = 'Náhled — nic se u nich nezměnilo. Provede se až s provest: true.';
     return odpoved;
   }
 
@@ -1208,6 +1266,12 @@ async function pikaNahled(env, volby) {
     return odpoved;
   }
   const vysledek = await pikaProved(env, plan);
+  /* Co se nepovedlo, musí dojít mailem. Srovnání běží na pozadí —
+     bez zprávy by se o zaseknutém kusu majitel dozvěděl leda tak, že
+     by si toho někdy všiml v jejich portálu. */
+  if (vysledek.potize.length) {
+    odpoved.mail = await pikaOhlasPotize(env, vysledek.potize);
+  }
   odpoved.stav = vysledek.potize.length ? 'provedeno s potížemi' : 'provedeno';
   odpoved.provedeno = vysledek.hotovo;
   odpoved.zapisu = vysledek.zapisu;

@@ -72,13 +72,13 @@ const POLOZKY = [
 const VYPIS = [
   { id: 'aaaaaaaa-0000-4000-8000-000000000001', short_id: 'L-1', sku: 'DD1391-100', size: '43',
     condition: 'DS', status: 'listed', price_cents: 450000, payout_basis_cents: null,
-    updated_at: '2026-09-01T10:00:00.000Z' },
+    commission_rate_bp: 2500, updated_at: '2026-09-01T10:00:00.000Z' },
   { id: 'aaaaaaaa-0000-4000-8000-000000000002', short_id: 'L-2', sku: 'BB-2', size: '45',
     condition: 'DS', status: 'listed', price_cents: 700000, payout_basis_cents: 600000,
-    updated_at: '2026-09-01T10:00:00.000Z' },
+    commission_rate_bp: 2500, updated_at: '2026-09-01T10:00:00.000Z' },
   { id: 'aaaaaaaa-0000-4000-8000-000000000003', short_id: 'L-3', sku: 'ZZ-9', size: '40',
     condition: 'DS', status: 'listed', price_cents: 100000, payout_basis_cents: null,
-    updated_at: '2026-09-01T10:00:00.000Z' },
+    commission_rate_bp: 2500, updated_at: '2026-09-01T10:00:00.000Z' },
   { id: 'aaaaaaaa-0000-4000-8000-000000000004', short_id: 'L-4', sku: 'YY-8', size: '39',
     condition: 'DS', status: 'sold', price_cents: 250000, payout_basis_cents: null,
     updated_at: '2026-09-02T08:00:00.000Z' },
@@ -197,34 +197,32 @@ const ME = {
   v = await pika();
 
   sekce('2) Peníze');
-  /* L-2 má na pultě 7 000 (zvednuto slevovou akcí), dohodnuto 6 000 —
-     a ve skladu je cílovka 6 000. Kdo počítá z ceny na pultě, ohlásí
-     rozdíl, který neexistuje, a hnal by se přeceňovat. */
-  shoda('cena na pultě nedělá falešný rozdíl', (r.precenit || []).map(x => x.nazev), []);
-  ok('spárované sedí obě', v.telo.ve_skladu && v.telo.ve_skladu.sedi === 2,
+  /* Cílová cena ve SKLADu je to, co má majiteli přijít na účet. Obchod
+     si z ceny na pultě bere provizi, takže na pult musí jít víc —
+     jinak by mu z každého prodeje ubrali čtvrtinu. Provize se bere
+     z jejich vlastních dat, ne z čísla opsaného z podmínek. */
+  ok('provize se přečte z jejich řádků', v.telo.ve_skladu.provize_pct === 25,
     JSON.stringify(v.telo.ve_skladu));
+  const osobni = (r.vystavit || []).find(x => x.nazev === 'Osobní kousek');
+  ok('cílovka zůstává tím, co má přijít', osobni && osobni.cena_kc === 3000,
+    JSON.stringify(osobni));
+  ok('a na pult jde částka i s provizí', osobni && osobni.na_pulte_kc === 4000,
+    '3000 / 0,75 = 4000 | ' + JSON.stringify(osobni));
   const euro = (r.vystavit || []).find(x => x.nazev === 'Eurová cílovka');
   ok('eurová cílovka se přepočítá dnešním kurzem', euro && euro.cena_kc === 4750,
     '190 € × 25 = 4750 | ' + JSON.stringify(euro));
+  ok('a taky se navýší o provizi', euro && euro.na_pulte_kc === 6333,
+    '4750 / 0,75 = 6333 | ' + JSON.stringify(euro));
   ok('kurz je vidět', v.telo.ve_skladu && v.telo.ve_skladu.kurz_eur === 25,
     JSON.stringify(v.telo.ve_skladu));
 
-  /* A když se dohodnutá cena od cílovky opravdu liší, musí to být vidět —
-     a to částkou dohodnutou, ne tou na pultě. */
-  pikaOdpovedi = (url) => {
-    if (url.endsWith('/me')) return Response.json(ME);
-    const zmeneny = VYPIS.map(x => x.short_id === 'L-2'
-      ? Object.assign({}, x, { payout_basis_cents: 550000 }) : x);
-    return Response.json({ data: zmeneny, page: 1, page_size: 50, total: zmeneny.length,
-      server_time: '2026-09-03T09:00:00.000Z' });
-  };
-  const jinak = await pika();
-  const uKomisare = (jinak.telo.plan.precenit || []).find(x => x.nazev === 'U komisáře');
-  ok('skutečný rozdíl v ceně se ohlásí', !!uKomisare, JSON.stringify(jinak.telo.plan.precenit));
-  ok('a bere se dohodnutá cena, ne cena na pultě',
-    uKomisare && uKomisare.z_kc === 5500,
-    'payout_basis 550000 = 5500 Kč; 7000 by znamenalo počítání z price_cents | '
-      + JSON.stringify(uKomisare));
+  /* Staré inzeráty se nepřeceňují vůbec. Majitel si komis prochází sám
+     a ceny upravuje podle toho, jak na tom je; automatika by mu do
+     toho neměla sahat. */
+  ok('plán vůbec nezná přeceňování', r.precenit === undefined,
+    JSON.stringify(Object.keys(r)));
+  ok('a u nich už vystavené kusy se jen započtou', v.telo.ve_skladu.uz_visi === 2,
+    JSON.stringify(v.telo.ve_skladu));
 
   // Bez kurzu se eurová cena nehádá
   cnbOdpoved = () => new Response('nic', { status: 500 });
@@ -234,6 +232,22 @@ const ME = {
     (bezKurzu.telo.plan.bez_cilove_ceny || []).some(x => x.nazev === 'Eurová cílovka'),
     JSON.stringify(bezKurzu.telo.plan.bez_cilove_ceny));
   cnbOdpoved = () => new Response('03.09.2026 #170\nzemě|měna|množství|kód|kurz\nEMU|euro|1|EUR|25,000\n');
+
+  /* Když se provize z jejich odpovědi zjistit nedá, kus se nevystaví.
+     Hádat ji z podmínek by znamenalo hádat peníze. */
+  pikaOdpovedi = (url) => {
+    if (url.endsWith('/me')) return Response.json(ME);
+    if (url.includes('consigner-terms/status')) return Response.json({ accepted: true });
+    const bez = VYPIS.map(x => { const y = Object.assign({}, x); delete y.commission_rate_bp; return y; });
+    return Response.json({ data: bez, page: 1, page_size: 50, total: bez.length, server_time: 'x' });
+  };
+  const bezProvize = await pika();
+  ok('bez známé provize se nevystavuje', (bezProvize.telo.plan.vystavit || []).length === 0,
+    JSON.stringify(bezProvize.telo.plan.vystavit));
+  ok('a řekne se to', (bezProvize.telo.plan.bez_zname_provize || []).length === 2,
+    JSON.stringify(bezProvize.telo.plan.bez_zname_provize));
+  pikaOdpovedi = scenarOk();
+  v = await pika();
 
   sekce('3) Tvar odpovědi');
   // Pole pod `items` místo `data` — nula řádků a žádná chyba by byla nejhorší možný výsledek
@@ -470,15 +484,15 @@ const ME = {
     nNahled.data && Array.isArray(nNahled.data.plan.vystavit),
     JSON.stringify(nNahled.data && nNahled.data.plan).slice(0, 160));
 
-  sekce('9) Počty místo identity');
-  /* Dvě stejná trička ve velikosti S se od sebe v jejich odpovědi
-     nedají odlišit — nic, čím by se dala nést naše identita, tam není.
-     Proto se srovnávají počty ve skupině (SKU/název + velikost). */
+  sekce('9) Jeden inzerát na model a velikost');
+  /* Majitel listuje jeden kus, i když jich má víc — tak to dělal ručně
+     a chce to tak dál. Když se prodá jinde, inzerát visí dál, dokud mu
+     doma zbývá aspoň jeden; když se prodá u nich, vystaví se znovu. */
   const DVOJCATA = [
     { id: 'a', name: 'Tričko', sku: 'T-1', size: 'S', category: 'obleceni',
-      saleState: 'stock', location: 'Doma', targetPrice: 500 },
+      saleState: 'stock', location: 'Doma', targetPrice: 750 },
     { id: 'b', name: 'Tričko', sku: 'T-1', size: 'S', category: 'obleceni',
-      saleState: 'stock', location: 'Doma', targetPrice: 500 },
+      saleState: 'stock', location: 'Doma', targetPrice: 750 },
   ];
   function scenarSeSkladem(polozky, vypis, extra) {
     odpovezSklad = (url) => {
@@ -503,57 +517,113 @@ const ME = {
     };
   }
   const radekTricko = (id, stav, cena) => ({ id, short_id: id, sku: 'T-1', size: 'S',
-    status: stav, price_cents: cena, payout_basis_cents: null, created_at: '2026-08-01T00:00:00Z' });
+    status: stav, price_cents: cena, payout_basis_cents: null, commission_rate_bp: 2500,
+    created_at: '2026-08-01T00:00:00Z' });
 
-  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 50000)]);
+  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000)]);
   let p = (await pika()).telo.plan;
-  ok('chybí-li jeden ze dvou, vystaví se jeden', (p.vystavit || []).length === 1,
+  shoda('dva kusy doma, jeden inzerát — nedělá se nic',
+    [(p.vystavit || []).length, (p.stahnout || []).length], [0, 0]);
+
+  // Jiný kus u nich visí (od něj se pozná provize), tenhle model ne
+  const cizi = { id: 'C-9', short_id: 'C-9', sku: 'JINY-1', size: '44', status: 'listed',
+    price_cents: 100000, commission_rate_bp: 2500, created_at: '2026-08-01T00:00:00Z' };
+  scenarSeSkladem(DVOJCATA, [cizi]);
+  p = (await pika()).telo.plan;
+  ok('když ten model nevisí, vystaví se právě jeden', (p.vystavit || []).length === 1,
     JSON.stringify(p.vystavit));
-  shoda('a nic se nestahuje', (p.stahnout || []).map(x => x.popis), []);
+  ok('a na pult jde cílovka i s provizí',
+    p.vystavit[0] && p.vystavit[0].na_pulte_kc === 1000,
+    '750 / 0,75 = 1000 | ' + JSON.stringify(p.vystavit));
 
-  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 50000), radekTricko('T-B', 'listed', 50000)]);
+  /* Když u nich nevisí vůbec nic, není odkud vzít provizi — a bez ní
+     se cena na pultě spočítat nedá. Radši nic než kus vystavený za
+     čistou částku, ze které si obchod ještě ukrojí. */
+  scenarSeSkladem(DVOJCATA, []);
   p = (await pika()).telo.plan;
-  shoda('když sedí počty, nedělá se nic', [(p.vystavit || []).length, (p.stahnout || []).length,
-    (p.precenit || []).length], [0, 0, 0]);
+  shoda('bez jediného vystaveného kusu se provize nemá odkud vzít',
+    [(p.vystavit || []).length, (p.bez_zname_provize || []).length], [0, 1]);
 
-  // Jeden se prodal jinde → majitel ho dá do Čeká → u nich má zůstat jeden
+  // Prodej jinde: jeden kus jde do Čeká, druhý zůstává doma → inzerát visí dál
   const jedenCeka = [DVOJCATA[0], Object.assign({}, DVOJCATA[1], { saleState: 'waiting' })];
-  scenarSeSkladem(jedenCeka, [radekTricko('T-A', 'listed', 50000), radekTricko('T-B', 'listed', 50000)]);
+  scenarSeSkladem(jedenCeka, [radekTricko('T-A', 'listed', 100000)]);
   p = (await pika()).telo.plan;
-  ok('přesun do Čeká stáhne právě jeden kus', (p.stahnout || []).length === 1,
+  shoda('prodej jinde inzerát nestahuje, dokud je doma další kus',
+    [(p.vystavit || []).length, (p.stahnout || []).length], [0, 0]);
+
+  // Poslední kus odešel do Čeká → inzerát ven
+  const obaCekaji = DVOJCATA.map(x => Object.assign({}, x, { saleState: 'waiting' }));
+  scenarSeSkladem(obaCekaji, [radekTricko('T-A', 'listed', 100000)]);
+  p = (await pika()).telo.plan;
+  ok('poslední kus do Čeká inzerát stáhne', (p.stahnout || []).length === 1,
     JSON.stringify(p.stahnout));
 
-  /* Prodej u nich se vyřeší sám: jejich řádek je `sold`, majitel kus
-     posune do Čeká — a rozdíl vyjde nula. O stažení se nežádá. */
-  scenarSeSkladem(jedenCeka, [radekTricko('T-A', 'listed', 50000), radekTricko('T-B', 'sold', 50000)]);
+  /* Prodej u nich: jejich řádek přejde na sold, činných je nula —
+     a protože doma ještě jeden kus je, vystaví se znovu. Přesně to,
+     co majitel dělal rukama. */
+  scenarSeSkladem(jedenCeka, [radekTricko('T-B', 'sold', 100000)]);
   p = (await pika()).telo.plan;
-  shoda('prodej u nich nevyvolá žádný úkon',
-    [(p.vystavit || []).length, (p.stahnout || []).length], [0, 0]);
+  ok('po prodeji u nich se vystaví znovu', (p.vystavit || []).length === 1,
+    JSON.stringify(p.vystavit));
   ok('a je vidět, že se u nich prodalo', (p.prodano_u_nich || []).length === 1,
     JSON.stringify(p.prodano_u_nich));
 
-  // Návrat z Čeká na sklad: radši vrátit stažený kus než zakládat nový
-  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 50000), radekTricko('T-B', 'withdrawn', 50000)]);
+  // Návrat z Čeká: radši vrátit stažený kus než zakládat nový
+  scenarSeSkladem(DVOJCATA, [radekTricko('T-B', 'withdrawn', 100000)]);
   p = (await pika()).telo.plan;
   shoda('návrat na sklad vrátí stažený kus, nezaloží nový',
     [(p.vratit_do_prodeje || []).length, (p.vystavit || []).length], [1, 0]);
 
   // Cizí kus, o kterém sklad neví, se hlásí, ale nesahá se na něj
-  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 50000), radekTricko('T-B', 'listed', 50000),
-    { id: 'X-1', short_id: 'X-1', sku: 'CIZI-9', size: '44', status: 'listed', price_cents: 10000 }]);
+  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000),
+    { id: 'X-1', short_id: 'X-1', sku: 'CIZI-9', size: '44', status: 'listed',
+      price_cents: 10000, commission_rate_bp: 2500 }]);
   p = (await pika()).telo.plan;
   shoda('cizí vystavení se nestahuje', (p.stahnout || []).map(x => x.popis), []);
   ok('jen se ohlásí', (p.visi_navic_nezname || []).length === 1
     && p.visi_navic_nezname[0].id === 'X-1', JSON.stringify(p.visi_navic_nezname));
 
-  sekce('10) Zápisy');
+  sekce('10) Velikosti a názvy');
+  /* Ověřeno na skutečných datech: u nich „EU42" a „O/S", u nás „42"
+     a „OS"; u čepic mají „M", evidence vede „M/L"; a názvy se liší
+     pořadím slov i předsazeným „Air". Bez srovnání by se kus založil
+     podruhé vedle toho, který u nich už visí. */
+  const dvojice = [
+    ['EU42', '42', 'Nike Dunk Low', 'Nike Dunk Low'],
+    ['O/S', 'OS', 'Supreme MM6 Split 6-Panel Purple', 'Supreme MM6 Split 6-Panel Purple'],
+    ['M', 'M/L', 'Nike Flame Club Cap Navy', 'Nike Flame Club Cap Navy'],
+    ['L', 'L/XL', 'Nike Flame Club Cap Navy', 'Nike Flame Club Cap Navy'],
+    ['L', 'L', 'Corteiz Snickers White Tee', 'Corteiz White Snickers Tee'],
+    ['EU42', '42', 'Air Jordan 12 Retro Flu Game 2025', 'Jordan 12 Retro Flu Game (2025)'],
+  ];
+  for (const [velJejich, velNase, nazevJejich, nazevNase] of dvojice) {
+    scenarSeSkladem(
+      [{ id: 'x', name: nazevNase, size: velNase, category: 'obleceni',
+        saleState: 'stock', location: 'Doma', targetPrice: 1000 }],
+      [{ id: 'R-1', short_id: 'R-1', name: nazevJejich, size: velJejich, status: 'listed',
+        price_cents: 133300, commission_rate_bp: 2500 }]);
+    p = (await pika()).telo.plan;
+    ok('spáruje „' + velJejich + '/' + nazevJejich + '" s „' + velNase + '/' + nazevNase + '"',
+      (p.vystavit || []).length === 0 && (p.visi_navic_nezname || []).length === 0,
+      JSON.stringify({ vystavit: p.vystavit, navic: p.visi_navic_nezname }));
+  }
+  // A co se lišit má, se slévat nesmí
+  scenarSeSkladem(
+    [{ id: 'x', name: 'Bota', sku: 'B-1', size: '41 1/3', category: 'sneakers',
+      saleState: 'stock', location: 'Doma', targetPrice: 1000 }],
+    [{ id: 'R-9', short_id: 'R-9', sku: 'B-1', size: 'EU41', status: 'listed',
+      price_cents: 133300, commission_rate_bp: 2500 }]);
+  p = (await pika()).telo.plan;
+  ok('zlomkovou velikost neslévá s celou', (p.vystavit || []).length === 1,
+    '41 1/3 není 41 | ' + JSON.stringify(p.vystavit));
+
+  sekce('11) Zápisy');
   let odeslane = [];
   const zapisovyScenar = (url, init) => {
     odeslane.push({ url, method: (init && init.method) || 'GET',
       telo: init && init.body ? JSON.parse(init.body) : null,
       klic: init && init.headers && init.headers['Idempotency-Key'] });
     if (/\/withdraw$|\/activate$/.test(url)) return Response.json({ ok: true });
-    if (url.match(/\/listings\/[^/?]+$/)) return Response.json({ id: 'x', status: 'listed' });
     return Response.json({ id: 'nove-id', short_id: 'N-9', status: 'draft' });
   };
   async function srovnat(args) {
@@ -569,24 +639,43 @@ const ME = {
     return data;
   }
 
-  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 50000)], zapisovyScenar);
+  scenarSeSkladem(DVOJCATA, [cizi], zapisovyScenar);
   const jenPlan = await srovnat({});
   shoda('bez provest se nic neodešle', odeslane.filter(x => x.method !== 'GET').map(x => x.url), []);
   ok('a je vidět, že se to teprve provede', /provest/.test(jenPlan.poznamka || ''), jenPlan.poznamka);
 
   const provedeno = await srovnat({ provest: true });
-  const posty = odeslane.filter(x => x.method === 'POST');
-  ok('vystavení odešlo', posty.length === 1 && /\/listings$/.test(posty[0].url),
-    JSON.stringify(posty.map(x => x.method + ' ' + x.url)));
+  const posty = odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url));
+  ok('vystavení odešlo', posty.length === 1, JSON.stringify(odeslane.map(x => x.method + ' ' + x.url)));
   ok('a hlásí se to zpět', (provedeno.provedeno.vystaveno || []).length === 1,
     JSON.stringify(provedeno.provedeno));
   const telo = posty[0].telo;
   shoda('tělo nese povinná pole a daňový režim',
     [telo.store_id, telo.consigner_id, telo.size, telo.vat_mode],
     [ME.store.id, ME.consigner.id, 'S', 'bazar']);
-  ok('cena je v haléřích', telo.price_cents === 50000, JSON.stringify(telo));
+  ok('cena na pultě je v haléřích a s provizí', telo.price_cents === 100000,
+    '750 Kč cílovka → 1000 Kč na pultě → 100000 haléřů | ' + JSON.stringify(telo));
   ok('neznámý stav zboží je opatrně „used"', telo.condition === 'used', String(telo.condition));
   ok('a bez pokynu se nepublikuje', telo.publish === false, String(telo.publish));
+  ok('idempotenční klíč má tvar UUID',
+    /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(posty[0].klic || ''),
+    String(posty[0].klic));
+  const klicPrvni = posty[0].klic;
+  await srovnat({ provest: true });
+  ok('a je stejný pro totéž tělo',
+    odeslane.filter(x => x.method === 'POST')[0].klic === klicPrvni, 'klíč se změnil');
+
+  await srovnat({ provest: true, publikovat: true });
+  ok('s publikovat: true jde kus rovnou do prodeje',
+    odeslane.filter(x => x.method === 'POST')[0].telo.publish === true);
+
+  /* Nikdy se nepřeceňuje — ani PATCH, ani nic jiného na existující kus. */
+  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 999900)], zapisovyScenar);
+  const bezPreceneni = await srovnat({ provest: true });
+  shoda('u vystaveného kusu se cena nesahá',
+    odeslane.filter(x => x.method !== 'GET').map(x => x.method + ' ' + x.url), []);
+  ok('a nic k provedení nezbylo', /není co dělat/.test(bezPreceneni.poznamka || ''),
+    bezPreceneni.poznamka);
 
   /* Jejich stupnice je new | used | vnds. Naše DS a „Nové se štítky"
      jsou new, všechno ostatní used — lepší stav, než o jakém víme, se
@@ -595,7 +684,7 @@ const ME = {
     ['pouzite-dobre', 'used'], ['poskozene', 'used']]) {
     scenarSeSkladem([{ id: 'c1', name: 'Kus', sku: 'C-1', size: '42', category: 'sneakers',
       saleState: 'stock', location: 'Doma', targetPrice: 1000, condition: nas }],
-      [], zapisovyScenar);
+      [radekTricko('J-1', 'listed', 100000)], zapisovyScenar);
     await srovnat({ provest: true });
     const t = odeslane.filter(x => x.method === 'POST')[0];
     ok('stav zboží ' + nas + ' → ' + jejich, t && t.telo.condition === jejich,
@@ -607,38 +696,69 @@ const ME = {
       return t && t.telo.custom_model === 'Kus' && t.telo.style_code === 'C-1';
     })(), JSON.stringify(odeslane.filter(x => x.method === 'POST')[0]));
 
-  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 50000)], zapisovyScenar);
-  await srovnat({ provest: true });
-  ok('idempotenční klíč má tvar UUID',
-    /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(posty[0].klic || ''),
-    String(posty[0].klic));
+  sekce('12) Když něco selže, přijde mail');
+  /* Srovnání běží na pozadí. Bez zprávy by se o zaseknutém kusu
+     majitel dozvěděl leda tak, že by si toho všiml v jejich portálu. */
+  let posta = [];
+  const MAIL_ENV = Object.assign({}, ENV, { RESEND_API_KEY: 'k', MAIL_KOMU: 'ja@sklad.cz' });
+  scenarSeSkladem(DVOJCATA, [cizi], (url, init) => {
+    odeslane.push({ url, method: (init && init.method) || 'GET' });
+    return Response.json({ error: 'bad_request', detail: 'velikost nesedí' }, { status: 400 });
+  });
+  const puvodniFetchMail = global.fetch;
+  global.fetch = async (vstup, init) => {
+    const url = String(vstup && vstup.url ? vstup.url : vstup);
+    if (url.includes('resend')) { posta.push(JSON.parse(init.body)); return Response.json({ id: 'm1' }); }
+    return puvodniFetchMail(vstup, init);
+  };
+  async function srovnatSMailem(args, env) {
+    odeslane = []; posta = [];
+    const r = await bezLogu(() => worker.fetch(new Request(
+      'https://sklad.mtkm.workers.dev/' + ENV.MCP_TOKEN + '/mcp',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+          params: { name: 'pika_srovnat', arguments: args || {} } }) }), env));
+    const o = await r.json();
+    try { return JSON.parse(o.result.content[0].text); } catch (e) { return null; }
+  }
+  const sPotizi = await srovnatSMailem({ provest: true }, MAIL_ENV);
+  ok('potíž se vrátí ve výsledku', (sPotizi.potize || []).length === 1,
+    JSON.stringify(sPotizi.potize));
+  ok('a odejde mail', posta.length === 1, JSON.stringify(posta).slice(0, 200));
+  ok('v předmětu je vidět, o co jde', /Pikastore/.test((posta[0] || {}).subject || ''),
+    (posta[0] || {}).subject);
+  ok('a v textu je i důvod', /velikost nesedí/.test((posta[0] || {}).text || ''),
+    (posta[0] || {}).text);
+  ok('hlásí se, komu to šlo', sPotizi.mail && sPotizi.mail.odeslano === true,
+    JSON.stringify(sPotizi.mail));
 
-  // Týž plán podruhé musí dát týž klíč — jinak by opakování založilo duplikát
-  const klicPrvni = posty[0].klic;
-  await srovnat({ provest: true });
-  ok('a je stejný pro totéž tělo',
-    odeslane.filter(x => x.method === 'POST')[0].klic === klicPrvni, 'klíč se změnil');
+  // Bez nastavené pošty se potíž nesmí ztratit
+  const bezPosty = await srovnatSMailem({ provest: true }, ENV);
+  ok('bez nastavené pošty potíž nezmizí', (bezPosty.potize || []).length === 1,
+    JSON.stringify(bezPosty.potize));
+  ok('a řekne se, že mail poslat nešel',
+    bezPosty.mail && bezPosty.mail.odeslano === false && /RESEND/.test(bezPosty.mail.duvod || ''),
+    JSON.stringify(bezPosty.mail));
+  global.fetch = puvodniFetchMail;
 
-  // Publikovat se dá, ale jen na pokyn
-  await srovnat({ provest: true, publikovat: true });
-  ok('s publikovat: true jde kus rovnou do prodeje',
-    odeslane.filter(x => x.method === 'POST')[0].telo.publish === true);
-
-  sekce('11) Pojistky');
+  sekce('13) Pojistky');
   /* Hromadné stažení skoro vždycky znamená rozbité párování nebo
      neúplnou odpověď, ne že by se přes noc prodal celý sklad. */
   const mnoho = [];
-  for (let i = 0; i < 12; i++) mnoho.push(radekTricko('M-' + i, 'listed', 50000));
-  scenarSeSkladem([], mnoho.map(x => x), zapisovyScenar);
-  // sklad zná model (jsou v něm dvojčata), ale nic nemá viset
-  scenarSeSkladem(DVOJCATA.map(x => Object.assign({}, x, { saleState: 'waiting' })), mnoho, zapisovyScenar);
+  for (let i = 0; i < 12; i++) {
+    mnoho.push({ id: 'M-' + i, short_id: 'M-' + i, sku: 'T-' + i, size: 'S', status: 'listed',
+      price_cents: 100000, commission_rate_bp: 2500, created_at: '2026-08-01T00:00:00Z' });
+  }
+  const vseCeka = mnoho.map((m, i) => ({ id: 'w' + i, name: 'Kus ' + i, sku: 'T-' + i, size: 'S',
+    category: 'obleceni', saleState: 'waiting', location: 'Doma', targetPrice: 750 }));
+  scenarSeSkladem(vseCeka, mnoho, zapisovyScenar);
   const stopka = await srovnat({ provest: true });
   ok('hromadné stažení se zarazí', stopka.stav === 'nezapisovalo se', JSON.stringify(stopka.stav));
   ok('a řekne proč', /stropem/.test(stopka.duvod || ''), stopka.duvod);
   shoda('a opravdu nic neodešlo', odeslane.filter(x => x.method !== 'GET').map(x => x.url), []);
 
   // Bez ověřených podmínek se taky nezapisuje
-  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 50000)], zapisovyScenar);
+  scenarSeSkladem(DVOJCATA, [cizi], zapisovyScenar);
   const puvodniPika = pikaOdpovedi;
   pikaOdpovedi = (url, init) => url.includes('consigner-terms/status')
     ? Response.json({ error: 'forbidden' }, { status: 403 }) : puvodniPika(url, init);
