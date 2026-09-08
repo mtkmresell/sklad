@@ -529,6 +529,13 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   víc výsledků znamená nejistotu a pověsit kus na cizí model by
   znamenalo prodávat něco jiného, než si majitel myslí. Co katalog
   nezná, se **nevystaví** a jen se to řekne.
+- **Katalogové id je druhá cesta k párování.** Majitel u nich schválně
+  listuje kus pod jiným modelem, než jaký má ve skladu (dámské SKU,
+  pánský inzerát), takže klíč `sku|velikost` na jejich řádek nesedne.
+  Jejich systém ale kus na model sám přiřadí, takže `master_product_id`
+  je společné; podle něj se pozná, že tam kus visí, a hlásí se to jako
+  `uz_visi_pod_jinym_sku`. Bez toho se kus vystavil podruhé vedle toho,
+  který tam už visel — jednou se to stalo.
 - **Tvar odpovědi na `resolve-skus` kontrakt neuvádí** (je tam jen
   „object"), takže se v ní hledá, ne předpokládá: projde se celá
   a bere se mapa SKU → id i pole řádků, v obálce i bez ní. Když se

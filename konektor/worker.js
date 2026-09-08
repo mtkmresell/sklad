@@ -1047,8 +1047,16 @@ async function pikaNajdiVKatalogu(env, nazev) {
   return { radek: shody.length === 1 ? shody[0] : null, syrova: o, nalezeno: radky.length };
 }
 
-/* Doplní katalogové id do plánu. Co se nenajde, ven z vystavování. */
-async function pikaDoplnKatalog(env, plan) {
+/* Doplní katalogové id do plánu. Co se nenajde, ven z vystavování.
+
+   Katalogové id je zároveň **druhá cesta k párování**. Majitel u nich
+   schválně listuje kus pod jiným modelem, než jaký má ve skladu —
+   dámské SKU, pánský inzerát — takže klíč `sku|velikost` na jejich
+   řádek nesedne a kus by se vystavil podruhé vedle toho, který tam už
+   visí. Přesně to se jednou stalo. Jejich systém přitom kus na model
+   sám přiřadí, takže `master_product_id` je společné oběma stranám;
+   podle něj se pozná, že tam kus visí. */
+async function pikaDoplnKatalog(env, plan, radky) {
   if (!plan.vystavit.length) return;
   const skus = [...new Set(plan.vystavit.map(x => x.popis.sku).filter(Boolean))];
   let mapa = new Map();
@@ -1073,6 +1081,22 @@ async function pikaDoplnKatalog(env, plan) {
     u.telo.master_product_id = id;
     u.popis.katalog_id = id;
     u.popis.spárováno_podle = podle;
+
+    /* Visí to tam už na tenhle model a velikost? Pak je hotovo — jen se
+       to řekne, ať je vidět, proč se nic nezakládá. */
+    const jejich = (radky || []).find(r => r.master_product_id === id
+      && PIKA_STAVY_CINNE.indexOf(r.status) !== -1
+      && pikaVelikost(r.size) === pikaVelikost(u.popis.velikost));
+    if (jejich) {
+      const jejichId = jejich.short_id || jejich.id;
+      u.popis.jejich_id = jejichId;
+      u.popis.jejich_sku = jejich.sku || null;
+      plan.uzVisiJinak.push(u.popis);
+      // A ať se netváří jako cizí inzerát, o kterém sklad neví
+      plan.visi_navic_nezname = (plan.visi_navic_nezname || [])
+        .filter(x => x.id !== jejichId);
+      continue;
+    }
     zustane.push(u);
   }
   plan.vystavit = zustane;
@@ -1223,7 +1247,7 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
       za_kc: pikaKc(pikaZaklad(r)), kdy: r.updated_at || null }));
 
   return { vystavit, aktivovat, stahnout, sedi, bezCeny, bezProvize, provize, neniVKatalogu,
-    cekaNaSklad, visi_navic_nezname: naviCizi, prodano };
+    cekaNaSklad, visi_navic_nezname: naviCizi, prodano, uzVisiJinak: [] };
 }
 
 /* ── PROVEDENÍ ───────────────────────────────────────────────────────
@@ -1520,7 +1544,7 @@ async function pikaNahled(env, volby) {
   const plan = pikaPlan(polozky, radky, kurz, kdo,
     { publikovat: !!volby.publikovat, razitkoSkladu: data.savedAt });
   /* Katalog až tady — potřebuje síť, a plán se počítá bez ní. */
-  await pikaDoplnKatalog(env, plan);
+  await pikaDoplnKatalog(env, plan, radky);
 
   const podleStavu = {};
   for (const x of radky) podleStavu[x.status || '?'] = (podleStavu[x.status || '?'] || 0) + 1;
@@ -1565,6 +1589,7 @@ async function pikaNahled(env, volby) {
       bez_cilove_ceny: plan.bezCeny,
       bez_zname_provize: plan.bezProvize,
       neni_v_katalogu: plan.neniVKatalogu,
+      uz_visi_pod_jinym_sku: plan.uzVisiJinak,
       ceka_na_sklad: plan.cekaNaSklad,
       katalog_potiz: plan.katalogPotiz || null,
       katalog_ukazka: plan.katalogUkazka || null,
