@@ -583,15 +583,18 @@ async function zpracujZpravu(zprava, env) {
 const PIKA_BASE = 'https://consignthem.com/api/v1';
 const PIKA_OPENAPI = PIKA_BASE + '/openapi.json';
 const PIKA_KATEGORIE = ['sneakers', 'obleceni'];
-/* Místa, ze kterých se prodávat nedá — kus už není majitelův. Co u nich
-   za takový kus visí, se stahuje: prodat něco, co nemá, znamená podle
-   jejich podmínek pokutu od 200 Kč. */
-const PIKA_MISTA_PRYC = ['Bude vráceno', 'Vráceno', 'Zrušeno'];
-/* Kus je majitelův, jen ještě není doma. **Nevystavuje se, ale ani se
-   nestahuje**: majitel takové kusy listuje sám a schválně — balík čeká
-   na poště, a když se kus prodá, vyzvedne ho a rovnou odešle. Jeho
-   ruční inzeráty se neopravují. */
-const PIKA_MISTA_NEDOMA = ['Na cestě'];
+/* Místa, ze kterých se prodávat nedá — kus už majitelův **není**. Co
+   u nich za takový kus visí, se stahuje: prodat něco, co nemá, znamená
+   podle jejich podmínek pokutu od 200 Kč. */
+const PIKA_MISTA_PRYC = ['Vráceno', 'Zrušeno'];
+/* Kus majitelův pořád je, jen ho nemá doma po ruce. **Nevystavuje se,
+   ale ani se nestahuje** — jeho ruční inzeráty se neopravují:
+
+   „Na cestě" — balík čeká na poště. Majitel takové kusy listuje sám
+   a schválně; když se kus prodá, vyzvedne ho a rovnou odešle.
+   „Bude vráceno" — teprve to plánuje. Do té doby se kus prodat může
+   a když se prodá, prostě ho nevrátí a pošle kupci. */
+const PIKA_MISTA_NEDOMA = ['Na cestě', 'Bude vráceno'];
 const PIKA_STRANKA = 50;
 const PIKA_POKUSU = 3;          // kolikrát zkusit po chybě serveru
 const PIKA_NEJDELSI_CEKANI = 70; // vteřin celkem; Worker nemá běžet věčně
@@ -813,7 +816,8 @@ function pikaVUvahu(it) {
    A PLATFORMY). */
 function pikaDuvodStranou(it) {
   if (String(it.condition || '') === 'poskozene') return 'poškozený kus — na komisi nepatří';
-  if (PIKA_MISTA_NEDOMA.indexOf(it.location || 'Doma') !== -1) return 'zatím není doma';
+  const misto = it.location || 'Doma';
+  if (PIKA_MISTA_NEDOMA.indexOf(misto) !== -1) return 'kus není doma (' + misto + ')';
   return null;
 }
 

@@ -231,7 +231,7 @@ const ME = {
      čeká na poště, a když se kus prodá, vyzvedne ho a rovnou odešle. */
   shoda('kus na cestě se nevystaví, jen se řekne proč',
     (r.nevystavuje_se || []).filter(x => x.nazev === 'Ještě nedorazilo').map(x => x.duvod),
-    ['zatím není doma']);
+    ['kus není doma (Na cestě)']);
   ok('a nevystavuje se', !(r.vystavit || []).some(x => x.nazev === 'Ještě nedorazilo'),
     JSON.stringify((r.vystavit || []).map(x => x.nazev)));
   ok('jiné kategorie se neřeší', !JSON.stringify(r).includes('Pokémon box'));
@@ -944,12 +944,24 @@ const ME = {
   shoda('kus na cestě nestahuje, co si majitel nalistoval dopředu',
     [(p.stahnout || []).length, (p.vystavit || []).length], [0, 0]);
 
-  /* Ale kus, který už majitelův není, se stáhnout musí — prodat něco,
-     co nemá, je podle jejich podmínek pokuta od 200 Kč. */
-  scenarSeSkladem([Object.assign({}, kusNaCeste[0], { location: 'Vráceno' })],
+  /* „Bude vráceno" je teprve plán. Do té doby se kus prodat může —
+     když se prodá, majitel ho nevrátí a pošle kupci. Stahovat tedy ne. */
+  scenarSeSkladem([Object.assign({}, kusNaCeste[0], { location: 'Bude vráceno' })],
     [jejichNaCeste], zapisovyScenar);
   p = (await pika()).telo.plan;
-  shoda('vrácený kus se z prodeje stáhne', (p.stahnout || []).map(x => x.popis), ['L-NC']);
+  shoda('chystané vrácení inzerát nestahuje',
+    [(p.stahnout || []).length, (p.nevystavuje_se || []).map(x => x.duvod)],
+    [0, ['kus není doma (Bude vráceno)']]);
+
+  /* Ale kus, který už majitelův **není**, se stáhnout musí — prodat
+     něco, co nemá, je podle jejich podmínek pokuta od 200 Kč. */
+  for (const misto of ['Vráceno', 'Zrušeno']) {
+    scenarSeSkladem([Object.assign({}, kusNaCeste[0], { location: misto })],
+      [jejichNaCeste], zapisovyScenar);
+    p = (await pika()).telo.plan;
+    shoda('kus na místě „' + misto + '" se z prodeje stáhne',
+      (p.stahnout || []).map(x => x.popis), ['L-NC']);
+  }
 
   sekce('14) Opatrný rozjezd');
   /* „Vystav zatím jeden kus a ukaž mi ho." Bez tohohle by první ostrý

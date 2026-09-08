@@ -520,12 +520,13 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   Na profilu nezáleží (podnikatelský kus dostane fakturu, osobní kupní
   smlouvu) a na místě uskladnění taky ne — i kus ležící u jiného
   komisáře se dá prodat, majitel pošle štítek.
-- **Rozdíl mezi „kus tu není" a „kus ještě není doma" je zásadní.**
-  Z `PIKA_MISTA_PRYC` (vráceno, zrušeno) se stahuje — prodat něco, co
-  nemá, je pokuta od 200 Kč. Kus na cestě (`PIKA_MISTA_NEDOMA`) se
-  **nevystavuje, ale ani nestahuje**: majitel takové kusy listuje sám
-  a schválně, protože balík čeká na poště a po prodeji ho vyzvedne
-  a rovnou odešle. Ruční inzeráty se neopravují.
+- **Rozdíl mezi „kus už není můj" a „kus nemám po ruce" je zásadní.**
+  Z `PIKA_MISTA_PRYC` (*Vráceno*, *Zrušeno*) se stahuje — prodat něco,
+  co nemá, je pokuta od 200 Kč. `PIKA_MISTA_NEDOMA` (*Na cestě*,
+  *Bude vráceno*) se **nevystavuje, ale ani nestahuje**: balík čeká na
+  poště a po prodeji ho majitel vyzvedne a rovnou odešle; chystané
+  vrácení je zatím jen plán a když se kus prodá, nevrátí ho a pošle
+  kupci. Ruční inzeráty se neopravují.
 - **Poškozený kus se nevystavuje** — je to vada, se kterou by neprošel
   ověřením nebo by ho zákazník vrátil. A co za něj u nich náhodou visí,
   se kvůli tomu nestahuje. Totéž pravidlo je v aplikaci
