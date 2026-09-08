@@ -581,8 +581,12 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   Ověřeno na skutečných datech: u nich „EU42" a „O/S", u nás „42“
   a „OS“; u čepic mají „M“, evidence vede „M/L“; a názvy se liší
   pořadím slov („Corteiz Snickers White Tee“ proti „Corteiz White
-  Snickers Tee“) i předsazeným „Air“. Bez toho by se kus založil
-  podruhé vedle toho, který u nich už visí. Zlomkové velikosti
+  Snickers Tee“), předsazeným „Air“ a **samostatným „x“** u spolupráce
+  dvou značek („JJJJound x adidas Samba OG“ proti „adidas Samba OG
+  JJJJound“). Bez toho by se kus založil podruhé vedle toho, který
+  u nich už visí — nebo, u inzerátu bez SKU, by se nikdy nespároval
+  a nestáhl, i kdyby se kus prodal jinde. Velikostí se to nedotkne,
+  přeskakuje se jen samotné písmeno mezi mezerami. Zlomkové velikosti
   (41 1/3) si lomítko musí udržet.
 - **Co se nepovede, přijde mailem** (`pikaOhlasPotize`). Srovnání běží
   na pozadí; bez zprávy by se o zaseknutém kusu majitel dozvěděl leda

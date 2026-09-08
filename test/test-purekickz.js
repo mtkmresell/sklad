@@ -293,10 +293,27 @@ const radek = (o) => Object.assign({
      inzeráty nemají SKU, takže se párují jedině podle názvu — a ten se
      liší o jediné slovo. Bez téhle pojistky by se čtyři z jedenadvaceti
      kusů založily podruhé vedle inzerátu, který už u nich visel. */
-  const dvojice = [
+  /* Dvojice, které se liší jen slovem uvnitř názvu. „x" u spolupráce se
+     přeskakuje, takže ty dva se spárují doopravdy (a při prodeji jinde
+     se i stáhnou); „SE" a „Low" nezná nikdo, ty se jen odmítnou
+     vystavit. Obojí je správně, jen jinak silné. */
+  const spareno = [
     ['Jordan 5 Retro A Ma Maniére Dusk', "A Ma Maniére x Air Jordan 5 Retro 'Dusk'", '42'],
-    ['Air Jordan 3 Retro Craft Ivory', "Air Jordan 3 Retro SE Craft 'Ivory'", '43'],
     ['adidas Samba OG JJJJound Tobacco', "JJJJound x adidas Samba OG 'Tobacco'", '38 2/3'],
+  ];
+  for (const [nas, jejich, vel] of spareno) {
+    polozkySkladu = [{ id: 'x1', name: nas, sku: 'S-1', size: vel, category: 'sneakers',
+      saleState: 'stock', location: 'Doma', targetPrice: 5000 }];
+    scenar([radek({ id: 'jejich-1', sku: null, name: jejich, size: vel })]);
+    v = await nahled();
+    p = v.telo.plan;
+    shoda('spáruje se doopravdy: ' + nas.slice(0, 26) + '…',
+      [(p.vystavit || []).length, (p.mozna_uz_visi || []).length,
+        (p.visi_navic_nezname || []).length], [0, 0, 0]);
+  }
+
+  const dvojice = [
+    ['Air Jordan 3 Retro Craft Ivory', "Air Jordan 3 Retro SE Craft 'Ivory'", '43'],
     ['Nike Air Force 1 Low \'07 LV8 40th Anniversary Sail Malachite',
       "Nike Air Force 1 '07 LV8 '40th Anniversary - Sail Malachite'", '38.5'],
   ];
@@ -313,6 +330,28 @@ const radek = (o) => Object.assign({
   ok('a je vidět, o který jejich inzerát jde',
     (v.telo.plan.mozna_uz_visi[0] || {}).jejich_id === 'jejich-1',
     JSON.stringify(v.telo.plan.mozna_uz_visi));
+
+  /* Samostatné „x" u spolupráce se přeskakuje, takže tyhle dva názvy
+     jsou po očištění shodné — kus se spáruje doopravdy, ne jen odmítne
+     vystavit. Teprve tím se jejich inzerát začne chovat jako majitelův:
+     když kus prodá jinde, stáhne se. */
+  polozkySkladu = [{ id: 'x1', name: 'adidas Samba OG JJJJound Tobacco', sku: 'S-1',
+    size: '38 2/3', category: 'sneakers', saleState: 'waiting', location: 'Doma',
+    targetPrice: 3000 }];
+  scenar([radek({ id: 'spolupr', sku: null, name: "JJJJound x adidas Samba OG 'Tobacco'",
+    size: '38 2/3' })]);
+  v = await nahled();
+  shoda('spolupráce s „x" se spáruje a při prodeji jinde se stáhne',
+    (v.telo.plan.stahnout || []).map(x => x.id), ['spolupr']);
+
+  /* Ale velikosti se to dotknout nesmí — „XL" ani „2X" nejsou spolupráce. */
+  polozkySkladu = [{ id: 'x2', name: 'Tričko XL', sku: 'T-9', size: 'XL',
+    category: 'obleceni', saleState: 'stock', location: 'Doma', targetPrice: 500 }];
+  scenar([radek({ id: 'jine', sku: null, name: 'Tričko', size: 'XL' })]);
+  v = await nahled();
+  ok('„XL" v názvu zůstává', (v.telo.plan.mozna_uz_visi || []).length === 0
+    && (v.telo.plan.vystavit || []).length === 1,
+    JSON.stringify(v.telo.plan.vystavit) + JSON.stringify(v.telo.plan.mozna_uz_visi));
 
   /* Jiná velikost je jiný kus — ta se vystavit má, i když se název
      podobá. Bez tohohle by pojistka spolkla celou řadu velikostí. */

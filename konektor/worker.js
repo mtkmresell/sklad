@@ -896,8 +896,15 @@ function pikaVelikost(v) {
 }
 /* Název se u nich a u nás liší pořadím slov („Corteiz Snickers White
    Tee" proti „Corteiz White Snickers Tee"), předsazeným „Air" a
-   závorkami kolem roku. Porovnává se proto množina slov, ne řetězec. */
-const PIKA_SLOVA_MIMO = ['air', 'the', 'wmns', 'w', 'gs', 'ps', 'td'];
+   závorkami kolem roku. Porovnává se proto množina slov, ne řetězec.
+
+   **Samostatné „x" se přeskakuje.** U spolupráce dvou značek nic
+   neznamená a jen se podle něj rozcházejí názvy: „JJJJound x adidas
+   Samba OG" proti „adidas Samba OG JJJJound". Ověřeno na ostrých
+   datech — dva kusy se kvůli němu tvářily jako cizí inzeráty a nikdy
+   by se nestáhly, i kdyby se prodaly jinde. Velikosti jako „XL" nebo
+   „2X" to nezasáhne: přeskakuje se jen samotné písmeno mezi mezerami. */
+const PIKA_SLOVA_MIMO = ['air', 'the', 'wmns', 'w', 'gs', 'ps', 'td', 'x'];
 function pikaNazevKlic(v) {
   const slova = pikaText(v)
     .replace(/[()\[\].,''"`\-–—/]+/g, ' ')

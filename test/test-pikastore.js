@@ -963,6 +963,18 @@ const ME = {
       (p.stahnout || []).map(x => x.popis), ['L-NC']);
   }
 
+  /* Samostatné „x" u spolupráce dvou značek nic neznamená a jen se
+     podle něj rozcházejí názvy. Platí to pro obě komise — porovnávání
+     názvů je jedno sdílené. */
+  const spoluprace = [{ id: 'sp', name: 'adidas Samba OG JJJJound Tobacco', sku: 'SP-1',
+    size: '42', category: 'sneakers', saleState: 'stock', location: 'Doma',
+    targetPrice: 3000 }];
+  scenarSeSkladem(spoluprace, [Object.assign({}, radekTricko('L-SP', 'listed', 400000),
+    { sku: null, name: "JJJJound x adidas Samba OG 'Tobacco'", size: '42' })], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('spolupráce s „x" se spáruje i tady',
+    [(p.vystavit || []).length, (p.visi_navic_nezname || []).length], [0, 0]);
+
   sekce('14) Opatrný rozjezd');
   /* „Vystav zatím jeden kus a ukaž mi ho." Bez tohohle by první ostrý
      běh udělal celý plán najednou. */
