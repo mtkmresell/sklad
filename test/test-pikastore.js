@@ -902,7 +902,64 @@ const ME = {
   shoda('neznámé id se řekne, nic se nezkouší',
     [neznamy.stav, odeslane.filter(x => x.method === 'POST').length], ['nenalezeno', 0]);
 
-  sekce('15) Když něco selže, přijde mail');
+  sekce('15) Prodeje k přenesení do skladu');
+  /* Co se u nich prodalo a sklad to ještě neví. Konektor jen spočítá,
+     co se má vyplnit — zapisovat do cloudu smí jedině aplikace. */
+  async function prodeje(env = ENV) {
+    const r = await bezLogu(() => worker.fetch(new Request(
+      'https://sklad.mtkm.workers.dev/' + ENV.MCP_TOKEN + '/mcp',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+          params: { name: 'pika_prodeje', arguments: {} } }) }), env));
+    const o = await r.json();
+    try { return JSON.parse(o.result.content[0].text); } catch (e) { return null; }
+  }
+
+  const prodanyRadek = Object.assign(radekTricko('T-X', 'sold', 100000), {
+    updated_at: new Date(Date.now() - 3600000).toISOString(),
+    commission_rate_bp: 2500,
+  });
+  scenarSeSkladem([DVOJCATA[0]], [prodanyRadek], zapisovyScenar);
+  const pr = await prodeje();
+  ok('prodej se najde', (pr.k_preneseni || []).length === 1, JSON.stringify(pr));
+  const zapis = pr.k_preneseni[0];
+  shoda('vyplní se to, co má',
+    [zapis.vyplnit.saleState, zapis.vyplnit.waitState, zapis.vyplnit.soldWhere,
+      zapis.vyplnit.extraCosts, zapis.vyplnit.sellCurrency],
+    ['waiting', 'sending', 'Pikastore', 0, 'CZK']);
+  ok('prodejní cena je payout po jejich provizi', zapis.vyplnit.sellPrice === 750,
+    '1000 Kč na pultě − 25 % = 750 | ' + JSON.stringify(zapis.vyplnit));
+  ok('datum prodeje je den, kdy se to u nich prodalo',
+    zapis.vyplnit.saleDate === new Date(Date.now() - 3600000).toISOString().slice(0, 10),
+    zapis.vyplnit.saleDate);
+  shoda('číslo objednávky si majitel doplní sám', zapis.doplnit_rucne, ['saleRef']);
+  ok('a je vidět, který kus to je', zapis.polozka.id === 'a', JSON.stringify(zapis.polozka));
+
+  /* Poplatek má u nich spodní a horní mez. Kdo počítá jen procenta,
+     u levného kusu payout nadsadí a u drahého podhodnotí. */
+  scenarSeSkladem([DVOJCATA[0]], [Object.assign({}, prodanyRadek,
+    { commission_min_fee_cents: 40000 })], zapisovyScenar);
+  const sMinem = await prodeje();
+  ok('spodní mez poplatku se respektuje',
+    sMinem.k_preneseni[0].vyplnit.sellPrice === 600,
+    '1000 − 400 (spodní mez) = 600 | ' + JSON.stringify(sMinem.k_preneseni[0].vyplnit));
+  scenarSeSkladem([DVOJCATA[0]], [Object.assign({}, prodanyRadek,
+    { commission_max_fee_cents: 10000 })], zapisovyScenar);
+  const sMaxem = await prodeje();
+  ok('horní mez taky', sMaxem.k_preneseni[0].vyplnit.sellPrice === 900,
+    '1000 − 100 (strop) = 900 | ' + JSON.stringify(sMaxem.k_preneseni[0].vyplnit));
+
+  // Co sklad už zaznamenal, se nenabízí znovu
+  scenarSeSkladem([Object.assign({}, DVOJCATA[0], { saleState: 'waiting' })],
+    [prodanyRadek], zapisovyScenar);
+  const uzZname = await prodeje();
+  shoda('kus, který už je v Čeká, se nenabízí', (uzZname.k_preneseni || []).length, 0);
+
+  // A nic se u nich nezmění
+  shoda('nic se u nich nezapisuje',
+    odeslane.filter(x => x.method === 'POST' && !x.url.includes('master-products')).map(x => x.url), []);
+
+  sekce('16) Když něco selže, přijde mail');
   /* Srovnání běží na pozadí. Bez zprávy by se o zaseknutém kusu
      majitel dozvěděl leda tak, že by si toho všiml v jejich portálu. */
   let posta = [];
@@ -949,7 +1006,7 @@ const ME = {
     JSON.stringify(bezPosty.mail));
   global.fetch = puvodniFetchMail;
 
-  sekce('16) Pojistky');
+  sekce('17) Pojistky');
   /* Hromadné stažení skoro vždycky znamená rozbité párování nebo
      neúplnou odpověď, ne že by se přes noc prodal celý sklad. */
   const mnoho = [];
@@ -979,7 +1036,7 @@ const ME = {
 
   odpovezSklad = puvodniSklad;
 
-  sekce('17) Adresa je pod tokenem');
+  sekce('18) Adresa je pod tokenem');
   const r404 = await bezLogu(() => worker.fetch(
     new Request('https://sklad.mtkm.workers.dev/spatny-token/pika'), ENV));
   ok('bez správného tokenu se nic neprozradí', r404.status === 404, String(r404.status));

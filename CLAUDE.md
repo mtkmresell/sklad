@@ -562,6 +562,19 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
 - Přesun do **Čeká** znamená stáhnout — **kromě prodeje na Pikastore**,
   tam už stažené je.
 
+**Prodej u nich se do skladu přenáší přes aplikaci, ne přes konektor**
+(`pika_prodeje`). Konektor spočítá, co se má v položce vyplnit —
+`saleState: waiting`, `waitState: sending`, prodejní cenu jako **payout
+po jejich provizi**, datum prodeje, `soldWhere: Pikastore`,
+`extraCosts: 0` — ale **zapsat to smí jedině aplikace**. Druhý
+zapisovatel do cloudu by se pral s její synchronizací. Číslo objednávky
+chodí majiteli na Discord, kam konektor nevidí; doplňuje si ho ručně.
+
+Payout je dohodnutá cena minus provize, a **provize má u nich spodní
+i horní mez** (`commission_min_fee_cents`, `commission_max_fee_cents`).
+Kdo počítá jen procenta, u levného kusu payout nadsadí a u drahého
+podhodnotí.
+
 **Peníze jsou v celých centech** a výdělek se počítá z
 `payout_basis_cents ?? price_cents`. Během slevové akce obchod zvedne
 cenu na pultě a původní dohodnutou drží `payout_basis_cents`; kdo počítá

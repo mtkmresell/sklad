@@ -412,6 +412,14 @@ const NASTROJE = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'pika_prodeje',
+    description: 'Co se prodalo na komisním prodeji Pikastore a ve skladu je ten kus pořád '
+      + 'veden na skladě. Vrátí rovnou hodnoty, které se mají v položce vyplnit při přesunu '
+      + 'do Čeká — prodejní cenu (payout po jejich provizi), datum prodeje a místo prodeje. '
+      + 'Číslo objednávky chodí na Discord, to si majitel doplní sám. Nic nemění.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
     name: 'pika_srovnat',
     description: 'Srovná komisní prodej Pikastore se skladem — vystaví, co má viset, stáhne, '
       + 'co se prodalo jinde, vrátí do prodeje, co se vrátilo na sklad, a dorovná ceny. '
@@ -458,6 +466,7 @@ async function spustNastroj(jmeno, args, env) {
     return pikaSmlouva(cesty);
   }
   if (jmeno === 'pika_nahled') return pikaNahled(env);
+  if (jmeno === 'pika_prodeje') return pikaProdeje(env);
   if (jmeno === 'pika_srovnat') {
     return pikaNahled(env, { provest: !!args.provest, publikovat: !!args.publikovat,
       jen: args.jen, nejvyse: args.nejvyse, stahni: args.stahni });
@@ -713,6 +722,69 @@ function pikaZaklad(r) {
   return null;
 }
 const pikaKc = c => (c == null ? null : Math.round(c) / 100);
+
+/* ── CO PŘIJDE ZA PRODANÝ KUS ────────────────────────────────────────
+   Payout = dohodnutá cena minus provize. Provize má u nich i spodní
+   a horní mez (`commission_min_fee_cents`, `commission_max_fee_cents`);
+   u levného kusu tak může být poplatek vyšší než procenta a u drahého
+   naopak zastropovaný. Počítat jen procenta by u obou lhalo. */
+function pikaPayoutKc(r) {
+  const zaklad = pikaZaklad(r);
+  const bp = Number(r && r.commission_rate_bp);
+  if (!Number.isFinite(zaklad) || !Number.isFinite(bp)) return null;
+  let poplatek = zaklad * bp / 10000;
+  const min = Number(r.commission_min_fee_cents);
+  const max = Number(r.commission_max_fee_cents);
+  if (Number.isFinite(min) && min > 0 && poplatek < min) poplatek = min;
+  if (Number.isFinite(max) && max > 0 && poplatek > max) poplatek = max;
+  return Math.round((zaklad - poplatek) / 100);
+}
+
+/* ── PRODEJE K PŘENESENÍ DO SKLADU ───────────────────────────────────
+   Co se u nich prodalo a ve skladu je ten kus pořád veden na skladě.
+   Vrací se rovnou hodnoty, které se mají v položce vyplnit — aby
+   pravidla zůstala na jednom místě a aplikace je jen zapsala.
+
+   Zapisovat do cloudu smí **jedině aplikace**; konektor jen řekne, co
+   se stalo. Druhý zapisovatel by se pral s její synchronizací. */
+function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
+  const { skupiny } = pikaSkupiny(polozky, radky, null);
+  const ven = [];
+  for (const s of skupiny) {
+    const prodane = s.jejich
+      .filter(r => r.status === 'sold' && pikaProdejCerstvy(r, razitkoSkladu))
+      .sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')));
+    if (!prodane.length) continue;
+    /* Kusy doma, které ještě čekají na to, že se prodej zapíše.
+       Bere se ten nejdéle ležící — u dvou stejných je to jedno, ale
+       ať je to pokaždé stejné a nepřehazuje se to. */
+    const doma = s.chtene.map(x => x.it)
+      .sort((a, b) => (a.dateAdded || 0) - (b.dateAdded || 0));
+    for (let i = 0; i < prodane.length && i < doma.length; i++) {
+      const r = prodane[i], it = doma[i];
+      const payout = pikaPayoutKc(r);
+      ven.push({
+        polozka: { id: it.id, nazev: it.name, sku: it.sku || null, velikost: it.size || null },
+        u_nich: { id: r.short_id || r.id, na_pulte_kc: pikaKc(pikaZaklad(r)),
+          provize_pct: Number.isFinite(Number(r.commission_rate_bp))
+            ? Number(r.commission_rate_bp) / 100 : null },
+        vyplnit: {
+          saleState: 'waiting',
+          waitState: 'sending',
+          sellPrice: payout,
+          sellCurrency: 'CZK',
+          saleDate: String(r.updated_at || '').slice(0, 10) || null,
+          soldWhere: 'Pikastore',
+          extraCosts: 0,
+        },
+        /* Číslo objednávky chodí majiteli na Discord, kam konektor
+           nevidí — doplní si ho ručně. */
+        doplnit_rucne: ['saleRef'],
+      });
+    }
+  }
+  return ven;
+}
 
 /* Má tenhle kus u nich viset? Viz hlavička sekce. */
 function pikaMaViset(it) {
@@ -1343,6 +1415,24 @@ async function pikaSmlouva(cesty) {
     vysledek.push(zaznam);
   }
   return { zdroj: PIKA_OPENAPI, verze: (doc.info || {}).version || null, cesty: vysledek };
+}
+
+/* Prodeje z komise, které sklad ještě nezaznamenal. Jen čte. */
+async function pikaProdeje(env) {
+  const { radky } = await pikaVypis(env);
+  const token = await prihlas(env);
+  const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
+  const polozky = slozPolozky(data, archivy);
+  const prodeje = pikaProdejeKPreneseni(polozky, radky, data.savedAt);
+  return {
+    stav: 'ok',
+    sklad_ulozen: data.savedAt || null,
+    k_preneseni: prodeje,
+    poznamka: prodeje.length
+      ? 'Tyhle kusy se u nich prodaly a ve skladu jsou pořád na skladě. '
+        + 'Zapsat je smí jedině aplikace — konektor do cloudu nezapisuje.'
+      : 'Nic nečeká — všechny prodeje z komise už sklad zná.',
+  };
 }
 
 /* Náhled na /<TOKEN>/pika — otevře se v prohlížeči a řekne, co by se
