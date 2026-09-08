@@ -763,6 +763,12 @@ function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
     for (let i = 0; i < prodane.length && i < doma.length; i++) {
       const r = prodane[i], it = doma[i];
       const payout = pikaPayoutKc(r);
+      /* Číslo objednávky chodí majiteli na Discord, kam konektor nevidí.
+         A když u jejich řádku chybí provize, payout se nedá spočítat —
+         přesun je i tak přednější (kus se fyzicky prodal), ale cena se
+         nehádá a řekne se, že si ji majitel musí doplnit. */
+      const rucne = ['saleRef'];
+      if (payout == null) rucne.push('sellPrice');
       ven.push({
         polozka: { id: it.id, nazev: it.name, sku: it.sku || null, velikost: it.size || null },
         u_nich: { id: r.short_id || r.id, na_pulte_kc: pikaKc(pikaZaklad(r)),
@@ -777,9 +783,7 @@ function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
           soldWhere: 'Pikastore',
           extraCosts: 0,
         },
-        /* Číslo objednávky chodí majiteli na Discord, kam konektor
-           nevidí — doplní si ho ručně. */
-        doplnit_rucne: ['saleRef'],
+        doplnit_rucne: rucne,
       });
     }
   }
@@ -2563,6 +2567,25 @@ async function pripravUpozorneni(env) {
   return { polozky, zprava: sestavZpravu(polozky, ted, data, crm) };
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   ADRESA PRO APLIKACI
+   ──────────────────────────────────────────────────────────────────────
+   Aplikace v prohlížeči si sama chodí pro prodeje z komise, aby prodaný
+   kus nemusel majitel přesouvat do Čeká ručně. Má na to **vlastní token**
+   (`APP_TOKEN`), protože MCP_TOKEN pouští ke všem datům skladu i k zápisům
+   do komise — a ten do stránky nepatří. Odsud se dá jedině přečíst, co se
+   u komisionáře prodalo; nic se tudy nezapisuje ani u nich, ani do cloudu.
+
+   Hvězdička v CORS je nutná: aplikace běží i z `file://`, kde je origin
+   `null` a jinak než hvězdičkou se povolit nedá. Chrání to token
+   v adrese, ne původ stránky.
+══════════════════════════════════════════════════════════════════════ */
+const APP_HLAVICKY = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Cache-Control': 'no-store',
+};
+
 /* ── Vstupní bod ────────────────────────────────────────────────────── */
 // Porovnání odolné vůči měření času — ať se token nedá uhodnout po znacích
 function shodujeSe(a, b) {
@@ -2585,6 +2608,34 @@ export default {
         return new Response('Method not allowed', { status: 405, headers: KURZ_HLAVICKY });
       }
       return obsluzKurz(cesta[1] || '');
+    }
+
+    /* Adresa pro aplikaci — viz ADRESA PRO APLIKACI. Stejný token jako
+       MCP_TOKEN se odmítne: zastínil by celý MCP server a konektor
+       v chatu by přestal chodit, aniž by bylo poznat proč. */
+    if (env.APP_TOKEN && env.APP_TOKEN !== env.MCP_TOKEN
+        && shodujeSe(cesta[0] || '', env.APP_TOKEN)) {
+      /* Cesta se posuzuje dřív než metoda — jinak by POST na /mcp
+         odpověděl „405", a tím by prozradil, že tam něco je. */
+      if (cesta[1] !== 'prodeje') {
+        return new Response('Not found', { status: 404, headers: APP_HLAVICKY });
+      }
+      if (request.method === 'OPTIONS') return new Response(null, { headers: APP_HLAVICKY });
+      if (request.method !== 'GET') {
+        return new Response('Method not allowed', { status: 405, headers: APP_HLAVICKY });
+      }
+      const chybiApp = ['SKLAD_EMAIL', 'SKLAD_HESLO', 'SKLAD_UID', 'CONSIGNTHEM_TOKEN']
+        .filter(k => !env[k]);
+      if (chybiApp.length) {
+        return Response.json({ stav: 'nenastaveno', chybi: chybiApp },
+          { status: 500, headers: APP_HLAVICKY });
+      }
+      try {
+        return Response.json(await pikaProdeje(env), { headers: APP_HLAVICKY });
+      } catch (e) {
+        return Response.json({ stav: 'chyba', chyba: String((e && e.message) || e) },
+          { status: 502, headers: APP_HLAVICKY });
+      }
     }
 
     // Bez platného tokenu se server tváří, že tu nic není

@@ -7,9 +7,11 @@ a na desktopu — tedy tam, kde není kde spustit program.
 počítač, na kterém běží. Obyčejný chat žádný nemá. Konektor to řeší tím,
 že běží na veřejné adrese a Claude se na něj připojuje z Anthropicu.
 
-**Jen čtení.** Zápisový kód v `worker.js` není a testy to hlídají. Účet,
-pod kterým se hlásí, má navíc zápis zakázaný přímo pravidly Firestore —
-viz `nastroje/PRAVIDLA.md`.
+**Do skladu jen čtení.** Zápisový kód do Firestore v `worker.js` není
+a testy to hlídají. Účet, pod kterým se hlásí, má navíc zápis zakázaný
+přímo pravidly Firestore — viz `nastroje/PRAVIDLA.md`. Jediné, kam
+konektor zapisuje, je API komisního prodeje (Pikastore), a to výhradně
+na vyžádání.
 
 ## Co poběží kde
 
@@ -56,6 +58,10 @@ Přidej čtyři, u každé vyber **typ Secret**, ne Text:
 | `SKLAD_UID` | UID majitele (čí data se čtou) |
 | `MCP_TOKEN` | token z kroku 1 |
 
+Nepovinné jsou `CONSIGNTHEM_TOKEN` (komisní prodej), `APP_TOKEN`
+(přenos prodejů do aplikace), `RESEND_API_KEY` a `MAIL_KOMU`
+(upozornění e-mailem). Bez nich běží zbytek dál.
+
 Po přidání znovu **Deploy**.
 
 Tohle je oproti proměnným prostředí v Claude Code zlepšení: Cloudflare má
@@ -95,9 +101,8 @@ https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/pika
 ```
 
 otevřená v prohlížeči spočítá rozdíl mezi skladem a tím, co u nich visí:
-co u nich chybí, kde se liší cena, co visí navíc, co se prodalo a co
-nejde vystavit kvůli chybějící cílové ceně. **Nic nemění** — vystavovat
-a stahovat konektor zatím neumí.
+co u nich chybí, co visí navíc, co se prodalo a co nejde vystavit kvůli
+chybějící cílové ceně. **Náhled sám nic nemění.**
 
 Potřebuje jedno tajemství navíc:
 
@@ -112,9 +117,10 @@ opravdu nese — a jestli máš podepsané aktuální podmínky obchodu. Bez nic
 projde čtení, ale každý zápis skončí na `409 terms_acceptance_required`.
 
 Srovnání se pouští nástrojem `pika_srovnat`. **Bez `provest: true`
-jen ukáže plán**; s ním u nich vystaví, stáhne, vrátí do prodeje
-a přecení. Nové kusy jdou jako koncept, pokud se nepřidá
-`publikovat: true`.
+jen ukáže plán**; s ním u nich vystaví, stáhne a vrátí do prodeje.
+Staré inzeráty se nepřeceňují — ceny si majitel hlídá sám, cílová cena
+se použije jen při zakládání. Nové kusy jdou jako koncept, pokud se
+nepřidá `publikovat: true`.
 
 Obojí jde i **jako nástroj v běžném chatu** — konektor nabízí
 `pika_nahled` a `pika_smlouva`, takže se nemusí skládat adresa
@@ -130,6 +136,44 @@ Vytáhne z `openapi.json` povinná pole, typy a výčty pro cesty, podle
 kterých se píše zbytek napojení; vlastní cesty se dají zadat přes
 `?cesty=post /listings,get /sales`. Token se na to nepoužívá —
 `openapi.json` je veřejný.
+
+### Prodej se přesune do Čeká sám
+
+Co se u nich prodá, musel majitel v aplikaci ručně přesunout do Čeká —
+a dokud to neudělal, kus se tvářil, že je pořád doma. Aplikace se proto
+po startu zeptá konektoru, co se u nich prodalo, a přesune to sama:
+vyplní payout jako prodejní cenu, datum prodeje, místo *Pikastore*,
+další náklady 0 a stav *Čeká na odeslání*. Číslo objednávky konektor
+nevidí (chodí na Discord), takže se doplňuje ručně.
+
+**Zapisuje jedině aplikace.** Konektor jen spočítá, co se má vyplnit —
+druhý zapisovatel by se pral se synchronizací skladu. Před přesunem si
+aplikace uloží zálohu (*Nastavení → Automatické zálohy*), takže se to dá
+jedním kliknutím vrátit.
+
+Má na to **vlastní adresu s vlastním tokenem**:
+
+```
+https://<jméno-workeru>.<jméno-účtu>.workers.dev/<APP_TOKEN>/prodeje
+```
+
+Token je vlastní schválně: `MCP_TOKEN` pouští ke všem datům skladu
+i k zápisům do komise, a ten do prohlížeče nepatří. Odsud se dá jedině
+číst, co se prodalo — cokoli jiného pod tímhle tokenem vrátí `404`
+a jiná metoda než `GET` skončí na `405`. Stejný token jako `MCP_TOKEN`
+se odmítne; zastínil by celý MCP server a konektor v chatu by přestal
+chodit.
+
+Zapojení:
+
+1. V Cloudflare přidej tajemství `APP_TOKEN` (jiná náhodná řada než
+   `MCP_TOKEN`) a nasaď worker znovu.
+2. V aplikaci **Nastavení → Nástroje → Komisní prodej** vlož tentýž
+   token a dej *Zkontrolovat teď*. Adresa konektoru se bere z *Kurzy
+   měn*, takže musí být vyplněná.
+3. Token zůstává **jen v tom prohlížeči** — nesynchronizuje se, protože
+   synchronizované nastavení čte i účetní. Na druhém zařízení ho vlož
+   znovu; bez něj se prostě nic nepřenáší.
 
 ## Kurz ČNB pro aplikaci
 
@@ -394,6 +438,10 @@ Až doména v Resendu projde ověřením, `MAIL_KOMU` může být jakákoli adre
 | `sklad_polozky` | řádky skladu s filtry (stav, profil, kategorie, platforma, hledání) |
 | `sklad_prodeje` | prodané, volitelně za jeden rok |
 | `sklad_zakaznici` | zákazníci a partneři z CRM |
+| `pika_nahled` | rozdíl mezi skladem a komisním prodejem |
+| `pika_srovnat` | plán vystavení a stažení; s `provest: true` ho i provede |
+| `pika_prodeje` | co se u komisionáře prodalo a sklad to ještě neví |
+| `pika_smlouva` | co jejich veřejný kontrakt (`openapi.json`) slibuje |
 
 Odpovědi jsou omezené na 60 položek a zhruba 180 000 znaků; celý sklad má
 přes 600 kB a do jedné odpovědi se nevejde. Když je toho víc, konektor to

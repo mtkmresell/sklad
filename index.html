@@ -1967,8 +1967,13 @@ function syncSettings() {
 
 // Frekvence našeptávaných hodnot — jdou do cloudu pohromadě v jednom poli
 var SYNC_FREQ_KEYS = ['carrier_freq', 'soldWhere_freq', 'payoutCustom_freq'];
-// Klíče, které se při odhlášení mažou, ale do cloudu nepatří
-function syncLocalOnlyKeys() { return [SK, SK + '_savedAt', SK + '_dirty', SK_SNAP]; }
+/* Klíče, které se při odhlášení mažou, ale do cloudu nepatří.
+   Token ke konektoru (KOMISNÍ PRODEJ) je mezi nimi schválně: do
+   synchronizovaného nastavení nepatří, protože ten dokument čte i
+   účetní — ale na odhlášeném zařízení ležet nemá. */
+function syncLocalOnlyKeys() {
+  return [SK, SK + '_savedAt', SK + '_dirty', SK_SNAP, SK_KOMISE_TOKEN, SK_KOMISE_STAV];
+}
 
 // Doplní do cloudového balíčku všechna nastavení ze seznamu.
 // Chybějící klíč pošle jako null — aby čerstvé zařízení nepřepsalo cloud
@@ -6025,10 +6030,9 @@ function saveKonektorUrl(u) {
   try { _ioCloudSync(); } catch (e) {}
 }
 
-/* Adresa kurzu poskládaná ze základu konektoru. Bere se jen schéma
-   a doména — kdyby někdo vložil celou adresu i s tokenem, do dotazu
-   na kurz se token nedostane. */
-function konektorKurzUrl(dateStr) {
+/* Schéma a doména konektoru, nic víc — kdyby někdo vložil celou adresu
+   i s tokenem, do sestavených dotazů se token nedostane. */
+function konektorOrigin() {
   var zaklad = getKonektorUrl();
   if (!zaklad) return '';
   if (!/^https?:\/\//i.test(zaklad)) zaklad = 'https://' + zaklad;
@@ -6039,8 +6043,14 @@ function konektorKurzUrl(dateStr) {
      jména, jinak by překlep tiše vyrobil adresu, na kterou nikdo
      neodpoví, a vypadalo by to jako chyba konektoru. */
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(adresa.hostname)) return '';
+  return adresa.origin;
+}
+
+function konektorKurzUrl(dateStr) {
+  var origin = konektorOrigin();
+  if (!origin) return '';
   var m = /^(\d{4}-\d{2}-\d{2})/.exec(String(dateStr || ''));
-  return adresa.origin + '/kurz' + (m ? '/' + m[1] : '');
+  return origin + '/kurz' + (m ? '/' + m[1] : '');
 }
 function cnbKurzUrl(dateStr) {
   var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || ''));
@@ -9742,6 +9752,268 @@ async function zkusitKonektor() {
       + '. Zkontroluj adresu a jestli je worker nasazený.';
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   KOMISNÍ PRODEJ — PŘENOS PRODEJŮ
+
+   Co se prodá u komisionáře (Pikastore), musel majitel přesunout do
+   Čeká ručně — a dokud to neudělal, kus se tvářil, že je pořád doma.
+   Aplikace se proto po startu zeptá konektoru, co se u nich prodalo,
+   a přesune to sama.
+
+   ── Proč to dělá aplikace, a ne konektor ────────────────────────────
+   Do cloudu smí zapisovat **jedině aplikace**. Druhý zapisovatel by se
+   pral s její synchronizací: razítko `savedAt` je jediný rozhodčí
+   a konektor by ho posouval bez toho, aby o tom otevřené zařízení
+   vědělo. Konektor tedy jen spočítá, co se má vyplnit, a aplikace to
+   zapíše svou obvyklou cestou (`sv()`).
+
+   ── Než se sáhne do dat ─────────────────────────────────────────────
+   - Čeká se na první snímek z cloudu (`_fbCloudReady`). Před ním
+     zařízení netuší, co v cloudu je, a zápis by ho přepsal starším
+     stavem — přesně jak je popsáno u ukládání do cloudu.
+   - Uloží se **záloha** (ta z Nastavení → Automatické zálohy), takže
+     se přesun dá jedním kliknutím vrátit.
+   - Přesouvá se jen kus, který je pořád na skladě. Když s ním majitel
+     mezitím něco udělal, nechá se být — přepsat hotový prodej je horší
+     chyba než nechat kus doma o den dýl.
+
+   ── Token má vlastní a nesynchronizuje se ───────────────────────────
+   Adresa `/…/prodeje` má v konektoru vlastní `APP_TOKEN`, protože
+   MCP_TOKEN pouští ke všem datům skladu i k zápisům do komise. A drží
+   se **jen v tomhle prohlížeči**, ne v synchronizovaném nastavení: to
+   čte i účetní, a token do cizích rukou nepatří. Na druhém zařízení se
+   vloží znovu; bez něj se prostě nic neděje.
+══════════════════════════════════════════════════════════════════════ */
+var SK_KOMISE_TOKEN = 'sklad_komise_token_v1';
+var SK_KOMISE_STAV = 'sklad_komise_stav_v1';
+var KOMISE_TIMEOUT_MS = 20000;
+
+function getKomiseToken() {
+  try { return (localStorage.getItem(SK_KOMISE_TOKEN) || '').trim(); } catch (e) { return ''; }
+}
+function saveKomiseToken(t) {
+  try { localStorage.setItem(SK_KOMISE_TOKEN, String(t || '').trim()); } catch (e) {}
+}
+
+// Adresa se skládá z domény konektoru a vlastního tokenu aplikace
+function komiseProdejeUrl() {
+  var origin = konektorOrigin();
+  var token = getKomiseToken();
+  if (!origin || !token) return '';
+  return origin + '/' + encodeURIComponent(token) + '/prodeje';
+}
+
+/* Jak to dopadlo naposledy. Na mobilu se do konzole prohlížeče nikdo
+   nedostane, takže bez tohohle by se nedalo zjistit, jestli přenos
+   vůbec běží — a mlčení je tu normální stav. */
+function komiseStav() {
+  try { return JSON.parse(localStorage.getItem(SK_KOMISE_STAV) || 'null'); } catch (e) { return null; }
+}
+function _komiseZapisStav(o) {
+  try { localStorage.setItem(SK_KOMISE_STAV, JSON.stringify(Object.assign({ kdy: new Date().toISOString() }, o))); } catch (e) {}
+}
+
+/* Co se smí z odpovědi vzít a v jakém tvaru. Odpověď přijde po síti,
+   takže se z ní nikdy nekopíruje, co pošle — jinak by změna konektoru
+   (nebo někdo, kdo odpoví místo něj) mohla přepsat nákupní cenu i id.
+   Hodnota, která neprojde, se zahodí; pole, které tu není, se ignoruje. */
+var KOMISE_POLE = {
+  saleState: function (v) { return v === 'waiting' ? v : null; },
+  waitState: function (v) { return ['sending', 'sent', 'payout'].indexOf(v) !== -1 ? v : null; },
+  sellPrice: function (v) { return (typeof v === 'number' && isFinite(v) && v >= 0) ? Math.round(v) : null; },
+  sellCurrency: function (v) { return (v === 'CZK' || v === 'EUR') ? v : null; },
+  saleDate: function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null; },
+  soldWhere: function (v) { return (typeof v === 'string' && v && v.length <= 40) ? v : null; },
+  extraCosts: function (v) { return (typeof v === 'number' && isFinite(v) && v >= 0) ? v : null; },
+};
+
+function _komiseHodnoty(vyplnit) {
+  var ven = {};
+  if (!vyplnit || typeof vyplnit !== 'object') return null;
+  for (var k in KOMISE_POLE) {
+    if (!Object.prototype.hasOwnProperty.call(vyplnit, k)) continue;
+    var v = KOMISE_POLE[k](vyplnit[k]);
+    if (v !== null) ven[k] = v;
+  }
+  // Bez cílového stavu není co dělat — a hádat se nebude
+  if (ven.saleState !== 'waiting') return null;
+  if (!ven.waitState) ven.waitState = 'sending';
+  return ven;
+}
+
+async function _komiseNacti(url) {
+  var ovladac = typeof AbortController === 'function' ? new AbortController() : null;
+  var casovac = setTimeout(function () { if (ovladac) ovladac.abort(); }, KOMISE_TIMEOUT_MS);
+  try {
+    var r = await fetch(url, ovladac ? { signal: ovladac.signal } : undefined);
+    var d = null;
+    try { d = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error((d && d.chyba) || ('konektor odpověděl ' + r.status));
+    return d;
+  } finally { clearTimeout(casovac); }
+}
+
+/* Přenese prodeje z komise do skladu. `rucne` = spuštěno z Nastavení,
+   tehdy se ozve i to, že není co dělat. */
+async function komisePrenesProdeje(rucne) {
+  if (jeUctetni()) return { stav: 'uctetni' };
+  var url = komiseProdejeUrl();
+  if (!url) return { stav: 'nenastaveno' };
+  // Před prvním snímkem z cloudu se do dat nesahá — viz hlavička sekce
+  if (!window._fbUser || !_fbCloudReady) return { stav: 'ceka-na-cloud' };
+
+  var odpoved;
+  try {
+    odpoved = await _komiseNacti(url);
+  } catch (e) {
+    var duvod = String((e && e.message) || e);
+    _komiseZapisStav({ stav: 'chyba', chyba: duvod });
+    if (rucne) showToast('Komisní prodej: ' + duvod, 'err');
+    return { stav: 'chyba', chyba: duvod };
+  }
+
+  var seznam = (odpoved && Array.isArray(odpoved.k_preneseni)) ? odpoved.k_preneseni : [];
+  var chystane = [], preskocene = [];
+  for (var i = 0; i < seznam.length; i++) {
+    var z = seznam[i] || {};
+    var id = z.polozka && z.polozka.id;
+    var it = id ? items.find(function (x) { return x.id === id; }) : null;
+    var hodnoty = _komiseHodnoty(z.vyplnit);
+    /* Balíková hlavička nemá vlastní prodej a kus, se kterým majitel
+       mezitím pohnul, se nechá být. */
+    if (!it || !hodnoty || it.type === 'bulk' || (it.saleState && it.saleState !== 'stock')) {
+      preskocene.push((z.polozka && z.polozka.nazev) || id || '?');
+      continue;
+    }
+    chystane.push({ it: it, hodnoty: hodnoty, nazev: it.name });
+  }
+
+  if (!chystane.length) {
+    _komiseZapisStav({ stav: 'ok', preneseno: 0, preskoceno: preskocene.length });
+    if (rucne) {
+      showToast(preskocene.length
+        ? 'Není co přenášet — ' + preskocene.length + ' prodej(ů) sklad už zná.'
+        : 'Není co přenášet, všechny prodeje z komise sklad zná.');
+    }
+    return { stav: 'ok', preneseno: 0, preskoceno: preskocene };
+  }
+
+  // Záloha PŘED zásahem, ať se přesun dá jedním kliknutím vrátit
+  saveSnapshot('před přenosem z komise');
+
+  var jmena = [];
+  chystane.forEach(function (c) {
+    var it = c.it;
+    for (var k in c.hodnoty) it[k] = c.hodnoty[k];
+    // Stejná data jako u ruční změny stavu — jinak by tahle cesta
+    // některé z nich minula
+    oznacCasyStavu(it, it.waitState);
+    /* Prodaný kus už nikde nevisí. Stejně jako u ruční změny se
+       odškrtne i ostatním ve skupině, kteří sdíleli tentýž inzerát. */
+    if (it.soldWhere) {
+      platGroupSiblings(it, it.id).forEach(function (sib) {
+        var idx = (sib.platforms || []).indexOf(it.soldWhere);
+        if (idx !== -1) sib.platforms.splice(idx, 1);
+      });
+    }
+    it.platforms = [];
+    jmena.push(it.name);
+  });
+
+  sv();
+  try { renderStats(); renderItems(); } catch (e) {}
+  _komiseZapisStav({ stav: 'ok', preneseno: jmena.length, preskoceno: preskocene.length, kusy: jmena });
+  showToast(jmena.length === 1
+    ? 'Prodáno u komisionáře: ' + jmena[0] + ' → Čeká. Záloha je v Nastavení.'
+    : jmena.length + ' prodeje z komise přesunuty do Čeká. Záloha je v Nastavení.');
+  return { stav: 'ok', preneseno: jmena.length, kusy: jmena, preskoceno: preskocene };
+}
+
+// Nastavení → Nástroje → Komisní prodej
+function openKomiseSettings() {
+  var ov = document.createElement('div');
+  ov.id = 'komiseOverlay';
+  ov.className = 'mo open';
+  ov.style.zIndex = '350';
+  ov.innerHTML = '<div class="modal" style="max-width:520px;">'
+    + '<div class="mh"><div class="mt2">Komisní prodej</div>'
+    + '<button class="xb" id="komiseClose">✕</button></div>'
+
+    + '<div class="fs"><div class="fs-title">Přenos prodejů</div>'
+    + '<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:10px;">'
+    + 'Co se prodá u komisionáře, se po startu aplikace samo přesune do Čeká — '
+    + 'vyplní se payout, datum prodeje a místo. Číslo objednávky si doplníš sám. '
+    + 'Před každým přesunem se uloží záloha, takže se to dá vrátit.</div>'
+    + '<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:10px;">'
+    + 'Token je vlastní pro aplikaci (<code>APP_TOKEN</code> v Cloudflare) a zůstává '
+    + 'jen v tomhle prohlížeči — nesynchronizuje se. Na dalším zařízení ho vlož znovu.</div>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+    + '<input type="password" id="komiseTokenInput" class="brana-inp" style="flex:1;min-width:200px;" '
+    + 'placeholder="APP_TOKEN z Cloudflare" autocomplete="off">'
+    + '<button class="btn-sec" id="komiseTest" style="flex:none;padding:8px 14px;font-size:12px;white-space:nowrap;">Zkontrolovat teď</button>'
+    + '</div>'
+    + '<div id="komiseStavRadek" style="font-size:11px;color:var(--muted2);margin-top:8px;font-family:\'DM Mono\',monospace;line-height:1.6;"></div>'
+    + '</div>'
+
+    + '<div style="display:flex;gap:8px;margin-top:4px;">'
+    + '<button class="btn-sec" id="komiseBack" style="flex:1;">Zpět</button>'
+    + '<button class="btn-pri" id="komiseSave" style="flex:2;">Uložit</button>'
+    + '</div></div>';
+  document.body.appendChild(ov);
+
+  var pole = document.getElementById('komiseTokenInput');
+  var radek = document.getElementById('komiseStavRadek');
+  pole.value = getKomiseToken();
+  radek.textContent = _komiseStavPopis();
+
+  function zpet() { ov.remove(); openSettings(); }
+  document.getElementById('komiseClose').addEventListener('click', zpet);
+  document.getElementById('komiseBack').addEventListener('click', zpet);
+  ov.addEventListener('click', function (e) { if (e.target === ov) zpet(); });
+  document.getElementById('komiseSave').addEventListener('click', function () {
+    saveKomiseToken(pole.value);
+    ov.remove();
+    showToast(getKomiseToken() ? 'Token uložen.' : 'Token smazán — přenos prodejů neběží.');
+  });
+  document.getElementById('komiseTest').addEventListener('click', async function () {
+    saveKomiseToken(pole.value);
+    if (!konektorOrigin()) {
+      radek.textContent = 'Chybí adresa konektoru — vyplň ji v Nastavení → Kurzy měn.';
+      return;
+    }
+    if (!getKomiseToken()) { radek.textContent = 'Vlož token, jinak není kam se ptát.'; return; }
+    radek.textContent = 'Ptám se konektoru…';
+    var v = await komisePrenesProdeje(true);
+    radek.textContent = v.stav === 'ceka-na-cloud'
+      ? 'Ještě nedorazil první snímek z cloudu — zkus to za chvilku.'
+      : _komiseStavPopis();
+  });
+}
+
+// Jedna věta o tom, jak přenos dopadl naposledy
+function _komiseStavPopis() {
+  var s = komiseStav();
+  if (!getKomiseToken()) return 'Nenastaveno — prodeje z komise se nepřenášejí.';
+  if (!s) return 'Zatím neproběhlo.';
+  var kdy = fmtDate(String(s.kdy || '').slice(0, 10));
+  if (s.stav === 'chyba') return kdy + ': nepovedlo se — ' + s.chyba;
+  return kdy + ': ' + (s.preneseno ? 'přeneseno ' + s.preneseno + ' ('
+    + (s.kusy || []).join(', ') + ')' : 'nebylo co přenášet');
+}
+
+/* Po startu se počká na první snímek z cloudu. Bez nastaveného tokenu
+   se nečeká na nic — funkce prostě neběží. */
+(function komiseHlidacStartu() {
+  if (!komiseProdejeUrl()) return;
+  var pokusu = 0;
+  var t = setInterval(function () {
+    if (++pokusu > 120) { clearInterval(t); return; }   // dvě minuty a dost
+    if (!window._fbUser || !_fbCloudReady) return;
+    clearInterval(t);
+    komisePrenesProdeje(false);
+  }, 1000);
+})();
 
 autoRate = localStorage.getItem('autoRate') !== 'false';
 if (autoRate) fetchCnbRate(); // fetch on startup silently
@@ -18665,6 +18937,7 @@ rebuildBrandTables();
       <button class="btn-sec" onclick="openDropdownsEditor()">Dropdowny</button>
       <button class="btn-sec" onclick="cm('moSettings');openRetailersMgr()">Retaileři &amp; EU limit</button>
       <button class="btn-sec" onclick="cm('moSettings');openKurzyMen()">Kurzy měn</button>
+      <button class="btn-sec" onclick="cm('moSettings');openKomiseSettings()">Komisní prodej</button>
       <button class="btn-sec" onclick="cm('moSettings');openItemCacheMgr()">Databáze našeptávače</button>
       <button class="btn-sec" onclick="cm('moSettings');openIgMgr()">Posty na Instagramu</button>
       <button class="btn-sec" onclick="cm('moSettings');openSellerSettings()">Údaje pro doklad</button>

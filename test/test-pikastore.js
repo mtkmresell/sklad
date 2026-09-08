@@ -949,6 +949,20 @@ const ME = {
   ok('horní mez taky', sMaxem.k_preneseni[0].vyplnit.sellPrice === 900,
     '1000 − 100 (strop) = 900 | ' + JSON.stringify(sMaxem.k_preneseni[0].vyplnit));
 
+  /* Bez známé provize se payout spočítat nedá. Přesun je i tak
+     přednější — kus se prodal — ale cena se nehádá a musí se doplnit. */
+  const radekBezProvize = Object.assign({}, prodanyRadek);
+  delete radekBezProvize.commission_rate_bp;
+  scenarSeSkladem([DVOJCATA[0]], [radekBezProvize], zapisovyScenar);
+  const bezCeny = await prodeje();
+  ok('bez provize se prodej nezahodí', (bezCeny.k_preneseni || []).length === 1,
+    JSON.stringify(bezCeny));
+  ok('ale cena se nehádá', bezCeny.k_preneseni[0].vyplnit.sellPrice == null,
+    JSON.stringify(bezCeny.k_preneseni[0].vyplnit));
+  ok('a řekne se, že se má doplnit ručně',
+    (bezCeny.k_preneseni[0].doplnit_rucne || []).indexOf('sellPrice') !== -1,
+    JSON.stringify(bezCeny.k_preneseni[0].doplnit_rucne));
+
   // Co sklad už zaznamenal, se nenabízí znovu
   scenarSeSkladem([Object.assign({}, DVOJCATA[0], { saleState: 'waiting' })],
     [prodanyRadek], zapisovyScenar);
@@ -1040,6 +1054,61 @@ const ME = {
   const r404 = await bezLogu(() => worker.fetch(
     new Request('https://sklad.mtkm.workers.dev/spatny-token/pika'), ENV));
   ok('bez správného tokenu se nic neprozradí', r404.status === 404, String(r404.status));
+
+  sekce('19) Adresa pro aplikaci');
+  /* Aplikace si sama chodí pro prodeje z komise, aby prodaný kus
+     nemusel majitel přesouvat do Čeká ručně. Má na to vlastní token:
+     MCP_TOKEN pouští ke všem datům skladu i k zápisům do komise a do
+     prohlížeče nepatří. */
+  const APP_ENV = Object.assign({}, ENV, { APP_TOKEN: 'token-pro-aplikaci' });
+  scenarSeSkladem([DVOJCATA[0]], [prodanyRadek], zapisovyScenar);
+  async function app(cesta, env = APP_ENV, init) {
+    const adresa = 'https://sklad.mtkm.workers.dev/' + (env.APP_TOKEN || 'zadny') + '/' + cesta;
+    const r = await bezLogu(() => worker.fetch(new Request(adresa, init), env));
+    let telo = null;
+    try { telo = await r.json(); } catch (e) {}
+    return { stav: r.status, telo, cors: r.headers.get('Access-Control-Allow-Origin') };
+  }
+
+  const proApp = await app('prodeje');
+  ok('aplikace dostane, co se u nich prodalo',
+    proApp.stav === 200 && (proApp.telo.k_preneseni || []).length === 1,
+    JSON.stringify(proApp).slice(0, 200));
+  // Bez tohohle prohlížeč odpověď zahodí a v aplikaci se nic nestane
+  ok('a smí ji přečíst i prohlížeč', proApp.cors === '*', String(proApp.cors));
+  const predlet = await app('prodeje', APP_ENV, { method: 'OPTIONS' });
+  ok('předletový dotaz projde', predlet.stav === 200 && predlet.cors === '*',
+    predlet.stav + ' / ' + predlet.cors);
+
+  /* Tohle je celý smysl vlastního tokenu: z prohlížeče se nesmí dostat
+     nikam dál než na čtení prodejů. */
+  const zapisTudy = await app('prodeje', APP_ENV, { method: 'POST' });
+  ok('zapisovat se tudy nedá', zapisTudy.stav === 405, String(zapisTudy.stav));
+  const naMcp = await app('mcp', APP_ENV, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+  });
+  ok('token aplikace na MCP nedosáhne', naMcp.stav === 404, String(naMcp.stav));
+  ok('ani na komisi', (await app('pika')).stav === 404);
+  ok('ani na náhled mailu', (await app('nahled')).stav === 404);
+
+  const bezNastaveni = await bezLogu(() => worker.fetch(
+    new Request('https://sklad.mtkm.workers.dev/token-pro-aplikaci/prodeje'), ENV));
+  ok('dokud APP_TOKEN v Cloudflare není, adresa neexistuje', bezNastaveni.status === 404,
+    String(bezNastaveni.status));
+
+  /* Kdyby si majitel do APP_TOKEN vložil tentýž token jako do MCP_TOKEN,
+     zastínil by celý MCP server a konektor v chatu by přestal chodit —
+     aniž by z toho šlo poznat proč. */
+  const STEJNY = Object.assign({}, ENV, { APP_TOKEN: ENV.MCP_TOKEN });
+  const mcpDal = await bezLogu(() => worker.fetch(new Request(
+    'https://sklad.mtkm.workers.dev/' + ENV.MCP_TOKEN + '/mcp',
+    { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) }), STEJNY));
+  const mcpTelo = await mcpDal.json().catch(() => null);
+  ok('stejný token jako MCP nezastíní konektor v chatu',
+    mcpDal.status === 200 && !!(mcpTelo && mcpTelo.result && mcpTelo.result.tools),
+    mcpDal.status + ' / ' + JSON.stringify(mcpTelo).slice(0, 120));
 
   global.fetch = puvodniFetch;
   console.log('\n' + (selhalo ? selhalo + ' KONTROL SELHALO' : 'OK (' + proslo + ' kontrol)'));

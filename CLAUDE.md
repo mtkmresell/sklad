@@ -369,6 +369,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | prodejní doklad | `PRODEJNÍ DOKLAD` |
 | název souboru s nákupním dokladem | `NÁZEV SOUBORU S NÁKUPNÍM DOKLADEM` |
 | kurzy měn (nástroj v nastavení) | `KURZY MĚN` |
+| přenos prodejů z komise | `KOMISNÍ PRODEJ` |
 | údaje u způsobu vyplacení | `ÚDAJE U ZPŮSOBU VYPLACENÍ` |
 | typ dokladu u místa prodeje | `TYP DOKLADU U MÍSTA PRODEJE` |
 | analytika zákazníků a partnerů | `ANALYTIKA ZÁKAZNÍKŮ` |
@@ -563,12 +564,34 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   tam už stažené je.
 
 **Prodej u nich se do skladu přenáší přes aplikaci, ne přes konektor**
-(`pika_prodeje`). Konektor spočítá, co se má v položce vyplnit —
-`saleState: waiting`, `waitState: sending`, prodejní cenu jako **payout
-po jejich provizi**, datum prodeje, `soldWhere: Pikastore`,
-`extraCosts: 0` — ale **zapsat to smí jedině aplikace**. Druhý
-zapisovatel do cloudu by se pral s její synchronizací. Číslo objednávky
-chodí majiteli na Discord, kam konektor nevidí; doplňuje si ho ručně.
+(`pika_prodeje`, v aplikaci `KOMISNÍ PRODEJ`). Konektor spočítá, co se
+má v položce vyplnit — `saleState: waiting`, `waitState: sending`,
+prodejní cenu jako **payout po jejich provizi**, datum prodeje,
+`soldWhere: Pikastore`, `extraCosts: 0` — ale **zapsat to smí jedině
+aplikace**. Druhý zapisovatel do cloudu by se pral s její
+synchronizací. Číslo objednávky chodí majiteli na Discord, kam konektor
+nevidí; doplňuje si ho ručně. Bez známé provize se payout nespočítá —
+kus se přesune i tak (prodal se), ale cena se nehádá a jde do
+`doplnit_rucne`.
+
+Aplikace si pro to chodí na `/<APP_TOKEN>/prodeje`. Čtyři věci se
+nesmí rozbít:
+
+- **Vlastní token, ne `MCP_TOKEN`.** Ten pouští ke všem datům skladu
+  i k zápisům do komise a do prohlížeče nepatří. Pod `APP_TOKEN` se dá
+  jen číst prodeje; cokoli jiného je `404`, jiná metoda než `GET`
+  `405`. Stejný token jako `MCP_TOKEN` se odmítne — zastínil by celý
+  MCP server a konektor v chatu by přestal chodit.
+- **Token se nesynchronizuje** (je v `syncLocalOnlyKeys()`, ne
+  v `syncSettings()`). Synchronizované nastavení čte i účetní. Na
+  druhém zařízení se vloží znovu, při odhlášení se maže.
+- **Čeká se na první snímek z cloudu** (`_fbCloudReady`) a **před
+  přesunem se ukládá záloha**, ať se dá jedním kliknutím vrátit.
+- **Z odpovědi se bere jen dohodnutá hrstka polí** (`KOMISE_POLE`)
+  a jen kus, který je pořád na skladě. Odpověď přijde po síti; bez
+  toho by změna konektoru přepsala nákupní cenu nebo hotový prodej.
+
+Hlídá to `test-komise.js`.
 
 Payout je dohodnutá cena minus provize, a **provize má u nich spodní
 i horní mez** (`commission_min_fee_cents`, `commission_max_fee_cents`).
@@ -606,7 +629,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 53 souborů
+node test/run.js              # kontrola syntaxe + všech 54 souborů
 node test/run.js archive      # jen vybrané
 ```
 
