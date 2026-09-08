@@ -412,6 +412,13 @@ const NASTROJE = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'pk_nahled',
+    description: 'Rozdíl mezi skladem a druhým komisním prodejem (Purekickz): co u nich '
+      + 'chybí, co visí navíc, co se prodalo a co nejde vystavit. Pravidla jsou stejná jako '
+      + 'u Pikastore, liší se jen jejich API. Zatím jen čte, nic u nich nemění.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
     name: 'pika_prodeje',
     description: 'Co se prodalo na komisním prodeji Pikastore a ve skladu je ten kus pořád '
       + 'veden na skladě. Vrátí rovnou hodnoty, které se mají v položce vyplnit při přesunu '
@@ -468,6 +475,7 @@ async function spustNastroj(jmeno, args, env) {
   }
   if (jmeno === 'pika_nahled') return pikaNahled(env);
   if (jmeno === 'pika_prodeje') return pikaProdeje(env);
+  if (jmeno === 'pk_nahled') return pkNahled(env);
   if (jmeno === 'pika_srovnat') {
     return pikaNahled(env, { provest: !!args.provest, publikovat: !!args.publikovat,
       jen: args.jen, nejvyse: args.nejvyse, stahni: args.stahni });
@@ -1705,6 +1713,232 @@ async function pikaNahled(env, volby) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   PUREKICKZ — DRUHÝ KOMISNÍ PRODEJ
+
+   Druhý komisionář s vlastním API. **Pravidla chování skladu jsou
+   stejná jako u Pikastore** — co se vystaví, co se stáhne, poškozený kus
+   nikam, ruční inzeráty se neopravují — a proto se taky sdílí: skupiny
+   (`pikaSkupiny`), velikosti (`pikaVelikost`), názvy (`pikaNazevKlic`)
+   i důvody, proč kus zůstat stranou (`pikaDuvodStranou`). Druhá kopie
+   těch pravidel by se s tou první dřív nebo později rozešla.
+
+   Vlastní je jen to, co je vlastní jejich API:
+
+   - **Přihlašuje se klíčem v hlavičce** (`X-API-Key`), ne bearer tokenem.
+   - **Cena je rovnou payout v korunách.** Poplatek i cenu na pultě si
+     dopočítají sami, takže tu odpadá provize, přepočet i koncovka 90 —
+     posílá se prostě cílová cena. To je i důvod, proč se sem nedá
+     přenést pravidlo „cena končí na 90": na cenu na pultě nevidíme.
+   - **Zakládá se přímo přes SKU** z jejich e-shopu, žádný katalog se
+     nepřekládá. Kus bez SKU tím pádem vystavit nejde.
+   - **Inzerát nese počet kusů** (`quantity`). Pro jistotu se zakládá
+     vždycky jeden — majitel to tak dělal ručně a u Pikastore to tak
+     chce; kdyby chtěl počet podle skladu, je to jedno místo.
+
+   Stavy inzerátů jejich dokumentace nevyjmenovává, uvádí jen `listed`
+   v příkladu. Náhled proto vypisuje **všechny stavy, které v odpovědi
+   opravdu byly** (`stavy_v_odpovedi`) — ať se pravidla píšou z faktů,
+   ne z dohadů. Stejně tak jména polí.
+══════════════════════════════════════════════════════════════════════ */
+const PK_BASE = 'https://xbplnrpvyhxkryjncyau.supabase.co/functions/v1/consignor-api';
+const PK_JMENO = 'Purekickz';
+const PK_STRANKA = 100;        // jejich strop je 500, tohle je s rezervou
+const PK_STAVY_CINNE = ['listed'];
+const PK_STAV_PRODANO = 'sold';
+/* Jejich limit je 60 požadavků za minutu. Srovnání jich udělá pár, ale
+   stránkování u velkého skladu se k tomu může přiblížit. */
+const PK_NEJDELSI_CEKANI = 70;
+
+async function pkVolej(env, cesta, moznosti) {
+  if (!env.PUREKICKZ_TOKEN) {
+    throw pikaChyba('Chybí tajemství PUREKICKZ_TOKEN — doplň ho ve Workeru '
+      + '(Settings → Variables and Secrets) a nasaď znovu.', 'nenastaveno');
+  }
+  const m = moznosti || {};
+  let cekano = 0;
+  for (let pokus = 1; ; pokus++) {
+    const odpoved = await fetch(PK_BASE + cesta, {
+      method: m.method || 'GET',
+      headers: Object.assign({
+        'X-API-Key': env.PUREKICKZ_TOKEN,
+        Accept: 'application/json',
+      }, m.headers || {}),
+      body: m.body,
+    });
+    if (odpoved.ok) return pikaTelo(odpoved);
+    const telo = await pikaTelo(odpoved);
+
+    // Neplatný klíč opakování nespraví — rovnou ven, ať se chyba nehledá jinde
+    if (odpoved.status === 401) {
+      throw pikaChyba(PK_JMENO + ' klíč nebere (401) — chybí, je neplatný nebo ho zrušili. '
+        + 'Vygeneruj nový v jejich portálu a přepiš tajemství ve Workeru.', 'token');
+    }
+    if (odpoved.status === 403) {
+      throw pikaChyba(PK_JMENO + ' klíč nemá právo na tuhle akci (403) — je jen pro čtení, '
+        + 'nebo položka není tvoje.', 'token');
+    }
+    if (odpoved.status === 429) {
+      const pauza = pikaPauza(odpoved, telo);
+      if (cekano + pauza > PK_NEJDELSI_CEKANI) {
+        throw pikaChyba(PK_JMENO + ' hlásí překročený limit (60 požadavků za minutu) a čekat '
+          + 'se má ' + pauza + ' s. Nechávám to na příští běh.', 'zahlceno');
+      }
+      await pikaPockej(pauza * 1000);
+      cekano += pauza;
+      continue;
+    }
+    if (odpoved.status >= 500 && pokus < PIKA_POKUSU) {
+      await pikaPockej(1000 * pokus);
+      continue;
+    }
+    const detail = (telo && (telo.detail || telo.message || telo.error)) || ('HTTP ' + odpoved.status);
+    throw pikaChyba(PK_JMENO + ' odmítl ' + (m.method || 'GET') + ' ' + cesta + ': ' + detail,
+      odpoved.status === 404 ? 'nenalezeno' : 'odmitnuto');
+  }
+}
+
+async function pkKdoJsem(env) { return pkVolej(env, '/me'); }
+
+/* Celý výpis inzerátů. Stránkuje se přes limit/offset a **bez filtru na
+   stav** — prodané kusy potřebujeme vidět stejně jako vystavené, aby se
+   poznalo, co se u nich prodalo a sklad o tom ještě neví. */
+async function pkVypis(env) {
+  const radky = [];
+  let offset = 0, celkem = null;
+  for (let stranka = 1; stranka <= 100; stranka++) {
+    const o = await pkVolej(env, '/listings?limit=' + PK_STRANKA + '&offset=' + offset);
+    const davka = (o && Array.isArray(o.listings)) ? o.listings : null;
+    if (!davka) {
+      throw pikaChyba('Odpověď /listings nemá pole `listings` — nečekaný tvar, radši nic '
+        + 'nedělám.', 'tvar');
+    }
+    radky.push(...davka);
+    if (typeof o.total === 'number') celkem = o.total;
+    offset += davka.length;
+    if (!davka.length || celkem === null || radky.length >= celkem) break;
+  }
+  return { radky, celkem: celkem === null ? radky.length : celkem };
+}
+
+const pkCinny = r => PK_STAVY_CINNE.indexOf(String(r && r.status || '')) !== -1;
+// Kolik kusů inzerát nese — jen do výpisu. Chybějící počet je jeden kus, ne nula.
+function pkPocet(r) {
+  const n = Number(r && r.quantity);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 1;
+}
+
+/* Plán pro Purekickz. Pravidla jsou stejná jako u Pikastore, jen tělo
+   zápisu je jejich: založit jde přímo přes SKU a cena je payout.
+
+   Vystavuje se **jeden inzerát na model a velikost**, i když má majitel
+   kusů víc — tak to dělal ručně a chce to tak dál. Počet kusů
+   v inzerátu se proto ani nedopočítává, ani nečte: zakládá se s jedním
+   a rozhoduje se jen podle toho, jestli tam nějaký činný inzerát je. */
+function pkPlan(polozky, radky, kurz, volby) {
+  volby = volby || {};
+  const razitkoSkladu = volby.razitkoSkladu || null;
+  const { skupiny, cizi, bezCeny, stranou } = pikaSkupiny(polozky, radky, kurz);
+  const vystavit = [], stahnout = [], bezSku = [], cekaNaSklad = [];
+
+  for (const s of skupiny) {
+    const cinne = s.jejich.filter(pkCinny);
+    /* Prodej u nich, o kterém sklad ještě neví. Než majitel kus přesune
+       do Čeká, je pořád veden jako doma — a bez tohohle by se vystavil
+       znovu kus, který fyzicky nemá. Stejná pojistka jako u Pikastore. */
+    const nesrovnane = s.jejich.filter(r => String(r.status || '') === PK_STAV_PRODANO
+      && pikaProdejCerstvy(r, razitkoSkladu)).length;
+    const dostupne = Math.max(0, s.chtene.length - nesrovnane);
+
+    if (s.chtene.length && !dostupne) {
+      cekaNaSklad.push({ klic: s.klice[0], nazev: (s.chtene[0].it || {}).name || null,
+        duvod: 'u nich se to prodalo, sklad to ještě neví — počkám, až kus přesuneš' });
+      continue;
+    }
+    // Doma něco je, jen se to nevystavuje (bez ceny, poškozené, není doma).
+    // Není to důvod stahovat, co za to u nich visí.
+    if (!s.chtene.length && s.kusuStranou) continue;
+    if (!s.chtene.length) {
+      for (const r of cinne) {
+        stahnout.push({ id: r.id, popis: r.sku || r.name || r.id, klic: s.klice[0],
+          stav: r.status, nazev: r.name || null, velikost: r.size || null,
+          duvod: 've skladu už není k prodeji' });
+      }
+      continue;
+    }
+    /* Jeden inzerát na model a velikost stačí, i když má majitel kusů
+       víc — tak to dělal ručně a chce to tak dál. Na počtu kusů
+       v inzerátu proto nezáleží; rozhoduje jen to, jestli tam nějaký
+       činný je. */
+    if (cinne.length) continue;
+    const { it, cena } = s.chtene[0];
+    /* Zakládá se přímo přes SKU z jejich e-shopu. Kus bez SKU tudy
+       založit nejde a hádat ho podle názvu by znamenalo pověsit ho na
+       cizí model — to je horší než ho nevystavit. */
+    if (!it.sku) { bezSku.push(pikaPopisKusu(it, cena)); continue; }
+    vystavit.push({
+      popis: Object.assign(pikaPopisKusu(it, cena), { dostanes_kc: cena }),
+      telo: { sku: String(it.sku).trim(), size: String(it.size || '').trim(),
+        payout: cena, quantity: 1 },
+    });
+  }
+  return { vystavit, stahnout, bezCeny, stranou, bezSku, cekaNaSklad,
+    visi_navic_nezname: cizi.filter(pkCinny).map(r => ({ id: r.id, stav: r.status,
+      velikost: r.size || null, nazev: r.name || null, sku: r.sku || null,
+      payout_kc: r.payout != null ? r.payout : null, kusu: pkPocet(r) })),
+    prodano_u_nich: radky.filter(r => String(r.status || '') === PK_STAV_PRODANO)
+      .map(r => ({ id: r.id, velikost: r.size || null, nazev: r.name || null,
+        payout_kc: r.payout != null ? r.payout : null })) };
+}
+
+/* Náhled na rozdíl mezi skladem a Purekickz. Zatím **jen čte** — zápisy
+   se dopíšou, až bude z ostrých dat jisté, jaké stavy a pole jejich
+   odpověď doopravdy nese. */
+async function pkNahled(env) {
+  const kdo = await pkKdoJsem(env);
+  const { radky, celkem } = await pkVypis(env);
+  const token = await prihlas(env);
+  const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
+  const polozky = slozPolozky(data, archivy);
+  const kurz = await pikaKurz();
+  const plan = pkPlan(polozky, radky, kurz, { razitkoSkladu: data && data.savedAt });
+
+  const podleStavu = {};
+  for (const r of radky) podleStavu[r.status || '?'] = (podleStavu[r.status || '?'] || 0) + 1;
+  const neznameStavy = Object.keys(podleStavu)
+    .filter(x => PK_STAVY_CINNE.indexOf(x) === -1 && x !== PK_STAV_PRODANO);
+
+  return {
+    stav: 'ok',
+    kdo,
+    u_nich: {
+      celkem,
+      podle_stavu: podleStavu,
+      /* Jména polí a stavy z jejich skutečné odpovědi. Dokumentace je
+         nevyjmenovává a psát pravidla podle dohadu se u Pikastore
+         nevyplatilo. */
+      pole_v_odpovedi: radky.length ? Object.keys(radky[0]).sort() : [],
+      stavy_mimo_ocekavani: neznameStavy,
+    },
+    ve_skladu: {
+      kurz_eur: kurz,
+      sklad_ulozen: (data && data.savedAt) || null,
+      polozek: polozky.length,
+    },
+    plan: {
+      vystavit: plan.vystavit.map(x => x.popis),
+      stahnout: plan.stahnout,
+      bez_cilove_ceny: plan.bezCeny,
+      bez_sku: plan.bezSku,
+      nevystavuje_se: plan.stranou,
+      ceka_na_sklad: plan.cekaNaSklad,
+      visi_navic_nezname: plan.visi_navic_nezname,
+      prodano_u_nich: plan.prodano_u_nich,
+    },
+    poznamka: 'Náhled — Purekickz zatím jen čte, nic se u nich nemění.',
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    UPOZORNĚNÍ E-MAILEM
 
    Aplikace je stránka v prohlížeči — sama od sebe nikdy nic nespustí.
@@ -2772,7 +3006,7 @@ export default {
       return new Response('Not found', { status: 404 });
     }
     const co = cesta[1];
-    if (co !== 'mcp' && co !== 'nahled' && co !== 'test-mail' && co !== 'pika') {
+    if (co !== 'mcp' && co !== 'nahled' && co !== 'test-mail' && co !== 'pika' && co !== 'pk') {
       return new Response('Not found', { status: 404 });
     }
     // Chybějící tajemství se hlásí dřív než cokoli jiného — je to
@@ -2803,6 +3037,19 @@ export default {
           return Response.json(await pikaSmlouva(seznam));
         }
         return Response.json(await pikaNahled(env));
+      } catch (e) {
+        return Response.json({
+          stav: 'chyba',
+          chyba: String((e && e.message) || e),
+          duvod: (e && e.pikaKod) || null,
+        }, { status: (e && e.pikaKod === 'nenastaveno') ? 500 : 502 });
+      }
+    }
+
+    // Druhý komisní prodej. Zatím jen čte — viz PUREKICKZ.
+    if (co === 'pk') {
+      try {
+        return Response.json(await pkNahled(env));
       } catch (e) {
         return Response.json({
           stav: 'chyba',

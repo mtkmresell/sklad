@@ -58,7 +58,8 @@ Přidej čtyři, u každé vyber **typ Secret**, ne Text:
 | `SKLAD_UID` | UID majitele (čí data se čtou) |
 | `MCP_TOKEN` | token z kroku 1 |
 
-Nepovinné jsou `CONSIGNTHEM_TOKEN` (komisní prodej), `APP_TOKEN`
+Nepovinné jsou `CONSIGNTHEM_TOKEN` a `PUREKICKZ_TOKEN` (komisní
+prodeje), `APP_TOKEN`
 (přenos prodejů do aplikace), `RESEND_API_KEY` a `MAIL_KOMU`
 (upozornění e-mailem). Bez nich běží zbytek dál.
 
@@ -202,6 +203,39 @@ Tři věci, na které se dá spolehnout:
   náhodou v jejich portálu. Když se něco nepovede, přijde mail taky.
 - **Pád komise neumlčí ranní obhlídku.** Jsou to dvě nezávislé věci
   a běží po sobě, ne jedna místo druhé.
+
+## Purekickz — druhý komisní prodej
+
+Druhý komisionář s vlastním API. Adresa
+
+```
+https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/pk
+```
+
+ukáže rozdíl mezi skladem a tím, co u nich visí — a v chatu je na to
+nástroj `pk_nahled`. **Zatím jen čte**; zápisy se dopíšou, až bude
+z ostrých dat jisté, jaké stavy a pole jejich odpověď doopravdy nese.
+
+Potřebuje jedno tajemství:
+
+```
+PUREKICKZ_TOKEN   klíč z jejich portálu (pk_live_…)
+```
+
+Klíč jde v hlavičce `X-API-Key`, nikdy v adrese — tam by skončil v logu
+proxy i v historii prohlížeče.
+
+**Pravidla chování skladu jsou stejná jako u Pikastore** a schválně se
+sdílejí: co se vystaví, co se stáhne, poškozený kus nikam, kus na cestě
+se nechá být, ruční inzeráty se neopravují. Liší se jen jejich API:
+
+- **Cena je rovnou payout v korunách.** Poplatek i cenu na pultě si
+  dopočítají sami, takže odpadá provize i koncovka 90 — posílá se prostě
+  cílová cena z položky.
+- **Zakládá se přímo přes SKU** z jejich e-shopu, žádný katalog se
+  nepřekládá. Kus bez SKU tudy vystavit nejde.
+- **Jeden inzerát na model a velikost**, i když má majitel kusů víc.
+- Limit je **60 požadavků za minutu**.
 
 ## Kurz ČNB pro aplikaci
 
@@ -470,6 +504,7 @@ Až doména v Resendu projde ověřením, `MAIL_KOMU` může být jakákoli adre
 | `pika_srovnat` | plán vystavení a stažení; s `provest: true` ho i provede |
 | `pika_prodeje` | co se u komisionáře prodalo a sklad to ještě neví |
 | `pika_smlouva` | co jejich veřejný kontrakt (`openapi.json`) slibuje |
+| `pk_nahled` | totéž pro druhý komisní prodej (Purekickz), zatím jen čtení |
 
 Odpovědi jsou omezené na 60 položek a zhruba 180 000 znaků; celý sklad má
 přes 600 kB a do jedné odpovědi se nevejde. Když je toho víc, konektor to

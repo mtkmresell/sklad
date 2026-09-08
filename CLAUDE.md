@@ -638,18 +638,40 @@ API vracet `401` a začne vracet `429 too_many_failed_attempts` — to není
 o tempu volání a čekání to nespraví. Obojí končí stejně: ven s hláškou,
 že token nefunguje.
 
-**Komisní prodej Purekickz.** Spustili vlastní API a majitel ho chce
-zapojit hned, jak se Pikastore ustálí. **Pravidla chování skladu jsou
-stejná** — co se vystaví, co se stáhne, cílovka je payout, cena končí
-na 90, prodej se přesune do Čeká. Liší se jen jejich API.
+**Komisní prodej Purekickz** (`PUREKICKZ` v konektoru). Čtecí půlka
+hotová — `/<MCP_TOKEN>/pk` a nástroj `pk_nahled` ukážou rozdíl mezi
+skladem a tím, co u nich visí. **Nic nezapisuje**; zápisy se dopíšou,
+až bude z ostrých dat jisté, jaké stavy a pole jejich odpověď nese.
 
-Aplikace se kvůli tomu měnit nemusí: `/<APP_TOKEN>/prodeje` vrací
+**Pravidla chování skladu jsou stejná jako u Pikastore a schválně se
+sdílejí** — `pikaSkupiny`, `pikaVelikost`, `pikaNazevKlic`,
+`pikaDuvodStranou`, `pikaCenaKc`. Druhá kopie by se s tou první
+rozešla; `test-purekickz.js` proto prohání stejné případy (poškozený
+kus, kus na cestě, chystané vrácení, zapomenutá cílovka) a hlídá, že
+dopadnou stejně.
+
+Vlastní je jen jejich API:
+- **Klíč v hlavičce `X-API-Key`** (tajemství `PUREKICKZ_TOKEN`), ne
+  bearer token. Do adresy nepatří — skončil by v logu proxy.
+- **Cena je rovnou payout v korunách.** Poplatek i cenu na pultě si
+  dopočítají sami, takže tu odpadá provize, přepočet i koncovka 90 —
+  na cenu na pultě konektor nevidí a nemá ji co počítat.
+- **Zakládá se přímo přes SKU** z jejich e-shopu, žádný katalog. Kus
+  bez SKU tudy vystavit nejde a hádat model podle názvu by znamenalo
+  pověsit ho na cizí zboží.
+- **Jeden inzerát na model a velikost**, stejně jako u Pikastore.
+  Na počtu kusů v jejich inzerátu (`quantity`) proto nezáleží;
+  zakládá se s jedním.
+- **Stavy jejich dokumentace nevyjmenovává** (uvádí jen `listed`).
+  Náhled proto vypisuje `stavy_mimo_ocekavani` a `pole_v_odpovedi` —
+  ať se pravidla píšou z faktů, ne z dohadů.
+- Limit je **60 požadavků za minutu**; `429` se nesmí zaměnit za
+  neplatný klíč.
+
+Aplikace se kvůli nim měnit nemusí: `/<APP_TOKEN>/prodeje` vrací
 `soldWhere` z odpovědi a `KOMISE_POLE` bere libovolné místo prodeje,
-takže stačí, aby konektor do `k_preneseni` přidal i jejich prodeje.
-Co se rozdělit musí, je to, co je dnes v `pikaVolej`, `pikaVypis`
-a `pikaProved` — společná pravidla (`pikaPlan`, `pikaVelikost`,
-`pikaNazevKlic`, `pikaCenaNaPulte`) mají zůstat jedny. Druhá kopie
-pravidel by se s tou první rozešla.
+takže až se dopíšou zápisy, stačí přidat jejich prodeje do
+`k_preneseni`.
 
 **Doklady za měsíc v jednom souboru.** Typ dokladu u místa prodeje už
 existuje (`TYP DOKLADU U MÍSTA PRODEJE`), takže to, co tohle blokovalo, je
@@ -670,7 +692,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 55 souborů
+node test/run.js              # kontrola syntaxe + všech 56 souborů
 node test/run.js archive      # jen vybrané
 ```
 
