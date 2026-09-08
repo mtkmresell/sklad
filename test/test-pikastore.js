@@ -225,8 +225,15 @@ const ME = {
     JSON.stringify(v.telo.ve_skladu));
   shoda('bez cílové ceny se nevystaví, ale je vidět',
     (r.bez_cilove_ceny || []).map(x => x.nazev), ['Tričko bez cílovky']);
-  ok('co není na skladě, se neřeší',
-    !JSON.stringify(r).includes('Už se prodalo') && !JSON.stringify(r).includes('Ještě nedorazilo'));
+  ok('co není na skladě, se neřeší', !JSON.stringify(r).includes('Už se prodalo'));
+  /* Kus na cestě se nevystavuje, ale je vidět — a hlavně se kvůli němu
+     nic nestahuje. Majitel si takové kusy listuje sám a schválně: balík
+     čeká na poště, a když se kus prodá, vyzvedne ho a rovnou odešle. */
+  shoda('kus na cestě se nevystaví, jen se řekne proč',
+    (r.nevystavuje_se || []).filter(x => x.nazev === 'Ještě nedorazilo').map(x => x.duvod),
+    ['zatím není doma']);
+  ok('a nevystavuje se', !(r.vystavit || []).some(x => x.nazev === 'Ještě nedorazilo'),
+    JSON.stringify((r.vystavit || []).map(x => x.nazev)));
   ok('jiné kategorie se neřeší', !JSON.stringify(r).includes('Pokémon box'));
   ok('co u nich visí navíc, se hlásí', (r.visi_navic_nezname || []).length === 1
     && r.visi_navic_nezname[0].id === 'L-3', JSON.stringify(r.visi_navic_nezname));
@@ -800,7 +807,7 @@ const ME = {
      jsou new, všechno ostatní used — lepší stav, než o jakém víme, se
      tvrdit nebude. */
   for (const [nas, jejich] of [['DS', 'new'], ['nove-stitky', 'new'],
-    ['pouzite-dobre', 'used'], ['poskozene', 'used']]) {
+    ['pouzite-dobre', 'used'], ['pouzite', 'used']]) {
     scenarSeSkladem([{ id: 'c1', name: 'Kus', sku: 'C-1', size: '42', category: 'sneakers',
       saleState: 'stock', location: 'Doma', targetPrice: 1000, condition: nas }],
       [radekTricko('J-1', 'listed', 100000)], zapisovyScenar);
@@ -907,6 +914,42 @@ const ME = {
   shoda('a opravdu se nic nezaloží',
     odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url)).map(x => x.url), []);
   katalogNajde = true;
+
+  /* Poškozený kus na komisi nepatří — je to vada, se kterou by neprošel
+     ověřením nebo by ho zákazník vrátil. A co za něj u nich náhodou
+     visí, se kvůli tomu **nestahuje**: majitel ví, proč tam co má. */
+  const kusPoskozeny = [{ id: 'pk', name: 'Vadné boty', sku: 'PK-1', size: '42',
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 1000,
+    condition: 'poskozene' }];
+  scenarSeSkladem(kusPoskozeny, [cizi], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('poškozený kus se nevystaví, jen se řekne proč',
+    [(p.vystavit || []).length, (p.nevystavuje_se || []).map(x => x.duvod)],
+    [0, ['poškozený kus — na komisi nepatří']]);
+  const jejichVadny = Object.assign({}, radekTricko('L-PK', 'listed', 100000),
+    { sku: 'PK-1', size: '42' });
+  scenarSeSkladem(kusPoskozeny, [jejichVadny], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('a co za něj u nich visí, se nestahuje', (p.stahnout || []).map(x => x.popis), []);
+
+  /* Totéž u kusu na cestě. Našlo se to na skutečných datech: majitelovy
+     Awake NY Jordan 6 čekaly na poště, on je schválně nalistoval dopředu
+     a plán je chtěl stáhnout. */
+  const kusNaCeste = [{ id: 'nc', name: 'Ještě na cestě', sku: 'NC-1', size: '44',
+    category: 'sneakers', saleState: 'stock', location: 'Na cestě', targetPrice: 5000 }];
+  const jejichNaCeste = Object.assign({}, radekTricko('L-NC', 'listed', 700000),
+    { sku: 'NC-1', size: '44' });
+  scenarSeSkladem(kusNaCeste, [jejichNaCeste], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('kus na cestě nestahuje, co si majitel nalistoval dopředu',
+    [(p.stahnout || []).length, (p.vystavit || []).length], [0, 0]);
+
+  /* Ale kus, který už majitelův není, se stáhnout musí — prodat něco,
+     co nemá, je podle jejich podmínek pokuta od 200 Kč. */
+  scenarSeSkladem([Object.assign({}, kusNaCeste[0], { location: 'Vráceno' })],
+    [jejichNaCeste], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('vrácený kus se z prodeje stáhne', (p.stahnout || []).map(x => x.popis), ['L-NC']);
 
   sekce('14) Opatrný rozjezd');
   /* „Vystav zatím jeden kus a ukaž mi ho." Bez tohohle by první ostrý

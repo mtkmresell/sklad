@@ -370,6 +370,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | název souboru s nákupním dokladem | `NÁZEV SOUBORU S NÁKUPNÍM DOKLADEM` |
 | kurzy měn (nástroj v nastavení) | `KURZY MĚN` |
 | přenos prodejů z komise | `KOMISNÍ PRODEJ` |
+| poškozený kus a platformy | `POŠKOZENÝ KUS A PLATFORMY` |
 | údaje u způsobu vyplacení | `ÚDAJE U ZPŮSOBU VYPLACENÍ` |
 | typ dokladu u místa prodeje | `TYP DOKLADU U MÍSTA PRODEJE` |
 | analytika zákazníků a partnerů | `ANALYTIKA ZÁKAZNÍKŮ` |
@@ -518,8 +519,17 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
 - Vystaví se položka **na skladě** v kategorii **sneakers nebo oblečení**.
   Na profilu nezáleží (podnikatelský kus dostane fakturu, osobní kupní
   smlouvu) a na místě uskladnění taky ne — i kus ležící u jiného
-  komisáře se dá prodat, majitel pošle štítek. Mimo jsou jen místa, kde
-  kus fyzicky není nebo není jeho: `PIKA_MISTA_MIMO`.
+  komisáře se dá prodat, majitel pošle štítek.
+- **Rozdíl mezi „kus tu není" a „kus ještě není doma" je zásadní.**
+  Z `PIKA_MISTA_PRYC` (vráceno, zrušeno) se stahuje — prodat něco, co
+  nemá, je pokuta od 200 Kč. Kus na cestě (`PIKA_MISTA_NEDOMA`) se
+  **nevystavuje, ale ani nestahuje**: majitel takové kusy listuje sám
+  a schválně, protože balík čeká na poště a po prodeji ho vyzvedne
+  a rovnou odešle. Ruční inzeráty se neopravují.
+- **Poškozený kus se nevystavuje** — je to vada, se kterou by neprošel
+  ověřením nebo by ho zákazník vrátil. A co za něj u nich náhodou visí,
+  se kvůli tomu nestahuje. Totéž pravidlo je v aplikaci
+  (`POŠKOZENÝ KUS A PLATFORMY`).
 - **Vystavuje se přes jejich katalog** (`master_product_id`). Ověřeno
   ostrým pokusem: kus založený přes `custom_brand`/`custom_model` nemá
   u nich **ani fotku, ani SKU** — a fotka prodává; majitel je ručně
@@ -654,7 +664,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 54 souborů
+node test/run.js              # kontrola syntaxe + všech 55 souborů
 node test/run.js archive      # jen vybrané
 ```
 

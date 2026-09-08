@@ -583,10 +583,15 @@ async function zpracujZpravu(zprava, env) {
 const PIKA_BASE = 'https://consignthem.com/api/v1';
 const PIKA_OPENAPI = PIKA_BASE + '/openapi.json';
 const PIKA_KATEGORIE = ['sneakers', 'obleceni'];
-/* Místa, ze kterých se prodávat nedá — kus tam buď fyzicky není,
-   nebo už není majitelův. Všechna ostatní (Doma i cizí sklad) se
-   vystavují. */
-const PIKA_MISTA_MIMO = ['Na cestě', 'Bude vráceno', 'Vráceno', 'Zrušeno'];
+/* Místa, ze kterých se prodávat nedá — kus už není majitelův. Co u nich
+   za takový kus visí, se stahuje: prodat něco, co nemá, znamená podle
+   jejich podmínek pokutu od 200 Kč. */
+const PIKA_MISTA_PRYC = ['Bude vráceno', 'Vráceno', 'Zrušeno'];
+/* Kus je majitelův, jen ještě není doma. **Nevystavuje se, ale ani se
+   nestahuje**: majitel takové kusy listuje sám a schválně — balík čeká
+   na poště, a když se kus prodá, vyzvedne ho a rovnou odešle. Jeho
+   ruční inzeráty se neopravují. */
+const PIKA_MISTA_NEDOMA = ['Na cestě'];
 const PIKA_STRANKA = 50;
 const PIKA_POKUSU = 3;          // kolikrát zkusit po chybě serveru
 const PIKA_NEJDELSI_CEKANI = 70; // vteřin celkem; Worker nemá běžet věčně
@@ -791,11 +796,25 @@ function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
   return ven;
 }
 
-/* Má tenhle kus u nich viset? Viz hlavička sekce. */
-function pikaMaViset(it) {
+/* Přichází tenhle kus vůbec v úvahu? Viz hlavička sekce. */
+function pikaVUvahu(it) {
   if (stavPolozky(it) !== 'stock') return false;
   if (PIKA_KATEGORIE.indexOf(it.category) === -1) return false;
-  return PIKA_MISTA_MIMO.indexOf(it.location || 'Doma') === -1;
+  return PIKA_MISTA_PRYC.indexOf(it.location || 'Doma') === -1;
+}
+
+/* Kus, který je majitelův a doma by se prodávat mohl, ale automatika ho
+   nechá být. **Není to důvod ke stažení** toho, co u nich za něj visí —
+   ať už si to majitel vystavil sám, nebo to viselo dřív.
+
+   „Poškozené" neznamená obnošené: je to vada, se kterou by kus neprošel
+   jejich ověřením nebo by ho zákazník vrátil. Prodat se dá napřímo,
+   ne na komisi. Stejné pravidlo je v aplikaci (POŠKOZENÝ KUS
+   A PLATFORMY). */
+function pikaDuvodStranou(it) {
+  if (String(it.condition || '') === 'poskozene') return 'poškozený kus — na komisi nepatří';
+  if (PIKA_MISTA_NEDOMA.indexOf(it.location || 'Doma') !== -1) return 'zatím není doma';
+  return null;
 }
 
 /* Za kolik. Cílová cena je v `targetPrice` uložená vždycky v korunách;
@@ -1094,10 +1113,10 @@ async function pikaDoplnKatalog(env, plan) {
 function pikaSkupiny(polozky, radky, kurz) {
   const index = new Map();
   const skupiny = [];
-  const bezCeny = [];
+  const bezCeny = [], stranou = [];
   function skupinaProKlice(klice) {
     for (const k of klice) if (index.has(k)) return index.get(k);
-    const s = { klice: [], chtene: [], jejich: [], znameKusu: 0, kusuBezCeny: 0 };
+    const s = { klice: [], chtene: [], jejich: [], znameKusu: 0, kusuStranou: 0 };
     skupiny.push(s);
     return s;
   }
@@ -1109,12 +1128,18 @@ function pikaSkupiny(polozky, radky, kurz) {
     /* Počítá se každý kus, i prodaný a čekající — tím se pozná, že
        tenhle model vůbec známe. Co neznáme, toho se nedotýkáme. */
     s.znameKusu++;
-    if (!pikaMaViset(it)) continue;
+    if (!pikaVUvahu(it)) continue;
+    const duvod = pikaDuvodStranou(it);
+    if (duvod) {
+      stranou.push(Object.assign(pikaPopisKusu(it), { duvod }));
+      s.kusuStranou++;
+      continue;
+    }
     const cena = pikaCenaKc(it, kurz);
     /* Kus doma bez cílové ceny se nedá vystavit — ale rozhodně to
        neznamená, že se má stáhnout to, co u nich za něj visí.
        Zapomenutá cílovka není důvod k odstranění inzerátu. */
-    if (cena === null) { bezCeny.push(pikaPopisKusu(it)); s.kusuBezCeny++; continue; }
+    if (cena === null) { bezCeny.push(pikaPopisKusu(it)); s.kusuStranou++; continue; }
     s.chtene.push({ it, cena });
   }
   const cizi = [];
@@ -1123,14 +1148,14 @@ function pikaSkupiny(polozky, radky, kurz) {
     for (const k of pikaKliceRadku(r)) if (index.has(k)) { s = index.get(k); break; }
     if (s) s.jejich.push(r); else cizi.push(r);
   }
-  return { skupiny, cizi, bezCeny };
+  return { skupiny, cizi, bezCeny, stranou };
 }
 
 /* Z rozdílu udělá seznam úkonů. Nic neodesílá. */
 function pikaPlan(polozky, radky, kurz, kdo, volby) {
   volby = volby || {};
   const razitkoSkladu = volby.razitkoSkladu || null;
-  const { skupiny, cizi, bezCeny } = pikaSkupiny(polozky, radky, kurz);
+  const { skupiny, cizi, bezCeny, stranou } = pikaSkupiny(polozky, radky, kurz);
   const provize = pikaProvizeBp(radky);
   const vystavit = [], aktivovat = [], stahnout = [], sedi = [], bezProvize = [];
   const neniVKatalogu = [], cekaNaSklad = [];
@@ -1166,8 +1191,9 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
         duvod: 'u nich se to prodalo, sklad to ještě neví — počkám, až kus přesuneš' });
       continue;
     }
-    if (!s.chtene.length && s.kusuBezCeny) {
-      /* Doma něco je, jen bez ceny. Nevystavuje se ani nestahuje. */
+    if (!s.chtene.length && s.kusuStranou) {
+      /* Doma něco je, jen se to nevystavuje — chybí cena, kus je
+         poškozený nebo ještě není doma. Nevystavuje se ani nestahuje. */
       continue;
     }
     if (!s.chtene.length) {
@@ -1222,7 +1248,7 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
     .map(r => ({ id: r.short_id || r.id, velikost: r.size || null, nazev: r.name || null,
       za_kc: pikaKc(pikaZaklad(r)), kdy: r.updated_at || null }));
 
-  return { vystavit, aktivovat, stahnout, sedi, bezCeny, bezProvize, provize, neniVKatalogu,
+  return { vystavit, aktivovat, stahnout, sedi, bezCeny, stranou, bezProvize, provize, neniVKatalogu,
     cekaNaSklad, visi_navic_nezname: naviCizi, prodano };
 }
 
@@ -1563,6 +1589,7 @@ async function pikaNahled(env, volby) {
       vratit_do_prodeje: plan.aktivovat.map(x => x.popis),
       stahnout: plan.stahnout,
       bez_cilove_ceny: plan.bezCeny,
+      nevystavuje_se: plan.stranou,
       bez_zname_provize: plan.bezProvize,
       neni_v_katalogu: plan.neniVKatalogu,
       ceka_na_sklad: plan.cekaNaSklad,

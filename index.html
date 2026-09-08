@@ -4744,6 +4744,12 @@ function togglePlatItem(id, platform) {
   const isBazos = BAZOS_PLATS.includes(platform);
 
   if (i === -1) {
+    /* Poškozený kus se na komisi ani na ověřovanou platformu nedostane —
+       viz POŠKOZENÝ KUS A PLATFORMY. Odškrtnout jde dál. */
+    if (jePoskozene(items[idx]) && !platformaProPoskozene(platform)) {
+      showToast('Poškozený kus se na ' + platform + ' nabízet nedá — jen přímý prodej.', 'err');
+      return false;
+    }
     // Zaškrtáváme — zkontroluj limit pro Bazoš
     if (isBazos) {
       const currentCount = bazosActiveCount(platform);
@@ -4774,6 +4780,8 @@ function togglePlatItem(id, platform) {
     var sibPlats = sib.platforms || [];
     var sibIdx2 = sibPlats.indexOf(platform);
     if (i === -1) {
+      // Ve skupině může být poškozený kus, i když ten zaškrtnutý není
+      if (jePoskozene(sib) && !platformaProPoskozene(platform)) return;
       if (sibIdx2 === -1) sibPlats.push(platform);
       // Datum musí jít se skupinou. Bez toho by se sourozenec počítal do
       // limitu padesáti, ale nikdy by nevypršel.
@@ -5011,12 +5019,14 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
                 const on=(it.platforms||[]).includes(p);
                 const isBazosP = BAZOS_PLATS.includes(p);
                 const bazosFullP = isBazosP && !on && bazosActiveCount(p) >= BAZOS_LIMIT;
+                // Poškozený kus jen napřímo — viz POŠKOZENÝ KUS A PLATFORMY
+                const vadaP = !on && jePoskozene(it) && !platformaProPoskozene(p);
                 const style = on
                   ? 'background:#c8ff0020;color:#8ab200;border-color:#c8ff0035;cursor:pointer;'
-                  : bazosFullP
+                  : (bazosFullP || vadaP)
                     ? 'background:var(--surface3);color:transparent;border-color:var(--border);opacity:0.35;cursor:not-allowed;'
                     : 'background:var(--surface3);color:transparent;border-color:var(--border);cursor:pointer;';
-                return `<span data-action="toggleplat" data-id="${it.id}" data-plat="${p}" data-tip="${bazosFullP?p+' — plný (50/50)':p}" style="display:inline-block;width:18px;height:18px;border-radius:3px;border:1px solid;line-height:18px;font-size:9px;text-align:center;flex-shrink:0;${style}">
+                return `<span data-action="toggleplat" data-id="${it.id}" data-plat="${p}" data-tip="${bazosFullP?p+' — plný (50/50)':vadaP?p+' — poškozený kus, jen přímý prodej':p}" style="display:inline-block;width:18px;height:18px;border-radius:3px;border:1px solid;line-height:18px;font-size:9px;text-align:center;flex-shrink:0;${style}">
                   ${on?'✓':''}
                 </span>`;
               }).join('')}
@@ -5367,6 +5377,36 @@ function _sellLocationNeedsBuyer(val){
   if(known.indexOf(val) !== -1) return false;
   return true; // neznámá/vlastní hodnota = lokální prodej s přímým kontaktem
 }
+/* ══════════════════════════════════════════════════════════════════════
+   POŠKOZENÝ KUS A PLATFORMY
+
+   „Poškozené" neznamená obnošené — znamená vadu, se kterou by kus
+   neprošel ověřením, nebo by ho zákazník vrátil. Na komisi ani na
+   platformě, která zboží ověřuje, ho proto nabízet nejde: nabídka by
+   skončila vrácením a u komise ještě pokutou za nedodání.
+
+   Zbývá prodej napřímo (Vinted, Facebook, Bazoše, Instagram) a tři
+   místa, kde se poškozené zboží prodávat smí — `POSKOZENE_POVOLENO`.
+
+   Blokuje se jen **zaškrtnutí**. Odškrtnout jde vždycky: když už kus
+   někde visí, je ta fajfka pravda a majitel potřebuje inzerát nejdřív
+   stáhnout a teprve pak ji zrušit. Hlídá to `test-poskozene.js`. */
+var POSKOZENE_POVOLENO = ['Klekt', 'Alias', 'Cardmarket'];
+
+function jePoskozene(it) { return !!it && it.condition === 'poskozene'; }
+
+// Smí poškozený kus na tuhle platformu?
+function platformaProPoskozene(plat) {
+  var n = String(plat || '').trim();
+  if (!n) return false;
+  for (var i = 0; i < POSKOZENE_POVOLENO.length; i++) {
+    if (POSKOZENE_POVOLENO[i].toLowerCase() === n.toLowerCase()) return true;
+  }
+  var g = getPlatGroups();
+  // Neznámá/vlastní hodnota je prodej napřímo — stejně jako u _sellLocationNeedsBuyer
+  return (g.platforms || []).concat(g.eshopy || []).indexOf(n) === -1;
+}
+
 // Zobrazí/skryje řádek "Typ kupujícího" (a navazující "Zákazník") dle pole "Kde prodáno" — nemaže žádná data
 function updateBuyerTypeVisibility(prefix){
   prefix = prefix || 's';
