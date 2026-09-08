@@ -288,6 +288,70 @@ const radek = (o) => Object.assign({
     JSON.stringify(v.telo.plan.stahnout));
 
   /* ══════════════════════════════════════════════════════════════════ */
+  sekce('8b) Kus, který u nich možná visí pod jiným názvem');
+  /* Všechny čtyři dvojice jsou ze skutečných dat. Jejich ručně založené
+     inzeráty nemají SKU, takže se párují jedině podle názvu — a ten se
+     liší o jediné slovo. Bez téhle pojistky by se čtyři z jedenadvaceti
+     kusů založily podruhé vedle inzerátu, který už u nich visel. */
+  const dvojice = [
+    ['Jordan 5 Retro A Ma Maniére Dusk', "A Ma Maniére x Air Jordan 5 Retro 'Dusk'", '42'],
+    ['Air Jordan 3 Retro Craft Ivory', "Air Jordan 3 Retro SE Craft 'Ivory'", '43'],
+    ['adidas Samba OG JJJJound Tobacco', "JJJJound x adidas Samba OG 'Tobacco'", '38 2/3'],
+    ['Nike Air Force 1 Low \'07 LV8 40th Anniversary Sail Malachite',
+      "Nike Air Force 1 '07 LV8 '40th Anniversary - Sail Malachite'", '38.5'],
+  ];
+  for (const [nas, jejich, vel] of dvojice) {
+    polozkySkladu = [{ id: 'x1', name: nas, sku: 'S-1', size: vel, category: 'sneakers',
+      saleState: 'stock', location: 'Doma', targetPrice: 5000 }];
+    scenar([radek({ id: 'jejich-1', sku: null, name: jejich, size: vel })]);
+    v = await nahled();
+    p = v.telo.plan;
+    ok('nezaloží se podruhé: ' + nas.slice(0, 28) + '…',
+      (p.vystavit || []).length === 0 && (p.mozna_uz_visi || []).length === 1,
+      'vystavit=' + (p.vystavit || []).length + ' mozna=' + ((p.mozna_uz_visi || []).length));
+  }
+  ok('a je vidět, o který jejich inzerát jde',
+    (v.telo.plan.mozna_uz_visi[0] || {}).jejich_id === 'jejich-1',
+    JSON.stringify(v.telo.plan.mozna_uz_visi));
+
+  /* Jiná velikost je jiný kus — ta se vystavit má, i když se název
+     podobá. Bez tohohle by pojistka spolkla celou řadu velikostí. */
+  polozkySkladu = [{ id: 'x1', name: 'Air Jordan 3 Retro Craft Ivory', sku: 'S-1', size: '44',
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 5000 }];
+  scenar([radek({ id: 'jejich-1', sku: null, name: "Air Jordan 3 Retro SE Craft 'Ivory'", size: '43' })]);
+  v = await nahled();
+  shoda('jiná velikost se vystaví normálně',
+    [(v.telo.plan.vystavit || []).length, (v.telo.plan.mozna_uz_visi || []).length], [1, 0]);
+
+  /* Krátký název sedí na půlku skladu — od tří slov výš, jinak by
+     „Nike Dunk" zablokoval všechno. */
+  polozkySkladu = [{ id: 'x1', name: 'Nike Dunk', sku: 'S-1', size: '42', category: 'sneakers',
+    saleState: 'stock', location: 'Doma', targetPrice: 5000 }];
+  scenar([radek({ id: 'jejich-1', sku: null, name: 'Nike Dunk Low Panda', size: '42' })]);
+  v = await nahled();
+  shoda('krátký název pojistku nespustí',
+    [(v.telo.plan.vystavit || []).length, (v.telo.plan.mozna_uz_visi || []).length], [1, 0]);
+
+  /* ══════════════════════════════════════════════════════════════════ */
+  sekce('8c) Stav approved');
+  /* Ostrá data: sedmnáct inzerátů ve stavu `approved`, který jejich
+     dokumentace vůbec neuvádí. Kus, který u nich čeká na vystavení,
+     se nesmí založit podruhé — a když se prodá jinde, musí jít pryč
+     stejně jako vystavený. */
+  polozkySkladu = [{ id: 'ap', name: 'Kus', sku: 'AP-1', size: '42', category: 'sneakers',
+    saleState: 'stock', location: 'Doma', targetPrice: 1000 }];
+  scenar([radek({ sku: 'AP-1', size: '42', status: 'approved' })]);
+  v = await nahled();
+  shoda('approved se nezakládá podruhé',
+    [(v.telo.plan.vystavit || []).length, (v.telo.plan.stahnout || []).length], [0, 0]);
+  polozkySkladu = [{ id: 'ap', name: 'Kus', sku: 'AP-1', size: '42', category: 'sneakers',
+    saleState: 'waiting', location: 'Doma', targetPrice: 1000 }];
+  scenar([radek({ sku: 'AP-1', size: '42', status: 'approved' })]);
+  v = await nahled();
+  shoda('a když se kus prodá jinde, jde pryč taky',
+    (v.telo.plan.stahnout || []).map(x => x.stav), ['approved']);
+
+  /* ══════════════════════════════════════════════════════════════════ */
   sekce('9) Odpověď se čte opatrně');
   /* Jejich dokumentace stavy nevyjmenovává. Neznámý stav nesmí nic
      shodit ani nic strhnout — jen se ohlásí, ať se pravidla dopíšou

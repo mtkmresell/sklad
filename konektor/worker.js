@@ -1743,7 +1743,14 @@ async function pikaNahled(env, volby) {
 const PK_BASE = 'https://xbplnrpvyhxkryjncyau.supabase.co/functions/v1/consignor-api';
 const PK_JMENO = 'Purekickz';
 const PK_STRANKA = 100;        // jejich strop je 500, tohle je s rezervou
-const PK_STAVY_CINNE = ['listed'];
+/* Stavy z ostrých dat: `listed`, `sold` a **`approved`** — ten jejich
+   dokumentace neuvádí vůbec, přitom jich tam bylo sedmnáct. Bere se
+   jako činný: kus, který u nich čeká na vystavení, se nesmí založit
+   podruhé, a když ho majitel prodá jinde, musí jít pryč stejně jako
+   vystavený. */
+const PK_STAVY_CINNE = ['listed', 'approved'];
+// Kratší název než tolik slov se nepáruje — „Nike Dunk" sedí na půlku skladu
+const PK_MIN_SLOV = 3;
 const PK_STAV_PRODANO = 'sold';
 /* Jejich limit je 60 požadavků za minutu. Srovnání jich udělá pár, ale
    stránkování u velkého skladu se k tomu může přiblížit. */
@@ -1827,6 +1834,36 @@ function pkPocet(r) {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : 1;
 }
 
+/* Visí tenhle kus u nich pod jiným názvem?
+
+   Jejich ručně založené inzeráty nemají SKU — v ostrých datech šest ze
+   šesti — takže se párují jedině podle názvu. A ten se liší o jediné
+   slovo: „x" u spolupráce, „SE" u edice, „Low" u střihu. Ověřeno na
+   skutečných datech: **čtyři z jedenadvaceti kusů k vystavení u nich
+   už visely** a bez tohohle by se založily podruhé.
+
+   Rozhoduje množina slov jedné strany **obsažená** v té druhé při
+   shodné velikosti — stejné pravidlo jako u Instagramu. Přesnější to
+   být nemusí, protože se tím nic nepáruje, jen se odmítá zakládat:
+   falešná shoda znamená kus navíc v hlášení, chybějící shoda druhý
+   inzerát na tentýž pár. Dva inzeráty na jeden kus jsou horší — prodat
+   se můžou oba a dodat se dá jen jeden. */
+function pkMoznaUzVisi(it, cizi) {
+  const nase = pikaNazevKlic(it.name).split(' ').filter(Boolean);
+  if (nase.length < PK_MIN_SLOV) return null;
+  const vel = pikaVelikost(it.size);
+  for (const r of cizi) {
+    if (!pkCinny(r)) continue;
+    if (pikaVelikost(r.size) !== vel) continue;
+    const jejich = pikaNazevKlic(r.name).split(' ').filter(Boolean);
+    if (jejich.length < PK_MIN_SLOV) continue;
+    const mensi = nase.length <= jejich.length ? nase : jejich;
+    const vetsi = new Set(nase.length <= jejich.length ? jejich : nase);
+    if (mensi.every(x => vetsi.has(x))) return r;
+  }
+  return null;
+}
+
 /* Plán pro Purekickz. Pravidla jsou stejná jako u Pikastore, jen tělo
    zápisu je jejich: založit jde přímo přes SKU a cena je payout.
 
@@ -1838,7 +1875,7 @@ function pkPlan(polozky, radky, kurz, volby) {
   volby = volby || {};
   const razitkoSkladu = volby.razitkoSkladu || null;
   const { skupiny, cizi, bezCeny, stranou } = pikaSkupiny(polozky, radky, kurz);
-  const vystavit = [], stahnout = [], bezSku = [], cekaNaSklad = [];
+  const vystavit = [], stahnout = [], bezSku = [], cekaNaSklad = [], moznaVisi = [];
 
   for (const s of skupiny) {
     const cinne = s.jejich.filter(pkCinny);
@@ -1875,13 +1912,21 @@ function pkPlan(polozky, radky, kurz, volby) {
        založit nejde a hádat ho podle názvu by znamenalo pověsit ho na
        cizí model — to je horší než ho nevystavit. */
     if (!it.sku) { bezSku.push(pikaPopisKusu(it, cena)); continue; }
+    // Radši nevystavit než vystavit podruhé — viz pkMoznaUzVisi
+    const podobny = pkMoznaUzVisi(it, cizi);
+    if (podobny) {
+      moznaVisi.push(Object.assign(pikaPopisKusu(it, cena), {
+        jejich_id: podobny.id, jejich_nazev: podobny.name || null,
+        jejich_stav: podobny.status || null }));
+      continue;
+    }
     vystavit.push({
       popis: Object.assign(pikaPopisKusu(it, cena), { dostanes_kc: cena }),
       telo: { sku: String(it.sku).trim(), size: String(it.size || '').trim(),
         payout: cena, quantity: 1 },
     });
   }
-  return { vystavit, stahnout, bezCeny, stranou, bezSku, cekaNaSklad,
+  return { vystavit, stahnout, bezCeny, stranou, bezSku, cekaNaSklad, moznaVisi,
     visi_navic_nezname: cizi.filter(pkCinny).map(r => ({ id: r.id, stav: r.status,
       velikost: r.size || null, nazev: r.name || null, sku: r.sku || null,
       payout_kc: r.payout != null ? r.payout : null, kusu: pkPocet(r) })),
@@ -1929,6 +1974,7 @@ async function pkNahled(env) {
       stahnout: plan.stahnout,
       bez_cilove_ceny: plan.bezCeny,
       bez_sku: plan.bezSku,
+      mozna_uz_visi: plan.moznaVisi,
       nevystavuje_se: plan.stranou,
       ceka_na_sklad: plan.cekaNaSklad,
       visi_navic_nezname: plan.visi_navic_nezname,

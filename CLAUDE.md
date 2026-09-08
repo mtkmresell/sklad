@@ -663,8 +663,19 @@ Vlastní je jen jejich API:
   Na počtu kusů v jejich inzerátu (`quantity`) proto nezáleží;
   zakládá se s jedním.
 - **Stavy jejich dokumentace nevyjmenovává** (uvádí jen `listed`).
-  Náhled proto vypisuje `stavy_mimo_ocekavani` a `pole_v_odpovedi` —
-  ať se pravidla píšou z faktů, ne z dohadů.
+  V ostrých datech byly tři: `listed`, `sold` a **`approved`** (17 kusů).
+  `approved` se bere jako **činný** — kus, který u nich čeká na
+  vystavení, se nesmí založit podruhé a při prodeji jinde musí jít pryč
+  stejně jako vystavený. Náhled proto vypisuje `stavy_mimo_ocekavani`
+  a `pole_v_odpovedi`, ať se pravidla píšou z faktů, ne z dohadů.
+- **Jejich ruční inzeráty nemají SKU** (v ostrých datech šest ze šesti),
+  takže se párují jedině podle názvu — a ten se liší o jediné slovo:
+  „x" u spolupráce, „SE" u edice, „Low" u střihu. Proto `pkMoznaUzVisi`:
+  když je množina slov jedné strany **obsažená** v té druhé při shodné
+  velikosti, kus se **nevystaví** a jen se ohlásí (`mozna_uz_visi`).
+  Nic se tím nepáruje, jen se odmítá zakládat — falešná shoda znamená
+  kus navíc v hlášení, chybějící shoda druhý inzerát na tentýž pár.
+  **Čtyři z jedenadvaceti** kusů k vystavení u nich takhle už visely.
 - Limit je **60 požadavků za minutu**; `429` se nesmí zaměnit za
   neplatný klíč.
 
