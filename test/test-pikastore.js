@@ -1223,6 +1223,125 @@ const ME = {
     mcpDal.status === 200 && !!(mcpTelo && mcpTelo.result && mcpTelo.result.tools),
     mcpDal.status + ' / ' + JSON.stringify(mcpTelo).slice(0, 120));
 
+  sekce('20) Automatický běh (cron)');
+  /* Srovnání má běžet samo. Nikdo se u toho nedívá, takže platí dvě věci:
+     nižší strop zápisů a mail pokaždé, když se něco změnilo nebo
+     nepovedlo. Běh, který spadne potichu, vypadá zvenku úplně stejně
+     jako běh, kdy nebylo co dělat. */
+  const CRON_ENV = Object.assign({}, ENV, { RESEND_API_KEY: 'k', MAIL_KOMU: 'ja@sklad.cz' });
+  const CRON_CAS = Date.parse('2026-09-08T13:00:00Z');   // v Praze 15:00, ne hodina ranního mailu
+  let cronPosta = [];
+  const fetchPredCronem = global.fetch;
+  global.fetch = async (vstup, init) => {
+    const url = String(vstup && vstup.url ? vstup.url : vstup);
+    if (url.includes('resend')) { cronPosta.push(JSON.parse(init.body)); return Response.json({ id: 'm1' }); }
+    return fetchPredCronem(vstup, init);
+  };
+  const puvodniNow = Date.now;
+  async function cron(env = CRON_ENV) {
+    odeslane = []; cronPosta = [];
+    Date.now = () => CRON_CAS;
+    try { await bezLogu(() => worker.scheduled({ cron: '0 */3 * * *' }, env, {})); }
+    finally { Date.now = puvodniNow; }
+    return { zapisy: odeslane.filter(x => x.method !== 'GET' && !x.url.includes('master-products')),
+      posta: cronPosta };
+  }
+
+  const kusKVystaveni = [{ id: 'ac', name: 'Kus pro cron', sku: 'AC-1', size: '42',
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 1000 }];
+  scenarSeSkladem(kusKVystaveni, [cizi], zapisovyScenar);
+  let c = await cron();
+  ok('cron vystaví, co má viset', c.zapisy.length === 1 && /\/listings$/.test(c.zapisy[0].url),
+    JSON.stringify(c.zapisy.map(x => x.method + ' ' + x.url)));
+  ok('a rovnou do prodeje, ne jako koncept',
+    !!c.zapisy[0] && c.zapisy[0].telo.publish === true,
+    JSON.stringify((c.zapisy[0] || {}).telo));
+  ok('o změně přijde mail', c.posta.length === 1, JSON.stringify(c.posta).slice(0, 150));
+  ok('a je v něm, co se stalo', /vystaveno: Kus pro cron/.test((c.posta[0] || {}).text || ''),
+    (c.posta[0] || {}).text);
+
+  // Když sklad a komise sedí, nemá se dít nic — ani mail
+  scenarSeSkladem(kusKVystaveni, [Object.assign({}, radekTricko('L-AC', 'listed', 133400),
+    { sku: 'AC-1', size: '42' })], zapisovyScenar);
+  c = await cron();
+  shoda('srovnaný sklad neudělá nic', [c.zapisy.length, c.posta.length], [0, 0]);
+
+  /* Ticho je správný stav jen tehdy, když se opravdu nic nestalo.
+     Potíž se musí ozvat. */
+  scenarSeSkladem(kusKVystaveni, [cizi], (url, init) => {
+    odeslane.push({ url, method: (init && init.method) || 'GET' });
+    return Response.json({ error: 'bad_request', detail: 'velikost nesedí' }, { status: 400 });
+  });
+  c = await cron();
+  ok('o potíži přijde mail', c.posta.length === 1
+    && /velikost nesedí/.test((c.posta[0] || {}).text || ''), JSON.stringify(c.posta).slice(0, 200));
+
+  /* Zaražený běh není chyba spojení — je to přesně ta situace, kvůli
+     které ta pojistka je, a majitel se o ní musí dozvědět. */
+  const mnohoKStazeni = [];
+  for (let i = 0; i < 12; i++) {
+    mnohoKStazeni.push({ id: 'C-' + i, short_id: 'C-' + i, sku: 'CT-' + i, size: 'S',
+      status: 'listed', price_cents: 100000, commission_rate_bp: 2500,
+      master_product_id: 'mp-c-' + i, created_at: '2026-08-01T00:00:00Z' });
+  }
+  scenarSeSkladem(mnohoKStazeni.map((m, i) => ({ id: 'w' + i, name: 'Kus ' + i, sku: 'CT-' + i,
+    size: 'S', category: 'obleceni', saleState: 'waiting', location: 'Doma', targetPrice: 750 })),
+    mnohoKStazeni, zapisovyScenar);
+  c = await cron();
+  shoda('zaražený běh nic nezapíše a ozve se', [c.zapisy.length, c.posta.length], [0, 1]);
+  ok('a je z mailu poznat proč', /stropem/.test((c.posta[0] || {}).text || ''),
+    (c.posta[0] || {}).text);
+
+  /* Automatický běh má nižší strop než ruční — rozjetá chyba v párování
+     se nesmí stihnout rozlít dřív, než přijde mail. */
+  const mnohoDoma = [];
+  for (let i = 0; i < 15; i++) {
+    mnohoDoma.push({ id: 'm' + i, name: 'Kus ' + i, sku: 'MD-' + i, size: '42',
+      category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 1000 });
+  }
+  scenarSeSkladem(mnohoDoma, [cizi], zapisovyScenar);
+  c = await cron();
+  ok('víc než strop se v jednom běhu nezapíše', c.zapisy.length === 10,
+    'strop je 10, zapsalo se ' + c.zapisy.length);
+
+  // Bez tokenu ke komisi se cron o Pikastore vůbec nepokouší
+  const bezPika = Object.assign({}, CRON_ENV);
+  delete bezPika.CONSIGNTHEM_TOKEN;
+  scenarSeSkladem(kusKVystaveni, [cizi], zapisovyScenar);
+  c = await cron(bezPika);
+  shoda('bez tokenu ke komisi cron mlčí', [c.zapisy.length, c.posta.length], [0, 0]);
+
+  /* Ranní obhlídka a srovnání komise jsou dvě nezávislé věci. Když
+     komise spadne, mail o vypršelém inzerátu musí přijít stejně —
+     jinak by jedna rozbitá integrace umlčela druhou. */
+  const RANO = Date.parse('2026-09-08T08:00:00Z');   // v Praze 10:00
+  const DEN = 86400000;
+  scenarSeSkladem([{ id: 'bz', name: 'Kus na Bazoši', sku: 'BZ-1', size: '42',
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 1000,
+    platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': RANO - 60 * DEN } }],
+    [cizi], zapisovyScenar);
+  const puvodniPikaOdpovedi = pikaOdpovedi;
+  pikaOdpovedi = (url, init) => {
+    const k = katalogOdpoved(url, init); if (k) return k;
+    return Response.json({ error: 'server_error' }, { status: 500 });
+  };
+  odeslane = []; cronPosta = [];
+  Date.now = () => RANO;
+  let vyletelo = null;
+  try { await bezLogu(() => worker.scheduled({ cron: '0 8 * * *' }, CRON_ENV, {})); }
+  catch (e) { vyletelo = String((e && e.message) || e); }
+  finally { Date.now = puvodniNow; }
+  pikaOdpovedi = puvodniPikaOdpovedi;
+  ok('pád komise nevyletí z cronu ven', vyletelo === null, vyletelo);
+  ok('když komise spadne, ranní mail přijde stejně',
+    cronPosta.some(x => /Bazoš/.test(x.text || '')),
+    JSON.stringify(cronPosta.map(x => x.subject)));
+  ok('a o pádu komise se taky ví',
+    cronPosta.some(x => /Pikastore/.test(x.subject || '')),
+    JSON.stringify(cronPosta.map(x => x.subject)));
+
+  global.fetch = fetchPredCronem;
+
   global.fetch = puvodniFetch;
   console.log('\n' + (selhalo ? selhalo + ' KONTROL SELHALO' : 'OK (' + proslo + ' kontrol)'));
   process.exit(selhalo ? 1 : 0);

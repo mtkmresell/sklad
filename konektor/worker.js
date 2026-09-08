@@ -1276,6 +1276,12 @@ function pikaPlan(polozky, radky, kurz, kdo, volby) {
    stažený sklad. */
 const PIKA_STROP_ZAPISU = 40;
 const PIKA_STROP_STAZENI = 10;
+/* Automatický běh má nižší strop než ruční. Když se něco rozbije
+   v párování, ruční běh to majitel uvidí v plánu a zarazí — automatický
+   nikdo nekontroluje. Deset zápisů za běh je při srovnaném skladu
+   několikanásobek toho, co kdy nastane, a při rozjeté chybě se rozdíl
+   nedožene dřív, než mu přijde mail. Zbytek počká na další běh. */
+const PIKA_STROP_CRON = 10;
 
 /* Klíč tvaru UUID odvozený z těla. Stejné tělo dá stejný klíč. */
 function pikaOtisk(text) {
@@ -1365,6 +1371,58 @@ async function pikaOhlasPotize(env, potize) {
   } catch (e) {
     return { odeslano: false, duvod: String((e && e.message) || e) };
   }
+}
+
+/* Co automatika u nich sama změnila. Chodí to mailem schválně: majitel
+   se jinak o změně svých inzerátů dozví leda tak, že si jí všimne
+   v jejich portálu. Když se nic nezměnilo, mail nechodí — ticho je
+   správný stav, stejně jako u ranních upozornění. */
+async function pikaOhlasHotovo(env, hotovo) {
+  const radky = []
+    .concat((hotovo.vystaveno || []).map(x => '· vystaveno: ' + x))
+    .concat((hotovo.aktivovano || []).map(x => '· vráceno do prodeje: ' + x))
+    .concat((hotovo.stazeno || []).map(x => '· staženo: ' + x));
+  if (!radky.length) return null;
+  const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
+  if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
+  try {
+    await posliMail(env, {
+      predmet: 'SKLAD × Pikastore: ' + radky.length
+        + (radky.length === 1 ? ' změna' : radky.length < 5 ? ' změny' : ' změn'),
+      text: 'Srovnání skladu s komisním prodejem tohle u nich udělalo samo:\n\n'
+        + radky.join('\n')
+        + '\n\nCeny se nikde neměnily — staré inzeráty se nepřeceňují.',
+    });
+    return { odeslano: true, komu: env.MAIL_KOMU };
+  } catch (e) {
+    return { odeslano: false, duvod: String((e && e.message) || e) };
+  }
+}
+
+/* Automatické srovnání. Pouští ho cron, takže se nikdo nedívá —
+   proto nižší strop zápisů a mail pokaždé, když se něco změnilo nebo
+   nepovedlo. Výjimka se nesmí propadnout do logu a zmizet: běh, který
+   spadne potichu, vypadá úplně stejně jako běh, kdy nebylo co dělat. */
+async function pikaCron(env) {
+  if (!env.CONSIGNTHEM_TOKEN) return { stav: 'nenastaveno' };
+  let v;
+  try {
+    v = await pikaNahled(env, { provest: true, publikovat: true, nejvyse: PIKA_STROP_CRON });
+  } catch (e) {
+    const duvod = String((e && e.message) || e);
+    console.error('Pikastore: srovnání spadlo — ' + duvod);
+    await pikaOhlasPotize(env, ['celé srovnání spadlo: ' + duvod]);
+    return { stav: 'chyba', chyba: duvod };
+  }
+  /* Zaražený běh (nepodepsané podmínky, moc kusů ke stažení) není chyba
+     spojení — je to přesně ta situace, kvůli které ta pojistka je, a
+     majitel se o ní musí dozvědět. */
+  if (v.stav === 'nezapisovalo se') {
+    await pikaOhlasPotize(env, ['nezapisovalo se — ' + (v.duvod || 'bez důvodu')]);
+    return v;
+  }
+  if (v.provedeno) await pikaOhlasHotovo(env, v.provedeno);
+  return v;
 }
 
 /* Dnešní kurz eura pro přepočet eurových cílovek. Když ČNB neodpoví,
@@ -2837,13 +2895,28 @@ export default {
     return Response.json(odpoved);
   },
 
-  /* Denní obhlídka skladu.
+  /* Dvě věci na hodinách: srovnání komisního prodeje a ranní obhlídka.
 
-     Cloudflare umí spouštět jen podle UTC, a Praha je proti němu v létě
-     o dvě hodiny a v zimě o jednu. Proto jsou nastavené dva časy (0 8 * * *
-     a 0 9 * * *) a tady se pustí jen ten, kterému zrovna vychází desátá
-     v Praze — přechod na letní čas se nemusí hlídat dvakrát do roka. */
+     **Srovnání běží při každém spuštění**, ať už ho vyvolal kterýkoli
+     cron. Je to nejjednodušší pravidlo, jaké tu jde mít — a je bezpečné,
+     protože srovnání nic nemění, když sklad a komise sedí; opakovaný běh
+     tedy neudělá nic. Jak často to poběží, se řídí jen tím, jaké cron
+     triggery jsou v Cloudflare nastavené.
+
+     **Ranní obhlídka si hodinu hlídá sama.** Cloudflare umí spouštět jen
+     podle UTC a Praha je proti němu v létě o dvě hodiny a v zimě o jednu.
+     Proto jsou nastavené dva časy (0 8 * * * a 0 9 * * *) a projde jen
+     ten, kterému zrovna vychází desátá v Praze — přechod na letní čas se
+     nemusí hlídat dvakrát do roka. */
   async scheduled(event, env, ctx) {
+    /* Komise napřed: mail pak vychází z čerstvě srovnaného stavu.
+       Když spadne, ranní obhlídka musí proběhnout stejně — jsou to dvě
+       nezávislé věci a jedna nesmí umlčet druhou. */
+    if (env.SKLAD_EMAIL && env.SKLAD_HESLO && env.SKLAD_UID) {
+      try { await pikaCron(env); }
+      catch (e) { console.error('Pikastore: ' + (e && e.stack || e)); }
+    }
+
     const hodina = prazskeCasti(Date.now()).hodina;
     if (hodina !== HODINA_ODESLANI) return;
 

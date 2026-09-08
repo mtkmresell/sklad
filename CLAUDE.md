@@ -442,9 +442,14 @@ API `consignthem.com/api/v1`). Čtecí půlka hotová — konektor umí `/me`
 i stránkovaný `/listings` a na `/<TOKEN>/pika` ukáže rozdíl mezi skladem
 a tím, co u nich visí. **Nic nezapisuje.**
 
-Vystavování, stahování, vracení do prodeje i přeceňování **je
-napsané** (`pika_srovnat`). Zbývá to poprvé pustit proti jejich
-skutečnému API a pak zapojit na cron.
+Vystavování, stahování i vracení do prodeje běží a je odzkoušené na
+ostrých datech. **Srovnání se pouští při každém spuštění cronu** —
+jak často, se řídí jen tím, jaké cron triggery jsou v Cloudflare.
+Automatický běh má **nižší strop zápisů** (`PIKA_STROP_CRON`) než
+ruční: u ručního si plán přečteš a zarazíš ho, u automatického se
+nedívá nikdo. Co se změnilo nebo nepovedlo, **přijde mailem**; když
+sklad a komise sedí, neudělá běh nic a neozve se — ticho je správný
+stav. Pád komise neumlčí ranní obhlídku, jsou to dvě nezávislé věci.
 
 **Pracuje se s počty ve skupině, ne s identitou kusu.** Majitel má dvě
 stejná trička ve velikosti S a jejich odpověď nenese nic, čím by se

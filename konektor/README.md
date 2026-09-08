@@ -175,6 +175,34 @@ Zapojení:
    synchronizované nastavení čte i účetní. Na druhém zařízení ho vlož
    znovu; bez něj se prostě nic nepřenáší.
 
+### Srovnání běží samo
+
+Konektor srovnává sklad s komisí **při každém spuštění cronu** — vystaví,
+co má viset, stáhne, co se prodalo jinde, a vrátí do prodeje, co se
+vrátilo na sklad. Jak často to poběží, se řídí jen tím, jaké cron
+triggery jsou nastavené; k těm dvěma ranním (viz *Upozornění e-mailem*)
+přidej v **Settings → Triggers → Cron Triggers**:
+
+```
+0 */3 * * *
+```
+
+Tedy každé tři hodiny. Kdyby se ti to zdálo často, klidně míň — když
+sklad a komise sedí, běh **neudělá vůbec nic** a neposílá ani mail.
+Ticho je správný stav.
+
+Tři věci, na které se dá spolehnout:
+
+- **Automatický běh má nižší strop než ruční** (`PIKA_STROP_CRON`, deset
+  zápisů). U ručního běhu si plán přečteš a zarazíš ho; u automatického
+  se nedívá nikdo, takže rozjetá chyba v párování narazí na strop dřív,
+  než stihne nadělat škodu. Zbytek dojede při dalším běhu.
+- **Když se něco změní, přijde mail** — co se vystavilo, co stáhlo.
+  Bez toho by se ti inzeráty měnily pod rukama a dozvěděl by ses to leda
+  náhodou v jejich portálu. Když se něco nepovede, přijde mail taky.
+- **Pád komise neumlčí ranní obhlídku.** Jsou to dvě nezávislé věci
+  a běží po sobě, ne jedna místo druhé.
+
 ## Kurz ČNB pro aplikaci
 
 V daňové evidenci je závazný denní kurz ČNB. Aplikace si ho ale
