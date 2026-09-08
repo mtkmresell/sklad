@@ -973,55 +973,78 @@ function pikaTeloZalozeni(it, cenaNaPulte, kdo, publikovat) {
    Bez katalogového id se proto kus **nevystaví** a jen se to řekne.
    Prázdný inzerát je horší než žádný. */
 
-/* Odpověď resolve-skus kontrakt nepopisuje, tak se čte tolerantně:
-   mapa SKU → id, obálka data s toutéž mapou, nebo pole řádků. */
+/* Tvar odpovědi na dávkový překlad SKU kontrakt neuvádí — v openapi.json
+   je u ní jen „object". Nedá se tedy předpokládat; hledá se v ní.
+   Projde se celá odpověď a bere se dvojí zápis: řádek, který nese SKU
+   i id, a mapa SKU → id (kde id může být rovnou řetězec nebo objekt).
+   Obojí klidně zabalené v `data`, `resolved`, `results` — na jménu
+   obálky nezáleží.
+
+   Sesbírat se tím může i pár dvojic navíc, ale to nevadí: mapa se čte
+   jedině klíčem SKU, na které se ptáme. Co v odpovědi není, se tím
+   pádem nevymyslí. */
 function pikaMapaZOdpovedi(o) {
   const mapa = new Map();
+  const jeId = v => typeof v === 'string' && v.length >= 8 && !/\s/.test(v);
+  const idZ = (v) => {
+    if (jeId(v)) return v;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const id = v.master_product_id || v.id || (v.master_product && v.master_product.id);
+    return jeId(id) ? id : null;
+  };
   const pridej = (sku, id) => {
-    if (!sku || !id || typeof id !== 'string') return;
-    mapa.set(pikaText(sku), id);
+    const k = pikaText(sku);
+    if (!k || mapa.has(k) || !id) return;
+    mapa.set(k, id);
   };
-  const zRadku = (r) => {
-    if (!r || typeof r !== 'object') return;
-    pridej(r.sku || r.style_code || r.query,
-      r.master_product_id || r.id || (r.master_product && r.master_product.id));
-  };
-  const zObjektu = (obj) => {
-    for (const k of Object.keys(obj || {})) {
-      const v = obj[k];
-      if (typeof v === 'string') pridej(k, v);
-      else if (v && typeof v === 'object') pridej(k, v.master_product_id || v.id);
+  const projdi = (uzel, hloubka) => {
+    if (!uzel || typeof uzel !== 'object' || hloubka > 6) return;
+    if (Array.isArray(uzel)) { uzel.forEach(x => projdi(x, hloubka + 1)); return; }
+    // řádek, který nese SKU i id
+    pridej(uzel.sku || uzel.style_code || uzel.query || uzel.input || uzel.requested_sku,
+      idZ(uzel));
+    for (const k of Object.keys(uzel)) {
+      pridej(k, idZ(uzel[k]));          // mapa SKU → id
+      projdi(uzel[k], hloubka + 1);     // obálky
     }
   };
-  if (Array.isArray(o)) o.forEach(zRadku);
-  else if (o && Array.isArray(o.data)) o.data.forEach(zRadku);
-  else if (o && o.data && typeof o.data === 'object') zObjektu(o.data);
-  else if (o && typeof o === 'object') zObjektu(o);
+  projdi(o, 0);
   return mapa;
 }
 async function pikaResolveSkus(env, skus) {
-  if (!skus.length) return new Map();
+  if (!skus.length) return { mapa: new Map(), syrova: null };
   const o = await pikaVolej(env, '/master-products/resolve-skus', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ skus }),
   });
-  return pikaMapaZOdpovedi(o);
+  return { mapa: pikaMapaZOdpovedi(o), syrova: o };
+}
+
+/* Kousek odpovědi do náhledu. Bez něj je „není v katalogu"
+   nerozeznatelné od změněného tvaru odpovědi — a kus by se tiše
+   nevystavoval, aniž by z čehokoli šlo poznat proč. */
+function pikaUkazka(o, limit) {
+  if (o == null) return null;
+  let t;
+  try { t = JSON.stringify(o); } catch (e) { return String(o).slice(0, 200); }
+  const strop = limit || 1200;
+  return t.length > strop ? t.slice(0, strop) + '… (zkráceno)' : t;
 }
 
 /* Hledání podle názvu — záchrana pro kusy bez SKU. Bere se jen jistá
    shoda (stejná množina slov), jinak by se kus pověsil na cizí model
    a majitel by prodával něco jiného, než si myslí. */
 async function pikaNajdiVKatalogu(env, nazev) {
-  if (!nazev) return null;
+  if (!nazev) return { radek: null, syrova: null };
   const o = await pikaVolej(env, '/master-products?' + new URLSearchParams({
     q: String(nazev), page_size: '20', order: 'photo_first',
   }).toString());
   const radky = (o && Array.isArray(o.data)) ? o.data : [];
   const hledany = pikaNazevKlic(nazev);
   const shody = radky.filter(r => pikaNazevKlic(r.name) === hledany);
-  if (shody.length !== 1) return null;   // víc shod = nejistota, radši ručně
-  return shody[0];
+  // víc shod = nejistota, radši ručně
+  return { radek: shody.length === 1 ? shody[0] : null, syrova: o, nalezeno: radky.length };
 }
 
 /* Doplní katalogové id do plánu. Co se nenajde, ven z vystavování. */
@@ -1029,8 +1052,11 @@ async function pikaDoplnKatalog(env, plan) {
   if (!plan.vystavit.length) return;
   const skus = [...new Set(plan.vystavit.map(x => x.popis.sku).filter(Boolean))];
   let mapa = new Map();
-  try { mapa = await pikaResolveSkus(env, skus); }
-  catch (e) { plan.katalogPotiz = String((e && e.message) || e); }
+  let syrovaSku = null, syrovyNazev = null;
+  try {
+    const r = await pikaResolveSkus(env, skus);
+    mapa = r.mapa; syrovaSku = r.syrova;
+  } catch (e) { plan.katalogPotiz = String((e && e.message) || e); }
 
   const zustane = [];
   for (const u of plan.vystavit) {
@@ -1039,7 +1065,8 @@ async function pikaDoplnKatalog(env, plan) {
     if (!id) {
       try {
         const r = await pikaNajdiVKatalogu(env, u.popis.nazev);
-        if (r) { id = r.id; podle = 'název'; u.popis.katalog_nazev = r.name; }
+        if (syrovyNazev === null) syrovyNazev = r.syrova;
+        if (r.radek) { id = r.radek.id; podle = 'název'; u.popis.katalog_nazev = r.radek.name; }
       } catch (e) { /* nenajde se — kus prostě nepůjde vystavit */ }
     }
     if (!id) { plan.neniVKatalogu.push(u.popis); continue; }
@@ -1049,6 +1076,17 @@ async function pikaDoplnKatalog(env, plan) {
     zustane.push(u);
   }
   plan.vystavit = zustane;
+
+  /* Když se nepřeložilo vůbec nic, ukáže se, co katalog opravdu vrátil.
+     Jinak by změna tvaru jejich odpovědi vypadala úplně stejně jako
+     „ten model v katalogu není" a hledalo by se to naslepo. */
+  if (plan.neniVKatalogu.length && !mapa.size) {
+    plan.katalogUkazka = {
+      poslano: skus.slice(0, 5),
+      odpoved_sku: pikaUkazka(syrovaSku),
+      odpoved_nazev: pikaUkazka(syrovyNazev),
+    };
+  }
 }
 
 /* Skupiny: klíč → co v ní máme a co u nich visí. Klíčů má kus víc
@@ -1529,6 +1567,7 @@ async function pikaNahled(env, volby) {
       neni_v_katalogu: plan.neniVKatalogu,
       ceka_na_sklad: plan.cekaNaSklad,
       katalog_potiz: plan.katalogPotiz || null,
+      katalog_ukazka: plan.katalogUkazka || null,
       visi_navic_nezname: plan.visi_navic_nezname,
       prodano_u_nich: plan.prodano,
     },

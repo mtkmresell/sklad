@@ -103,12 +103,41 @@ const ME = {
      vystavit přes master_product_id, jinak u nich nemá fotku ani SKU. */
   let katalogNajde = true;
   let katalogShod = 1;      // kolik řádků vrátí hledání podle názvu
+  /* Jejich id jsou uuid — v testu taky, ať se na kratších řetězcích
+     neschová chyba, kterou by ostrá data odhalila. */
+  const mpId = (sku) => 'mp-' + String(sku).toLowerCase().replace(/[^a-z0-9]/g, '')
+    + '-0000-4000-8000-000000000000';
+  /* Tvar odpovědi resolve-skus kontrakt neuvádí, tak se zkouší víc
+     podob — klient nesmí stát na jedné uhodnuté. */
+  let katalogTvar = 'mapa';
   function katalogOdpoved(url, init) {
     if (url.includes('/master-products/resolve-skus')) {
       const skus = JSON.parse((init && init.body) || '{}').skus || [];
-      const mapa = {};
-      if (katalogNajde) skus.forEach(x => { mapa[x] = 'mp-' + String(x).toLowerCase(); });
-      return Response.json({ data: mapa });
+      if (!katalogNajde) return Response.json({ data: {} });
+      if (katalogTvar === 'mapa') {
+        const mapa = {};
+        skus.forEach(x => { mapa[x] = mpId(x); });
+        return Response.json({ data: mapa });
+      }
+      if (katalogTvar === 'resolved') {
+        const mapa = {};
+        skus.forEach(x => { mapa[x] = { id: mpId(x), name: 'Kus ' + x }; });
+        return Response.json({ resolved: mapa, unresolved: [] });
+      }
+      if (katalogTvar === 'pole') {
+        return Response.json({ data: skus.map(x => ({ sku: x, master_product_id: mpId(x) })) });
+      }
+      if (katalogTvar === 'cizi') {
+        // Odpověď plná cizích id — nic z toho není to, na co jsme se ptali
+        return Response.json({
+          meta: { id: 'aaaaaaaa-0000-4000-8000-000000000009' },
+          data: { 'UPLNE-JINE-SKU': 'bbbbbbbb-0000-4000-8000-000000000009' },
+        });
+      }
+      if (katalogTvar === 'holePole') {
+        return Response.json(skus.map(x => ({ input: x, master_product: { id: mpId(x) } })));
+      }
+      return Response.json({ data: {} });
     }
     if (url.includes('/master-products')) {
       const q = new URL(url).searchParams.get('q') || '';
@@ -785,7 +814,7 @@ const ME = {
      je ručně listuje přes katalog. */
   ok('v těle je katalogové id', (function () {
     const t = odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url))[0];
-    return t && t.telo.master_product_id === 'mp-c-1';
+    return t && t.telo.master_product_id === mpId('C-1');
   })(), JSON.stringify(odeslane.filter(x => /\/listings$/.test(x.url))[0]));
   ok('a nic o vlastní značce a modelu', (function () {
     const t = odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url))[0];
@@ -817,9 +846,31 @@ const ME = {
   scenarSeSkladem(kusSSku, [cizi], zapisovyScenar);
   p = (await pika()).telo.plan;
   ok('kus se spáruje podle SKU', (p.vystavit || []).length === 1
-    && p.vystavit[0].katalog_id === 'mp-ks-1', JSON.stringify(p.vystavit));
+    && p.vystavit[0].katalog_id === mpId('KS-1'), JSON.stringify(p.vystavit));
   ok('a je vidět, podle čeho', p.vystavit[0]['spárováno_podle'] === 'SKU',
     JSON.stringify(p.vystavit[0]));
+
+  /* Tvar té odpovědi kontrakt neuvádí („object"), takže se na jednu
+     podobu spoléhat nesmí. Tohle jsou tvary, které dávkový překlad
+     běžně mívá — klient musí zvládnout každý z nich. */
+  for (const tvar of ['resolved', 'pole', 'holePole']) {
+    katalogTvar = tvar;
+    scenarSeSkladem(kusSSku, [cizi], zapisovyScenar);
+    p = (await pika()).telo.plan;
+    ok('spáruje se i při tvaru odpovědi „' + tvar + '"', (p.vystavit || []).length === 1
+      && p.vystavit[0].katalog_id === mpId('KS-1'), JSON.stringify(p.vystavit));
+  }
+  /* V odpovědi se hledá, ale nic se nevymýšlí: když v ní naše SKU není,
+     je jedno, kolik jiných id nese. Pověsit kus na cizí model by
+     znamenalo prodávat něco jiného, než si majitel myslí. */
+  katalogTvar = 'cizi';
+  katalogShod = 0;
+  scenarSeSkladem(kusSSku, [cizi], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('co v odpovědi není, se nevymyslí',
+    [(p.vystavit || []).length, (p.neni_v_katalogu || []).length], [0, 1]);
+  katalogShod = 1;
+  katalogTvar = 'mapa';
 
   // Bez SKU se hledá podle názvu
   katalogNajde = true;
@@ -845,6 +896,13 @@ const ME = {
   p = (await pika()).telo.plan;
   shoda('co katalog nezná, se nevystaví',
     [(p.vystavit || []).length, (p.neni_v_katalogu || []).length], [0, 1]);
+  /* „Není v katalogu" a „změnil se tvar odpovědi" vypadají zvenku
+     stejně. Bez ukázky by se to hledalo naslepo. */
+  ok('a je vidět, co katalog vrátil',
+    p.katalog_ukazka && /\{/.test(p.katalog_ukazka.odpoved_sku || ''),
+    JSON.stringify(p.katalog_ukazka));
+  ok('i na co se ptal', (p.katalog_ukazka.poslano || []).indexOf('KS-1') !== -1,
+    JSON.stringify(p.katalog_ukazka.poslano));
   const nic = await srovnat({ provest: true });
   shoda('a opravdu se nic nezaloží',
     odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url)).map(x => x.url), []);

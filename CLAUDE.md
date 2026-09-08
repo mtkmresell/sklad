@@ -529,6 +529,12 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   víc výsledků znamená nejistotu a pověsit kus na cizí model by
   znamenalo prodávat něco jiného, než si majitel myslí. Co katalog
   nezná, se **nevystaví** a jen se to řekne.
+- **Tvar odpovědi na `resolve-skus` kontrakt neuvádí** (je tam jen
+  „object"), takže se v ní hledá, ne předpokládá: projde se celá
+  a bere se mapa SKU → id i pole řádků, v obálce i bez ní. Když se
+  nepřeloží nic, přiloží se do náhledu **ukázka toho, co katalog
+  vrátil** (`katalog_ukazka`) — bez ní vypadá změněný tvar odpovědi
+  úplně stejně jako „ten model v katalogu není".
 - **Vystavuje se jeden kus na model a velikost**, i když jich má
   majitel víc — tak to dělal ručně a chce to tak dál. Prodá-li se kus
   jinde, inzerát visí dál, dokud doma zbývá aspoň jeden; prodá-li se
