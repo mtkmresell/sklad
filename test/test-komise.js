@@ -206,7 +206,8 @@ function nasadKonektor(odpoved) {
   await page.evaluate(nasadKonektor, { stav: 'ok', k_preneseni: [prodej({
     vyplnit: { saleState: 'waiting', waitState: 'sending', sellPrice: 750,
       sellCurrency: 'CZK', saleDate: '2026-09-05', soldWhere: 'Pikastore', extraCosts: 0,
-      buyPrice: 1, name: 'Přepsáno', id: 'jiné', personal: true, profit: 999999 },
+      buyPrice: 1, name: 'Přepsáno', id: 'jiné', personal: true, profit: 999999,
+      saleRef: 'PODVRŽENO' },
   })] });
   await cloudDorazil(page);
   await page.evaluate(() => komisePrenesProdeje(true));
@@ -217,7 +218,11 @@ function nasadKonektor(odpoved) {
   check('název taky ne', it.name === 'Tričko', it.name);
   check('ani profil', it.personal === undefined, String(it.personal));
   check('zisk se nepodstrčí', it.profit === undefined, String(it.profit));
-  check('a přesun proběhl', it.saleState === 'waiting', it.saleState);
+  /* Číslo objednávky konektor nezná (chodí na Discord) — doplňuje se
+     ručně v úpravě položky. Nesmí se tedy ani vyplnit odjinud, ani na
+     něm nesmí přesun viset. */
+  check('ID prodeje se nevyplní', it.saleRef === undefined, String(it.saleRef));
+  check('a přesun proběhl i bez něj', it.saleState === 'waiting', it.saleState);
   await page.context().close();
 
   // Nesmyslná hodnota se zahodí, ne aby se zapsala

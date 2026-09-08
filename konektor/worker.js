@@ -406,7 +406,7 @@ const NASTROJE = [
   {
     name: 'pika_nahled',
     description: 'Rozdíl mezi skladem a komisním prodejem Pikastore a plán, co by se u nich '
-      + 'udělalo: co vystavit, co vrátit do prodeje, co stáhnout, co přecenit. Ukáže i to, '
+      + 'udělalo: co vystavit, co vrátit do prodeje, co stáhnout. Ukáže i to, '
       + 'jestli jsou podepsané podmínky obchodu — bez nich projde čtení, ale každý zápis '
       + 'skončí na 409. Nic u nich nemění.',
     inputSchema: { type: 'object', properties: {} },
@@ -422,7 +422,8 @@ const NASTROJE = [
   {
     name: 'pika_srovnat',
     description: 'Srovná komisní prodej Pikastore se skladem — vystaví, co má viset, stáhne, '
-      + 'co se prodalo jinde, vrátí do prodeje, co se vrátilo na sklad, a dorovná ceny. '
+      + 'co se prodalo jinde, a vrátí do prodeje, co se vrátilo na sklad. Staré inzeráty '
+      + 'nepřeceňuje, cílová cena se použije jen při zakládání. '
       + 'ZAPISUJE u nich. Bez provest: true jen ukáže plán, což je totéž co pika_nahled.',
     inputSchema: {
       type: 'object',

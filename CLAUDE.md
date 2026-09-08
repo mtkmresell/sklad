@@ -610,6 +610,19 @@ API vracet `401` a začne vracet `429 too_many_failed_attempts` — to není
 o tempu volání a čekání to nespraví. Obojí končí stejně: ven s hláškou,
 že token nefunguje.
 
+**Komisní prodej Purekickz.** Spustili vlastní API a majitel ho chce
+zapojit hned, jak se Pikastore ustálí. **Pravidla chování skladu jsou
+stejná** — co se vystaví, co se stáhne, cílovka je payout, cena končí
+na 90, prodej se přesune do Čeká. Liší se jen jejich API.
+
+Aplikace se kvůli tomu měnit nemusí: `/<APP_TOKEN>/prodeje` vrací
+`soldWhere` z odpovědi a `KOMISE_POLE` bere libovolné místo prodeje,
+takže stačí, aby konektor do `k_preneseni` přidal i jejich prodeje.
+Co se rozdělit musí, je to, co je dnes v `pikaVolej`, `pikaVypis`
+a `pikaProved` — společná pravidla (`pikaPlan`, `pikaVelikost`,
+`pikaNazevKlic`, `pikaCenaNaPulte`) mají zůstat jedny. Druhá kopie
+pravidel by se s tou první rozešla.
+
 **Doklady za měsíc v jednom souboru.** Typ dokladu u místa prodeje už
 existuje (`TYP DOKLADU U MÍSTA PRODEJE`), takže to, co tohle blokovalo, je
 vyřešené. Zbývá samotný export: sloučit doklady za měsíc do jednoho
