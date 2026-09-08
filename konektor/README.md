@@ -213,8 +213,8 @@ https://<jméno-workeru>.<jméno-účtu>.workers.dev/<MCP_TOKEN>/pk
 ```
 
 ukáže rozdíl mezi skladem a tím, co u nich visí — a v chatu je na to
-nástroj `pk_nahled`. **Zatím jen čte**; zápisy se dopíšou, až bude
-z ostrých dat jisté, jaké stavy a pole jejich odpověď doopravdy nese.
+nástroj `pk_nahled`. Provede ho `pk_srovnat` s `provest: true`
+a **cron ho pouští sám**, ve stejném běhu jako Pikastore.
 
 Potřebuje jedno tajemství:
 
@@ -235,6 +235,8 @@ se nechá být, ruční inzeráty se neopravují. Liší se jen jejich API:
 - **Zakládá se přímo přes SKU** z jejich e-shopu, žádný katalog se
   nepřekládá. Kus bez SKU tudy vystavit nejde.
 - **Jeden inzerát na model a velikost**, i když má majitel kusů víc.
+- **Kus bez SKU** se jednou týdně (v pondělí) připomene mailem, ať se
+  nezapomene nahodit ručně.
 - Limit je **60 požadavků za minutu**.
 
 ## Kurz ČNB pro aplikaci
@@ -504,7 +506,8 @@ Až doména v Resendu projde ověřením, `MAIL_KOMU` může být jakákoli adre
 | `pika_srovnat` | plán vystavení a stažení; s `provest: true` ho i provede |
 | `pika_prodeje` | co se u komisionáře prodalo a sklad to ještě neví |
 | `pika_smlouva` | co jejich veřejný kontrakt (`openapi.json`) slibuje |
-| `pk_nahled` | totéž pro druhý komisní prodej (Purekickz), zatím jen čtení |
+| `pk_nahled` | totéž pro druhý komisní prodej (Purekickz) |
+| `pk_srovnat` | provede to u Purekickz; bez `provest: true` jen plán |
 
 Odpovědi jsou omezené na 60 položek a zhruba 180 000 znaků; celý sklad má
 přes 600 kB a do jedné odpovědi se nevejde. Když je toho víc, konektor to

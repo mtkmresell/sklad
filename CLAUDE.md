@@ -638,10 +638,13 @@ API vracet `401` a začne vracet `429 too_many_failed_attempts` — to není
 o tempu volání a čekání to nespraví. Obojí končí stejně: ven s hláškou,
 že token nefunguje.
 
-**Komisní prodej Purekickz** (`PUREKICKZ` v konektoru). Čtecí půlka
-hotová — `/<MCP_TOKEN>/pk` a nástroj `pk_nahled` ukážou rozdíl mezi
-skladem a tím, co u nich visí. **Nic nezapisuje**; zápisy se dopíšou,
-až bude z ostrých dat jisté, jaké stavy a pole jejich odpověď nese.
+**Komisní prodej Purekickz** (`PUREKICKZ` v konektoru). Hotové —
+`/<MCP_TOKEN>/pk` a `pk_nahled` ukážou rozdíl, `pk_srovnat` ho
+s `provest: true` provede a **cron ho pouští sám**, ve stejném běhu
+jako Pikastore. Nový kus je `POST /listings`, stažení
+`DELETE /listings/{id}`; vracení do prodeje neexistuje, kus se prostě
+založí znovu. Stahuje se první — druhý kupec je horší problém než
+pozdě vystavený inzerát.
 
 **Pravidla chování skladu jsou stejná jako u Pikastore a schválně se
 sdílejí** — `pikaSkupiny`, `pikaVelikost`, `pikaNazevKlic`,
@@ -653,9 +656,9 @@ dopadnou stejně.
 Vlastní je jen jejich API:
 - **Klíč v hlavičce `X-API-Key`** (tajemství `PUREKICKZ_TOKEN`), ne
   bearer token. Do adresy nepatří — skončil by v logu proxy.
-- **Cena je rovnou payout v korunách.** Poplatek i cenu na pultě si
-  dopočítají sami, takže tu odpadá provize, přepočet i koncovka 90 —
-  na cenu na pultě konektor nevidí a nemá ji co počítat.
+- **Cena je rovnou payout v korunách** a posílá se **beze změny**:
+  cílovka 5 000 Kč znamená `payout: 5000`. Poplatek si k ní připočtou
+  navrch, ne z ní — odpadá tím provize, přepočet i koncovka 90.
 - **Zakládá se přímo přes SKU** z jejich e-shopu, žádný katalog. Kus
   bez SKU tudy vystavit nejde a hádat model podle názvu by znamenalo
   pověsit ho na cizí zboží.
@@ -678,6 +681,12 @@ Vlastní je jen jejich API:
   **Čtyři z jedenadvaceti** kusů k vystavení u nich takhle už visely.
 - Limit je **60 požadavků za minutu**; `429` se nesmí zaměnit za
   neplatný klíč.
+- **Kus bez SKU se připomíná jednou týdně.** Vystavit ho tudy nejde
+  a majitel ho nahazuje ručně, takže by na něj jinak zapomněl. Je to
+  ale **stav, ne okamžik** — denně by se to přestalo číst, proto jen
+  v pondělí, ke stejnému dni jako obhlídka skladu.
+- Stropy jsou vlastní (`PK_STROP_ZAPISU`, `PK_STROP_STAZENI`,
+  `PK_STROP_CRON`), jinak platí totéž co u Pikastore.
 
 Aplikace se kvůli nim měnit nemusí: `/<APP_TOKEN>/prodeje` vrací
 `soldWhere` z odpovědi a `KOMISE_POLE` bere libovolné místo prodeje,

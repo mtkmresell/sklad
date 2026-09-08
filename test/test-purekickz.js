@@ -397,15 +397,183 @@ const radek = (o) => Object.assign({
     JSON.stringify(v.telo));
 
   /* ══════════════════════════════════════════════════════════════════ */
-  sekce('11) Zatím se nic nezapisuje');
-  /* Zápisy se dopíšou, až bude z ostrých dat jisté, co jejich odpověď
-     doopravdy nese. Do té doby nesmí odejít nic jiného než GET. */
+  sekce('11) Bez pokynu se nic nezapisuje');
   polozkySkladu = [Object.assign({}, zaklad, { id: 'a' })];
   scenar([]);
   await nahled();
-  shoda('na jejich API jdou jen GETy',
+  shoda('náhled posílá jen GETy',
     volani.filter(x => x.url.includes('consignor-api') && x.method !== 'GET')
       .map(x => x.method + ' ' + x.url), []);
+
+  async function srovnat(args, env = ENV) {
+    volani = [];
+    const r = await bezLogu(() => worker.fetch(new Request(
+      'https://sklad.mtkm.workers.dev/' + env.MCP_TOKEN + '/mcp',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+          params: { name: 'pk_srovnat', arguments: args || {} } }) }), env));
+    const o = await r.json();
+    let telo = null;
+    try { telo = JSON.parse(o.result.content[0].text); } catch (e) {}
+    return { telo, zapisy: volani.filter(x => x.url.includes('consignor-api') && x.method !== 'GET') };
+  }
+
+  let z = await srovnat({});
+  shoda('a bez provest taky', z.zapisy.map(x => x.method), []);
+  ok('jen se řekne, že se to teprve provede', /provest/.test((z.telo || {}).poznamka || ''),
+    (z.telo || {}).poznamka);
+
+  /* ══════════════════════════════════════════════════════════════════ */
+  sekce('12) Vystavení a stažení');
+  z = await srovnat({ provest: true });
+  shoda('nový kus jde POSTem na /listings', z.zapisy.map(x => x.method), ['POST']);
+  const telo = JSON.parse(z.zapisy[0].init.body || '{}');
+  shoda('a nese jen to, co jejich API čeká',
+    Object.keys(telo).sort(), ['payout', 'quantity', 'size', 'sku']);
+  /* Cena je payout: co majitel chce dostat. Poplatky si k tomu
+     připočítají sami — nepočítá se z ní, ale přičítá se k ní. */
+  shoda('cena je cílovka beze změny a kus jeden',
+    [telo.payout, telo.quantity, telo.sku, telo.size], [1000, 1, 'AA-1', '42']);
+  ok('a hlásí se to zpět', ((z.telo.provedeno || {}).vystaveno || []).length === 1,
+    JSON.stringify(z.telo.provedeno));
+
+  /* Stažení je u nich DELETE, ne zvláštní sloveso. */
+  polozkySkladu = [Object.assign({}, zaklad, { id: 'a', saleState: 'waiting' })];
+  scenar([radek({ id: 'ke-smazani', sku: 'AA-1', size: '42' })]);
+  z = await srovnat({ provest: true });
+  shoda('stažení jde DELETEm na konkrétní id',
+    z.zapisy.map(x => x.method + ' ' + x.url.split('/consignor-api')[1]),
+    ['DELETE /listings/ke-smazani']);
+
+  /* Stahuje se první: kus, který se prodal, nemá u nich viset ani
+     o minutu déle, než musí — druhý kupec je horší než pozdní inzerát. */
+  polozkySkladu = [Object.assign({}, zaklad, { id: 'a' }),
+    { id: 'b', name: 'Jiný kus', sku: 'BB-1', size: '43', category: 'sneakers',
+      saleState: 'waiting', location: 'Doma', targetPrice: 2000 }];
+  scenar([radek({ id: 'pryc', sku: 'BB-1', size: '43' })]);
+  z = await srovnat({ provest: true });
+  shoda('stažení jde před vystavením', z.zapisy.map(x => x.method), ['DELETE', 'POST']);
+
+  // Opatrný rozjezd
+  const petKusu = [];
+  for (let i = 0; i < 5; i++) {
+    petKusu.push({ id: 'k' + i, name: 'Kus ' + i, sku: 'K-' + i, size: '42',
+      category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 1000 });
+  }
+  polozkySkladu = petKusu;
+  scenar([]);
+  z = await srovnat({ provest: true, nejvyse: 2 });
+  shoda('nejvyse omezí, kolik se toho udělá', z.zapisy.length, 2);
+  ok('a řekne se, kolik zbývá', /Zbývá 3/.test(z.telo.poznamka || ''), z.telo.poznamka);
+  z = await srovnat({ provest: true, jen: 'stahnout' });
+  shoda('jen: stahnout nic nevystaví', z.zapisy.length, 0);
+
+  /* ══════════════════════════════════════════════════════════════════ */
+  sekce('13) Pojistka proti hromadnému stažení');
+  /* Dvanáct kusů ke stažení naráz obvykle znamená rozbité párování nebo
+     neúplnou odpověď, ne že by se přes noc prodal celý sklad. */
+  const mnoho = [], jejichMnoho = [];
+  for (let i = 0; i < 12; i++) {
+    mnoho.push({ id: 'm' + i, name: 'Kus ' + i, sku: 'M-' + i, size: '42',
+      category: 'sneakers', saleState: 'waiting', location: 'Doma', targetPrice: 1000 });
+    jejichMnoho.push(radek({ id: 'jm' + i, sku: 'M-' + i, size: '42' }));
+  }
+  polozkySkladu = mnoho;
+  scenar(jejichMnoho);
+  z = await srovnat({ provest: true });
+  shoda('hromadné stažení se zarazí a nic neodejde',
+    [(z.telo || {}).stav, z.zapisy.length], ['nezapisovalo se', 0]);
+  ok('a řekne proč', /stropem/.test((z.telo || {}).duvod || ''), (z.telo || {}).duvod);
+
+  /* ══════════════════════════════════════════════════════════════════ */
+  sekce('14) Automatický běh (cron)');
+  /* Nikdo se u toho nedívá, takže platí totéž co u Pikastore: nižší
+     strop zápisů a mail pokaždé, když se něco změnilo nebo nepovedlo. */
+  const CRON_ENV = Object.assign({}, ENV, { RESEND_API_KEY: 'k', MAIL_KOMU: 'ja@sklad.cz' });
+  const UTERY = Date.parse('2026-09-08T13:00:00Z');   // v Praze 15:00, není pondělí
+  const PONDELI = Date.parse('2026-09-07T13:00:00Z');
+  let posta = [];
+  const fetchPredCronem = global.fetch;
+  global.fetch = async (vstup, init) => {
+    const url = String(vstup && vstup.url ? vstup.url : vstup);
+    if (url.includes('resend')) { posta.push(JSON.parse(init.body)); return Response.json({ id: 'm1' }); }
+    return fetchPredCronem(vstup, init);
+  };
+  const puvodniNow = Date.now;
+  async function cron(ted = UTERY, env = CRON_ENV) {
+    volani = []; posta = [];
+    Date.now = () => ted;
+    try { await bezLogu(() => worker.scheduled({ cron: '0 */3 * * *' }, env, {})); }
+    finally { Date.now = puvodniNow; }
+    return { zapisy: volani.filter(x => x.url.includes('consignor-api') && x.method !== 'GET'), posta };
+  }
+
+  polozkySkladu = [Object.assign({}, zaklad, { id: 'a' })];
+  scenar([]);
+  let c = await cron();
+  shoda('cron vystaví, co má viset', c.zapisy.map(x => x.method), ['POST']);
+  ok('a o změně přijde mail', c.posta.length === 1
+    && /vystaveno: Kus/.test((c.posta[0] || {}).text || ''), JSON.stringify(c.posta).slice(0, 200));
+
+  // Srovnaný sklad: nic se neděje a mail nechodí
+  scenar([radek({ sku: 'AA-1', size: '42' })]);
+  c = await cron();
+  shoda('srovnaný sklad neudělá nic a mlčí', [c.zapisy.length, c.posta.length], [0, 0]);
+
+  /* Kus bez SKU se tudy vystavit nedá a musí se nahodit ručně. Je to
+     stav, ne okamžik — chodí proto jen v pondělí, jinak by se ta
+     připomínka po týdnu přestala číst. */
+  polozkySkladu = [{ id: 'ns', name: 'Kus bez SKU', size: 'L', category: 'obleceni',
+    saleState: 'stock', location: 'Doma', targetPrice: 1000 }];
+  scenar([]);
+  c = await cron(UTERY);
+  shoda('v úterý se kus bez SKU nepřipomíná', [c.zapisy.length, c.posta.length], [0, 0]);
+  c = await cron(PONDELI);
+  ok('v pondělí ano', c.posta.length === 1
+    && /Kus bez SKU/.test((c.posta[0] || {}).text || ''), JSON.stringify(c.posta).slice(0, 250));
+  ok('a je z mailu jasné, že se má nahodit ručně',
+    /ručně/.test((c.posta[0] || {}).text || ''), (c.posta[0] || {}).text);
+
+  // Potíž se musí ozvat
+  polozkySkladu = [Object.assign({}, zaklad, { id: 'a' })];
+  scenar([], (url, init) => ((init && init.method) === 'POST'
+    ? Response.json({ detail: 'cena mimo rozsah' }, { status: 400 }) : null));
+  c = await cron();
+  ok('o potíži přijde mail', c.posta.length === 1
+    && /cena mimo rozsah/.test((c.posta[0] || {}).text || ''), JSON.stringify(c.posta).slice(0, 250));
+
+  /* Automatický běh má nižší strop než ruční — u ručního si plán majitel
+     přečte a zarazí ho, u automatického se nedívá nikdo. */
+  const patnact = [];
+  for (let i = 0; i < 15; i++) {
+    patnact.push({ id: 'c' + i, name: 'Kus ' + i, sku: 'C-' + i, size: '42',
+      category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 1000 });
+  }
+  polozkySkladu = patnact;
+  scenar([]);
+  c = await cron();
+  shoda('víc než strop se v jednom automatickém běhu nezapíše', c.zapisy.length, 10);
+
+  // Bez klíče ke komisi se cron o Purekickz vůbec nepokouší
+  const bezPk = Object.assign({}, CRON_ENV); delete bezPk.PUREKICKZ_TOKEN;
+  scenar([]);
+  c = await cron(UTERY, bezPk);
+  shoda('bez klíče cron mlčí', [c.zapisy.length, c.posta.length], [0, 0]);
+
+  /* Pád jednoho komisionáře nesmí umlčet druhého ani ranní obhlídku —
+     jsou to nezávislé věci a běží po sobě. */
+  polozkySkladu = [Object.assign({}, zaklad, { id: 'a' })];
+  scenar([], () => Response.json({ error: 'server_error' }, { status: 500 }));
+  let vyletelo = null;
+  volani = []; posta = [];
+  Date.now = () => UTERY;
+  try { await bezLogu(() => worker.scheduled({ cron: '0 */3 * * *' }, CRON_ENV, {})); }
+  catch (e) { vyletelo = String((e && e.message) || e); }
+  finally { Date.now = puvodniNow; }
+  ok('pád komise nevyletí z cronu ven', vyletelo === null, vyletelo);
+  ok('a ozve se mailem', posta.some(x => /Purekickz/.test(x.subject || '')),
+    JSON.stringify(posta.map(x => x.subject)));
+  global.fetch = fetchPredCronem;
 
   // Adresa je pod tokenem
   const r404 = await bezLogu(() => worker.fetch(

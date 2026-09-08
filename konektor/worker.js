@@ -419,6 +419,29 @@ const NASTROJE = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'pk_srovnat',
+    description: 'Srovná druhý komisní prodej (Purekickz) se skladem — vystaví, co má viset, '
+      + 'a stáhne, co se prodalo jinde. Cena se posílá jako payout, oni si k ní připočtou '
+      + 'svoje poplatky. ZAPISUJE u nich. Bez provest: true jen ukáže plán.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        provest: {
+          type: 'boolean',
+          description: 'true = opravdu to u nich provést. Výchozí false, tedy jen plán.',
+        },
+        jen: {
+          type: 'string', enum: ['vse', 'vystavit', 'stahnout'],
+          description: 'Omezí běh na jeden druh úkonu. Výchozí vse.',
+        },
+        nejvyse: {
+          type: 'number',
+          description: 'Nejvíc tolik zápisů v tomhle běhu — na opatrný rozjezd.',
+        },
+      },
+    },
+  },
+  {
     name: 'pika_prodeje',
     description: 'Co se prodalo na komisním prodeji Pikastore a ve skladu je ten kus pořád '
       + 'veden na skladě. Vrátí rovnou hodnoty, které se mají v položce vyplnit při přesunu '
@@ -476,6 +499,9 @@ async function spustNastroj(jmeno, args, env) {
   if (jmeno === 'pika_nahled') return pikaNahled(env);
   if (jmeno === 'pika_prodeje') return pikaProdeje(env);
   if (jmeno === 'pk_nahled') return pkNahled(env);
+  if (jmeno === 'pk_srovnat') {
+    return pkNahled(env, { provest: !!args.provest, jen: args.jen, nejvyse: args.nejvyse });
+  }
   if (jmeno === 'pika_srovnat') {
     return pikaNahled(env, { provest: !!args.provest, publikovat: !!args.publikovat,
       jen: args.jen, nejvyse: args.nejvyse, stahni: args.stahni });
@@ -1744,10 +1770,10 @@ const PK_BASE = 'https://xbplnrpvyhxkryjncyau.supabase.co/functions/v1/consignor
 const PK_JMENO = 'Purekickz';
 const PK_STRANKA = 100;        // jejich strop je 500, tohle je s rezervou
 /* Stavy z ostrých dat: `listed`, `sold` a **`approved`** — ten jejich
-   dokumentace neuvádí vůbec, přitom jich tam bylo sedmnáct. Bere se
-   jako činný: kus, který u nich čeká na vystavení, se nesmí založit
-   podruhé, a když ho majitel prodá jinde, musí jít pryč stejně jako
-   vystavený. */
+   dokumentace neuvádí vůbec, přitom jich tam bylo sedmnáct. Podle
+   majitele to nejspíš znamená kus, který u nich není nejlevnější
+   nabídkou; pro nás je to **činný inzerát jako každý jiný**: nesmí se
+   založit podruhé, a když se kus prodá jinde, musí jít pryč. */
 const PK_STAVY_CINNE = ['listed', 'approved'];
 // Kratší název než tolik slov se nepáruje — „Nike Dunk" sedí na půlku skladu
 const PK_MIN_SLOV = 3;
@@ -1755,6 +1781,12 @@ const PK_STAV_PRODANO = 'sold';
 /* Jejich limit je 60 požadavků za minutu. Srovnání jich udělá pár, ale
    stránkování u velkého skladu se k tomu může přiblížit. */
 const PK_NEJDELSI_CEKANI = 70;
+const PK_STROP_ZAPISU = 40;
+const PK_STROP_STAZENI = 10;
+/* Automatický běh má nižší strop než ruční — u ručního si plán majitel
+   přečte a zarazí ho, u automatického se nedívá nikdo. Stejně jako
+   u Pikastore. */
+const PK_STROP_CRON = 10;
 
 async function pkVolej(env, cesta, moznosti) {
   if (!env.PUREKICKZ_TOKEN) {
@@ -1935,10 +1967,61 @@ function pkPlan(polozky, radky, kurz, volby) {
         payout_kc: r.payout != null ? r.payout : null })) };
 }
 
-/* Náhled na rozdíl mezi skladem a Purekickz. Zatím **jen čte** — zápisy
-   se dopíšou, až bude z ostrých dat jisté, jaké stavy a pole jejich
-   odpověď doopravdy nese. */
-async function pkNahled(env) {
+/* ── PROVEDENÍ ───────────────────────────────────────────────────────
+   Stejné pojistky jako u Pikastore, jen jejich slovesa: nový kus je
+   `POST /listings`, stažení `DELETE /listings/{id}`.
+
+   **Stahuje se první.** Kus, který se ve skladu prodal, nemá u nich
+   viset ani o minutu déle, než musí — druhý kupec je horší problém než
+   pozdě vystavený inzerát. */
+async function pkProved(env, plan, volby) {
+  volby = volby || {};
+  const hotovo = { vystaveno: [], stazeno: [] };
+  const potize = [];
+  let zapisu = 0;
+  const strop = Math.min(
+    Number.isFinite(volby.nejvyse) && volby.nejvyse > 0 ? volby.nejvyse : PK_STROP_ZAPISU,
+    PK_STROP_ZAPISU);
+  const zbyva = () => zapisu < strop;
+  const smi = (druh) => !volby.jen || volby.jen === 'vse' || volby.jen === druh;
+  const ukony = {
+    stahnout: smi('stahnout') ? plan.stahnout : [],
+    vystavit: smi('vystavit') ? plan.vystavit : [],
+  };
+
+  for (const u of ukony.stahnout) {
+    if (!zbyva()) break;
+    try {
+      await pkVolej(env, '/listings/' + u.id, { method: 'DELETE' });
+      hotovo.stazeno.push((u.nazev || u.popis) + ' ' + (u.velikost || '')); zapisu++;
+    } catch (e) {
+      potize.push('stažení ' + (u.nazev || u.popis) + ': ' + e.message);
+      if (e.pikaKod === 'token') break;
+    }
+  }
+  for (const u of ukony.vystavit) {
+    if (!zbyva()) break;
+    try {
+      const o = await pkVolej(env, '/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(u.telo),
+      });
+      hotovo.vystaveno.push((u.popis.nazev || '') + ' ' + (u.popis.velikost || '')
+        + ' → ' + ((o && (o.id || (o.listing && o.listing.id))) || 'založeno')); zapisu++;
+    } catch (e) {
+      potize.push('vystavení ' + (u.popis.nazev || '') + ': ' + e.message);
+      if (e.pikaKod === 'token') break;
+    }
+  }
+  return { hotovo, potize, zapisu, strop,
+    zbylo: (ukony.stahnout.length + ukony.vystavit.length) - zapisu };
+}
+
+/* Náhled na rozdíl mezi skladem a Purekickz; s `provest: true` to
+   i provede. */
+async function pkNahled(env, volby) {
+  volby = volby || {};
   const kdo = await pkKdoJsem(env);
   const { radky, celkem } = await pkVypis(env);
   const token = await prihlas(env);
@@ -1952,7 +2035,7 @@ async function pkNahled(env) {
   const neznameStavy = Object.keys(podleStavu)
     .filter(x => PK_STAVY_CINNE.indexOf(x) === -1 && x !== PK_STAV_PRODANO);
 
-  return {
+  const odpoved = {
     stav: 'ok',
     kdo,
     u_nich: {
@@ -1980,8 +2063,122 @@ async function pkNahled(env) {
       visi_navic_nezname: plan.visi_navic_nezname,
       prodano_u_nich: plan.prodano_u_nich,
     },
-    poznamka: 'Náhled — Purekickz zatím jen čte, nic se u nich nemění.',
+    poznamka: 'Náhled — nic se u nich nezměnilo. Provede se až s provest: true.',
   };
+
+  const ukonu = plan.vystavit.length + plan.stahnout.length;
+  if (!ukonu) {
+    odpoved.poznamka = 'Sklad a komise sedí, není co dělat.';
+    return odpoved;
+  }
+  if (!volby.provest) return odpoved;
+
+  /* Od téhle chvíle se zapisuje. Stejná pojistka jako u Pikastore:
+     tolik kusů ke stažení naráz obvykle znamená neúplnou odpověď nebo
+     rozbité párování, ne že by se přes noc prodal celý sklad. */
+  if (plan.stahnout.length > PK_STROP_STAZENI) {
+    odpoved.stav = 'nezapisovalo se';
+    odpoved.duvod = 'Plán chce stáhnout ' + plan.stahnout.length + ' kusů, což je nad stropem '
+      + PK_STROP_STAZENI + '. Projdi si plán a řekni, jestli je v pořádku.';
+    return odpoved;
+  }
+  const vysledek = await pkProved(env, plan, volby);
+  if (vysledek.potize.length) odpoved.mail = await pkOhlasPotize(env, vysledek.potize);
+  odpoved.stav = vysledek.potize.length ? 'provedeno s potížemi' : 'provedeno';
+  odpoved.provedeno = vysledek.hotovo;
+  odpoved.zapisu = vysledek.zapisu;
+  if (vysledek.potize.length) odpoved.potize = vysledek.potize;
+  if (vysledek.zbylo > 0) {
+    odpoved.poznamka = 'Zbývá ' + vysledek.zbylo + ' úkonů — strop je ' + vysledek.strop
+      + ' zápisů na běh. Pusť to znovu, plán se přepočítá.';
+  }
+  return odpoved;
+}
+
+/* Co se nepovedlo. Stejné pravidlo jako u Pikastore: srovnání běží na
+   pozadí, takže bez mailu by se o zaseknutém kusu majitel dozvěděl leda
+   tak, že by si toho všiml v jejich portálu. */
+async function pkOhlasPotize(env, potize) {
+  const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
+  if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
+  try {
+    await posliMail(env, {
+      predmet: 'SKLAD × ' + PK_JMENO + ': ' + potize.length
+        + (potize.length === 1 ? ' věc se nepovedla' : ' věcí se nepovedlo'),
+      text: 'Při srovnávání skladu s ' + PK_JMENO + ' se tohle nepovedlo:\n\n'
+        + potize.map(x => '· ' + x).join('\n')
+        + '\n\nZbytek proběhl. Co je v seznamu, zůstalo nedodělané.',
+    });
+    return { odeslano: true, komu: env.MAIL_KOMU };
+  } catch (e) {
+    return { odeslano: false, duvod: String((e && e.message) || e) };
+  }
+}
+
+/* Co automatika u nich sama změnila, plus jednou týdně připomínka kusů,
+   které tudy vystavit nejde.
+
+   Ta připomínka je **stav, ne okamžik**, a stav se podle pravidel téhle
+   pošty nehlásí denně — přestal by se číst. Chodí proto jen v pondělí,
+   ke stejnému dni jako obhlídka skladu: kus bez SKU se musí vystavit
+   ručně a bez připomenutí by na něj majitel zapomněl. */
+async function pkOhlasHotovo(env, hotovo, bezSku, ted) {
+  const radky = []
+    .concat((hotovo.vystaveno || []).map(x => '· vystaveno: ' + x))
+    .concat((hotovo.stazeno || []).map(x => '· staženo: ' + x));
+  const pondeli = denVTydnu(prazskyDen(ted)) === TYDENNI_DEN;
+  const pripomenout = pondeli ? (bezSku || []) : [];
+  if (!radky.length && !pripomenout.length) return null;
+  const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
+  if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
+
+  let text = '';
+  if (radky.length) {
+    text += 'Srovnání skladu s ' + PK_JMENO + ' tohle u nich udělalo samo:\n\n'
+      + radky.join('\n') + '\n';
+  }
+  if (pripomenout.length) {
+    text += (text ? '\n' : '')
+      + 'Tyhle kusy tudy vystavit nejde — jejich API zakládá výhradně přes SKU,\n'
+      + 'a to u nich chybí. Musí se nahodit ručně v jejich portálu:\n\n'
+      + pripomenout.slice(0, NEJVIC_V_SEZNAMU)
+        .map(x => '· ' + (x.nazev || '?') + ' ' + (x.velikost || '')).join('\n')
+      + (pripomenout.length > NEJVIC_V_SEZNAMU
+        ? '\n· … a další ' + (pripomenout.length - NEJVIC_V_SEZNAMU) : '') + '\n';
+  }
+  const kolik = radky.length;
+  try {
+    await posliMail(env, {
+      predmet: 'SKLAD × ' + PK_JMENO + ': ' + (kolik
+        ? kolik + (kolik === 1 ? ' změna' : kolik < 5 ? ' změny' : ' změn')
+        : 'kusy k ručnímu vystavení'),
+      text,
+    });
+    return { odeslano: true, komu: env.MAIL_KOMU };
+  } catch (e) {
+    return { odeslano: false, duvod: String((e && e.message) || e) };
+  }
+}
+
+/* Automatické srovnání. Stejná stavba jako u Pikastore — výjimka se
+   nesmí propadnout do logu a zmizet, zaražený běh se musí ozvat. */
+async function pkCron(env, ted) {
+  if (!env.PUREKICKZ_TOKEN) return { stav: 'nenastaveno' };
+  let v;
+  try {
+    v = await pkNahled(env, { provest: true, nejvyse: PK_STROP_CRON });
+  } catch (e) {
+    const duvod = String((e && e.message) || e);
+    console.error(PK_JMENO + ': srovnání spadlo — ' + duvod);
+    await pkOhlasPotize(env, ['celé srovnání spadlo: ' + duvod]);
+    return { stav: 'chyba', chyba: duvod };
+  }
+  if (v.stav === 'nezapisovalo se') {
+    await pkOhlasPotize(env, ['nezapisovalo se — ' + (v.duvod || 'bez důvodu')]);
+    return v;
+  }
+  await pkOhlasHotovo(env, v.provedeno || {}, (v.plan || {}).bez_sku || [], ted || Date.now());
+  return v;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -3206,8 +3403,12 @@ export default {
        Když spadne, ranní obhlídka musí proběhnout stejně — jsou to dvě
        nezávislé věci a jedna nesmí umlčet druhou. */
     if (env.SKLAD_EMAIL && env.SKLAD_HESLO && env.SKLAD_UID) {
+      /* Dva komisionáři, dva nezávislé běhy. Pád jednoho nesmí umlčet
+         druhého ani ranní obhlídku. */
       try { await pikaCron(env); }
       catch (e) { console.error('Pikastore: ' + (e && e.stack || e)); }
+      try { await pkCron(env, Date.now()); }
+      catch (e) { console.error(PK_JMENO + ': ' + (e && e.stack || e)); }
     }
 
     const hodina = prazskeCasti(Date.now()).hodina;
