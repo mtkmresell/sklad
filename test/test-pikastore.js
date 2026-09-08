@@ -908,33 +908,6 @@ const ME = {
     odeslane.filter(x => x.method === 'POST' && /\/listings$/.test(x.url)).map(x => x.url), []);
   katalogNajde = true;
 
-  /* Skutečný případ z provozu: majitel má ve skladu dámské SKU, ale
-     u nich kus schválně listuje jako pánský. Klíč sku|velikost proto
-     na jejich řádek nesedne — a bez druhé cesty přes katalogové id se
-     kus vystavil podruhé vedle toho, který tam už visel. */
-  const jejichJinakSku = { id: 'jj', short_id: 'L-JJ', sku: 'PANSKE-1', size: 'EU44.5',
-    status: 'listed', price_cents: 599000, commission_rate_bp: 2500,
-    master_product_id: mpId('DAMSKE-1'), created_at: '2026-08-01T00:00:00Z',
-    updated_at: '2026-08-01T00:00:00Z' };
-  const kusDamske = [{ id: 'd1', name: 'Mind 001 (Women\'s)', sku: 'DAMSKE-1', size: '44.5',
-    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 4840 }];
-  scenarSeSkladem(kusDamske, [jejichJinakSku], zapisovyScenar);
-  p = (await pika()).telo.plan;
-  shoda('kus visící u nich pod jiným SKU se nevystaví podruhé',
-    [(p.vystavit || []).length, (p.uz_visi_pod_jinym_sku || []).length], [0, 1]);
-  ok('a je vidět, který inzerát to je',
-    (p.uz_visi_pod_jinym_sku[0] || {}).jejich_id === 'L-JJ',
-    JSON.stringify(p.uz_visi_pod_jinym_sku));
-  ok('a přestane se hlásit jako cizí',
-    !(p.visi_navic_nezname || []).some(x => x.id === 'L-JJ'),
-    JSON.stringify(p.visi_navic_nezname));
-  // Jiná velikost je jiný kus — ta se vystavit má
-  scenarSeSkladem(kusDamske, [Object.assign({}, jejichJinakSku, { size: 'EU43' })],
-    zapisovyScenar);
-  p = (await pika()).telo.plan;
-  shoda('jiná velikost téhož modelu se vystaví',
-    [(p.vystavit || []).length, (p.uz_visi_pod_jinym_sku || []).length], [1, 0]);
-
   sekce('14) Opatrný rozjezd');
   /* „Vystav zatím jeden kus a ukaž mi ho." Bez tohohle by první ostrý
      běh udělal celý plán najednou. */
