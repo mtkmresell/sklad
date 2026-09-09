@@ -466,6 +466,10 @@ const radek = (o) => Object.assign({
   sekce('12) Vystavení a stažení');
   z = await srovnat({ provest: true });
   shoda('nový kus jde POSTem na /listings', z.zapisy.map(x => x.method), ['POST']);
+  /* Odpověď nesmí vedle seznamu provedených úkonů tvrdit, že se nic
+     nezměnilo — přesně to dělala po prvním ostrém stažení. */
+  ok('a odpověď netvrdí, že se nic nezměnilo',
+    !/nic se u nich nezměnilo/.test((z.telo || {}).poznamka || ''), (z.telo || {}).poznamka);
   const telo = JSON.parse(z.zapisy[0].init.body || '{}');
   shoda('a nese jen to, co jejich API čeká',
     Object.keys(telo).sort(), ['payout', 'quantity', 'size', 'sku']);

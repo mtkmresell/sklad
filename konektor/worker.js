@@ -2070,7 +2070,6 @@ async function pkNahled(env, volby) {
       visi_navic_nezname: plan.visi_navic_nezname,
       prodano_u_nich: plan.prodano_u_nich,
     },
-    poznamka: 'Náhled — nic se u nich nezměnilo. Provede se až s provest: true.',
   };
 
   const ukonu = plan.vystavit.length + plan.stahnout.length;
@@ -2078,7 +2077,13 @@ async function pkNahled(env, volby) {
     odpoved.poznamka = 'Sklad a komise sedí, není co dělat.';
     return odpoved;
   }
-  if (!volby.provest) return odpoved;
+  /* Poznámka o náhledu se přidává až tady. Když stála rovnou v odpovědi,
+     tvrdila „nic se u nich nezměnilo" i po skutečném stažení — vedle
+     seznamu toho, co se právě stalo. */
+  if (!volby.provest) {
+    odpoved.poznamka = 'Náhled — nic se u nich nezměnilo. Provede se až s provest: true.';
+    return odpoved;
+  }
 
   /* Od téhle chvíle se zapisuje. Stejná pojistka jako u Pikastore:
      tolik kusů ke stažení naráz obvykle znamená neúplnou odpověď nebo
