@@ -18,6 +18,7 @@ const UCETNI = 'uctetni1';
 const POLOZKY = [
   { id: 's1', name: 'Dunk Low Panda', category: 'sneakers', buyPrice: 2400, buyCurrency: 'CZK',
     saleState: 'stock', location: 'Doma', dateAdded: 101, buyDate: '2026-01-05', tags: [],
+    sku: 'DD1391-100', size: '42', platforms: [], condition: 'DS',
     stockxUrl: 'https://stockx.com/dunk-low-panda' },
   { id: 's2', name: 'Osobni Pikachu', category: 'pokemon', buyPrice: 850, buyCurrency: 'CZK',
     saleState: 'stock', personal: true, location: 'Doma', dateAdded: 102, buyDate: '2026-02-05', tags: [] },
@@ -27,6 +28,11 @@ const POLOZKY = [
   { id: 'p1', name: 'Jordan 1 Chicago', category: 'sneakers', buyPrice: 5200, buyCurrency: 'CZK',
     saleState: 'paid', sellPrice: 8900, profit: 3700, saleDate: '2026-05-01', payoutDate: '2026-05-10',
     soldWhere: 'StockX', dateAdded: 104, buyDate: '2026-01-01', tags: [] },
+  // Prodej na místě, kde se vystavuje doklad — jediné tlačítko, které
+  // účetnímu v detailu zůstat musí
+  { id: 'p2', name: 'Yeezy Slide', category: 'sneakers', buyPrice: 1900, buyCurrency: 'CZK',
+    saleState: 'paid', sellPrice: 3200, profit: 1300, saleDate: '2026-06-01', payoutDate: '2026-06-03',
+    soldWhere: 'Vinted', saleDocNum: '2026-007', dateAdded: 105, buyDate: '2026-02-01', tags: [] },
 ];
 
 (async () => {
@@ -130,8 +136,13 @@ const POLOZKY = [
   await page.evaluate(() => switchTab('wishlist'));
   await page.waitForTimeout(200);
   check('switchTab na wishlist odkloní na sklad', (await page.evaluate(() => tab)) === 'stock');
+  await page.evaluate(() => switchTab('waiting'));
+  await page.waitForTimeout(200);
+  check('switchTab na Čeká odkloní na sklad', (await page.evaluate(() => tab)) === 'stock');
   const anal = await page.evaluate(() => { stockViewMode = 'analytics'; renderItems(); return stockViewMode; });
   check('analytika skladu se přepne zpět na tabulku', anal === 'table', anal);
+  const analP = await page.evaluate(() => { soldViewMode = 'analytics'; renderSoldView(); return soldViewMode; });
+  check('analytika prodejů taky', analP === 'table', analP);
 
   section('7) CRM se vůbec nenačte');
   const crm = await page.evaluate(() => { loadCrmFromFirestore(); return { z: customers.length, p: partners.length }; });
@@ -153,7 +164,288 @@ const POLOZKY = [
   await page.waitForTimeout(300);
   check('CRM se taky nezapíše', (await page.evaluate(() => JSON.stringify(window.__store))) === predZapisem);
 
-  section('9) Nastavení má jen odhlášení a manuál');
+  // ══════════════════════════════════════════════════════════════
+  /* Tohle je jádro celého souboru. Skryté tlačítko není totéž co
+     zakázaná akce a dlouho to tady bylo zaměněné: tlačítka „Upravit /
+     Duplikovat / Smazat" se v detailu skládají za běhu, do CSS pravidel
+     nespadala, a účetní tak položku přepsal i smazal. Do cloudu se to
+     nedostalo, ale přepsané číslo zůstalo v tabulce a nic nenaznačilo,
+     že si ho tam dal sám — a z takového čísla se dělá přiznání.
+
+     Nekontroluje se proto, jestli je tlačítko vidět, ale jestli se po
+     kliknutí něco změnilo. Klikne se na všechno, na co v pohledu
+     účetního jde kliknout, a `items` i úložiště musí zůstat, jak byly. */
+  section('9) Naklikat se nedá nic');
+  await page.evaluate(() => {
+    window.confirm = () => true;
+    window.prompt = () => 'X';
+    window.__otisk = () => JSON.stringify({
+      items: items,
+      sk: localStorage.getItem('sklad_v3'),
+      savedAt: localStorage.getItem('sklad_v3_savedAt'),
+      dirty: localStorage.getItem('sklad_v3_dirty'),
+      store: window.__store,
+    });
+    // Sloupce platforem jsou sbalené — rozbal je, ať jsou fajfky na dosah
+    if (window.platExpanded) { platExpanded.platforms = true; platExpanded.eshopy = true; platExpanded.local = true; }
+    renderItems();
+  });
+  await page.waitForTimeout(300);
+  const otisk = () => page.evaluate(() => window.__otisk());
+
+  // Posbírej všechno klikací v hlavním pohledu i v detailech a zmáčkni to
+  const naklikano = await page.evaluate(async () => {
+    const zmeny = [];
+    const vid = (el) => getComputedStyle(el).display !== 'none' && el.offsetParent !== null
+      && getComputedStyle(el).pointerEvents !== 'none';
+    const cekej = (ms) => new Promise(r => setTimeout(r, ms));
+    const klikni = async (el, kde) => {
+      const pred = window.__otisk();
+      try { el.click(); } catch (e) {}
+      await cekej(120);
+      if (window.__otisk() !== pred) zmeny.push(kde + ': ' + (el.dataset.action || (el.getAttribute('onclick') || '').slice(0, 30) || el.textContent.trim().slice(0, 20)));
+      // ukliď po sobě, ať další klik nezačíná v rozdělaném okně
+      document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));
+      document.querySelectorAll('#retailersMgrOv, [id^="_del"]').forEach(o => o.remove && o.remove());
+    };
+    for (const el of Array.from(document.querySelectorAll('button, [data-action], [onclick]')).filter(vid)) {
+      if (!el.closest('.mo')) await klikni(el, 'hlavní pohled');
+    }
+    for (const id of ['s1', 'p1', 'p2']) {
+      openDetail(id);
+      await cekej(150);
+      const mo = document.getElementById('moDetail');
+      const prvky = Array.from(mo.querySelectorAll('button, [data-action], [onclick]')).filter(vid);
+      for (let i = 0; i < prvky.length; i++) {
+        openDetail(id);
+        await cekej(120);
+        const znovu = Array.from(mo.querySelectorAll('button, [data-action], [onclick]')).filter(vid);
+        if (znovu[i]) await klikni(znovu[i], 'detail ' + id);
+      }
+    }
+    return zmeny;
+  });
+  check('žádný klik nic nezměnil', naklikano.length === 0, naklikano.join(' | '));
+
+  /* A totéž pro cesty, které se dají spustit i mimo tlačítko: „Upravit"
+     otevírá formulář, jehož Uložit zapisuje do items rovnou, a
+     togglePlatItem si píše do localStorage sám, mimo sv(). */
+  const pred9 = await otisk();
+  await page.evaluate(async () => {
+    openEdit('s1');
+    await new Promise(r => setTimeout(r, 150));
+    const n = document.getElementById('fName'); if (n) n.value = 'PŘEPSÁNO ÚČETNÍM';
+    const b = document.getElementById('fBuy'); if (b) b.value = '1';
+    await saveItem();
+  });
+  await page.waitForTimeout(900);
+  check('Upravit + Uložit položku nepřepíše', (await otisk()) === pred9,
+    JSON.stringify((await page.evaluate(() => items.map(i => i.name)))));
+
+  await page.evaluate(() => del('s1'));
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { const y = document.getElementById('_delYes'); if (y) y.click(); });
+  await page.waitForTimeout(600);
+  check('Smazat položku nesmaže', (await otisk()) === pred9,
+    JSON.stringify((await page.evaluate(() => items.map(i => i.id)))));
+
+  const plat = await page.evaluate(() => togglePlatItem('s1', 'Vinted'));
+  await page.waitForTimeout(300);
+  check('fajfka u platformy se nezaškrtne', plat === false && (await otisk()) === pred9, String(plat));
+
+  await page.evaluate(() => openAddModal());
+  await page.waitForTimeout(200);
+  check('formulář nové položky se ani neotevře',
+    !(await page.evaluate(() => document.getElementById('moAdd').classList.contains('open'))));
+
+  /* Obrana stojí na dvou nezávislých vrstvách a každá se musí dát
+     rozbít zvlášť, jinak by se testovala jen ta druhá.
+
+     Vrstva jedna je seznam UCETNI_AKCE v rozcestníku kliků. Ta drží
+     akce, které vlastní bránu ve funkci nemají — „Duplikovat" založí
+     kopii rovnou v rozcestníku, „Prodat" a přesuny stavů volají funkce
+     bez brány. Klikne se tedy na skutečná tlačítka odkrytá z CSS
+     (`uc-skryt` je jen vzhled) a na akce, které se v pohledu účetního
+     nevykreslují vůbec. */
+  const branaAkci = await page.evaluate(async () => {
+    const zmeny = [];
+    // Porovnává se vždy s okamžikem těsně před klikem, ne s jedním
+    // začátkem — jinak by první změna obarvila všechny další akce
+    const uklid = () => {
+      document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));
+      document.querySelectorAll('[id^="_del"], #retailersMgrOv').forEach(o => o.remove());
+    };
+    const klikni = async (el, jmeno) => {
+      const pred = window.__otisk();
+      el.click();
+      await new Promise(r => setTimeout(r, 220));
+      uklid();
+      if (window.__otisk() !== pred) zmeny.push(jmeno);
+    };
+    // „Duplikovat" existuje, jen je skryté — odkryj a klikni
+    openDetail('s1');
+    await new Promise(r => setTimeout(r, 150));
+    const dup = document.querySelector('#moDetail [data-action="duplicate"]');
+    if (!dup) return ['tlačítko Duplikovat se v detailu nenašlo'];
+    dup.classList.remove('uc-skryt');
+    await klikni(dup, 'duplicate');
+    // Akce ze skrytých sekcí — v pohledu účetního se nevykreslí, ale
+    // rozcestník je jediné, co je zastaví
+    for (const akce of ['sell', 'returnstock-wait', 'markpaid', 'del', 'edit', 'toggleplat', 'removeimg']) {
+      const b = document.createElement('button');
+      b.dataset.action = akce; b.dataset.id = 's1'; b.dataset.plat = 'Vinted'; b.dataset.state = 'sent';
+      document.body.appendChild(b);
+      await klikni(b, akce);
+      b.remove();
+    }
+    return zmeny;
+  });
+  check('rozcestník zastaví i akce bez vlastní brány', branaAkci.length === 0, branaAkci.join(', '));
+
+  /* Vrstva dvě je seznam UCETNI_KLAVESY. Že „n" nic neotevře, dokáže
+     i brána v openAddModal — tady se proto kouká, jestli se k ní klávesa
+     vůbec dostane. */
+  const doslaKlavesa = await page.evaluate(async () => {
+    const puvodni = window.openAddModal;
+    let volano = 0;
+    window.openAddModal = function() { volano++; };
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true }));
+    await new Promise(r => setTimeout(r, 150));
+    window.openAddModal = puvodni;
+    return volano;
+  });
+  check('klávesa „n" se k zakládání položky vůbec nedostane', doslaKlavesa === 0, String(doslaKlavesa));
+
+  /* Správa retailerů visí na dlaždici „EU nákupy", je to inline onclick
+     mimo rozcestník a přidává a maže retailery i roční limit. Otevřít
+     ji nesmí; číslo na dlaždici účetnímu zůstává. */
+  await page.evaluate(() => openRetailersMgr());
+  await page.waitForTimeout(250);
+  check('správa retailerů se neotevře',
+    !(await page.evaluate(() => !!document.getElementById('retailersMgrOv'))));
+
+  // ══════════════════════════════════════════════════════════════
+  /* Zkratky vedly k témuž úplně mimo tlačítka: „n" zakládalo položku,
+     „e" otvíralo úpravu první viditelné a Delete mazal vybrané. Skrytý
+     „+ Přidat" na to nemá vliv. */
+  section('10) Klávesnice taky ne');
+  const pred10 = await otisk();
+  for (const key of ['n', 'N', 'e', 'E', 'Delete']) {
+    await page.evaluate((k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })), key);
+    await page.waitForTimeout(200);
+    const otevrene = await page.evaluate(() => Array.from(document.querySelectorAll('.mo.open')).map(m => m.id));
+    check('klávesa „' + key + '" nic neotevře', otevrene.length === 0, otevrene.join(','));
+  }
+  check('a nic nezměnila', (await otisk()) === pred10);
+  // Listování detailem šipkami zůstává — jinak by se v prodejích neproklikal
+  await page.evaluate(() => openDetail('s1'));
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })));
+  await page.waitForTimeout(300);
+  check('šipkami se detailem listovat dá',
+    await page.evaluate(() => document.getElementById('moDetail').classList.contains('open')));
+  await page.evaluate(() => cm('moDetail'));
+
+  // ══════════════════════════════════════════════════════════════
+  /* Doklad je jediné, co účetní v detailu vystavit smí — je to přesně
+     jeho práce. Číslo si k němu ale vymýšlet nesmí: uložit ho nemá kam,
+     takže by zmizelo se zavřením záložky a majitel by témuž prodeji
+     přidělil jindy jiné. Dva doklady na jeden prodej s různými čísly
+     jsou horší než doklad žádný. */
+  section('11) Doklad ano, přidělování čísel ne');
+  await page.evaluate(() => openDetail('p2'));
+  await page.waitForTimeout(300);
+  const tlacitka = await page.evaluate(() => {
+    const mo = document.getElementById('moDetail');
+    const vid = (el) => getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
+    return Array.from(mo.querySelectorAll('button')).filter(vid).map(b => (b.textContent || '').trim());
+  });
+  check('Doklad v detailu zůstal', tlacitka.includes('Doklad'), JSON.stringify(tlacitka));
+  check('Upravit je pryč', !tlacitka.includes('Upravit'), JSON.stringify(tlacitka));
+  check('Smazat je pryč', !tlacitka.includes('Smazat'), JSON.stringify(tlacitka));
+  check('Duplikovat je pryč', !tlacitka.some(t => /Duplikovat/.test(t)), JSON.stringify(tlacitka));
+  await page.evaluate(() => cm('moDetail'));
+
+  const doklad = await page.evaluate(() => {
+    // p2 má číslo uložené od majitele, w1 ne
+    const s = saleDocNumber(items.find(i => i.id === 'p2'));
+    const bez = items.find(i => i.id === 'w1');
+    const b = saleDocNumber(bez);
+    return { ulozene: s, vymyslene: b, zapsane: bez.saleDocNum || null };
+  });
+  check('uložené číslo se přečte', doklad.ulozene === '2026-007', String(doklad.ulozene));
+  check('nevystavené se nevymyslí', doklad.vymyslene === '', String(doklad.vymyslene));
+  check('a do položky se nic nezapsalo', doklad.zapsane === null, String(doklad.zapsane));
+
+  /* A doklad se účetnímu opravdu vystaví — samotné tlačítko nestačí,
+     tohle je to, kvůli čemu ten pohled existuje. Otvírá se v novém okně. */
+  const [oknoDokladu] = await Promise.all([
+    page.context().waitForEvent('page').catch(() => null),
+    page.evaluate(() => {
+      openDetail('p2');
+      setTimeout(function() {
+        var b = Array.from(document.querySelectorAll('#moDetail button'))
+          .find(function(x) { return x.textContent.trim() === 'Doklad'; });
+        if (b) b.click();
+      }, 200);
+    }),
+  ]);
+  if (!oknoDokladu) {
+    check('doklad se vystaví', false, 'nové okno se neotevřelo');
+  } else {
+    await oknoDokladu.waitForTimeout(400);
+    const t = (await oknoDokladu.evaluate(() => document.body.textContent) || '').replace(/\s+/g, ' ');
+    check('doklad nese uložené číslo', /2026-007/.test(t), t.slice(0, 80));
+    check('a je to Dodavatel/Odběratel', /Dodavatel/.test(t) && /Odběratel/.test(t), t.slice(0, 80));
+    // Datum na dokladu je den vyplacení (3. 6.), ne den prodeje (1. 6.)
+    check('datum je den vyplacení, ne prodeje', /03\.06\.2026/.test(t) && !/01\.06\.2026/.test(t), t.slice(0, 120));
+    await oknoDokladu.close();
+  }
+  await page.evaluate(() => cm('moDetail'));
+
+  // ══════════════════════════════════════════════════════════════
+  /* Majitelův sklad se účetnímu do prohlížeče neukládá. Klíč
+     `sklad_v3` odhlášení sice přežije jen do `clearSkladLocalStorage()`,
+     jenže kdo zavře záložku, se neodhlásí — a když majitel přístup
+     zrušil, účetní si po obnovení stránky pořád zobrazil jeho sklad
+     z uložené kopie. Našeptávač (`sklad_item_cache_v2`) je na tom hůř:
+     ten se při odhlášení nemazal vůbec a nesl názvy a SKU. */
+  section('12) V prohlížeči účetního nezůstane nic');
+  const vUlozisti = await page.evaluate(() => {
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (/Dunk Low Panda|Jordan 1 Chicago|Yeezy Slide/.test(localStorage.getItem(k) || '')) out.push(k);
+    }
+    return out;
+  });
+  check('majitelovy položky nikde v localStorage', vUlozisti.length === 0, vUlozisti.join(','));
+  check('a našeptávač je prázdný',
+    !(await page.evaluate(() => (localStorage.getItem('sklad_item_cache_v2') || '').includes('Dunk Low Panda'))));
+
+  // ══════════════════════════════════════════════════════════════
+  /* Hledání napříč sekcemi účetnímu zůstává — hledat doklad podle čísla
+     objednávky potřebuje. Jde ale přímo přes `items`, ne přes vykreslený
+     seznam, takže se ho filtry z mřížky netýkají: vypisovalo osobní
+     položky i celou sekci Čeká, s cenami a se štítkem „Čeká". */
+  section('13) Hledáním se schované sekce neobejdou');
+  await page.evaluate(() => openGlobalSearch());
+  await page.waitForTimeout(300);
+  check('hledání se otevřelo', await page.evaluate(() => !!document.getElementById('_globalSearchOverlay')));
+  const hledej = async (q) => page.evaluate(async (dotaz) => {
+    const inp = document.getElementById('_gsInput');
+    if (!inp) return '(hledání se neotevřelo)';
+    inp.value = dotaz;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 300));
+    return (document.getElementById('_gsResults') || {}).textContent || '';
+  }, q);
+  check('podnikatelská položka se najde', /Dunk Low Panda/.test(await hledej('Dunk')));
+  check('osobní položka se nenajde', !/Osobni Pikachu/.test(await hledej('Pikachu')));
+  check('čekající prodej se nenajde', !/Ceka LEGO/.test(await hledej('LEGO')));
+  await page.evaluate(() => { const o = document.getElementById('_globalSearchOverlay'); if (o) o.remove(); });
+
+  section('14) Nastavení má jen odhlášení a manuál');
   await page.evaluate(() => { document.getElementById('moSettings').classList.add('open'); });
   await page.waitForTimeout(200);
   const nastaveni = await page.evaluate(() => {
@@ -167,7 +459,7 @@ const POLOZKY = [
   check('a je to ten pro účetního', nastaveni.uctetniBlok === true);
   await page.evaluate(() => { document.getElementById('moSettings').classList.remove('open'); });
 
-  section('10) Manuál se otevře a něco vysvětlí');
+  section('15) Manuál se otevře a něco vysvětlí');
   await page.evaluate(() => otevriUctetniManual());
   await page.waitForTimeout(200);
   const manual = await page.evaluate(() => {
@@ -179,7 +471,7 @@ const POLOZKY = [
   check('říká, co tu není', /Zákazníci/.test(manual.text));
   await page.evaluate(() => cm('moUctetniManual'));
 
-  section('11) Odkazy ven nefungují');
+  section('16) Odkazy ven nefungují');
   const odkaz = await page.evaluate(() => {
     const a = document.querySelector('#itemsGrid a[target="_blank"]');
     if (!a) return { zadny: true };
@@ -205,7 +497,7 @@ const POLOZKY = [
   // ══════════════════════════════════════════════════════════════
   // Bez obnovení stránky — přesně jak to udělá člověk, který si pohled
   // účetního vyzkouší a pak se přihlásí zpátky jako majitel.
-  section('12) Odhlášení režim vypne');
+  section('17) Odhlášení režim vypne');
   await page.evaluate(() => {
     window._fbUser = null;
     document.dispatchEvent(new CustomEvent('fb-auth', { detail: { user: null } }));
@@ -222,7 +514,7 @@ const POLOZKY = [
   check('lišta účetního je pryč', poOdhlaseni.lista === false);
   check('nečte se už cizí kóje', poOdhlaseni.uid === null, String(poOdhlaseni.uid));
 
-  section('13) Majitel po účetním ve stejné záložce může ukládat');
+  section('18) Majitel po účetním ve stejné záložce může ukládat');
   await page.evaluate((d) => {
     window.__store = {};
     window.__store['users/' + d.MAJITEL + '/sklad/data'] = { items: JSON.parse(JSON.stringify(d.POLOZKY)), savedAt: '2026-08-02T10:00:00.000Z' };
@@ -241,7 +533,7 @@ const POLOZKY = [
   check('a čte svoji vlastní kóji', zapisPoUcetnim.uid === MAJITEL, zapisPoUcetnim.uid);
 
   // ══════════════════════════════════════════════════════════════
-  section('14) Běžného uživatele se to nedotkne');
+  section('19) Běžného uživatele se to nedotkne');
   await page.evaluate(() => location.reload());
   await page.waitForTimeout(3500);
   await page.evaluate(installFakeFirestore);
@@ -280,7 +572,7 @@ const POLOZKY = [
   check('majitel pořád může ukládat', zapisMajitele === true);
 
   // ══════════════════════════════════════════════════════════════
-  section('15) Hledání ukazatele');
+  section('20) Hledání ukazatele');
   const hledani = await page.evaluate(() => {
     const snap = (dokumenty) => ({ forEach: (f) => dokumenty.forEach(d => f({ id: d.id, data: () => d.v })) });
     return {

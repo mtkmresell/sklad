@@ -160,6 +160,46 @@ a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovan�
   leželo v `localStorage` a v nabídkách se objevilo až po obnovení stránky.
   Hlídá to `test-zarizeni.js`, sekce 12.
 
+### Pohled účetního (`POHLED ÚČETNÍHO`)
+
+Účetní se přihlásí vlastním účtem, ve své kóji má jen `uctujePro` s UID
+majitele a aplikace se přepne na jeho data. **Schovat tlačítko není totéž
+co zakázat akci** — tohle tu bylo dlouho zaměněné. Tlačítka v detailu
+položky se skládají za běhu, pod pravidla v CSS nespadala, a účetní tak
+šel položku přepsat i smazat; klávesy `n`, `e` a Delete ho k témuž
+pustily úplně mimo tlačítka. Do cloudu se nic nedostalo, ale přepsané
+číslo zůstalo v tabulce a nic nenaznačilo, že si ho tam dal sám.
+
+Drží to **kladný výčet na jednom místě** — `UCETNI_AKCE` v rozcestníku
+kliků a `UCETNI_KLAVESY` u zkratek. Co v něm není, se zastaví, takže
+nová akce je zakázaná, dokud se tam nedopíše. Druhá vrstva jsou brány
+v samotných zapisovacích funkcích, protože inline `onclick` vede mimo
+rozcestník a `togglePlatItem` si píše do `localStorage` sám, mimo `sv()`.
+
+Čtyři věci se snadno rozbijí:
+
+- **Doklad účetnímu zůstat musí** — vystavit ho je přesně jeho práce.
+  Ostatní tlačítka v detailu nesou `uc-skryt`, tohle ne.
+- **Číslo dokladu si účetní přidělit nesmí** (`saleDocNumber`). Uložit
+  ho nemá kam, takže by zmizelo se zavřením záložky a majitel by témuž
+  prodeji přidělil jindy jiné. Dva doklady na jeden prodej s různými
+  čísly jsou horší než doklad žádný.
+- **Majitelův sklad se účetnímu do prohlížeče neukládá**
+  (`_applyCloudData`, `_applyItemCacheDoc`). Kdo zavře záložku, se
+  neodhlásí — a po zrušení přístupu se mu data zobrazovala dál
+  z uložené kopie, která měla novější razítko než jeho vlastní kóje.
+  Našeptávač byl na tom hůř: `sklad_item_cache_v2` odhlášení přežíval
+  a nesl majitelovy názvy a SKU.
+- **Hledání napříč sekcemi si filtruje samo.** Jde přímo přes `items`,
+  ne přes vykreslený seznam, takže se ho filtry z mřížky netýkají —
+  vypisovalo osobní položky i celou sekci Čeká, s cenami a se štítkem
+  „Čeká". Účetnímu zůstává, hledat doklad podle čísla objednávky
+  potřebuje.
+
+`test-uctetni.js` kliká na všechno, na co v pohledu účetního jde
+kliknout, a kouká, jestli se `items` nebo úložiště změnily — sekce 9
+až 13.
+
 ### Úložiště prohlížeče
 
 `localStorage` má strop (na iPhonu kolem 5 MB) a při jeho překročení `setItem`

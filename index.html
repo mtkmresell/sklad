@@ -104,9 +104,13 @@ body.uctetni .bulk-bar,
 /* „Analytika →" v Prodáno se skládá až za běhu a nemá vlastní id */
 body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 
-/* Úpravy položek — účetní se jen dívá */
+/* Úpravy položek — účetní se jen dívá.
+   `.uc-skryt` nesou tlačítka, která se skládají za běhu (detail položky,
+   ukládání fotky). Skrývání je jen vzhled; co se opravdu nesmí, hlídá
+   seznam UCETNI_AKCE v rozcestníku kliků. */
 body.uctetni .ta-btn,
-body.uctetni .card-actions { display:none !important; }
+body.uctetni .card-actions,
+body.uctetni .uc-skryt { display:none !important; }
 
 /* Odkazy ven (StockX, sledování zásilek) zůstanou jako text.
    Míří na atribut, ne na třídu, protože část odkazů žádnou nemá. */
@@ -2461,6 +2465,10 @@ function _ioDistinctBuyWheres(){
   return Object.keys(seen).sort(function(a,b){ return a.localeCompare(b,'cs'); });
 }
 function openRetailersMgr(){
+  /* Visí na dlaždici „EU nákupy" a je to jediné zapisující ovládání
+     mimo rozcestník kliků — přidává a maže retailery a mění roční limit.
+     Číslo na dlaždici účetnímu zůstane, správa už ne. */
+  if (jeUctetni()) return;
   var existing=document.getElementById('retailersMgrOv');
   if(existing){ existing.remove(); return; }
   var ov=document.createElement('div');
@@ -2797,7 +2805,8 @@ function sv(){
 
    Zamčené:  zákazníci (CRM je vlastní dokument a pravidla Firestore ho
              účetnímu nepustí — ta data mu nikdy nedorazí) a jakýkoli
-             zápis (pravidla ho odmítnou, ať si aplikace dělá co chce).
+             zápis do cloudu (pravidla ho odmítnou, ať si aplikace dělá
+             co chce).
 
    Schované: wishlist a osobní položky. Leží ve stejném dokumentu jako
              sklad, takže do prohlížeče dorazí a jsou pryč jen z obrazu.
@@ -2809,6 +2818,44 @@ function sv(){
    Skrývá se přes třídu `uctetni` na <body> a CSS, ne záplatami ve
    vykreslovacích funkcích. Ty se volají pořád dokola a stačilo by
    zapomenout na jednu, aby se tlačítko na okamžik mihlo.
+
+   ── SCHOVAT NESTAČÍ ─────────────────────────────────────────────────
+   Skryté tlačítko není zakázaná akce a dlouho to tady bylo zaměněné.
+   Tlačítka „Upravit / Duplikovat / Smazat" se v detailu položky skládají
+   za běhu a pod pravidla v CSS nespadala, takže účetní položku přepsal
+   i smazal. Klávesy „n", „e" a Delete ho k témuž pustily úplně mimo
+   tlačítka. Do cloudu se nic z toho nedostalo — jenže přepsané číslo
+   zůstalo v tabulce a nic nenaznačilo, že si ho tam dal sám. Z takového
+   čísla se dělá přiznání.
+
+   Proto jsou nad tím dvě nezávislé vrstvy:
+
+   1) Seznamy UCETNI_AKCE a UCETNI_KLAVESY. Jedno místo, kladný výčet —
+      co v něm není, se zastaví. Nová akce je pro účetního zakázaná,
+      dokud se tam nedopíše; obráceně by stačilo na jednu zapomenout.
+      Tohle je ta hlavní vrstva a jediná, která drží „Duplikovat"
+      a přesuny stavů — ty vlastní bránu ve funkci nemají.
+
+   2) Brána v samotných zapisovacích funkcích (sv, saveItem, del,
+      openEdit, openAddModal, togglePlatItem, fbSaveToCloud,
+      openRetailersMgr). Tam vede i inline onclick mimo rozcestník
+      a `togglePlatItem` si navíc píše do localStorage sám, mimo sv().
+
+   Doklad je výjimka — vystavit ho je přesně účetního práce, takže mu
+   tlačítko zůstává. Číslo dokladu si ale přidělit nesmí, viz
+   saleDocNumber().
+
+   Majitelův sklad se účetnímu do prohlížeče neukládá vůbec
+   (_applyCloudData, _applyItemCacheDoc). Kdo zavře záložku, se
+   neodhlásí, a po zrušení přístupu se mu data zobrazovala dál
+   z uložené kopie.
+
+   A hledání napříč sekcemi jde přímo přes `items`, ne přes vykreslený
+   seznam — filtry z mřížky se ho netýkají, takže si osobní položky
+   a sekci Čeká odfiltrovává samo (openGlobalSearch).
+
+   Hlídá to test-uctetni.js, sekce 9 až 13 — kliká na všechno, na co
+   v pohledu účetního jde kliknout, a kouká, jestli se něco změnilo.
 ══════════════════════════════════════════════════════════════════════ */
 var _uctetniRezim = false;
 var _uctetniMajitel = null;
@@ -2823,6 +2870,39 @@ function _datovyUid() {
 
 // Sekce, do kterých účetní nesmí
 var UCETNI_SKRYTE_TABY = ['waiting', 'customers', 'wishlist'];
+
+/* Co smí účetní odkliknout a odmáčknout.
+   Skrytá tlačítka nestačí. Detail položky se skládá za běhu a jeho
+   „Upravit / Duplikovat / Smazat" pod pravidla v CSS nespadalo, takže
+   šla položka z detailu přepsat i smazat. Do cloudu se to sice nedostalo
+   (sv() i fbSaveToCloud účetnímu nezapíšou), ale přepsaná položka
+   zůstala v paměti a v tabulce — účetní by z ní počítal daně a nic by
+   nenaznačilo, že to číslo sám přepsal. Klávesa „n" a „e" ho k témuž
+   pustily úplně mimo tlačítka.
+   Proto jedno místo se seznamem toho, co projde. Seznam je schválně
+   kladný: nová akce je pro účetního zakázaná, dokud se sem nedopíše.
+   Obráceně by stačilo na jednu zapomenout a bylo by to zpátky. */
+var UCETNI_AKCE = [
+  'detail', 'switchtab', 'opensettings',      // dívání a navigace
+  'copytext', 'copysku',                       // kopírování do schránky
+  'img',                                       // fotka položky (ukládání je vlastní akce)
+  'multifilter', 'setview', 'sizeunit', 'platexpand',
+  'nextstock', 'nextcat', 'nextsold', 'nextprofit', 'nextrev', 'nextpendingrev',
+  'closemodal', 'closemo', 'closecsvmodal',
+];
+/* Klávesové zkratky se řídí stejným pravidlem. Šipky listují detailem,
+   Escape zavírá, lomítko skáče do hledání, čísla přepínají sekce
+   (switchTab si ty zakázané odkloní sám) a Ctrl+K je hledání napříč. */
+var UCETNI_KLAVESY = ['ArrowLeft', 'ArrowRight', 'Escape', '/',
+  '1', '2', '3', '4', '5', 'k', 'K'];
+
+/* Vrátí true, když se má akce zastavit. Volá se z jednoho místa
+   v rozcestníku kliků a z jednoho v klávesových zkratkách. */
+function uctetniNesmi(co, seznam) {
+  if (!jeUctetni()) return false;
+  if (seznam.indexOf(co) !== -1) return false;
+  return true;
+}
 
 function zapniUctetniRezim(majitelUid) {
   if (_uctetniRezim) return;
@@ -2881,6 +2961,8 @@ function otevriUctetniManual() {
     + '<p>Lupa v hlavičce hledá napříč sekcemi — podle názvu, SKU i čísla objednávky.</p>'
     + '<h4>Co tu není</h4>'
     + '<p>Zákazníci, analytika, wishlist a osobní sbírka. Do těch dat pohled účetního nevidí.</p>'
+    + '<h4>Doklady</h4>'
+    + '<p>U prodejů, ke kterým se doklad vystavuje, je v detailu položky tlačítko <b>Doklad</b>. Datum na něm je den, kdy dorazily peníze. Prodeje, které doklad ještě nemají přidělené číslo, vystaví majitel — tobě se pak objeví samy.</p>'
     + '<h4>Změny</h4>'
     + '<p>Odsud se nedá nic upravit ani smazat. Když něco nesedí, dej vědět majiteli skladu — opraví to na své straně a tobě se to objeví samo.</p>'
     + '</div>';
@@ -3356,10 +3438,22 @@ function _applyCloudData(data, archiveItems, photos) {
   var cloudItems = _mergeCloudItems(data, archiveItems === undefined ? [] : archiveItems);
   if (!cloudItems || !cloudItems.length) return false;
   items = _photoAttach(cloudItems, photos);
-  /* Když se do prohlížeče zapsat nedá, razítko se posunout nesmí:
+  /* Účetnímu se majitelův sklad do prohlížeče neukládá. Jeho data chodí
+     z cloudu při každém otevření a offline je nepotřebuje, zato zůstávala
+     ležet v localStorage, dokud se neodhlásil — a kdo zavře záložku, se
+     neodhlásí. Když pak majitel přístup zrušil, účetní si po obnovení
+     stránky pořád zobrazil jeho sklad z uložené kopie, a ta měla novější
+     razítko než jeho vlastní prázdná kóje. Bez uložení mu po zrušení
+     přístupu nezbude nic.
+
+     Když se do prohlížeče zapsat nedá, razítko se posunout nesmí:
      jinak by zařízení tvrdilo, že má data z dneška, a přitom by
      v úložišti ležel týden starý sklad. */
-  if (_ulozLokal(SK, JSON.stringify(items))) {
+  if (jeUctetni()) {
+    localStorage.removeItem(SK);
+    localStorage.removeItem(SK+'_savedAt');
+    localStorage.removeItem(SK+'_dirty');
+  } else if (_ulozLokal(SK, JSON.stringify(items))) {
     if (data.savedAt) _ulozLokal(SK+'_savedAt', data.savedAt);
     localStorage.removeItem(SK+'_dirty');
   } else {
@@ -4737,6 +4831,10 @@ function bazosExpireCheckSafe() {
 }
 
 function togglePlatItem(id, platform) {
+  /* Jediná zapisovací cesta, která obchází sv() — píše do localStorage
+     sama. Bez tohohle by účetnímu fajfka u platformy držela i po
+     obnovení stránky, protože sv() by se na to nedostalo. */
+  if (jeUctetni()) return false;
   const idx = items.findIndex(i => i.id === id);
   if (idx === -1) return false;
   const plats = items[idx].platforms || [];
@@ -6777,6 +6875,8 @@ function _cleanBulkOnDelete(id) {
 }
 
 function del(id){
+  // Pojistka na samotném mazání, viz saveItem()
+  if (jeUctetni()) { showToast('Pohled účetního — měnit se tu nedá.', 'err'); return; }
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;';
   overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
@@ -6954,6 +7054,8 @@ async function loadOpenFakturyPrijate() {
 }
 
 function openAddModal(){
+  // Formulář, ze kterého nejde uložit, jen mate — viz saveItem()
+  if (jeUctetni()) return;
   editId=null;
   var tabTitles = {stock: 'Nová položka — Na skladě', waiting: 'Nová položka — Čeká', sold: 'Nová položka — Prodáno'};
   document.getElementById('mTitle').textContent = tabTitles[tab] || 'Nová položka';
@@ -7015,6 +7117,8 @@ function openAddModal(){
   }, 50);
 }
 function openEdit(id){
+  // Formulář, ze kterého nejde uložit, jen mate — viz saveItem()
+  if (jeUctetni()) return;
   editId=id;const it=items.find(i=>i.id===id);if(!it)return;
   document.getElementById('mTitle').textContent='Upravit';
   var _qw=document.getElementById('fQtyWrap'); if(_qw) _qw.style.display='none';
@@ -7165,6 +7269,10 @@ function openEdit(id){
   }, 30);
 }
 async function saveItem(){
+  /* Pojistka na samotném zápisu, ne jen na tlačítku. Do rozcestníku
+     kliků se dopisují nové akce a inline onclick sem může vést mimo něj;
+     tady se to zastaví, ať už cesta vedla odkudkoli. */
+  if (jeUctetni()) { showToast('Pohled účetního — měnit se tu nedá.', 'err'); return; }
   const name=document.getElementById('fName').value.trim();
   const bp=parseFloat(document.getElementById('fBuy').value);
   if(!name||isNaN(bp)){showToast('Vyplň název a nákupní cenu.', 'err');return;}
@@ -8517,22 +8625,24 @@ function openDetail(id) {
 
   // Tlačítka — pro paid stejný styl jako Čeká (Upravit + Smazat bez duplikovat)
   var btnsHtml;
+  /* `uc-skryt` je na každém tlačítku zvlášť, ne na obalu — účetní musí
+     „Doklad" vidět, vystavit ho je přesně jeho práce. */
   if (isPaid) {
     btnsHtml = '<div style="display:flex;gap:8px;margin-top:20px;">'
       + (lzeVystavitDoklad(it) ? '<button class="btn-sec" onclick="openSaleDocument(\''+it.id+'\')" style="flex:1;">Doklad</button>' : '')
-      + '<button class="btn-sec" data-action="edit" data-id="'+it.id+'" style="flex:1;">Upravit</button>'
-      + '<button class="btn-sec" data-action="del" data-id="'+it.id+'" style="border-color:var(--danger);color:var(--danger);flex:1;">Smazat</button>'
+      + '<button class="btn-sec uc-skryt" data-action="edit" data-id="'+it.id+'" style="flex:1;">Upravit</button>'
+      + '<button class="btn-sec uc-skryt" data-action="del" data-id="'+it.id+'" style="border-color:var(--danger);color:var(--danger);flex:1;">Smazat</button>'
       + '</div>';
   } else if (isWaiting) {
     btnsHtml = '<div style="display:flex;gap:8px;margin-top:20px;">'
-      + '<button class="btn-sec" data-action="edit" data-id="'+it.id+'" style="flex:1;">Upravit</button>'
-      + '<button class="btn-sec" data-action="del" data-id="'+it.id+'" style="border-color:var(--danger);color:var(--danger);flex:1;">Smazat</button>'
+      + '<button class="btn-sec uc-skryt" data-action="edit" data-id="'+it.id+'" style="flex:1;">Upravit</button>'
+      + '<button class="btn-sec uc-skryt" data-action="del" data-id="'+it.id+'" style="border-color:var(--danger);color:var(--danger);flex:1;">Smazat</button>'
       + '</div>';
   } else {
     btnsHtml = '<div style="display:flex;gap:8px;margin-top:20px;">'
-      + '<button class="btn-sec" data-action="edit" data-id="'+it.id+'" style="flex:1;">Upravit</button>'
-      + '<button class="btn-sec" data-action="duplicate" data-id="'+it.id+'" style="flex:1;">⧉ Duplikovat</button>'
-      + '<button class="btn-sec" data-action="del" data-id="'+it.id+'" style="border-color:var(--danger);color:var(--danger);flex:1;">Smazat</button>'
+      + '<button class="btn-sec uc-skryt" data-action="edit" data-id="'+it.id+'" style="flex:1;">Upravit</button>'
+      + '<button class="btn-sec uc-skryt" data-action="duplicate" data-id="'+it.id+'" style="flex:1;">⧉ Duplikovat</button>'
+      + '<button class="btn-sec uc-skryt" data-action="del" data-id="'+it.id+'" style="border-color:var(--danger);color:var(--danger);flex:1;">Smazat</button>'
       + '</div>';
   }
 
@@ -9168,10 +9278,16 @@ function chceOdkazNaFakturu(it) {
   return getPlatDocType(it.soldWhere) === 'faktura';
 }
 
-// Číslo dokladu ve tvaru ROK-NNN; jednou přidělené se už nemění
+/* Číslo dokladu ve tvaru ROK-NNN; jednou přidělené se už nemění.
+
+   Účetní ho přidělit nesmí. Zapsat ho nemá kam (sv() mu neuloží nic),
+   takže by číslo zmizelo se zavřením záložky a majitel by témuž prodeji
+   přidělil jindy jiné. Dva doklady na jeden prodej s různými čísly jsou
+   horší než doklad žádný — proto se vrátí prázdno a volající to řekne. */
 function saleDocNumber(it) {
   if (!it) return '';
   if (it.saleDocNum) return it.saleDocNum;
+  if (jeUctetni()) return '';
   var rok = String(it.payoutDate || it.saleDate || _dnesISO()).slice(0, 4);
   var nejvyssi = 0;
   (items || []).forEach(function(x) {
@@ -9196,6 +9312,8 @@ function openSaleDocument(id) {
   }
   var p = getSeller();
   var cislo = saleDocNumber(it);
+  // Nevystavený doklad účetní nedostane — viz saleDocNumber()
+  if (!cislo) { showToast('Doklad zatím nemá číslo — musí ho vystavit majitel.', 'err'); return; }
   var kupujici = it.linkedCustomerId ? (customers.find(function(c){ return c.id === it.linkedCustomerId; }) || null) : null;
   /* Částka jen v té měně, ve které prodej opravdu proběhl. Přepočet na Kč
      na doklad nepatří — kupující platil eura a účetní si je na konci
@@ -9620,7 +9738,15 @@ function openGlobalSearch() {
   function _gsRender(q) {
     if (!q || q.length < 2) { results.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;">Zadej alespoň 2 znaky…</div>'; return; }
     var ql = q.toLowerCase();
-    var allItems = items.filter(function(it){ return it.type !== 'bulk'; });
+    /* Hledání jde přímo přes `items`, ne přes vykreslený seznam, takže
+       se ho filtry z mřížky netýkají — a účetnímu tak ukazovalo osobní
+       položky i celou sekci Čeká, obojí i s cenami a se štítkem „Čeká".
+       Schované to je jen v rozhraní, tady je rozhraní taky. */
+    var allItems = items.filter(function(it){
+      if (it.type === 'bulk') return false;
+      if (jeUctetni() && (!profMatch(it) || it.saleState === 'waiting')) return false;
+      return true;
+    });
     var matched = allItems.filter(function(it){
       return (it.name||'').toLowerCase().includes(ql)
         || (it.sku||'').toLowerCase().includes(ql)
@@ -10117,6 +10243,11 @@ document.addEventListener('click', function(e) {
   e.stopPropagation();
   const action = btn.dataset.action;
   const id = btn.dataset.id;
+  // Účetní se jen dívá — viz UCETNI_AKCE
+  if (uctetniNesmi(action, UCETNI_AKCE)) {
+    showToast('Pohled účetního — měnit se tu nedá.', 'err');
+    return;
+  }
   if (action === 'switchtab') { switchTab(btn.dataset.tab); return; }
   if (action === 'opensettings') { openSettings(); return; }
   if (action === 'opensizeTables') { cm('moSettings'); openSizeTables(); return; }
@@ -12336,6 +12467,10 @@ function repairItemCache() {
 // Našeptávač ze snímku kolekce. legacyField = pole itemCache ze starého formátu.
 var _itemCacheLoaded = false;
 function _applyItemCacheDoc(cacheDoc, legacyField) {
+  /* Účetní našeptávač nepotřebuje — nic nezakládá. Zato se mu majitelovy
+     názvy a SKU usazovaly v prohlížeči a klíč `sklad_item_cache_v2`
+     odhlášení přežívá, takže mu tam zůstávaly i potom. */
+  if (jeUctetni()) return;
   function mergeIn(raw) {
     if (!raw) return;
     try {
@@ -15657,6 +15792,9 @@ if (document.readyState === 'loading') {
 document.addEventListener('keydown', function(e) {
   // Ignoruj pokud je fokus na inputu/textaree/selectu
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  // Účetní se jen dívá — „n" zakládalo položku, „e" otvíralo úpravu
+  // a Delete mazal vybrané, všechno mimo tlačítka. Viz UCETNI_KLAVESY.
+  if (uctetniNesmi(e.key, UCETNI_KLAVESY)) return;
   // Ignoruj pokud je otevřený modal
   var openModal = document.querySelector('.modal-overlay.open, .modal-overlay.vis');
   
@@ -18826,7 +18964,7 @@ rebuildBrandTables();
 <div class="img-modal">
   <div style="margin-bottom:20px;"><div class="mt2">Fotka položky</div></div>
   <!-- Preview -->
-  <div id="imgPreviewPh" class="img-preview-ph" data-action="openimgfile" style="cursor:pointer">
+  <div id="imgPreviewPh" class="img-preview-ph uc-skryt" data-action="openimgfile" style="cursor:pointer">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted2)"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
     <div style="font-size:11px;color:var(--muted);margin-top:5px;font-family:inherit;">Klikni pro nahrání</div>
   </div>
@@ -18844,18 +18982,18 @@ rebuildBrandTables();
 
   <!-- Upload / URL -->
   <input type="file" id="imgFileInput" accept="image/*" style="display:none" onchange="handleImgFile(event)">
-  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+  <div class="uc-skryt" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
     <div class="fi">
       <label>Nebo vlož přímý odkaz na obrázek</label>
       <input type="url" id="imgUrlInput" placeholder="https://...obr.jpg" oninput="previewImgUrl(this.value)" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;width:100%;transition:border-color 0.2s;">
     </div>
   </div>
 
-  <div class="btn-row">
+  <div class="btn-row uc-skryt">
     <button class="btn-sec" data-action="openimgfile">Nahrát soubor</button>
     <button class="btn-pri" data-action="saveimgurl">Uložit</button>
   </div>
-  <div style="margin-top:10px;text-align:center;">
+  <div class="uc-skryt" style="margin-top:10px;text-align:center;">
     <button data-action="removeimg" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:12px;font-family:inherit;padding:8px 0;display:block;margin:8px auto 0;text-align:center;">✕ Odebrat obrázek</button>
   </div>
 </div>

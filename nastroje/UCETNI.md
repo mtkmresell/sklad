@@ -14,6 +14,7 @@ projdi nejdřív ten návod — postup je stejný a pravidla se doplňují.
 | **vidí** | Na skladě, Prodáno, hledání napříč sekcemi, odhlášení, vysvětlivky |
 | **nevidí** | Čeká, Zákazníci, Wishlist, analytiku, kalkulačku marží, chybějící listingy, osobní položky, přepínač profilů |
 | **nemůže** | přidat, upravit ani smazat položku; prokliknout se na StockX ani na sledování zásilky |
+| **smí** | otevřít a vytisknout **prodejní doklad** u prodejů, kde je vystavený — je to jeho práce |
 
 Nahoře mu svítí oranžový pruh **Pohled účetního** s tlačítkem na
 vysvětlivky, ať je pořád jasné, kde je.
@@ -35,6 +36,21 @@ nástroje, na ně dosáhne.
 Kdyby to jednou vadilo, musely by se wishlist i osobní položky
 přestěhovat do vlastních dokumentů. To je zásah do ukládání dat
 a přenos toho, co už je uložené — samostatná práce, ne přepínač.
+
+**Ani úpravy nestačí schovat.** Dlouho se spoléhalo jen na to, že
+tlačítka nejsou vidět — jenže ta v detailu položky se skládají za běhu
+a pravidlům v CSS se vyhnula, takže účetní položku přepsal i smazal.
+Klávesy `n`, `e` a Delete vedly k témuž úplně mimo tlačítka. Do cloudu
+se nic nedostalo (to hlídá server), ale přepsané číslo zůstalo
+v tabulce a nic nenaznačilo, že ho tam dal on sám. Teď to drží kladný
+výčet povolených akcí a kláves plus brány v samotných zapisovacích
+funkcích; `test-uctetni.js` na všechno klikne a kontroluje, že se nic
+nezměnilo.
+
+**Data mu v prohlížeči nezůstávají.** Majitelův sklad se účetnímu
+neukládá do `localStorage` ani do našeptávače. Zavřít záložku není
+odhlášení, a bez tohohle se mu sklad zobrazoval z uložené kopie i poté,
+co jsi mu přístup zrušil.
 
 ## 1. Založ účet účetnímu
 
