@@ -975,6 +975,49 @@ const ME = {
   shoda('spolupráce s „x" se spáruje i tady',
     [(p.vystavit || []).length, (p.visi_navic_nezname || []).length], [0, 0]);
 
+  /* Čerstvě přidaný kus chvíli počká. Dokud se srovnávalo jen na cronu,
+     měl majitel tuhle lhůtu náhodou — mezi zadáním kusu a nejbližším
+     během byly klidně tři hodiny. Aplikace teď konektor šťouchne hned
+     po uložení, takže by kus visel u komise do vteřiny; a opravit
+     překlep v ceně nejde levně, protože staré inzeráty se nepřeceňují.
+
+     Datum se počítá ode dneška, ne pevné — pevné by za měsíc znamenalo
+     něco jiného a test by spadl beze změny v kódu. */
+  const MIN = 60000;
+  const cerstvy = (staryMin) => [{ id: 'novy', name: 'Zbrusu nové', sku: 'NV-1', size: '43',
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 4000,
+    dateAdded: Date.now() - staryMin * MIN }];
+  /* Ve výpisu musí něco viset, jinak není odkud vzít provizi a kus by
+     se nevystavil z úplně jiného důvodu než kvůli lhůtě. Je to jiný
+     model, takže se s naším kusem nespáruje. */
+  const cizinec = Object.assign({}, radekTricko('L-CZ', 'listed', 100000),
+    { sku: 'JINY-1', size: 'XXL' });
+
+  scenarSeSkladem(cerstvy(1), [cizinec], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('kus přidaný před minutou se nevystaví', (p.vystavit || []).map(x => x.sku), []);
+  ok('a je řečeno proč', /čerstvě přidaný/i.test(
+    JSON.stringify(p.nevystavuje_se || [])), JSON.stringify(p.nevystavuje_se));
+
+  scenarSeSkladem(cerstvy(60), [cizinec], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('po uplynutí lhůty se vystaví', (p.vystavit || []).map(x => x.sku), ['NV-1']);
+
+  /* Kus bez data přidání je starý import, ne novinka — kdyby se bral
+     jako čerstvý, nevystavil by se nikdy. */
+  scenarSeSkladem([Object.assign({}, cerstvy(0)[0], { dateAdded: undefined })],
+    [cizinec], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('kus bez data přidání lhůta nebrzdí', (p.vystavit || []).map(x => x.sku), ['NV-1']);
+
+  /* A hlavně: lhůta se týká jen vystavování. Stažení je ta strana,
+     kde zpoždění stojí peníze — prodaný kus musí pryč hned. */
+  scenarSeSkladem([Object.assign({}, cerstvy(1)[0], { location: 'Vráceno' })],
+    [Object.assign({}, radekTricko('L-NOV', 'listed', 500000),
+      { sku: 'NV-1', size: '43' })], zapisovyScenar);
+  p = (await pika()).telo.plan;
+  shoda('stahování lhůta nebrzdí', (p.stahnout || []).map(x => x.popis), ['L-NOV']);
+
   sekce('14) Opatrný rozjezd');
   /* „Vystav zatím jeden kus a ukaž mi ho." Bez tohohle by první ostrý
      běh udělal celý plán najednou. */
@@ -1187,9 +1230,9 @@ const ME = {
      prohlížeče nepatří. */
   const APP_ENV = Object.assign({}, ENV, { APP_TOKEN: 'token-pro-aplikaci' });
   scenarSeSkladem([DVOJCATA[0]], [prodanyRadek], zapisovyScenar);
-  async function app(cesta, env = APP_ENV, init) {
+  async function app(cesta, env = APP_ENV, init, ctx) {
     const adresa = 'https://sklad.mtkm.workers.dev/' + (env.APP_TOKEN || 'zadny') + '/' + cesta;
-    const r = await bezLogu(() => worker.fetch(new Request(adresa, init), env));
+    const r = await bezLogu(() => worker.fetch(new Request(adresa, init), env, ctx));
     let telo = null;
     try { telo = await r.json(); } catch (e) {}
     return { stav: r.status, telo, cors: r.headers.get('Access-Control-Allow-Origin') };
@@ -1206,9 +1249,9 @@ const ME = {
     predlet.stav + ' / ' + predlet.cors);
 
   /* Tohle je celý smysl vlastního tokenu: z prohlížeče se nesmí dostat
-     nikam dál než na čtení prodejů. */
+     nikam dál než na čtení prodejů a na „koukni se na to teď". */
   const zapisTudy = await app('prodeje', APP_ENV, { method: 'POST' });
-  ok('zapisovat se tudy nedá', zapisTudy.stav === 405, String(zapisTudy.stav));
+  ok('do prodejů se zapisovat nedá', zapisTudy.stav === 405, String(zapisTudy.stav));
   const naMcp = await app('mcp', APP_ENV, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
@@ -1216,6 +1259,44 @@ const ME = {
   ok('token aplikace na MCP nedosáhne', naMcp.stav === 404, String(naMcp.stav));
   ok('ani na komisi', (await app('pika')).stav === 404);
   ok('ani na náhled mailu', (await app('nahled')).stav === 404);
+
+  /* ── Šťouchnutí: „něco se ve skladu změnilo, srovnej to teď" ──────
+     Bez tohohle se stahovalo jen na cronu a mezi prodejem kusu
+     a stažením inzerátu byly klidně tři hodiny. Když ho mezitím koupí
+     někdo druhý, je za nedodání pokuta od 200 Kč. */
+  const kusPryc = [Object.assign({}, DVOJCATA[0], { location: 'Vráceno' })];
+  const jejichKus = [Object.assign({}, radekTricko('L-ST', 'listed', 100000),
+    { sku: 'T-1', size: 'S' })];
+
+  // Odpověď musí přijít hned — srovnání trvá vteřiny a aplikace na ni čeká
+  scenarSeSkladem(kusPryc, jejichKus, zapisovyScenar);
+  odeslane = [];
+  let nabehlo = null;
+  const stouch = await app('srovnat', APP_ENV, {
+    method: 'POST',
+    // waitUntil: takhle to Cloudflare předává doopravdy
+  }, { waitUntil: (p) => { nabehlo = p; } });
+  ok('šťouchnutí projde a odpoví hned', stouch.stav === 200 && stouch.telo.stav === 'spuštěno',
+    JSON.stringify(stouch).slice(0, 160));
+  if (nabehlo) await nabehlo;
+  ok('a srovnání se opravdu provedlo',
+    odeslane.some(x => /\/withdraw$/.test(x.url)),
+    JSON.stringify(odeslane.map(x => x.method + ' ' + x.url)).slice(0, 200));
+
+  /* Hned podruhé se nespouští. Aplikace si hlídá svůj odstup, ale ten
+     je jen v jednom prohlížeči — tohle drží i při víc zařízeních. */
+  odeslane = [];
+  const hnedZnovu = await app('srovnat', APP_ENV, { method: 'POST' });
+  ok('hned podruhé se nespustí', hnedZnovu.telo.stav === 'moc brzy',
+    JSON.stringify(hnedZnovu.telo));
+  shoda('a opravdu se nic neodeslalo', odeslane.filter(x => x.method !== 'GET').map(x => x.url), []);
+
+  /* Každá adresa svou metodu. GETem by srovnání spustil i náhodný
+     proklik nebo předtažení prohlížečem. */
+  ok('GETem se srovnání nespustí', (await app('srovnat', APP_ENV)).stav === 405,
+    String((await app('srovnat', APP_ENV)).stav));
+  ok('a pod MCP tokenem ta adresa není', (await bezLogu(() => worker.fetch(new Request(
+    'https://sklad.mtkm.workers.dev/' + ENV.MCP_TOKEN + '/srovnat', { method: 'POST' }), ENV))).status === 404);
 
   const bezNastaveni = await bezLogu(() => worker.fetch(
     new Request('https://sklad.mtkm.workers.dev/token-pro-aplikaci/prodeje'), ENV));

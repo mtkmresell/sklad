@@ -634,6 +634,14 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   zůstane potíž aspoň ve výsledku volání.
 - Přesun do **Čeká** znamená stáhnout — **kromě prodeje na Pikastore**,
   tam už stažené je.
+- **Čerstvě přidaný kus se chvíli nevystavuje** (`PIKA_ODKLAD_NOVE_MIN`,
+  20 minut). Dokud srovnání běželo jen na cronu, měl majitel tuhle lhůtu
+  náhodou — mezi zadáním kusu a nejbližším během byly klidně tři hodiny.
+  Aplikace teď konektor šťouchne hned po uložení, takže by kus visel
+  u komise do vteřiny a překlep v ceně by se nedal levně opravit: **staré
+  inzeráty se nepřeceňují**, takže špatná cena znamená stáhnout a založit
+  znovu. Platí pro každý běh stejně — ruční, cronový i šťouchnutý.
+  **Stahování žádnou lhůtu nemá**, tam zpoždění stojí peníze.
 
 **Prodej u nich se do skladu přenáší přes aplikaci, ne přes konektor**
 (`pika_prodeje`, v aplikaci `KOMISNÍ PRODEJ`). Konektor spočítá, co se
@@ -650,10 +658,11 @@ Aplikace si pro to chodí na `/<APP_TOKEN>/prodeje`. Čtyři věci se
 nesmí rozbít:
 
 - **Vlastní token, ne `MCP_TOKEN`.** Ten pouští ke všem datům skladu
-  i k zápisům do komise a do prohlížeče nepatří. Pod `APP_TOKEN` se dá
-  jen číst prodeje; cokoli jiného je `404`, jiná metoda než `GET`
-  `405`. Stejný token jako `MCP_TOKEN` se odmítne — zastínil by celý
-  MCP server a konektor v chatu by přestal chodit.
+  i k zápisům do komise a do prohlížeče nepatří. Pod `APP_TOKEN` vedou
+  jen dvě adresy — `GET /prodeje` a `POST /srovnat` (viz níž); cokoli
+  jiného je `404` a špatná metoda `405`. Stejný token jako `MCP_TOKEN`
+  se odmítne — zastínil by celý MCP server a konektor v chatu by
+  přestal chodit.
 - **Token se nesynchronizuje** (je v `syncLocalOnlyKeys()`, ne
   v `syncSettings()`). Synchronizované nastavení čte i účetní. Na
   druhém zařízení se vloží znovu, při odhlášení se maže.
@@ -664,6 +673,33 @@ nesmí rozbít:
   toho by změna konektoru přepsala nákupní cenu nebo hotový prodej.
 
 Hlídá to `test-komise.js`.
+
+**Opačným směrem jde šťouchnutí: `POST /<APP_TOKEN>/srovnat`.** Dokud
+se stahovalo jen na cronu, trvalo klidně tři hodiny, než kus přesunutý
+do Čeká zmizel z komise — a když ho mezitím koupí někdo druhý, je za
+nedodání pokuta od 200 Kč. Aplikace proto po každé změně položek řekne
+konektoru „koukni se na to teď". Vystavování nových kusů to zrychlí taky.
+
+Čtyři věci se nesmí rozbít:
+
+- **Šťouchá se až po potvrzeném zápisu do cloudu**, ne při změně —
+  volá se z `done()` ve `fbSaveToCloud` (v aplikaci `ŠŤOUCHNUTÍ PO
+  ZMĚNĚ`). Konektor si sklad čte z Firestore; kdyby se ozvalo dřív,
+  přečetl by starý stav, neudělal nic a vypadalo by to, že to proběhlo.
+- **Cron zůstává záchrannou sítí, ne zdvojením.** Šťouchnutí se ztratí
+  pokaždé, když je telefon offline nebo konektor dole. Neúspěch se proto
+  nikde nehlásí jako chyba a `fetch` má `.catch()` — jinak by nezachycené
+  odmítnutí sypalo do konzole při každém výpadku sítě.
+- **Volající neurčuje nic.** Neřekne, co stáhnout ani co vystavit; jen
+  „podívej se". Konektor pak udělá totéž co na cronu, se všemi
+  pojistkami. Nejhorší, co jde s uniklým `APP_TOKEN` udělat, je pustit
+  srovnání častěji, než je potřeba.
+- **Odstup na obou stranách** (`KOMISE_STOUCH_PAUZA_MS` v aplikaci,
+  `APP_SROVNAT_PAUZA_MS` v konektoru). Ten v aplikaci platí jen pro
+  jeden prohlížeč, ten v konektoru i pro víc zařízení naráz.
+
+Odpovídá se hned a srovnání běží na pozadí (`waitUntil`) — trvá vteřiny
+a aplikace na odpověď čeká z prohlížeče.
 
 Payout je dohodnutá cena minus provize, a **provize má u nich spodní
 i horní mez** (`commission_min_fee_cents`, `commission_max_fee_cents`).

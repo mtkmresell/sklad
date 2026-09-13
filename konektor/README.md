@@ -159,11 +159,11 @@ https://<jméno-workeru>.<jméno-účtu>.workers.dev/<APP_TOKEN>/prodeje
 ```
 
 Token je vlastní schválně: `MCP_TOKEN` pouští ke všem datům skladu
-i k zápisům do komise, a ten do prohlížeče nepatří. Odsud se dá jedině
-číst, co se prodalo — cokoli jiného pod tímhle tokenem vrátí `404`
-a jiná metoda než `GET` skončí na `405`. Stejný token jako `MCP_TOKEN`
-se odmítne; zastínil by celý MCP server a konektor v chatu by přestal
-chodit.
+i k zápisům do komise, a ten do prohlížeče nepatří. Pod `APP_TOKEN`
+vedou jen dvě adresy — `GET /prodeje` a `POST /srovnat` (viz níž);
+cokoli jiného vrátí `404` a špatná metoda `405`. Stejný token jako
+`MCP_TOKEN` se odmítne; zastínil by celý MCP server a konektor v chatu
+by přestal chodit.
 
 Zapojení:
 
@@ -175,6 +175,42 @@ Zapojení:
 3. Token zůstává **jen v tom prohlížeči** — nesynchronizuje se, protože
    synchronizované nastavení čte i účetní. Na druhém zařízení ho vlož
    znovu; bez něj se prostě nic nepřenáší.
+
+### Aplikace umí srovnání pošťouchnout
+
+Dokud se stahovalo jen na cronu, trvalo klidně tři hodiny, než kus
+přesunutý do Čeká zmizel z komise. Když ho mezitím koupí někdo druhý, je
+podle podmínek Pikastore za nedodání **pokuta od 200 Kč**. Aplikace
+proto po každé změně položek řekne konektoru „koukni se na to teď":
+
+```
+POST https://<jméno-workeru>.<jméno-účtu>.workers.dev/<APP_TOKEN>/srovnat
+```
+
+Nic se nenastavuje — jede to samo, jakmile je vyplněný `APP_TOKEN`
+a adresa konektoru. Zrychlí to i vystavování nových kusů.
+
+Co je na tom potřeba vědět:
+
+- **Volající neurčuje nic.** Neřekne, co stáhnout ani co vystavit; jen
+  „podívej se". Konektor pak udělá přesně to, co by udělal na cronu, se
+  všemi pojistkami. Nejhorší, co jde s uniklým `APP_TOKEN` udělat, je
+  pustit srovnání častěji, než je potřeba.
+- **Odpovídá se hned**, srovnání běží na pozadí. Jak dopadlo, se
+  dozvíš mailem stejně jako u cronu.
+- **Odstup nejmíň minuta** (`APP_SROVNAT_PAUZA_MS`). Aplikace si hlídá
+  svůj vlastní, ale ten platí jen pro jeden prohlížeč.
+- **Čerstvě přidaný kus počká 20 minut** (`PIKA_ODKLAD_NOVE_MIN`), než
+  se vystaví. Dokud se běhalo jen na cronu, byla tahle lhůta náhodná
+  a dala se v ní opravit špatně napsaná cena; teď je schválně, protože
+  **staré inzeráty se nepřeceňují** a špatnou cenu jde spravit jedině
+  stažením a novým založením. Stahování žádnou lhůtu nemá — tam
+  zpoždění stojí peníze. Kdyby ti to vadilo, sniž tu konstantu; na 0 se
+  kus vystaví hned po uložení.
+
+**Cron zůstává i tak.** Šťouchnutí se ztratí pokaždé, když je telefon
+offline nebo konektor zrovna dole, a bez cronu by se na takový kus
+nepřišlo vůbec.
 
 ### Srovnání běží samo
 

@@ -3372,6 +3372,9 @@ function fbSaveToCloud(pokus) {
     if (callId === _fbSaveCallId && dot) dot.className = 'fb-status fb-online';
     _posledniPotiz = null;
     try { localStorage.removeItem('sklad_sync_potiz'); } catch (e) {}
+    /* Teprve teď má konektor v cloudu co číst — viz ŠŤOUCHNUTÍ PO
+       ZMĚNĚ. Dřív by přečetl starý stav a neudělal nic. */
+    try { if (typeof komiseStouchni === 'function') komiseStouchni(); } catch (e) {}
   }
   function failed(e) {
     var duvod = (e && (e.code || e.message)) || String(e);
@@ -10166,6 +10169,61 @@ function _komiseStavPopis() {
   if (s.stav === 'chyba') return kdy + ': nepovedlo se — ' + s.chyba;
   return kdy + ': ' + (s.preneseno ? 'přeneseno ' + s.preneseno + ' ('
     + (s.kusy || []).join(', ') + ')' : 'nebylo co přenášet');
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   KOMISNÍ PRODEJ — ŠŤOUCHNUTÍ PO ZMĚNĚ
+
+   Dokud se srovnávalo jen na cronu, trvalo klidně tři hodiny, než kus
+   přesunutý do Čeká zmizel z komise. Když ho mezitím koupí někdo druhý,
+   je podle podmínek Pikastore za nedodání pokuta od 200 Kč — to
+   zpoždění stojí skutečné peníze. Aplikace proto po každé změně
+   položek řekne konektoru „koukni se na to teď".
+
+   Tři věci, které se nesmí rozbít:
+
+   1) **Šťouchá se až po potvrzeném zápisu do cloudu**, ne při změně.
+      Konektor si sklad čte z Firestore. Kdyby se ozvalo dřív, přečetl
+      by cloud beze změny, neudělal nic — a vypadalo by to, že to
+      proběhlo. Volá se proto z `done()` ve `fbSaveToCloud`.
+
+   2) **Cron zůstává záchrannou sítí.** Šťouchnutí se ztratí pokaždé,
+      když je telefon offline nebo konektor dole. Neúspěch se proto
+      nikde nehlásí jako chyba — není to chyba, jen se to nestihlo dřív
+      a cron to dožene.
+
+   3) **Odstup.** Při hromadné úpravě letí zápisů za sebou spousta
+      a každý běh čte celý výpis obou komisionářů. Konektor má svůj
+      vlastní strop, tenhle je proti zbytečnému provozu z prohlížeče.
+
+   Vystavování nových kusů to zrychlí taky, ale ne na nulu: konektor
+   drží `PIKA_ODKLAD_NOVE_MIN`, aby šel překlep v ceně opravit dřív, než
+   se kus někam dostane. Stahování žádnou takovou lhůtu nemá.
+══════════════════════════════════════════════════════════════════════ */
+var KOMISE_STOUCH_PAUZA_MS = 90000;
+var _komiseStouchPosledni = 0;
+
+function komiseSrovnatUrl() {
+  var origin = konektorOrigin();
+  var token = getKomiseToken();
+  if (!origin || !token) return '';
+  return origin + '/' + encodeURIComponent(token) + '/srovnat';
+}
+
+function komiseStouchni() {
+  var url = komiseSrovnatUrl();
+  if (!url) return;                       // bez tokenu se neděje nic
+  if (jeUctetni()) return;                // účetní komisi neřídí
+  var ted = Date.now();
+  if (ted - _komiseStouchPosledni < KOMISE_STOUCH_PAUZA_MS) return;
+  _komiseStouchPosledni = ted;
+  /* Odpověď nikoho nezajímá — konektor ji vrací hned a srovnání si
+     doběhne na pozadí. Chyba se polyká schválně: cron je záchranná
+     síť a hláška „nepovedlo se šťouchnout" by majiteli neřekla nic,
+     s čím by mohl něco udělat. */
+  try {
+    fetch(url, { method: 'POST', cache: 'no-store' }).catch(function () {});
+  } catch (e) {}
 }
 
 /* Po startu se počká na první snímek z cloudu. Bez nastaveného tokenu

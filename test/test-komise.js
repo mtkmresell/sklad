@@ -10,6 +10,7 @@
 
 const { chromium } = require('playwright');
 const path = require('path');
+const installFakeFirestore = require('./fakefs.js');
 
 let failures = 0;
 function check(n, c, e) { console.log((c ? 'PASS' : 'FAIL') + ' — ' + n + (c || e === undefined ? '' : ' | ' + e)); if (!c) failures++; }
@@ -306,6 +307,131 @@ function nasadKonektor(odpoved) {
   });
   check('uložení zapíše nový token', poZmene.ulozeno === 'jiny-token', poZmene.ulozeno);
   check('a okno se zavře', poZmene.zavreno);
+  await page.context().close();
+
+  // ══════════════════════════════════════════════════════════════
+  section('9) Šťouchnutí po změně');
+  /* Dokud se srovnávalo jen na cronu, trvalo klidně tři hodiny, než kus
+     přesunutý do Čeká zmizel z komise. Když ho mezitím koupí někdo
+     druhý, je za nedodání pokuta od 200 Kč. Aplikace proto po každé
+     změně řekne konektoru „koukni se na to teď". */
+  page = await otevri({ url: KONEKTOR, token: TOKEN });
+  await page.evaluate(nasadKonektor, { stav: 'ok', k_preneseni: [] });
+  await cloudDorazil(page);
+
+  const stouchnuti = () => page.evaluate(() =>
+    (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1));
+
+  const jednou = await page.evaluate(async () => {
+    window.__dotazy = [];
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 100));
+    return (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1);
+  });
+  check('šťouchnutí jde na správnou adresu',
+    jednou.length === 1 && jednou[0] === KONEKTOR + '/' + TOKEN + '/srovnat',
+    JSON.stringify(jednou));
+
+  /* Při hromadné úpravě letí zápisů za sebou spousta a každý běh čte
+     u konektoru celý výpis obou komisionářů. */
+  const opakovane = await page.evaluate(async () => {
+    window.__dotazy = [];
+    for (let i = 0; i < 5; i++) komiseStouchni();
+    await new Promise(r => setTimeout(r, 100));
+    return (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length;
+  });
+  check('pět změn za sebou nešťouchne pětkrát', opakovane === 0, String(opakovane));
+
+  /* Neúspěch není chyba — cron je záchranná síť a hláška, se kterou
+     majitel nic neudělá, by se přestala číst.
+
+     Chytá se i nezachycené odmítnutí slibu: `fetch` na spadlé síti
+     nevyhodí výjimku rovnou, jen vrátí odmítnutý slib. Bez `.catch()`
+     by to sice nic nerozbilo, ale sypalo by to do konzole pokaždé, když
+     je telefon offline — a konzole je jediné místo, kde se tady dá něco
+     vyšetřit. */
+  const kdyzSpadne = await page.evaluate(async () => {
+    const nezachycene = [];
+    const posluchac = (e) => { nezachycene.push(String(e.reason && e.reason.message || e.reason)); };
+    window.addEventListener('unhandledrejection', posluchac);
+    window.__odpoved = { __selze: true };
+    _komiseStouchPosledni = 0;
+    let vyhozeno = null;
+    try { komiseStouchni(); } catch (e) { vyhozeno = String(e && e.message); }
+    await new Promise(r => setTimeout(r, 300));
+    window.removeEventListener('unhandledrejection', posluchac);
+    return { vyhozeno, nezachycene, toast: !!document.querySelector('.toast, #toast.show') };
+  });
+  check('spadlá síť nic nevyhodí', kdyzSpadne.vyhozeno === null, String(kdyzSpadne.vyhozeno));
+  check('ani nezachycené odmítnutí do konzole',
+    kdyzSpadne.nezachycene.length === 0, JSON.stringify(kdyzSpadne.nezachycene));
+  check('a nic se nehlásí', kdyzSpadne.toast === false);
+  await page.context().close();
+
+  /* Bez tokenu se nesmí ozvat nikam — stejně jako u čtení prodejů. */
+  page = await otevri({ url: KONEKTOR });            // adresa ano, token ne
+  await page.evaluate(nasadKonektor, { stav: 'ok', k_preneseni: [] });
+  await cloudDorazil(page);
+  const bezTokenu = await page.evaluate(async () => {
+    window.__dotazy = [];
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 100));
+    // Jen šťouchnutí — kurz ČNB si aplikace tahá ze startu a sem nepatří
+    return (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length;
+  });
+  check('bez tokenu se nešťouchá', bezTokenu === 0, String(bezTokenu));
+  await page.context().close();
+
+  /* A hlavně: šťouchá se až po potvrzeném zápisu do cloudu, ne při
+     změně. Konektor si sklad čte z Firestore — kdyby se ozvalo dřív,
+     přečetl by starý stav, neudělal nic a vypadalo by to, že to
+     proběhlo. */
+  page = await otevri({ url: KONEKTOR, token: TOKEN });
+  await page.evaluate(nasadKonektor, { stav: 'ok', k_preneseni: [] });
+  await cloudDorazil(page);
+  const poradi = await page.evaluate(async () => {
+    // sv() smí zapsat lokálně, ale do cloudu se v testu nedostane
+    window.__dotazy = [];
+    _komiseStouchPosledni = 0;
+    items[1].saleState = 'waiting';
+    sv();
+    await new Promise(r => setTimeout(r, 700));
+    return (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length;
+  });
+  check('samotné sv() bez potvrzení z cloudu nešťouchá', poradi === 0, String(poradi));
+  await page.context().close();
+
+  /* A druhá půlka téhož: až zápis do cloudu opravdu dojde, šťouchnout
+     se musí. Tady proto běží skutečný `fbSaveToCloud` proti falešnému
+     Firestore — s atrapou by se `done()` nikdy nezavolalo a test by
+     nedokázal nic. */
+  page = await otevri({ url: KONEKTOR, token: TOKEN });
+  await page.evaluate(installFakeFirestore);
+  const poZapisu = await page.evaluate(async () => {
+    window.__dotazy = [];
+    window.fetch = async function (u) {
+      window.__dotazy.push(String(u && u.url ? u.url : u));
+      return new Response('{"stav":"spuštěno"}',
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+    window.__store = {};
+    window._fbUser = { uid: 'u1', email: 'u1@test.cz' };
+    document.dispatchEvent(new CustomEvent('fb-auth', { detail: { user: { uid: 'u1' } } }));
+    await new Promise(r => setTimeout(r, 300));
+    window.__emitSnapshot && window.__emitSnapshot();
+    await new Promise(r => setTimeout(r, 400));
+    _komiseStouchPosledni = 0;
+    window.__dotazy = [];
+    items[1].saleState = 'waiting';
+    sv();
+    await new Promise(r => setTimeout(r, 1500));
+    return {
+      stouchnuto: (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length,
+      vCloudu: JSON.stringify(window.__store).indexOf('waiting') !== -1,
+    };
+  });
+  check('zápis do cloudu opravdu prošel', poZapisu.vCloudu === true);
+  check('a po jeho potvrzení se šťouchlo', poZapisu.stouchnuto === 1, String(poZapisu.stouchnuto));
   await page.context().close();
 
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }

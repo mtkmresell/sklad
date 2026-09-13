@@ -205,6 +205,9 @@ const radek = (o) => Object.assign({
     ['kus na cestě taky ne', { location: 'Na cestě' }, 'nevystavuje_se'],
     ['ani ten, co se bude vracet', { location: 'Bude vráceno' }, 'nevystavuje_se'],
     ['bez cílové ceny taky ne', { targetPrice: undefined }, 'bez_cilove_ceny'],
+    // Ochranná lhůta na překlep je taky sdílená — počítá se ode dneška,
+    // pevné datum by za měsíc znamenalo něco jiného
+    ['čerstvě přidaný kus počká i tady', { dateAdded: Date.now() }, 'nevystavuje_se'],
   ];
   for (const [popis, zmena, kam] of pripady) {
     polozkySkladu = [Object.assign({}, zaklad, zmena)];

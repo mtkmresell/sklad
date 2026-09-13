@@ -848,10 +848,34 @@ function pikaVUvahu(it) {
    jejich ověřením nebo by ho zákazník vrátil. Prodat se dá napřímo,
    ne na komisi. Stejné pravidlo je v aplikaci (POŠKOZENÝ KUS
    A PLATFORMY). */
+/* Čerstvě přidaný kus chvíli počká, než se vystaví.
+
+   Dokud srovnání běželo jen na cronu, měl majitel tuhle lhůtu náhodou —
+   mezi zadáním kusu a nejbližším během byly klidně tři hodiny, a
+   překlep v ceně nebo velikosti se dal opravit dřív, než se kus někam
+   dostal. Jenže aplikace teď konektor šťouchne hned po uložení, takže
+   by ten kus visel u komise do vteřiny.
+
+   Opravit se to pak nedá levně: **staré inzeráty se nepřeceňují**
+   (žádný PATCH /listings), takže špatná cena znamená stáhnout a založit
+   znovu. Ta lhůta je proto schválně, ne opomenutí.
+
+   Platí pro každý běh stejně — ruční, cronový i šťouchnutý. Kdyby
+   platila jen pro některý, chovalo by se to pokaždé jinak a nikdo by
+   nevěděl proč. Stahování se netýká: prodaný kus musí pryč hned, tam
+   je zpoždění to, co stojí peníze. */
+const PIKA_ODKLAD_NOVE_MIN = 20;
 function pikaDuvodStranou(it) {
   if (String(it.condition || '') === 'poskozene') return 'poškozený kus — na komisi nepatří';
   const misto = it.location || 'Doma';
   if (PIKA_MISTA_NEDOMA.indexOf(misto) !== -1) return 'kus není doma (' + misto + ')';
+  const pridano = Number(it.dateAdded);
+  if (Number.isFinite(pridano) && pridano > 0) {
+    const zbyva = PIKA_ODKLAD_NOVE_MIN * 60000 - (Date.now() - pridano);
+    if (zbyva > 0) {
+      return 'čerstvě přidaný kus — vystaví se za ' + Math.ceil(zbyva / 60000) + ' min';
+    }
+  }
   return null;
 }
 
@@ -3191,8 +3215,30 @@ async function pripravUpozorneni(env) {
    Aplikace v prohlížeči si sama chodí pro prodeje z komise, aby prodaný
    kus nemusel majitel přesouvat do Čeká ručně. Má na to **vlastní token**
    (`APP_TOKEN`), protože MCP_TOKEN pouští ke všem datům skladu i k zápisům
-   do komise — a ten do stránky nepatří. Odsud se dá jedině přečíst, co se
-   u komisionáře prodalo; nic se tudy nezapisuje ani u nich, ani do cloudu.
+   do komise — a ten do stránky nepatří.
+
+   Vedou sem dvě adresy a nic víc; cokoli jiného je 404.
+
+   `GET /prodeje`   co se u komisionáře prodalo. Jen čte.
+   `POST /srovnat`  „něco se ve skladu změnilo, srovnej to teď".
+
+   ── Proč smí `/srovnat` existovat ───────────────────────────────────
+   Do té doby se stahovalo jedině na cronu, takže mezi prodejem kusu
+   a stažením inzerátu byly klidně tři hodiny. Když kus mezitím koupí
+   někdo druhý, je podle podmínek Pikastore za nedodání pokuta od 200 Kč
+   — to zpoždění stojí skutečné peníze.
+
+   Je to změkčení hranice „pod APP_TOKEN se dá jen číst" a stojí za to
+   vědět, co přesně se tím povolilo. **Volající neurčuje nic.** Neřekne,
+   co stáhnout ani co vystavit; řekne jedině „podívej se". Konektor pak
+   udělá přesně to, co by udělal na cronu, se všemi svými pojistkami
+   (`PIKA_STROP_CRON`, `PIKA_STROP_STAZENI`, cizí inzeráty se nechají
+   být). Nejhorší, co s uniklým APP_TOKENem jde udělat, je pustit
+   srovnání častěji, než je potřeba — a proti tomu stojí `APP_SROVNAT_PAUZA`.
+
+   Cron zůstává jako záchranná síť, ne jako zdvojení: šťouchnutí se
+   ztratí pokaždé, když je telefon offline nebo konektor zrovna dole,
+   a bez cronu by se na takový kus nepřišlo vůbec.
 
    Hvězdička v CORS je nutná: aplikace běží i z `file://`, kde je origin
    `null` a jinak než hvězdičkou se povolit nedá. Chrání to token
@@ -3200,9 +3246,42 @@ async function pripravUpozorneni(env) {
 ══════════════════════════════════════════════════════════════════════ */
 const APP_HLAVICKY = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Cache-Control': 'no-store',
 };
+
+/* Nejkratší rozestup mezi dvěma šťouchnutími. Aplikace si hlídá svůj
+   vlastní odstup, ale ten je jen v jednom prohlížeči — tohle drží
+   i tehdy, když je otevřených zařízení víc nebo když si někdo s adresou
+   hraje. Kratší pauza by nic nepřinesla: každý běh čte celý výpis obou
+   komisionářů a rychleji se stav u nich stejně nezmění. */
+const APP_SROVNAT_PAUZA_MS = 60000;
+let _appSrovnatPosledni = 0;
+let _appSrovnatBezi = false;
+
+/* Srovnání na požádání. Odpovídá se hned a běží se na pozadí
+   (`waitUntil`) — aplikace čeká na odpověď z prohlížeče a srovnání trvá
+   klidně dvacet vteřin; kdyby na to čekala, vypadalo by to zaseknutě.
+   Co se povedlo a co ne, se stejně dozvídá mailem jako u cronu. */
+function appSrovnatTed(env, ctx) {
+  const ted = Date.now();
+  if (_appSrovnatBezi) return { stav: 'už běží' };
+  if (ted - _appSrovnatPosledni < APP_SROVNAT_PAUZA_MS) {
+    return { stav: 'moc brzy', zkus_za_s: Math.ceil((APP_SROVNAT_PAUZA_MS - (ted - _appSrovnatPosledni)) / 1000) };
+  }
+  _appSrovnatPosledni = ted;
+  _appSrovnatBezi = true;
+  /* Oba komisionáři, každý zvlášť — pád jednoho nesmí umlčet druhého,
+     stejně jako na cronu. */
+  const beh = (async () => {
+    try { await pikaCron(env); }
+    catch (e) { console.error('Pikastore (na požádání): ' + (e && e.stack || e)); }
+    try { await pkCron(env, Date.now()); }
+    catch (e) { console.error(PK_JMENO + ' (na požádání): ' + (e && e.stack || e)); }
+  })().finally(() => { _appSrovnatBezi = false; });
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(beh);
+  return { stav: 'spuštěno' };
+}
 
 /* ── Vstupní bod ────────────────────────────────────────────────────── */
 // Porovnání odolné vůči měření času — ať se token nedá uhodnout po znacích
@@ -3214,7 +3293,7 @@ function shodujeSe(a, b) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const cesta = url.pathname.replace(/^\/+|\/+$/g, '').split('/');
 
@@ -3235,11 +3314,16 @@ export default {
         && shodujeSe(cesta[0] || '', env.APP_TOKEN)) {
       /* Cesta se posuzuje dřív než metoda — jinak by POST na /mcp
          odpověděl „405", a tím by prozradil, že tam něco je. */
-      if (cesta[1] !== 'prodeje') {
+      const coApp = cesta[1];
+      if (coApp !== 'prodeje' && coApp !== 'srovnat') {
         return new Response('Not found', { status: 404, headers: APP_HLAVICKY });
       }
       if (request.method === 'OPTIONS') return new Response(null, { headers: APP_HLAVICKY });
-      if (request.method !== 'GET') {
+      /* Každá adresa svou metodu: čtení GET, spuštění POST. Kdyby
+         srovnání šlo pustit GETem, spustil by ho i náhodný proklik
+         nebo si ho předtáhne prohlížeč. */
+      const metodaOk = coApp === 'prodeje' ? 'GET' : 'POST';
+      if (request.method !== metodaOk) {
         return new Response('Method not allowed', { status: 405, headers: APP_HLAVICKY });
       }
       const chybiApp = ['SKLAD_EMAIL', 'SKLAD_HESLO', 'SKLAD_UID', 'CONSIGNTHEM_TOKEN']
@@ -3247,6 +3331,9 @@ export default {
       if (chybiApp.length) {
         return Response.json({ stav: 'nenastaveno', chybi: chybiApp },
           { status: 500, headers: APP_HLAVICKY });
+      }
+      if (coApp === 'srovnat') {
+        return Response.json(appSrovnatTed(env, ctx), { headers: APP_HLAVICKY });
       }
       try {
         return Response.json(await pikaProdeje(env), { headers: APP_HLAVICKY });
