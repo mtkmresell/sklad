@@ -823,7 +823,7 @@ function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
           sellPrice: payout,
           sellCurrency: 'CZK',
           saleDate: String(r.updated_at || '').slice(0, 10) || null,
-          soldWhere: 'Pikastore',
+          soldWhere: PIKA_JMENO,
           extraCosts: 0,
         },
         doplnit_rucne: rucne,
@@ -968,6 +968,10 @@ function pikaKlicePolozky(it) {
 
    Stažený kus se přednostně **vrátí do prodeje** místo zakládání nového
    (`activate`), takže návrat z Čeká na sklad nezaloží duplikát. */
+/* Jak se ta komise jmenuje ve skladu. Musí sedět s názvem platformy
+   v aplikaci (`PLATFORMS`) — pod tímhle jménem se zapisuje `soldWhere`
+   i fajfka „vystaveno". Dvě různá napsání by znamenala platformu navíc. */
+const PIKA_JMENO = 'Pikastore';
 const PIKA_STAVY_CINNE = ['draft', 'listed'];
 /* Jak dlouho po prodeji u nich se ten model nevystavuje znovu, i když
    razítko skladu mezitím poskočilo. Razítko se hýbe i po nesouvisející
@@ -1185,7 +1189,7 @@ function pikaSkupiny(polozky, radky, kurz) {
   const bezCeny = [], stranou = [];
   function skupinaProKlice(klice) {
     for (const k of klice) if (index.has(k)) return index.get(k);
-    const s = { klice: [], chtene: [], jejich: [], znameKusu: 0, kusuStranou: 0 };
+    const s = { klice: [], chtene: [], doma: [], jejich: [], znameKusu: 0, kusuStranou: 0 };
     skupiny.push(s);
     return s;
   }
@@ -1198,6 +1202,11 @@ function pikaSkupiny(polozky, radky, kurz) {
        tenhle model vůbec známe. Co neznáme, toho se nedotýkáme. */
     s.znameKusu++;
     if (!pikaVUvahu(it)) continue;
+    /* Kus, který u nich viset **může**. Sbírá se dřív než se řeší cena
+       a důvody stranou: kus doma bez cílovky nebo poškozený se sice
+       nevystaví, ale klidně u nich už visí z dřívějška — a aplikace si
+       ho má odškrtnout stejně jako každý jiný. */
+    s.doma.push(it);
     const duvod = pikaDuvodStranou(it);
     if (duvod) {
       stranou.push(Object.assign(pikaPopisKusu(it), { duvod }));
@@ -1218,6 +1227,34 @@ function pikaSkupiny(polozky, radky, kurz) {
     if (s) s.jejich.push(r); else cizi.push(r);
   }
   return { skupiny, cizi, bezCeny, stranou };
+}
+
+/* Které kusy u nich doopravdy visí — aby si je aplikace mohla
+   odškrtnout jako vystavené a nepletly se jí mezi nevystavené.
+
+   **Zapsat to smí jedině aplikace**, stejně jako u prodejů: konektor
+   do cloudu nezapisuje. Tady se jen spočítá, co je pravda.
+
+   Párování je po skupinách (SKU-nebo-název + velikost), ne po kusech —
+   jejich řádky nenesou nic, čím by se dva stejné páry daly odlišit.
+   Odškrtne se proto **tolik kusů, kolik jich u nich visí**, ne celá
+   skupina: kdyby majitel měl doma tři stejné a u nich visel jeden,
+   odškrtnutí všech tří by tvrdilo, že jsou vystavené všechny. Falešná
+   fajfka je ta horší chyba — kus se pak tváří jako nabízený a majitel
+   ho nikam nedá.
+
+   Pořadí je ustálené (podle `id`), aby dva běhy nad týmiž daty vybraly
+   tytéž kusy a fajfka neskákala z kusu na kus. */
+function komiseVystavene(polozky, radky, cinneStavy, kde) {
+  const { skupiny } = pikaSkupiny(polozky, radky, null);
+  const ven = [];
+  for (const s of skupiny) {
+    const cinnych = s.jejich.filter(r => cinneStavy.indexOf(r.status) !== -1).length;
+    if (!cinnych) continue;
+    const kusy = s.doma.slice().sort((a, b) => String(a.id) < String(b.id) ? -1 : 1);
+    for (const it of kusy.slice(0, cinnych)) ven.push({ id: it.id, kde });
+  }
+  return ven;
 }
 
 /* Z rozdílu udělá seznam úkonů. Nic neodesílá. */
@@ -1636,10 +1673,33 @@ async function pikaProdeje(env) {
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
   const polozky = slozPolozky(data, archivy);
   const prodeje = pikaProdejeKPreneseni(polozky, radky, data.savedAt);
+
+  /* Co u nich visí, ať si to aplikace odškrtne. Purekickz je nepovinný
+     a **jeho výpadek nesmí shodit přenos prodejů** — to jsou dvě
+     nezávislé věci a prodej je ta dražší. Když se jeho výpis nepovede,
+     jeho fajfky se prostě nepřiloží a řekne se proč; kdyby se místo
+     toho poslal prázdný seznam, vypadalo by to, že u nich nic nevisí. */
+  const vystaveno = komiseVystavene(polozky, radky, PIKA_STAVY_CINNE, PIKA_JMENO);
+  const nezjisteno = [];
+  if (env.PUREKICKZ_TOKEN) {
+    try {
+      const { radky: pkRadky } = await pkVypis(env);
+      vystaveno.push(...komiseVystavene(polozky, pkRadky, PK_STAVY_CINNE, PK_JMENO));
+    } catch (e) {
+      nezjisteno.push({ kde: PK_JMENO, chyba: String((e && e.message) || e).slice(0, 120) });
+    }
+  } else {
+    nezjisteno.push({ kde: PK_JMENO, chyba: 'není nastavený token' });
+  }
+
   return {
     stav: 'ok',
     sklad_ulozen: data.savedAt || null,
     k_preneseni: prodeje,
+    vystaveno,
+    /* Komise, kterou se zjistit nepodařilo. Aplikace podle toho pozná,
+       že „u nich nic nevisí" a „nevíme" nejsou totéž. */
+    vystaveno_nezjisteno: nezjisteno,
     poznamka: prodeje.length
       ? 'Tyhle kusy se u nich prodaly a ve skladu jsou pořád na skladě. '
         + 'Zapsat je smí jedině aplikace — konektor do cloudu nezapisuje.'

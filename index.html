@@ -10024,6 +10024,45 @@ async function _komiseNacti(url) {
   } finally { clearTimeout(casovac); }
 }
 
+/* Odškrtne kusy, které u komisionáře opravdu visí.
+
+   Konektor je vystaví, ale zapsat to do skladu smí jedině aplikace —
+   druhý zapisovatel do cloudu by se pral s její synchronizací. Bez
+   tohohle zůstal kus vystavený na Pikastore i Purekickz veden jako
+   nikde nevystavený a pletl se mezi ty, co se mají teprve nahodit.
+
+   Zaškrtává se **jen**, nikdy neodškrtává. Chybějící fajfka je otrava,
+   ale falešná tvrdí, že kus někde visí, a majitel ho pak nikam nedá.
+   A hlavně: majitel schválně listuje některé kusy pod jiným SKU, než
+   má ve skladu (dámské boty jako pánské) — takový inzerát konektor
+   v páru nenajde a odškrtnutí by mu ručně zaškrtnutou platformu
+   pokaždé smazalo. Až bude potřeba i odebírat, musí se nejdřív umět
+   odlišit fajfka od automatiky od té ruční.
+
+   Z odpovědi se bere jen `id` a `kde`, a `kde` musí být jedno ze dvou
+   jmen, která tuhle cestu smí použít — odpověď přijde po síti a názvem
+   platformy se sem jinak dá propašovat cokoli. */
+var KOMISE_PLATFORMY = ['Pikastore', 'Purekickz'];
+
+function _komiseOdskrtniVystavene(odpoved) {
+  var seznam = (odpoved && Array.isArray(odpoved.vystaveno)) ? odpoved.vystaveno : [];
+  var zmeneno = [];
+  for (var i = 0; i < seznam.length; i++) {
+    var z = seznam[i] || {};
+    var kde = z.kde;
+    if (KOMISE_PLATFORMY.indexOf(kde) === -1) continue;
+    if (PLATFORMS.indexOf(kde) === -1) continue;   // platforma, kterou appka nezná
+    var it = z.id ? items.find(function (x) { return x.id === z.id; }) : null;
+    // Kus, se kterým majitel mezitím pohnul, se nechá být
+    if (!it || it.type === 'bulk' || (it.saleState && it.saleState !== 'stock')) continue;
+    if (!Array.isArray(it.platforms)) it.platforms = [];
+    if (it.platforms.indexOf(kde) !== -1) continue;
+    it.platforms.push(kde);
+    zmeneno.push(it.name + ' → ' + kde);
+  }
+  return zmeneno;
+}
+
 /* Přenese prodeje z komise do skladu. `rucne` = spuštěno z Nastavení,
    tehdy se ozve i to, že není co dělat. */
 async function komisePrenesProdeje(rucne) {
@@ -10059,14 +10098,25 @@ async function komisePrenesProdeje(rucne) {
     chystane.push({ it: it, hodnoty: hodnoty, nazev: it.name });
   }
 
+  /* Odškrtnutí vystavených je na přenosu prodejů nezávislé a děje se
+     i tehdy, když žádný prodej nečeká — což je většina běhů. */
+  var odskrtnuto = _komiseOdskrtniVystavene(odpoved);
+
   if (!chystane.length) {
-    _komiseZapisStav({ stav: 'ok', preneseno: 0, preskoceno: preskocene.length });
-    if (rucne) {
-      showToast(preskocene.length
-        ? 'Není co přenášet — ' + preskocene.length + ' prodej(ů) sklad už zná.'
-        : 'Není co přenášet, všechny prodeje z komise sklad zná.');
+    if (odskrtnuto.length) {
+      sv();
+      try { renderStats(); renderItems(); } catch (e) {}
     }
-    return { stav: 'ok', preneseno: 0, preskoceno: preskocene };
+    _komiseZapisStav({ stav: 'ok', preneseno: 0, preskoceno: preskocene.length,
+      vystaveno: odskrtnuto });
+    if (rucne) {
+      showToast(odskrtnuto.length
+        ? 'Není co přenášet. Odškrtnuto jako vystavené: ' + odskrtnuto.length + '×.'
+        : (preskocene.length
+          ? 'Není co přenášet — ' + preskocene.length + ' prodej(ů) sklad už zná.'
+          : 'Není co přenášet, všechny prodeje z komise sklad zná.'));
+    }
+    return { stav: 'ok', preneseno: 0, preskoceno: preskocene, vystaveno: odskrtnuto };
   }
 
   // Záloha PŘED zásahem, ať se přesun dá jedním kliknutím vrátit
@@ -10093,7 +10143,8 @@ async function komisePrenesProdeje(rucne) {
 
   sv();
   try { renderStats(); renderItems(); } catch (e) {}
-  _komiseZapisStav({ stav: 'ok', preneseno: jmena.length, preskoceno: preskocene.length, kusy: jmena });
+  _komiseZapisStav({ stav: 'ok', preneseno: jmena.length, preskoceno: preskocene.length,
+    kusy: jmena, vystaveno: odskrtnuto });
   showToast(jmena.length === 1
     ? 'Prodáno u komisionáře: ' + jmena[0] + ' → Čeká. Záloha je v Nastavení.'
     : jmena.length + ' prodeje z komise přesunuty do Čeká. Záloha je v Nastavení.');

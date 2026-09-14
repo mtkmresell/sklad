@@ -176,6 +176,20 @@ Zapojení:
    synchronizované nastavení čte i účetní. Na druhém zařízení ho vlož
    znovu; bez něj se prostě nic nepřenáší.
 
+Stejnou odpovědí chodí i **`vystaveno`** — které kusy u komisionářů
+doopravdy visí, ať si je aplikace odškrtne jako vystavené. Bez toho se
+kus vystavený automatikou tvářil jako nikde nevystavený a pletl se mezi
+ty, co se teprve mají nahodit. Tři věci:
+
+- **Odškrtne se tolik kusů, kolik jich u nich visí**, ne celá skupina.
+  Doma tři stejné a u nich jeden inzerát znamená jednu fajfku.
+- **Jen se zaškrtává, nikdy neodškrtává.** Kusy listované pod jiným SKU,
+  než mají ve skladu, konektor v páru nenajde — odškrtávání by ti u nich
+  ručně zaškrtnutou platformu pokaždé smazalo.
+- **Výpadek Purekickz přenos prodejů neshodí.** Jeho fajfky se nepřiloží
+  a řekne se proč v `vystaveno_nezjisteno`; prázdný seznam by lhal, že
+  u nich nic nevisí.
+
 ### Aplikace umí srovnání pošťouchnout
 
 Dokud se stahovalo jen na cronu, trvalo klidně tři hodiny, než kus

@@ -245,6 +245,80 @@ function nasadKonektor(odpoved) {
   await page.context().close();
 
   // ══════════════════════════════════════════════════════════════
+  section('5b) Odškrtnutí vystavených kusů');
+  /* Konektor kus u komise vystaví, ale zapsat to smí jedině aplikace.
+     Bez tohohle zůstal kus vystavený na Pikastore i Purekickz veden
+     jako nikde nevystavený a pletl se mezi ty, co se teprve nahodí. */
+  page = await otevri({ url: KONEKTOR, token: TOKEN });
+  await page.evaluate(nasadKonektor, { stav: 'ok', k_preneseni: [],
+    vystaveno: [{ id: 'b', kde: 'Pikastore' }, { id: 'b', kde: 'Purekickz' }] });
+  await cloudDorazil(page);
+  v = await page.evaluate(() => komisePrenesProdeje(true));
+  check('kus se odškrtne u obou komisí',
+    (await page.evaluate(() => items.find(x => x.id === 'b').platforms)).join(',')
+      === 'Pikastore,Purekickz',
+    JSON.stringify(await page.evaluate(() => items.find(x => x.id === 'b').platforms)));
+  check('děje se to, i když žádný prodej nečeká', v.preneseno === 0, JSON.stringify(v));
+  /* Fajfka musí přežít zavření záložky — jinak by se odškrtnutí
+     dělalo pořád dokola a při odpojeném cloudu by zmizelo úplně. */
+  check('a rovnou se to uloží, ne jen do paměti',
+    (await page.evaluate(() => JSON.parse(localStorage.getItem('sklad_v3') || '[]')
+      .find(x => x.id === 'b').platforms)).join(',') === 'Pikastore,Purekickz');
+
+  // Podruhé se nesmí přidat znovu
+  await page.evaluate(() => { window.__zapisyDoCloudu = 0; });
+  await page.evaluate(() => komisePrenesProdeje(true));
+  check('podruhé se fajfka nezdvojí',
+    (await page.evaluate(() => items.find(x => x.id === 'b').platforms)).length === 2,
+    JSON.stringify(await page.evaluate(() => items.find(x => x.id === 'b').platforms)));
+  check('a zbytečně se neukládá', (await page.evaluate(() => window.__zapisyDoCloudu)) === 0);
+  await page.context().close();
+
+  /* Odpověď přijde po síti. Názvem platformy se sem nesmí dát
+     propašovat cokoli — jinak by změna konektoru (nebo někdo, kdo
+     odpoví místo něj) nasypala do skladu platformy, které neexistují. */
+  page = await otevri({ url: KONEKTOR, token: TOKEN });
+  await page.evaluate(nasadKonektor, { stav: 'ok', k_preneseni: [], vystaveno: [
+    { id: 'b', kde: 'Vinted' },            // platforma appka zná, ale tudy nesmí
+    { id: 'b', kde: 'Nesmysl' },           // neexistuje vůbec
+    { id: 'b', kde: '<img src=x>' },
+    { id: 'neexistuje', kde: 'Pikastore' },
+    { id: 'a', kde: 'Pikastore' },         // kus je v Čeká, ne na skladě
+    { kde: 'Pikastore' },
+  ] });
+  await cloudDorazil(page);
+  const poCizim = await page.evaluate(async () => {
+    // Kus v Čeká už nikde nevisí — fajfka by mu přibýt neměla
+    items.find(x => x.id === 'a').saleState = 'waiting';
+    items.find(x => x.id === 'a').platforms = [];
+    await komisePrenesProdeje(true);
+    return { b: items.find(x => x.id === 'b').platforms,
+      a: items.find(x => x.id === 'a').platforms || [] };
+  });
+  check('cizí ani neznámá platforma se nezapíše', poCizim.b.length === 0,
+    JSON.stringify(poCizim.b));
+  check('a kus, který už na skladě není, se nechá být', poCizim.a.length === 0,
+    JSON.stringify(poCizim.a));
+  await page.context().close();
+
+  /* Zaškrtává se jen, nikdy neodškrtává. Majitel schválně listuje
+     některé kusy pod jiným SKU, než má ve skladu — takový inzerát
+     konektor v páru nenajde a odškrtávání by mu ručně zaškrtnutou
+     platformu pokaždé smazalo. */
+  page = await otevri({ url: KONEKTOR, token: TOKEN });
+  await page.evaluate(() => {
+    items.find(x => x.id === 'b').platforms = ['Pikastore', 'Bazoš.cz'];
+  });
+  await page.evaluate(nasadKonektor, { stav: 'ok', k_preneseni: [], vystaveno: [] });
+  await cloudDorazil(page);
+  await page.evaluate(() => komisePrenesProdeje(true));
+  check('ručně zaškrtnutá platforma se nesmaže',
+    (await page.evaluate(() => items.find(x => x.id === 'b').platforms)).join(',')
+      === 'Pikastore,Bazoš.cz',
+    JSON.stringify(await page.evaluate(() => items.find(x => x.id === 'b').platforms)));
+  await page.context().close();
+
+  // ══════════════════════════════════════════════════════════════
   section('6) Když konektor neodpoví');
   page = await otevri({ url: KONEKTOR, token: TOKEN });
   await page.evaluate(nasadKonektor, { __selze: true });

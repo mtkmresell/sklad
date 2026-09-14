@@ -690,7 +690,33 @@ nesmí rozbít:
   a jen kus, který je pořád na skladě. Odpověď přijde po síti; bez
   toho by změna konektoru přepsala nákupní cenu nebo hotový prodej.
 
-Hlídá to `test-komise.js`.
+**Stejnou cestou se odškrtává, co u nich visí** (`vystaveno` v odpovědi
+na `/prodeje`, v aplikaci `_komiseOdskrtniVystavene`). Konektor kus
+vystaví, ale zapsat to smí jedině aplikace — bez toho zůstal kus
+vystavený na Pikastore i Purekickz veden jako **nikde nevystavený**
+a pletl se mezi ty, co se teprve mají nahodit. Čtyři věci:
+
+- **Odškrtne se tolik kusů, kolik jich u nich visí**, ne celá skupina.
+  Párování je po skupinách (SKU-nebo-název + velikost) a jejich řádky
+  nenesou nic, čím by se dva stejné páry daly odlišit. Doma tři stejné
+  a u nich jeden inzerát znamená jednu fajfku; odškrtnout všechny tři
+  by tvrdilo, že jsou vystavené všechny. Pořadí je ustálené (podle
+  `id`), ať fajfka neskáče z kusu na kus.
+- **Zaškrtává se jen, nikdy neodškrtává.** Chybějící fajfka je otrava,
+  falešná tvrdí, že kus někde visí, a majitel ho pak nikam nedá. Hlavně
+  ale majitel schválně listuje některé kusy pod jiným SKU, než má ve
+  skladu — takový inzerát konektor v páru nenajde a odškrtávání by mu
+  ručně zaškrtnutou platformu pokaždé smazalo. Až bude potřeba
+  i odebírat, musí jít nejdřív odlišit fajfka od automatiky od ruční.
+- **Bere se jen `id` a `kde`**, a `kde` musí být jedno ze dvou jmen
+  v `KOMISE_PLATFORMY`, která jsou zároveň v `PLATFORMS`. Odpověď jde
+  po síti; jinak se názvem platformy dá propašovat cokoli.
+- **Výpadek Purekickz nesmí shodit přenos prodejů** — jsou to dvě
+  nezávislé věci a prodej je ta dražší. Jeho fajfky se pak nepřiloží
+  a řekne se proč (`vystaveno_nezjisteno`); prázdný seznam by lhal, že
+  u nich nic nevisí.
+
+Hlídá to `test-komise.js` (sekce 5b) a `test-pikastore.js` (sekce 15).
 
 **Opačným směrem jde šťouchnutí: `POST /<APP_TOKEN>/srovnat`.** Dokud
 se stahovalo jen na cronu, trvalo klidně tři hodiny, než kus přesunutý

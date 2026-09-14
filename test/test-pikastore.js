@@ -1097,6 +1097,77 @@ const ME = {
     ['waiting', 'sending', 'Pikastore', 0, 'CZK']);
   ok('prodejní cena je payout po jejich provizi', zapis.vyplnit.sellPrice === 750,
     '1000 Kč na pultě − 25 % = 750 | ' + JSON.stringify(zapis.vyplnit));
+
+  /* ── Co u nich visí, ať si to aplikace odškrtne ──────────────────
+     Bez tohohle zůstal kus vystavený na komisi veden jako nikde
+     nevystavený a pletl se mezi ty, co se mají teprve nahodit. */
+  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000)], zapisovyScenar);
+  const sVystavenym = await prodeje();
+  shoda('vystavený kus se pošle aplikaci k odškrtnutí',
+    (sVystavenym.vystaveno || []).map(x => x.kde), ['Pikastore']);
+  /* **Dva kusy doma, jeden inzerát = odškrtne se jeden.** Odškrtnout
+     oba by tvrdilo, že jsou vystavené oba — a majitel by ten druhý
+     nikam nedal. Falešná fajfka je ta horší chyba. */
+  ok('a jen jeden, i když jsou doma dva',
+    (sVystavenym.vystaveno || []).length === 1, JSON.stringify(sVystavenym.vystaveno));
+  ok('pokaždé ten samý — fajfka neskáče',
+    JSON.stringify((await prodeje()).vystaveno) === JSON.stringify(sVystavenym.vystaveno),
+    JSON.stringify(sVystavenym.vystaveno));
+
+  // Dva inzeráty, dva kusy doma → odškrtnou se oba
+  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000),
+    radekTricko('T-B', 'listed', 100000)], zapisovyScenar);
+  shoda('dva inzeráty odškrtnou dva kusy',
+    ((await prodeje()).vystaveno || []).map(x => x.id).sort(), ['a', 'b']);
+
+  // Co u nich neleží, se odškrtnout nesmí
+  scenarSeSkladem(DVOJCATA, [], zapisovyScenar);
+  shoda('bez inzerátu se neodškrtne nic', ((await prodeje()).vystaveno || []).length, 0);
+
+  // Stažený inzerát není vystavený inzerát
+  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'withdrawn', 100000)], zapisovyScenar);
+  shoda('stažený inzerát se za vystavený nepočítá',
+    ((await prodeje()).vystaveno || []).length, 0);
+
+  /* Kus doma bez cílové ceny se sice nevystaví, ale u nich klidně visí
+     z dřívějška — a odškrtnout se má stejně jako každý jiný. */
+  scenarSeSkladem([Object.assign({}, DVOJCATA[0], { targetPrice: null })],
+    [radekTricko('T-A', 'listed', 100000)], zapisovyScenar);
+  shoda('kus bez cílovky se odškrtne taky',
+    ((await prodeje()).vystaveno || []).map(x => x.kde), ['Pikastore']);
+
+  /* Purekickz je nepovinný a **jeho výpadek nesmí shodit přenos
+     prodejů** — to jsou dvě nezávislé věci a prodej je ta dražší.
+     Prázdný seznam by přitom lhal, že u nich nic nevisí. */
+  scenarSeSkladem([DVOJCATA[0]], [prodanyRadek], zapisovyScenar);
+  const bezPk = await prodeje();
+  ok('bez klíče k Purekickz přenos prodejů chodí dál',
+    (bezPk.k_preneseni || []).length === 1, JSON.stringify(bezPk).slice(0, 160));
+  ok('a řekne se, že se u nich nedalo zjistit nic',
+    (bezPk.vystaveno_nezjisteno || []).some(x => x.kde === 'Purekickz'),
+    JSON.stringify(bezPk.vystaveno_nezjisteno));
+
+  // A totéž, když klíč je, ale jejich API zrovna nejede
+  const fetchPredPk = global.fetch;
+  global.fetch = async (vstup, init) => {
+    const u = String(vstup && vstup.url ? vstup.url : vstup);
+    if (u.includes('consignor-api')) throw new Error('Purekickz je dole');
+    return fetchPredPk(vstup, init);
+  };
+  let pkSpadl;
+  try {
+    pkSpadl = await bezLogu(() => prodeje(Object.assign({}, ENV,
+      { PUREKICKZ_TOKEN: 'pk_live_testovaci' })));
+  } finally { global.fetch = fetchPredPk; }
+  ok('a jejich výpadek přenos prodejů neshodí',
+    pkSpadl && (pkSpadl.k_preneseni || []).length === 1,
+    JSON.stringify(pkSpadl).slice(0, 200));
+  ok('fajfky z Pikastore přitom dorazí dál', !!pkSpadl && Array.isArray(pkSpadl.vystaveno),
+    JSON.stringify((pkSpadl || {}).vystaveno));
+  ok('a o výpadku se řekne, ať se nemyslí, že u nich nic nevisí',
+    !!pkSpadl && (pkSpadl.vystaveno_nezjisteno || [])
+      .some(x => x.kde === 'Purekickz' && /dole/.test(x.chyba || '')),
+    JSON.stringify((pkSpadl || {}).vystaveno_nezjisteno));
   ok('datum prodeje je den, kdy se to u nich prodalo',
     zapis.vyplnit.saleDate === new Date(Date.now() - 3600000).toISOString().slice(0, 10),
     zapis.vyplnit.saleDate);
