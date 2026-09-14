@@ -1326,6 +1326,16 @@ const ME = {
     JSON.stringify(hnedZnovu.telo));
   ok('a je to zařazené, ne zapomenuté', odlozeny instanceof Promise, String(odlozeny));
 
+  /* Konektor musí říct, co při posledním běhu doopravdy udělal.
+     Bez toho „šťouchnutí prošlo" neznamenalo skoro nic: konektor uměl
+     přijmout šťouchnutí, odpovědět 200 a nespustit vůbec nic, a z
+     aplikace se to nedalo odlišit od zdravého provozu. */
+  const behZpet = hnedZnovu.telo.posledni_beh || {};
+  ok('odpověď nese, co poslední běh udělal', !!behZpet.pika,
+    JSON.stringify(hnedZnovu.telo).slice(0, 200));
+  shoda('a jsou v tom čísla, ne jen „ok"',
+    [(behZpet.pika || {}).stazeno, (behZpet.pika || {}).vystaveno], [1, 0]);
+
   /* Šťouchnutí, které dorazí **během** běhu, musí vynutit druhý
      průchod. Konektor si sklad sebral na začátku běhu; co majitel
      udělal potom, v těch datech není a bez opakování by to tenhle běh
@@ -1361,6 +1371,119 @@ const ME = {
   if (prvni.beh) await prvni.beh;
   ok('a vynutí druhý průchod', pocetVypisu >= 2, 'výpisů: ' + pocetVypisu);
   pikaOdpovedi = pikaBezPomalu;
+
+  /* **Zaseknutý běh nesmí spolykat všechna další šťouchnutí.**
+     Tohle byla ta chyba, kvůli které se kus vrácený z Čeká nikam
+     nenalistoval. Běh žije ve `waitUntil` a Cloudflare ho zruší,
+     kdykoli isolate odklidí nebo mu dojde rozpočet — `finally` se pak
+     nespustí a příznak „zrovna běžím" v tom isolate zůstane viset.
+     Od té chvíle konektor na každé šťouchnutí odpověděl 200 a
+     `běží, zopakuje se`, aplikace si zapsala `ok` a nespustilo se už
+     nikdy nic. Zvenku to vypadalo jako zdravý provoz. */
+  const { default: worker3 } = await import(
+    path.resolve(__dirname, '..', 'konektor', 'worker.js') + '?cerstva=2');
+  scenarSeSkladem(kusPryc, jejichKus, zapisovyScenar);
+  /* Zádrž na výpis. **Musí jít pustit i pozdě**: běh, který k ní dorazí
+     až po uvolnění, by jinak zůstal viset, `Promise.all` by se ho
+     nedočkal, Node by neměl co dělat a **skončil by s nulou uprostřed
+     testu** — zbytek sekcí by se tiše neproběhl a vypadalo by to, že
+     všechno prošlo. */
+  function udelejZadrz() {
+    let pusteno = false;
+    const cekajici = [];
+    return {
+      cekej: () => new Promise(r => (pusteno ? r() : cekajici.push(r))),
+      kolik: () => cekajici.length,
+      pustPrvni: () => { const r = cekajici.shift(); if (r) r(); },
+      pustVse: () => { pusteno = true; while (cekajici.length) cekajici.shift()(); },
+    };
+  }
+  const zadrz = udelejZadrz();
+  const pikaPredZasekem = pikaOdpovedi;
+  pikaOdpovedi = async (url, init) => {
+    // Běh, který nedoběhne — přesně to, co po sobě nechá zrušený waitUntil
+    if (url.includes('/listings?')) await zadrz.cekej();
+    return pikaPredZasekem(url, init);
+  };
+  const behy = [];
+  const srovnat3 = async () => {
+    const r = await bezLogu(() => worker3.fetch(
+      new Request('https://sklad.mtkm.workers.dev/' + APP_ENV.APP_TOKEN + '/srovnat',
+        { method: 'POST' }), APP_ENV, { waitUntil: (p) => behy.push(p) }));
+    return await r.json();
+  };
+  const zaseklo = await srovnat3();
+  ok('běh se rozjel', zaseklo.stav === 'spuštěno', JSON.stringify(zaseklo));
+  await new Promise(r => setTimeout(r, 60));          // teď v něm vězíme
+  const behemZaseku = await srovnat3();
+  ok('dokud běží, další šťouchnutí se k němu přičte',
+    behemZaseku.stav === 'běží, zopakuje se', JSON.stringify(behemZaseku));
+
+  // A teď ten běh runtime zahodí. Po pěti minutách se na mrtvolu nečeká.
+  const opravduNow = Date.now;
+  Date.now = () => opravduNow() + 6 * 60000;
+  let poZaseku;
+  try { poZaseku = await srovnat3(); } finally { Date.now = opravduNow; }
+  ok('ztracený běh se po čase přebije, šťouchání nepřestane fungovat',
+    poZaseku.stav === 'spuštěno' && poZaseku.prebit_zaseknuty_beh === true,
+    JSON.stringify(poZaseku));
+  /* Zadržené běhy se musí dojet **tady**. Kdyby se nechaly plavat, dojely
+     by svoje zápisy uprostřed další sekce a rozhodily jí `odeslane`. */
+  zadrz.pustVse();
+  await Promise.all(behy);
+  pikaOdpovedi = pikaPredZasekem;
+
+  /* **Doběhlý starý běh nesmí uklidit po tom, kdo ho přebil.** Když se
+     zaseknutý běh po pěti minutách přebije a on pak přece jen doběhne,
+     jeho `finally` by bez stráže na id shodilo příznak patřící běhu
+     novému — a další šťouchnutí by odstartovalo třetí běh souběžně
+     s druhým. Dva běhy najednou čtou tentýž sklad a oba by na základě
+     týchž dat sáhly na komisi. */
+  const { default: worker4 } = await import(
+    path.resolve(__dirname, '..', 'konektor', 'worker.js') + '?cerstva=3');
+  scenarSeSkladem(kusPryc, jejichKus, zapisovyScenar);
+  const zadrz2 = udelejZadrz();
+  const pikaPredDrzenim = pikaOdpovedi;
+  pikaOdpovedi = async (url, init) => {
+    if (url.includes('/listings?')) await zadrz2.cekej();
+    return pikaPredDrzenim(url, init);
+  };
+  const behy4 = [];
+  const srovnat4 = async () => {
+    const r = await bezLogu(() => worker4.fetch(
+      new Request('https://sklad.mtkm.workers.dev/' + APP_ENV.APP_TOKEN + '/srovnat',
+        { method: 'POST' }), APP_ENV, { waitUntil: (p) => behy4.push(p) }));
+    return await r.json();
+  };
+  const azBude = async (fn) => {
+    for (let i = 0; i < 60 && !fn(); i++) await new Promise(r => setTimeout(r, 10));
+    return fn();
+  };
+  const behA = await srovnat4();
+  ok('starý běh se rozjel', behA.stav === 'spuštěno', JSON.stringify(behA));
+  ok('a visí na výpisu', await azBude(() => zadrz2.kolik() === 1), 'zadrženo: ' + zadrz2.kolik());
+
+  const nowBezPosunu = Date.now;
+  Date.now = () => nowBezPosunu() + 6 * 60000;
+  try {
+    const behB = await srovnat4();
+    ok('po pěti minutách ho nový běh přebije', behB.stav === 'spuštěno'
+      && behB.prebit_zaseknuty_beh === true, JSON.stringify(behB));
+    ok('a taky visí na výpisu', await azBude(() => zadrz2.kolik() === 2),
+      'zadrženo: ' + zadrz2.kolik());
+
+    // Teď dojede ten starý, přebitý. Po novém uklízet nesmí.
+    zadrz2.pustPrvni();
+    await azBude(() => false);                      // ať se jeho finally stihne
+    const behC = await srovnat4();
+    ok('doběhlý starý běh neuklidí po tom novém',
+      behC.stav === 'běží, zopakuje se', JSON.stringify(behC));
+  } finally {
+    Date.now = nowBezPosunu;
+    zadrz2.pustVse();
+    await Promise.all(behy4).catch(() => {});
+    pikaOdpovedi = pikaPredDrzenim;
+  }
 
   /* Každá adresa svou metodu. GETem by srovnání spustil i náhodný
      proklik nebo předtažení prohlížečem. */

@@ -198,6 +198,17 @@ Co je na tom potřeba vědět:
   pustit srovnání častěji, než je potřeba.
 - **Odpovídá se hned**, srovnání běží na pozadí. Jak dopadlo, se
   dozvíš mailem stejně jako u cronu.
+- **V odpovědi je i to, co poslední běh udělal** (`posledni_beh` —
+  kolik kusů se vystavilo, stáhlo, vrátilo). Aplikace si to pamatuje
+  a ukazuje v *Nastavení → Komisní prodej*. Bez toho „šťouchnutí
+  prošlo" neznamenalo skoro nic: konektor uměl odpovědět `200`
+  a nespustit vůbec nic.
+- **Zaseknutý běh se po pěti minutách přebije** (`APP_SROVNAT_ZASEK_MS`).
+  Běh žije ve `waitUntil` a Cloudflare ho zruší, kdykoli isolate
+  odklidí — příznak „zrovna běžím" pak zůstal viset napořád a konektor
+  přestal srovnávat úplně, přestože na každé šťouchnutí odpovídal
+  `200`. Když se běh takhle přebije, je v odpovědi
+  `prebit_zaseknuty_beh: true`.
 - **Odstup nejmíň minuta** (`APP_SROVNAT_PAUZA_MS`), ale **nic se
   nezahazuje** — co přijde během odstupu, se zařadí a spustí se, až
   odstup dojde. Co přijde během běhu, ten běh zopakuje. Dřív se to

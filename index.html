@@ -10280,8 +10280,12 @@ function komiseStouchni() {
     fetch(url, { method: 'POST', cache: 'no-store' })
       .then(function (r) {
         return r.json().catch(function () { return null; }).then(function (t) {
+          /* Odpověď nese i to, co konektor naposled doopravdy udělal.
+             Bez toho „ok" neznamenalo skoro nic: konektor uměl přijmout
+             šťouchnutí, odpovědět 200 a nespustit nic. */
           _stouchZapis({ stav: r.ok ? 'ok' : 'odmítnuto', kod: r.status,
-            odpoved: t && t.stav ? String(t.stav) : null });
+            odpoved: t && t.stav ? String(t.stav) : null,
+            beh: (t && t.posledni_beh) || null });
         });
       })
       .catch(function (e) {
@@ -10304,8 +10308,32 @@ function _stouchPopis() {
   if (s.stav === 'nedoručeno') return 'Šťouchnutí ' + cas + ': nedorazilo — ' + (s.chyba || 'síť');
   if (s.stav === 'odmítnuto') return 'Šťouchnutí ' + cas + ': konektor odmítl (' + s.kod + ')'
     + (s.kod === 404 ? ' — starý worker, chybí /srovnat' : '');
-  if (s.stav === 'ok') return 'Šťouchnutí ' + cas + ': v pořádku (' + (s.odpoved || 'ok') + ')';
+  if (s.stav === 'ok') return 'Šťouchnutí ' + cas + ': v pořádku (' + (s.odpoved || 'ok') + ')'
+    + _behPopis(s.beh);
   return 'Šťouchnutí ' + cas + ': odesláno, bez odpovědi.';
+}
+
+/* Co konektor při posledním srovnání udělal. „Šťouchnutí prošlo"
+   a „a něco to udělalo" jsou dvě různé věci — konektor uměl odpovědět
+   200 a nespustit nic, a poznat se to nedalo. */
+function _behPopis(b) {
+  if (!b) return ' — co konektor udělal, neřekl (starý worker).';
+  var casti = [];
+  [['Pikastore', b.pika], ['Purekickz', b.pk]].forEach(function (p) {
+    var v = p[1];
+    if (!v) return;
+    if (v.stav === 'nenastaveno') return;           // ta komise není zapojená
+    if (v.vystaveno == null) { casti.push(p[0] + ': ' + v.stav); return; }
+    var kusy = [];
+    if (v.vystaveno) kusy.push(v.vystaveno + '× vystaveno');
+    if (v.stazeno) kusy.push(v.stazeno + '× staženo');
+    if (v.vraceno) kusy.push(v.vraceno + '× vráceno');
+    if (v.potize) kusy.push(v.potize + '× potíž');
+    casti.push(p[0] + ': ' + (kusy.length ? kusy.join(', ') : 'nic k udělání'));
+  });
+  if (!casti.length) return ' — konektor zatím nic nesrovnával.';
+  return ' Poslední srovnání ' + String(b.kdy || '').slice(11, 16)
+    + ' — ' + casti.join(' · ') + '.';
 }
 
 /* Po startu se počká na první snímek z cloudu. Bez nastaveného tokenu

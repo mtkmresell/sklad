@@ -725,6 +725,24 @@ konektoru „koukni se na to teď". Vystavování nových kusů to zrychlí taky
 - **Běh, do kterého přišlo další šťouchnutí, se zopakuje.** Konektor si
   sklad sebral na začátku; co majitel udělal potom, v těch datech není
   a bez opakování by to tenhle běh minulo.
+- **Příznak „zrovna běžím" musí vypršet** (`APP_SROVNAT_ZASEK_MS`, 5
+  minut). Běh žije v `waitUntil` a Cloudflare ho zruší, kdykoli isolate
+  odklidí nebo mu dojde rozpočet na práci na pozadí — `finally` se pak
+  nespustí. Dokud byl příznak obyčejný `true`, zůstal v tom isolate
+  viset a **každé další šťouchnutí se do něj zabořilo**: konektor
+  odpověděl `200` a `běží, zopakuje se`, aplikace si zapsala `ok`
+  a nespustilo se nikdy nic. Zvenku k nerozeznání od zdravého provozu —
+  našlo se to až na ostrých datech, kus vrácený z Čeká ležel doma, plán
+  ho chtěl vystavit a nikdo ho nevystavil. Srovnání trvá vteřiny, takže
+  co se do pěti minut neozve, se smí přebít. **Doběhlý starý běh přitom
+  nesmí uklidit po tom, kdo ho přebil** (`_appSrovnatBehId`), jinak by
+  vedle sebe běžely dva. Hlídá to `test-pikastore.js`, sekce 19.
+- **Konektor hlásí, co poslední běh udělal** (`posledni_beh` v odpovědi
+  na `/srovnat`, v aplikaci `beh` v `SK_STOUCH_STAV` a věta v
+  *Nastavení → Komisní prodej*). Aplikace do té doby znala jen to, co
+  **odeslala** — „šťouchnutí prošlo" a „a něco to udělalo" jsou ale dvě
+  různé věci a bez čísel se nedaly odlišit. Starý worker `posledni_beh`
+  neposílá a to se **nesmí tvářit jako „proběhlo a nic nenašlo"**.
 - **Šťouchnutí po sobě nechává stopu** (`SK_STOUCH_STAV`, vidět
   v *Nastavení → Komisní prodej*). Navenek je tiché schválně, ale bez
   záznamu vypadalo „nestáhlo se to" úplně stejně jako „aplikace se

@@ -3276,9 +3276,44 @@ const APP_HLAVICKY = {
    hraje. Kratší pauza by nic nepřinesla: každý běh čte celý výpis obou
    komisionářů a rychleji se stav u nich stejně nezmění. */
 const APP_SROVNAT_PAUZA_MS = 60000;
+
+/* Po téhle době se rozdělaný běh považuje za ztracený.
+
+   **Příznak „zrovna běžím" nesmí platit napořád.** Běh žije v
+   `waitUntil`, a to Cloudflare zruší, kdykoli isolate odklidí nebo mu
+   dojde rozpočet na práci na pozadí — `finally` se pak nespustí.
+   Dokud byl příznak obyčejný `true`, zůstal v tom isolate viset
+   a **každé další šťouchnutí se do něj zabořilo**: konektor odpověděl
+   `200` a `běží, zopakuje se`, aplikace si zapsala `ok` a nespustilo
+   se nikdy nic. Navenek to vypadalo přesně jako zdravý provoz — kus
+   ležel ve skladu, plán ho chtěl vystavit a nikdo ho nevystavil.
+   Srovnání trvá vteřiny, takže co se do pěti minut neozve, doběhnout
+   už nestihne a další šťouchnutí ho má právo přebít. */
+const APP_SROVNAT_ZASEK_MS = 5 * 60000;
+
 let _appSrovnatPosledni = 0;
-let _appSrovnatBezi = false;
+let _appSrovnatBeziOd = 0;      // 0 = neběží; jinak čas spuštění
+let _appSrovnatBehId = 0;       // aby doběhlý běh neuklidil po tom novějším
+let _appSrovnatPoradi = 0;
 let _appSrovnatZnovu = false;
+let _appSrovnatVysledek = null; // co poslední běh doopravdy udělal
+
+/* Co z běhu stojí za zapamatování. Konektor o sobě dosud neřekl nic
+   a aplikace zná jen to, co odeslala — „nestáhlo se to" pak vypadalo
+   stejně jako „nic nepřišlo". Čísla stačí; seznamy chodí mailem. */
+function appShrnutiBehu(v) {
+  if (!v) return null;
+  const p = v.provedeno || {};
+  const shrnuti = { stav: v.stav || '?' };
+  if (v.duvod || v.chyba) shrnuti.duvod = String(v.duvod || v.chyba).slice(0, 120);
+  if (v.provedeno) {
+    shrnuti.vystaveno = (p.vystaveno || []).length;
+    shrnuti.stazeno = (p.stazeno || []).length;
+    shrnuti.vraceno = (p.aktivovano || []).length;
+  }
+  if ((v.potize || []).length) shrnuti.potize = v.potize.length;
+  return shrnuti;
+}
 
 /* Jeden průchod oběma komisionáři. Každý zvlášť — pád jednoho nesmí
    umlčet druhého, stejně jako na cronu. Opakuje se, dokud během běhu
@@ -3288,10 +3323,18 @@ async function appSrovnatBeh(env) {
   do {
     _appSrovnatZnovu = false;
     _appSrovnatPosledni = Date.now();
-    try { await pikaCron(env); }
-    catch (e) { console.error('Pikastore (na požádání): ' + (e && e.stack || e)); }
-    try { await pkCron(env); }
-    catch (e) { console.error(PK_JMENO + ' (na požádání): ' + (e && e.stack || e)); }
+    const shrnuti = { kdy: new Date().toISOString(), pika: null, pk: null };
+    try { shrnuti.pika = appShrnutiBehu(await pikaCron(env)); }
+    catch (e) {
+      shrnuti.pika = { stav: 'spadlo', duvod: String((e && e.message) || e).slice(0, 120) };
+      console.error('Pikastore (na požádání): ' + (e && e.stack || e));
+    }
+    try { shrnuti.pk = appShrnutiBehu(await pkCron(env)); }
+    catch (e) {
+      shrnuti.pk = { stav: 'spadlo', duvod: String((e && e.message) || e).slice(0, 120) };
+      console.error(PK_JMENO + ' (na požádání): ' + (e && e.stack || e));
+    }
+    _appSrovnatVysledek = shrnuti;
   } while (_appSrovnatZnovu);
 }
 
@@ -3313,20 +3356,37 @@ async function appSrovnatBeh(env) {
    zrovna jede (`_appSrovnatZnovu`), nebo se počká, až brzda dojde,
    a spustí se pak. Strop na tempo tím zůstává, ztráta mizí. */
 function appSrovnatTed(env, ctx) {
-  if (_appSrovnatBezi) {
+  const ted = Date.now();
+  /* Ať aplikace ví, co se tu naposled doopravdy stalo — bez toho se
+     „šťouchnutí prošlo" nedá odlišit od „a nic to neudělalo". */
+  const stav = (o) => Object.assign(o, { posledni_beh: _appSrovnatVysledek });
+
+  if (_appSrovnatBeziOd > 0 && ted - _appSrovnatBeziOd < APP_SROVNAT_ZASEK_MS) {
     _appSrovnatZnovu = true;
-    return { stav: 'běží, zopakuje se' };
+    return stav({ stav: 'běží, zopakuje se' });
   }
-  const zbyva = APP_SROVNAT_PAUZA_MS - (Date.now() - _appSrovnatPosledni);
-  _appSrovnatBezi = true;
+  /* Sem se dojde i tehdy, když předchozí běh uvízl: `waitUntil` mohl
+     runtime zrušit a `finally` se pak nespustí. Takový běh se po
+     APP_SROVNAT_ZASEK_MS přebije, jinak by zaseknutý příznak spolykal
+     všechna další šťouchnutí a konektor by přestal srovnávat úplně. */
+  const zaseknuty = _appSrovnatBeziOd > 0;
+  const mujBeh = ++_appSrovnatPoradi;
+  const zbyva = APP_SROVNAT_PAUZA_MS - (ted - _appSrovnatPosledni);
+  _appSrovnatBeziOd = ted;
+  _appSrovnatBehId = mujBeh;
   const beh = (async () => {
     if (zbyva > 0) await new Promise(r => setTimeout(r, zbyva));
     await appSrovnatBeh(env);
-  })().finally(() => { _appSrovnatBezi = false; });
+  })().finally(() => {
+    // Uklízí jen svůj běh; ten starší už mezitím mohl být přebitý
+    if (_appSrovnatBehId === mujBeh) _appSrovnatBeziOd = 0;
+  });
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(beh);
-  return zbyva > 0
+  const odpoved = zbyva > 0
     ? { stav: 'zařazeno', za_s: Math.ceil(zbyva / 1000) }
     : { stav: 'spuštěno' };
+  if (zaseknuty) odpoved.prebit_zaseknuty_beh = true;
+  return stav(odpoved);
 }
 
 /* ── Vstupní bod ────────────────────────────────────────────────────── */

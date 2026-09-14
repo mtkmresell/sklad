@@ -416,6 +416,55 @@ function nasadKonektor(odpoved) {
   check('povedené šťouchnutí nechá stopu', stopa.ulozeno && stopa.ulozeno.stav === 'ok',
     JSON.stringify(stopa.ulozeno));
   check('a je z ní poznat, co konektor odpověděl', /spuštěno/.test(stopa.popis), stopa.popis);
+  /* „Šťouchnutí prošlo" a „a něco to udělalo" jsou dvě různé věci.
+     Konektor uměl přijmout šťouchnutí, odpovědět 200 a nespustit nic —
+     a z aplikace to vypadalo na zdravý provoz. Kus vrácený z Čeká pak
+     ležel doma, plán ho chtěl vystavit a nikdo ho nevystavil. */
+  const sBehem = await page.evaluate(async () => {
+    _komiseStouchPosledni = 0;
+    window.fetch = async () => new Response(JSON.stringify({
+      stav: 'spuštěno',
+      posledni_beh: { kdy: '2026-09-14T17:35:00.000Z',
+        pika: { stav: 'provedeno', vystaveno: 1, stazeno: 0, vraceno: 0 },
+        pk: { stav: 'nenastaveno' } },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 200));
+    return { ulozeno: stouchStav(), popis: _stouchPopis() };
+  });
+  check('zapamatuje se i to, co konektor doopravdy udělal',
+    !!(sBehem.ulozeno && sBehem.ulozeno.beh && sBehem.ulozeno.beh.pika),
+    JSON.stringify(sBehem.ulozeno));
+  check('a je to vidět v Nastavení i s počtem kusů',
+    /Pikastore: 1× vystaveno/.test(sBehem.popis), sBehem.popis);
+  check('komise, která zapojená není, se nevypisuje',
+    !/Purekickz/.test(sBehem.popis), sBehem.popis);
+
+  // Běh, který nic nenašel, se musí umět odlišit od běhu, co neproběhl
+  const prazdnyBeh = await page.evaluate(async () => {
+    _komiseStouchPosledni = 0;
+    window.fetch = async () => new Response(JSON.stringify({
+      stav: 'zařazeno',
+      posledni_beh: { kdy: '2026-09-14T17:35:00.000Z',
+        pika: { stav: 'provedeno', vystaveno: 0, stazeno: 0, vraceno: 0 }, pk: null },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 200));
+    return _stouchPopis();
+  });
+  check('„nic k udělání" se řekne naplno', /nic k udělání/.test(prazdnyBeh), prazdnyBeh);
+
+  /* Starý worker o svém běhu neřekne nic — a to se nesmí tvářit jako
+     „proběhlo a nic nenašlo". */
+  const staryBezBehu = await page.evaluate(async () => {
+    _komiseStouchPosledni = 0;
+    window.fetch = async () => new Response('{"stav":"spuštěno"}',
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 200));
+    return _stouchPopis();
+  });
+  check('bez hlášení o běhu se to přizná', /neřekl/.test(staryBezBehu), staryBezBehu);
 
   /* 404 znamená jedinou konkrétní věc: nasazený worker tu adresu nemá.
      Bez pojmenování by se to hledalo hodinu. */
