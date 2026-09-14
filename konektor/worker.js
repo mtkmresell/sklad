@@ -1237,22 +1237,22 @@ function pikaSkupiny(polozky, radky, kurz) {
 
    Párování je po skupinách (SKU-nebo-název + velikost), ne po kusech —
    jejich řádky nenesou nic, čím by se dva stejné páry daly odlišit.
-   Odškrtne se proto **tolik kusů, kolik jich u nich visí**, ne celá
-   skupina: kdyby majitel měl doma tři stejné a u nich visel jeden,
-   odškrtnutí všech tří by tvrdilo, že jsou vystavené všechny. Falešná
-   fajfka je ta horší chyba — kus se pak tváří jako nabízený a majitel
-   ho nikam nedá.
+   **Odškrtne se celá skupina**, ne jen tolik kusů, kolik jich u nich
+   visí. Jeden inzerát totiž zastupuje celou skupinu: vystavuje se
+   jeden kus na model a velikost, a když se jeden prodá jinde, inzerát
+   visí dál, dokud doma zbývá aspoň jeden. Kus ze skupiny tedy
+   **nabízený je**, i když zrovna jeho konkrétní řádek u nich nestojí.
 
-   Pořadí je ustálené (podle `id`), aby dva běhy nad týmiž daty vybraly
-   tytéž kusy a fajfka neskákala z kusu na kus. */
+   Tak to má i aplikace: `onReturnToStock` kopíruje platformy od
+   sourozence ve skupině a při prodeji se fajfka odškrtne všem, kdo
+   sdíleli tentýž inzerát. Odškrtávat po jednom kuse by se s tím pralo
+   a zbytek skupiny by se tvářil jako nikde nenabídnutý. */
 function komiseVystavene(polozky, radky, cinneStavy, kde) {
   const { skupiny } = pikaSkupiny(polozky, radky, null);
   const ven = [];
   for (const s of skupiny) {
-    const cinnych = s.jejich.filter(r => cinneStavy.indexOf(r.status) !== -1).length;
-    if (!cinnych) continue;
-    const kusy = s.doma.slice().sort((a, b) => String(a.id) < String(b.id) ? -1 : 1);
-    for (const it of kusy.slice(0, cinnych)) ven.push({ id: it.id, kde });
+    if (!s.jejich.some(r => cinneStavy.indexOf(r.status) !== -1)) continue;
+    for (const it of s.doma) ven.push({ id: it.id, kde });
   }
   return ven;
 }

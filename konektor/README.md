@@ -181,8 +181,9 @@ doopravdy visí, ať si je aplikace odškrtne jako vystavené. Bez toho se
 kus vystavený automatikou tvářil jako nikde nevystavený a pletl se mezi
 ty, co se teprve mají nahodit. Tři věci:
 
-- **Odškrtne se tolik kusů, kolik jich u nich visí**, ne celá skupina.
-  Doma tři stejné a u nich jeden inzerát znamená jednu fajfku.
+- **Odškrtne se celá skupina.** Jeden inzerát zastupuje všechny kusy
+  téhož modelu a velikosti — když se jeden prodá jinde, visí dál, dokud
+  ti doma zbývá aspoň jeden. Stejně to dělá aplikace při prodeji.
 - **Jen se zaškrtává, nikdy neodškrtává.** Kusy listované pod jiným SKU,
   než mají ve skladu, konektor v páru nenajde — odškrtávání by ti u nich
   ručně zaškrtnutou platformu pokaždé smazalo.

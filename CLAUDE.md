@@ -696,12 +696,16 @@ vystaví, ale zapsat to smí jedině aplikace — bez toho zůstal kus
 vystavený na Pikastore i Purekickz veden jako **nikde nevystavený**
 a pletl se mezi ty, co se teprve mají nahodit. Čtyři věci:
 
-- **Odškrtne se tolik kusů, kolik jich u nich visí**, ne celá skupina.
-  Párování je po skupinách (SKU-nebo-název + velikost) a jejich řádky
-  nenesou nic, čím by se dva stejné páry daly odlišit. Doma tři stejné
-  a u nich jeden inzerát znamená jednu fajfku; odškrtnout všechny tři
-  by tvrdilo, že jsou vystavené všechny. Pořadí je ustálené (podle
-  `id`), ať fajfka neskáče z kusu na kus.
+- **Odškrtne se celá skupina**, ne jen tolik kusů, kolik jich u nich
+  visí. Jeden inzerát zastupuje celou skupinu: vystavuje se jeden kus
+  na model a velikost, a když se jeden prodá jinde, inzerát visí dál,
+  dokud doma zbývá aspoň jeden. Kus ze skupiny je tedy **nabízený**,
+  i když zrovna jeho řádek u nich nestojí. Tak to má i aplikace —
+  `onReturnToStock` kopíruje platformy od sourozence ve skupině
+  a při prodeji se fajfka odškrtne všem, kdo sdíleli tentýž inzerát;
+  odškrtávání po jednom kuse by se s tím pralo a zbytek skupiny by se
+  tvářil jako nikde nenabídnutý. **Majitel to tak chce**, ptal se na
+  to výslovně.
 - **Zaškrtává se jen, nikdy neodškrtává.** Chybějící fajfka je otrava,
   falešná tvrdí, že kus někde visí, a majitel ho pak nikam nedá. Hlavně
   ale majitel schválně listuje některé kusy pod jiným SKU, než má ve

@@ -1103,22 +1103,20 @@ const ME = {
      nevystavený a pletl se mezi ty, co se mají teprve nahodit. */
   scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000)], zapisovyScenar);
   const sVystavenym = await prodeje();
-  shoda('vystavený kus se pošle aplikaci k odškrtnutí',
-    (sVystavenym.vystaveno || []).map(x => x.kde), ['Pikastore']);
-  /* **Dva kusy doma, jeden inzerát = odškrtne se jeden.** Odškrtnout
-     oba by tvrdilo, že jsou vystavené oba — a majitel by ten druhý
-     nikam nedal. Falešná fajfka je ta horší chyba. */
-  ok('a jen jeden, i když jsou doma dva',
-    (sVystavenym.vystaveno || []).length === 1, JSON.stringify(sVystavenym.vystaveno));
-  ok('pokaždé ten samý — fajfka neskáče',
+  ok('vystavený kus se pošle aplikaci k odškrtnutí',
+    (sVystavenym.vystaveno || []).length > 0
+      && (sVystavenym.vystaveno || []).every(x => x.kde === 'Pikastore'),
+    JSON.stringify(sVystavenym.vystaveno));
+  /* **Jeden inzerát odškrtne celou skupinu.** Vystavuje se jeden kus
+     na model a velikost a ten inzerát zastupuje všechny: když se jeden
+     prodá jinde, visí dál, dokud doma zbývá aspoň jeden. Kus ze
+     skupiny je tedy nabízený, i když zrovna jeho řádek u nich nestojí.
+     Stejně to má aplikace — při prodeji odškrtává celé skupině. */
+  shoda('jeden inzerát odškrtne celou skupinu',
+    (sVystavenym.vystaveno || []).map(x => x.id).sort(), ['a', 'b']);
+  ok('a dvakrát po sobě to vyjde stejně',
     JSON.stringify((await prodeje()).vystaveno) === JSON.stringify(sVystavenym.vystaveno),
     JSON.stringify(sVystavenym.vystaveno));
-
-  // Dva inzeráty, dva kusy doma → odškrtnou se oba
-  scenarSeSkladem(DVOJCATA, [radekTricko('T-A', 'listed', 100000),
-    radekTricko('T-B', 'listed', 100000)], zapisovyScenar);
-  shoda('dva inzeráty odškrtnou dva kusy',
-    ((await prodeje()).vystaveno || []).map(x => x.id).sort(), ['a', 'b']);
 
   // Co u nich neleží, se odškrtnout nesmí
   scenarSeSkladem(DVOJCATA, [], zapisovyScenar);
