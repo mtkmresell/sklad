@@ -1438,36 +1438,19 @@ async function pikaOhlasPotize(env, potize) {
   }
 }
 
-/* Co automatika u nich sama změnila. Chodí to mailem schválně: majitel
-   se jinak o změně svých inzerátů dozví leda tak, že si jí všimne
-   v jejich portálu. Když se nic nezměnilo, mail nechodí — ticho je
-   správný stav, stejně jako u ranních upozornění. */
-async function pikaOhlasHotovo(env, hotovo) {
-  const radky = []
-    .concat((hotovo.vystaveno || []).map(x => '· vystaveno: ' + x))
-    .concat((hotovo.aktivovano || []).map(x => '· vráceno do prodeje: ' + x))
-    .concat((hotovo.stazeno || []).map(x => '· staženo: ' + x));
-  if (!radky.length) return null;
-  const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
-  if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
-  try {
-    await posliMail(env, {
-      predmet: 'SKLAD × Pikastore: ' + radky.length
-        + (radky.length === 1 ? ' změna' : radky.length < 5 ? ' změny' : ' změn'),
-      text: 'Srovnání skladu s komisním prodejem tohle u nich udělalo samo:\n\n'
-        + radky.join('\n')
-        + '\n\nCeny se nikde neměnily — staré inzeráty se nepřeceňují.',
-    });
-    return { odeslano: true, komu: env.MAIL_KOMU };
-  } catch (e) {
-    return { odeslano: false, duvod: String((e && e.message) || e) };
-  }
-}
+/* O tom, co se u Pikastore změnilo, se odsud mail neposílá. Pikastore
+   posílá při každém vystavení i stažení svůj vlastní — dvě zprávy
+   o jedné věci znamenají, že se přestanou číst obě. Purekickz nic
+   neposílá, tam mail o změnách zůstává (`pkOhlasHotovo`).
+
+   Potíže (`pikaOhlasPotize`) se hlásí dál: o tom, že konektor sám
+   narazil — nepodepsané podmínky, zaražený běh, spadlé srovnání —
+   Pikastore neví a nikdo jiný to neřekne. */
 
 /* Automatické srovnání. Pouští ho cron, takže se nikdo nedívá —
-   proto nižší strop zápisů a mail pokaždé, když se něco změnilo nebo
-   nepovedlo. Výjimka se nesmí propadnout do logu a zmizet: běh, který
-   spadne potichu, vypadá úplně stejně jako běh, kdy nebylo co dělat. */
+   proto nižší strop zápisů a mail pokaždé, když se něco nepovedlo.
+   Výjimka se nesmí propadnout do logu a zmizet: běh, který spadne
+   potichu, vypadá úplně stejně jako běh, kdy nebylo co dělat. */
 async function pikaCron(env) {
   if (!env.CONSIGNTHEM_TOKEN) return { stav: 'nenastaveno' };
   let v;
@@ -1486,7 +1469,8 @@ async function pikaCron(env) {
     await pikaOhlasPotize(env, ['nezapisovalo se — ' + (v.duvod || 'bez důvodu')]);
     return v;
   }
-  if (v.provedeno) await pikaOhlasHotovo(env, v.provedeno);
+  /* Za úspěšný běh se mail neposílá — o změnách u sebe dá Pikastore
+     vědět sám. Viz komentář nad `pikaOhlasPotize`. */
   return v;
 }
 
@@ -2033,13 +2017,17 @@ async function pkProved(env, plan, volby) {
   for (const u of ukony.vystavit) {
     if (!zbyva()) break;
     try {
-      const o = await pkVolej(env, '/listings', {
+      await pkVolej(env, '/listings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(u.telo),
       });
+      /* S cenou, ne s jejich id. Majitel mail čte proto, aby na první
+         pohled věděl, že kus visí a za kolik — jejich uuid mu k tomu
+         neřekne nic a jen zabírá řádek. U nich je cena rovnou payout
+         v korunách, takže je to přesně to, co dostane. */
       hotovo.vystaveno.push((u.popis.nazev || '') + ' ' + (u.popis.velikost || '')
-        + ' → ' + ((o && (o.id || (o.listing && o.listing.id))) || 'založeno')); zapisu++;
+        + ' → založeno za ' + kc(u.telo.payout)); zapisu++;
     } catch (e) {
       potize.push('vystavení ' + (u.popis.nazev || '') + ': ' + e.message);
       if (e.pikaKod === 'token') break;

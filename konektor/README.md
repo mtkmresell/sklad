@@ -238,9 +238,11 @@ Tři věci, na které se dá spolehnout:
   zápisů). U ručního běhu si plán přečteš a zarazíš ho; u automatického
   se nedívá nikdo, takže rozjetá chyba v párování narazí na strop dřív,
   než stihne nadělat škodu. Zbytek dojede při dalším běhu.
-- **Když se něco změní, přijde mail** — co se vystavilo, co stáhlo.
-  Bez toho by se ti inzeráty měnily pod rukama a dozvěděl by ses to leda
-  náhodou v jejich portálu. Když se něco nepovede, přijde mail taky.
+- **Mail chodí jen o tom, co se nepovedlo** — nepodepsané podmínky,
+  zaražený běh, spadlé srovnání. O změnách u sebe posílá Pikastore svůj
+  vlastní mail, takže dvě zprávy o jedné věci by znamenaly, že se
+  přestanou číst obě. U Purekickz je to naopak: ti neposílají nic, tam
+  chodí i mail o změnách.
 - **Pád komise neumlčí ranní obhlídku.** Jsou to dvě nezávislé věci
   a běží po sobě, ne jedna místo druhé.
 
@@ -275,6 +277,11 @@ se nechá být, ruční inzeráty se neopravují. Liší se jen jejich API:
 - **Zakládá se přímo přes SKU** z jejich e-shopu, žádný katalog se
   nepřekládá. Kus bez SKU tudy vystavit nejde.
 - **Jeden inzerát na model a velikost**, i když má majitel kusů víc.
+- **O změnách chodí mail** — na rozdíl od Pikastore, který si posílá
+  svůj. Purekickz neposílá nic, takže bez toho by se o vystavení ani
+  stažení nedalo dozvědět. U vystaveného kusu je v mailu i **cena**;
+  je to rovnou payout v korunách, takže je na první pohled vidět, že
+  kus visí a za kolik.
 - **Kus bez SKU** se jednou týdně (v pondělí) připomene mailem, ať se
   nezapomene nahodit ručně.
 - Limit je **60 požadavků za minutu**.

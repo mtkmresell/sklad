@@ -1363,9 +1363,10 @@ const ME = {
 
   sekce('20) Automatický běh (cron)');
   /* Srovnání má běžet samo. Nikdo se u toho nedívá, takže platí dvě věci:
-     nižší strop zápisů a mail pokaždé, když se něco změnilo nebo
-     nepovedlo. Běh, který spadne potichu, vypadá zvenku úplně stejně
-     jako běh, kdy nebylo co dělat. */
+     nižší strop zápisů a mail pokaždé, když se něco nepovedlo. Běh,
+     který spadne potichu, vypadá zvenku úplně stejně jako běh, kdy
+     nebylo co dělat. O změnách u nich mail nechodí — ty hlásí sám
+     Pikastore, na rozdíl od Purekickz. */
   const CRON_ENV = Object.assign({}, ENV, { RESEND_API_KEY: 'k', MAIL_KOMU: 'ja@sklad.cz' });
   const CRON_CAS = Date.parse('2026-09-08T13:00:00Z');   // v Praze 15:00, ne hodina ranního mailu
   let cronPosta = [];
@@ -1394,9 +1395,12 @@ const ME = {
   ok('a rovnou do prodeje, ne jako koncept',
     !!c.zapisy[0] && c.zapisy[0].telo.publish === true,
     JSON.stringify((c.zapisy[0] || {}).telo));
-  ok('o změně přijde mail', c.posta.length === 1, JSON.stringify(c.posta).slice(0, 150));
-  ok('a je v něm, co se stalo', /vystaveno: Kus pro cron/.test((c.posta[0] || {}).text || ''),
-    (c.posta[0] || {}).text);
+  /* O změně u nich mail nechodí — Pikastore o vystavení i stažení
+     posílá svůj vlastní a dvě zprávy o jedné věci znamenají, že se
+     přestanou číst obě. Že pošta funguje, dokazuje test o pár řádků
+     níž: potíž mail pošle. */
+  ok('o změně mail nechodí, Pikastore posílá svůj', c.posta.length === 0,
+    JSON.stringify(c.posta).slice(0, 200));
 
   // Když sklad a komise sedí, nemá se dít nic — ani mail
   scenarSeSkladem(kusKVystaveni, [Object.assign({}, radekTricko('L-AC', 'listed', 133400),

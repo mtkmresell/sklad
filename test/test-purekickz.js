@@ -533,8 +533,10 @@ const radek = (o) => Object.assign({
 
   /* ══════════════════════════════════════════════════════════════════ */
   sekce('14) Automatický běh (cron)');
-  /* Nikdo se u toho nedívá, takže platí totéž co u Pikastore: nižší
-     strop zápisů a mail pokaždé, když se něco změnilo nebo nepovedlo. */
+  /* Nikdo se u toho nedívá, takže platí nižší strop zápisů a mail
+     pokaždé, když se něco změnilo nebo nepovedlo. Na rozdíl od
+     Pikastore se hlásí i změny: Purekickz sám neposílá nic, takže
+     bez mailu by majitel o vystavení ani stažení nevěděl. */
   const CRON_ENV = Object.assign({}, ENV, { RESEND_API_KEY: 'k', MAIL_KOMU: 'ja@sklad.cz' });
   const UTERY = Date.parse('2026-09-08T13:00:00Z');   // v Praze 15:00, není pondělí
   const PONDELI = Date.parse('2026-09-07T13:00:00Z');
@@ -560,6 +562,12 @@ const radek = (o) => Object.assign({
   shoda('cron vystaví, co má viset', c.zapisy.map(x => x.method), ['POST']);
   ok('a o změně přijde mail', c.posta.length === 1
     && /vystaveno: Kus/.test((c.posta[0] || {}).text || ''), JSON.stringify(c.posta).slice(0, 200));
+  /* Cena v mailu je kontrola na první pohled: majitel uvidí, že kus visí
+     a za kolik. Jejich uuid mu k tomu neřekne nic. U nich je cena rovnou
+     payout v korunách, takže v mailu stojí přesně to, co dostane. */
+  const mailText = ((c.posta[0] || {}).text || '').replace(/[  ]/g, ' ');
+  ok('a je v něm cena, za kterou se to nahodilo', /založeno za 1 000 Kč/.test(mailText),
+    mailText);
 
   // Srovnaný sklad: nic se neděje a mail nechodí
   scenar([radek({ sku: 'AA-1', size: '42' })]);

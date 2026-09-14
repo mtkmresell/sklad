@@ -487,9 +487,16 @@ ostrých datech. **Srovnání se pouští při každém spuštění cronu** —
 jak často, se řídí jen tím, jaké cron triggery jsou v Cloudflare.
 Automatický běh má **nižší strop zápisů** (`PIKA_STROP_CRON`) než
 ruční: u ručního si plán přečteš a zarazíš ho, u automatického se
-nedívá nikdo. Co se změnilo nebo nepovedlo, **přijde mailem**; když
-sklad a komise sedí, neudělá běh nic a neozve se — ticho je správný
-stav. Pád komise neumlčí ranní obhlídku, jsou to dvě nezávislé věci.
+nedívá nikdo. Co se nepovedlo, **přijde mailem**; když sklad a komise
+sedí, neudělá běh nic a neozve se — ticho je správný stav. Pád komise
+neumlčí ranní obhlídku, jsou to dvě nezávislé věci.
+
+**O změnách u Pikastore se mail neposílá** — Pikastore při každém
+vystavení i stažení posílá svůj vlastní a dvě zprávy o jedné věci
+znamenají, že se přestanou číst obě. Purekickz neposílá nic, tam mail
+o změnách zůstává. Mail o potížích (`pikaOhlasPotize`) chodí u obou:
+že konektor sám narazil — nepodepsané podmínky, zaražený běh, spadlé
+srovnání — nikdo jiný neřekne. Hlídá to `test-pikastore.js`, sekce 20.
 
 **Pracuje se s počty ve skupině, ne s identitou kusu.** Majitel má dvě
 stejná trička ve velikosti S a jejich odpověď nenese nic, čím by se
@@ -786,6 +793,12 @@ Vlastní je jen jejich API:
   a majitel ho nahazuje ručně, takže by na něj jinak zapomněl. Je to
   ale **stav, ne okamžik** — denně by se to přestalo číst, proto jen
   v pondělí, ke stejnému dni jako obhlídka skladu.
+- **O změnách tady mail chodí** (`pkOhlasHotovo`), na rozdíl od
+  Pikastore — Purekickz neposílá nic, takže bez mailu se o vystavení
+  ani stažení neví. U vystaveného kusu je v něm i **cena**, ne jejich
+  uuid: mail se čte proto, aby bylo na první pohled vidět, že kus visí
+  a za kolik, a uuid k tomu neřekne nic. Cena u nich je rovnou payout
+  v korunách, takže v mailu stojí přesně to, co majitel dostane.
 - Stropy jsou vlastní (`PK_STROP_ZAPISU`, `PK_STROP_STAZENI`,
   `PK_STROP_CRON`), jinak platí totéž co u Pikastore.
 
