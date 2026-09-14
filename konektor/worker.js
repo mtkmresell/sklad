@@ -3258,29 +3258,55 @@ const APP_HLAVICKY = {
 const APP_SROVNAT_PAUZA_MS = 60000;
 let _appSrovnatPosledni = 0;
 let _appSrovnatBezi = false;
+let _appSrovnatZnovu = false;
 
-/* Srovnání na požádání. Odpovídá se hned a běží se na pozadí
-   (`waitUntil`) — aplikace čeká na odpověď z prohlížeče a srovnání trvá
-   klidně dvacet vteřin; kdyby na to čekala, vypadalo by to zaseknutě.
-   Co se povedlo a co ne, se stejně dozvídá mailem jako u cronu. */
-function appSrovnatTed(env, ctx) {
-  const ted = Date.now();
-  if (_appSrovnatBezi) return { stav: 'už běží' };
-  if (ted - _appSrovnatPosledni < APP_SROVNAT_PAUZA_MS) {
-    return { stav: 'moc brzy', zkus_za_s: Math.ceil((APP_SROVNAT_PAUZA_MS - (ted - _appSrovnatPosledni)) / 1000) };
-  }
-  _appSrovnatPosledni = ted;
-  _appSrovnatBezi = true;
-  /* Oba komisionáři, každý zvlášť — pád jednoho nesmí umlčet druhého,
-     stejně jako na cronu. */
-  const beh = (async () => {
+/* Jeden průchod oběma komisionáři. Každý zvlášť — pád jednoho nesmí
+   umlčet druhého, stejně jako na cronu. Opakuje se, dokud během běhu
+   přicházela další šťouchnutí: to, co se stalo ve skladu až po sebrání
+   dat, by jinak tenhle běh minulo. */
+async function appSrovnatBeh(env) {
+  do {
+    _appSrovnatZnovu = false;
+    _appSrovnatPosledni = Date.now();
     try { await pikaCron(env); }
     catch (e) { console.error('Pikastore (na požádání): ' + (e && e.stack || e)); }
     try { await pkCron(env, Date.now()); }
     catch (e) { console.error(PK_JMENO + ' (na požádání): ' + (e && e.stack || e)); }
+  } while (_appSrovnatZnovu);
+}
+
+/* Srovnání na požádání. Odpovídá se hned a běží se na pozadí
+   (`waitUntil`) — aplikace čeká na odpověď z prohlížeče a srovnání trvá
+   klidně dvacet vteřin; kdyby na to čekala, vypadalo by to zaseknutě.
+   Co se povedlo a co ne, se stejně dozvídá mailem jako u cronu.
+
+   ── Brzda smí odložit, nikdy zahodit ────────────────────────────────
+   První verze na „moc brzy" prostě odpověděla a nic dalšího neudělala.
+   Vypadalo to neškodně, ale zahazovalo to přesně to šťouchnutí, na
+   kterém záleží: majitel vrátil kus z Čeká na sklad a hned ho prodal
+   znovu — dvě uložení pár vteřin po sobě. To první brzdu spotřebovalo,
+   to druhé (kus je prodaný, stáhni ho) spadlo pod stůl, a inzerát
+   u obou komisí visel dál. Zahozené šťouchnutí se přitom navenek
+   nedá odlišit od rozbité funkce.
+
+   Teď se zařadí do fronty na jeden takt: buď se přičte k běhu, který
+   zrovna jede (`_appSrovnatZnovu`), nebo se počká, až brzda dojde,
+   a spustí se pak. Strop na tempo tím zůstává, ztráta mizí. */
+function appSrovnatTed(env, ctx) {
+  if (_appSrovnatBezi) {
+    _appSrovnatZnovu = true;
+    return { stav: 'běží, zopakuje se' };
+  }
+  const zbyva = APP_SROVNAT_PAUZA_MS - (Date.now() - _appSrovnatPosledni);
+  _appSrovnatBezi = true;
+  const beh = (async () => {
+    if (zbyva > 0) await new Promise(r => setTimeout(r, zbyva));
+    await appSrovnatBeh(env);
   })().finally(() => { _appSrovnatBezi = false; });
   if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(beh);
-  return { stav: 'spuštěno' };
+  return zbyva > 0
+    ? { stav: 'zařazeno', za_s: Math.ceil(zbyva / 1000) }
+    : { stav: 'spuštěno' };
 }
 
 /* ── Vstupní bod ────────────────────────────────────────────────────── */

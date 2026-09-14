@@ -10202,6 +10202,7 @@ function _komiseStavPopis() {
 ══════════════════════════════════════════════════════════════════════ */
 var KOMISE_STOUCH_PAUZA_MS = 90000;
 var _komiseStouchPosledni = 0;
+var _komiseStouchCeka = null;
 
 function komiseSrovnatUrl() {
   var origin = konektorOrigin();
@@ -10214,9 +10215,27 @@ function komiseStouchni() {
   var url = komiseSrovnatUrl();
   if (!url) return;                       // bez tokenu se neděje nic
   if (jeUctetni()) return;                // účetní komisi neřídí
-  var ted = Date.now();
-  if (ted - _komiseStouchPosledni < KOMISE_STOUCH_PAUZA_MS) return;
-  _komiseStouchPosledni = ted;
+  /* Odstup smí šťouchnutí odložit, nikdy zahodit.
+
+     První verze uvnitř odstupu prostě skončila. Vypadalo to neškodně,
+     ale zahazovalo to přesně to šťouchnutí, na kterém záleží: majitel
+     vrátil kus z Čeká na sklad a vzápětí ho prodal znovu — dvě uložení
+     pár vteřin po sobě. To první odstup spotřebovalo, to druhé (kus je
+     prodaný, stáhni ho) se ztratilo a inzerát u obou komisí visel dál.
+     Zahozené šťouchnutí se přitom navenek nedá odlišit od rozbité
+     funkce; tohle je ta horší půlka. */
+  var zbyva = KOMISE_STOUCH_PAUZA_MS - (Date.now() - _komiseStouchPosledni);
+  if (zbyva > 0) {
+    // Stačí jedno odložené — víc změn se stejně srovná jedním během
+    if (!_komiseStouchCeka) {
+      _komiseStouchCeka = setTimeout(function () {
+        _komiseStouchCeka = null;
+        komiseStouchni();
+      }, zbyva + 100);
+    }
+    return;
+  }
+  _komiseStouchPosledni = Date.now();
   /* Odpověď nikoho nezajímá — konektor ji vrací hned a srovnání si
      doběhne na pozadí. Chyba se polyká schválně: cron je záchranná
      síť a hláška „nepovedlo se šťouchnout" by majiteli neřekla nic,

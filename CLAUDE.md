@@ -694,9 +694,19 @@ konektoru „koukni se na to teď". Vystavování nových kusů to zrychlí taky
   „podívej se". Konektor pak udělá totéž co na cronu, se všemi
   pojistkami. Nejhorší, co jde s uniklým `APP_TOKEN` udělat, je pustit
   srovnání častěji, než je potřeba.
-- **Odstup na obou stranách** (`KOMISE_STOUCH_PAUZA_MS` v aplikaci,
-  `APP_SROVNAT_PAUZA_MS` v konektoru). Ten v aplikaci platí jen pro
-  jeden prohlížeč, ten v konektoru i pro víc zařízení naráz.
+- **Odstup smí odložit, nikdy zahodit** (`KOMISE_STOUCH_PAUZA_MS`
+  v aplikaci, `APP_SROVNAT_PAUZA_MS` v konektoru). První verze uvnitř
+  odstupu prostě skončila a **ztratila přesně to šťouchnutí, na kterém
+  záleží**: majitel vrátil kus z Čeká na sklad a vzápětí ho prodal
+  znovu — dvě uložení pár vteřin po sobě. To první odstup spotřebovalo,
+  to druhé („kus je prodaný, stáhni ho") spadlo pod stůl a inzerát
+  visel u obou komisí dál. Zahozené šťouchnutí se zvenku nedá odlišit
+  od rozbité funkce. Teď se zařadí: aplikace si ho odloží na konec
+  odstupu (jedno, ne řetízek), konektor ho buď přičte k běhu, který
+  jede (`_appSrovnatZnovu`), nebo si počká a spustí ho pak.
+- **Běh, do kterého přišlo další šťouchnutí, se zopakuje.** Konektor si
+  sklad sebral na začátku; co majitel udělal potom, v těch datech není
+  a bez opakování by to tenhle běh minulo.
 
 Odpovídá se hned a srovnání běží na pozadí (`waitUntil`) — trvá vteřiny
 a aplikace na odpověď čeká z prohlížeče.

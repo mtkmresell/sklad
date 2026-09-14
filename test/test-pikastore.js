@@ -1283,13 +1283,58 @@ const ME = {
     odeslane.some(x => /\/withdraw$/.test(x.url)),
     JSON.stringify(odeslane.map(x => x.method + ' ' + x.url)).slice(0, 200));
 
-  /* Hned podruhé se nespouští. Aplikace si hlídá svůj odstup, ale ten
-     je jen v jednom prohlížeči — tohle drží i při víc zařízeních. */
+  /* Hned podruhé se nespouští okamžitě — ale **nesmí se to zahodit**.
+     Tohle byla skutečná chyba: majitel vrátil kus na sklad a hned ho
+     prodal znovu, dvě uložení pár vteřin po sobě. To první brzdu
+     spotřebovalo, to druhé („kus je prodaný, stáhni ho") spadlo pod
+     stůl a inzerát u komise visel dál. Zahozené šťouchnutí se přitom
+     zvenku nedá odlišit od rozbité funkce. */
   odeslane = [];
-  const hnedZnovu = await app('srovnat', APP_ENV, { method: 'POST' });
-  ok('hned podruhé se nespustí', hnedZnovu.telo.stav === 'moc brzy',
+  let odlozeny = null;
+  const hnedZnovu = await app('srovnat', APP_ENV, { method: 'POST' },
+    { waitUntil: (p) => { odlozeny = p; } });
+  ok('hned podruhé se nespustí okamžitě', hnedZnovu.telo.stav === 'zařazeno',
     JSON.stringify(hnedZnovu.telo));
-  shoda('a opravdu se nic neodeslalo', odeslane.filter(x => x.method !== 'GET').map(x => x.url), []);
+  shoda('a hned se nic neodeslalo', odeslane.filter(x => x.method !== 'GET').map(x => x.url), []);
+  ok('ale řekne, za jak dlouho', typeof hnedZnovu.telo.za_s === 'number' && hnedZnovu.telo.za_s > 0,
+    JSON.stringify(hnedZnovu.telo));
+  ok('a je to zařazené, ne zapomenuté', odlozeny instanceof Promise, String(odlozeny));
+
+  /* Šťouchnutí, které dorazí **během** běhu, musí vynutit druhý
+     průchod. Konektor si sklad sebral na začátku běhu; co majitel
+     udělal potom, v těch datech není a bez opakování by to tenhle běh
+     minulo — kus prodaný v průběhu srovnávání by zůstal viset.
+
+     Jede se na čerstvě načtené kopii workeru, aby stav brzdy nezáležel
+     na tom, co si zavolaly testy před tím. */
+  const { default: worker2 } = await import(
+    path.resolve(__dirname, '..', 'konektor', 'worker.js') + '?cerstva=1');
+  scenarSeSkladem(kusPryc, jejichKus, zapisovyScenar);
+  let pocetVypisu = 0;
+  const pikaBezPomalu = pikaOdpovedi;
+  pikaOdpovedi = async (url, init) => {
+    if (url.includes('/listings?')) {
+      pocetVypisu++;
+      await new Promise(r => setTimeout(r, 150));   // ať se stihne šťouchnout během běhu
+    }
+    return pikaBezPomalu(url, init);
+  };
+  const srovnat2 = async () => {
+    let beh = null;
+    const r = await bezLogu(() => worker2.fetch(
+      new Request('https://sklad.mtkm.workers.dev/' + APP_ENV.APP_TOKEN + '/srovnat',
+        { method: 'POST' }), APP_ENV, { waitUntil: (pr) => { beh = pr; } }));
+    return { telo: await r.json(), beh };
+  };
+  const prvni = await srovnat2();
+  ok('běh se rozjel', prvni.telo.stav === 'spuštěno', JSON.stringify(prvni.telo));
+  await new Promise(r => setTimeout(r, 80));        // teď jsme uvnitř běhu
+  const behem = await srovnat2();
+  ok('šťouchnutí během běhu se zařadí k němu', behem.telo.stav === 'běží, zopakuje se',
+    JSON.stringify(behem.telo));
+  if (prvni.beh) await prvni.beh;
+  ok('a vynutí druhý průchod', pocetVypisu >= 2, 'výpisů: ' + pocetVypisu);
+  pikaOdpovedi = pikaBezPomalu;
 
   /* Každá adresa svou metodu. GETem by srovnání spustil i náhodný
      proklik nebo předtažení prohlížečem. */

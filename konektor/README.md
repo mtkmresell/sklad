@@ -198,8 +198,12 @@ Co je na tom potřeba vědět:
   pustit srovnání častěji, než je potřeba.
 - **Odpovídá se hned**, srovnání běží na pozadí. Jak dopadlo, se
   dozvíš mailem stejně jako u cronu.
-- **Odstup nejmíň minuta** (`APP_SROVNAT_PAUZA_MS`). Aplikace si hlídá
-  svůj vlastní, ale ten platí jen pro jeden prohlížeč.
+- **Odstup nejmíň minuta** (`APP_SROVNAT_PAUZA_MS`), ale **nic se
+  nezahazuje** — co přijde během odstupu, se zařadí a spustí se, až
+  odstup dojde. Co přijde během běhu, ten běh zopakuje. Dřív se to
+  zahazovalo a ztratilo se přesně to šťouchnutí, na kterém záleželo:
+  kus vrácený na sklad a hned znovu prodaný se uložil dvakrát za sebou,
+  první uložení odstup spotřebovalo a druhé se nepovedlo doručit.
 - **Čerstvě přidaný kus počká 20 minut** (`PIKA_ODKLAD_NOVE_MIN`), než
   se vystaví. Dokud se běhalo jen na cronu, byla tahle lhůta náhodná
   a dala se v ní opravit špatně napsaná cena; teď je schválně, protože

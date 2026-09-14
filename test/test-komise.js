@@ -342,6 +342,37 @@ function nasadKonektor(odpoved) {
   });
   check('pět změn za sebou nešťouchne pětkrát', opakovane === 0, String(opakovane));
 
+  /* Ale nesmí se ztratit. Tohle je ta chyba, kvůli které prodaný kus
+     zůstal viset na obou komisích: majitel vrátil kus na sklad a hned
+     ho prodal znovu, dvě uložení pár vteřin po sobě. To první odstup
+     spotřebovalo, to druhé — „kus je prodaný, stáhni ho" — se zahodilo.
+     Odstup se proto na chvilku zkrátí, ať se to dá změřit. */
+  const neztratilo = await page.evaluate(async () => {
+    const puvodni = KOMISE_STOUCH_PAUZA_MS;
+    KOMISE_STOUCH_PAUZA_MS = 400;
+    _komiseStouchPosledni = 0;
+    _komiseStouchCeka = null;
+    window.__dotazy = [];
+    komiseStouchni();                       // projde hned
+    await new Promise(r => setTimeout(r, 50));
+    const hned = (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length;
+    komiseStouchni();                       // uvnitř odstupu — musí se odložit
+    komiseStouchni();
+    const behem = (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length;
+    await new Promise(r => setTimeout(r, 900));
+    const potom = (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length;
+    /* A pak ještě chvíli klid. Dvě odložená šťouchnutí by se jinak
+       poslala za sebou v řetízku, a to by se v krátkém okně schovalo. */
+    await new Promise(r => setTimeout(r, 1400));
+    const nakonec = (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length;
+    KOMISE_STOUCH_PAUZA_MS = puvodni;
+    return { hned, behem, potom, nakonec };
+  });
+  check('první šťouchnutí projde hned', neztratilo.hned === 1, JSON.stringify(neztratilo));
+  check('další uvnitř odstupu se nepošlou hned', neztratilo.behem === 1, JSON.stringify(neztratilo));
+  check('ale po odstupu se doženou', neztratilo.potom === 2, JSON.stringify(neztratilo));
+  check('a jen jednou, ne v řetízku', neztratilo.nakonec === 2, JSON.stringify(neztratilo));
+
   /* Neúspěch není chyba — cron je záchranná síť a hláška, se kterou
      majitel nic neudělá, by se přestala číst.
 
