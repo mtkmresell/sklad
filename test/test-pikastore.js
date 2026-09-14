@@ -1179,7 +1179,33 @@ const ME = {
   ok('hlásí se, komu to šlo', sPotizi.mail && sPotizi.mail.odeslano === true,
     JSON.stringify(sPotizi.mail));
 
+  /* Tatáž potíž se nesmí hlásit pořád dokola. Potíž je trvalá — kus,
+     který jejich API odmítlo, se příště zkusí znovu a odmítne se zas —
+     a srovnání běží po každém uložení položky. Bez tohohle by kvůli
+     jednomu kusu chodil mail po minutách. */
+  const znovuTatazPotiz = await srovnatSMailem({ provest: true }, MAIL_ENV);
+  ok('potíž se ve výsledku vrací dál', (znovuTatazPotiz.potize || []).length === 1,
+    JSON.stringify(znovuTatazPotiz.potize));
+  shoda('ale mail se neopakuje', posta.length, 0);
+  ok('a je řečeno proč', znovuTatazPotiz.mail && znovuTatazPotiz.mail.odeslano === false
+    && /neopakuje/.test(znovuTatazPotiz.mail.duvod || ''), JSON.stringify(znovuTatazPotiz.mail));
+
+  // Jiná potíž ale umlčená být nesmí — jinak by se ztratila
+  scenarSeSkladem(DVOJCATA, [cizi], (url, init) => {
+    odeslane.push({ url, method: (init && init.method) || 'GET' });
+    return Response.json({ error: 'bad_request', detail: 'jiná úplně potíž' }, { status: 400 });
+  });
+  const jinaPotiz = await srovnatSMailem({ provest: true }, MAIL_ENV);
+  ok('jiná potíž se ozve hned', posta.length === 1
+    && /jiná úplně potíž/.test((posta[0] || {}).text || ''), JSON.stringify(posta).slice(0, 200));
+  ok('a hlásí se, že odešla', jinaPotiz.mail && jinaPotiz.mail.odeslano === true,
+    JSON.stringify(jinaPotiz.mail));
+
   // Bez nastavené pošty se potíž nesmí ztratit
+  scenarSeSkladem(DVOJCATA, [cizi], (url, init) => {
+    odeslane.push({ url, method: (init && init.method) || 'GET' });
+    return Response.json({ error: 'bad_request', detail: 'velikost nesedí' }, { status: 400 });
+  });
   const bezPosty = await srovnatSMailem({ provest: true }, ENV);
   ok('bez nastavené pošty potíž nezmizí', (bezPosty.potize || []).length === 1,
     JSON.stringify(bezPosty.potize));

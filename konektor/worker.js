@@ -1417,6 +1417,35 @@ async function pikaProved(env, plan, volby) {
     zbylo: (ukony.stahnout.length + ukony.aktivovat.length + ukony.vystavit.length) - zapisu };
 }
 
+/* Tatáž potíž se nehlásí pořád dokola.
+
+   Potíž je svou povahou trvalá: kus, který jejich API odmítlo, se při
+   dalším běhu zkusí znovu a odmítne se zas; nepodepsané podmínky
+   shodí každý zápis, dokud se nepodepíšou. A srovnání neběží jednou
+   denně — jede po každém uložení položky (šťouchnutí z aplikace,
+   odstup 60 s). Bez tohohle by kvůli jednomu zaseknutému kusu chodil
+   mail po minutách, pořád stejný, a přestal by se číst — stejná
+   chyba, jaká tu byla u připomínky kusů bez SKU.
+
+   Mlčí se jen na `POTIZE_TICHO_MS` a jen na **úplně stejný** seznam
+   potíží; jakmile se objeví jiná, ozve se hned. Paměť je jen
+   v běžícím isolate, takže po studeném startu dojde jeden mail navíc.
+   To je schválně: říct potíž dvakrát je lepší než ji spolknout.
+   Hlídá to `test-pikastore.js` (sekce 16) a `test-purekickz.js`. */
+const POTIZE_TICHO_MS = 6 * 3600000;
+const _potizeNaposled = new Map();
+
+function potizeUzSlyseny(kdo, potize) {
+  const otisk = kdo + '|' + potize.slice().sort().join('|');
+  const ted = Date.now();
+  const bylo = _potizeNaposled.get(otisk);
+  if (bylo != null && ted - bylo < POTIZE_TICHO_MS) return true;
+  // Ať paměť neroste bez konce; potíží je v praxi pár.
+  if (_potizeNaposled.size > 50) _potizeNaposled.clear();
+  _potizeNaposled.set(otisk, ted);
+  return false;
+}
+
 /* Ohlášení potíží mailem. Volá se jen když se něco opravdu nepovedlo —
    mail o tom, že je všechno v pořádku, by se přestal číst.
 
@@ -1425,6 +1454,9 @@ async function pikaProved(env, plan, volby) {
 async function pikaOhlasPotize(env, potize) {
   const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
   if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
+  if (potizeUzSlyseny('pika', potize)) {
+    return { odeslano: false, duvod: 'tatáž potíž už šla, mail se neopakuje' };
+  }
   const text = 'Při srovnávání skladu s komisním prodejem Pikastore se tohle nepovedlo:\n\n'
     + potize.map(x => '· ' + x).join('\n')
     + '\n\nZbytek proběhl. Co je v seznamu, zůstalo nedodělané — buď to sprav ručně '
@@ -2125,6 +2157,9 @@ async function pkNahled(env, volby) {
 async function pkOhlasPotize(env, potize) {
   const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
   if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
+  if (potizeUzSlyseny('pk', potize)) {
+    return { odeslano: false, duvod: 'tatáž potíž už šla, mail se neopakuje' };
+  }
   try {
     await posliMail(env, {
       predmet: 'SKLAD × ' + PK_JMENO + ': ' + potize.length
@@ -2139,44 +2174,39 @@ async function pkOhlasPotize(env, potize) {
   }
 }
 
-/* Co automatika u nich sama změnila, plus jednou týdně připomínka kusů,
-   které tudy vystavit nejde.
+/* Co automatika u nich sama změnila. Purekickz na rozdíl od Pikastore
+   neposílá nic, takže bez tohohle mailu by se o vystavení ani stažení
+   nevědělo.
 
-   Ta připomínka je **stav, ne okamžik**, a stav se podle pravidel téhle
-   pošty nehlásí denně — přestal by se číst. Chodí proto jen v pondělí,
-   ke stejnému dni jako obhlídka skladu: kus bez SKU se musí vystavit
-   ručně a bez připomenutí by na něj majitel zapomněl. */
-async function pkOhlasHotovo(env, hotovo, bezSku, ted) {
+   **Ze srovnání se hlásí jen okamžik, nikdy stav.** Tady dřív visela
+   týdenní připomínka kusů, které tudy vystavit nejde (bez SKU), a
+   podmínkou bylo „je pondělí". To platí celý den — a srovnání se
+   nepouští jednou denně: jede při každém cronu a hlavně při každém
+   šťouchnutí z aplikace, tedy po každém uložení položky
+   (`APP_SROVNAT_PAUZA_MS`, odstup 60 s). V pondělí tak chodil mail
+   o jednom triku po minutách. Stav patří do ranní obhlídky, která
+   běží jednou denně — a ta kusy ležící bez inzerce hlásí sama
+   (`tydenniBlok`). Nic, co se odsud posílá, se proto nesmí odvozovat
+   z data ani z toho, jak sklad vypadá; jen z toho, co tenhle běh
+   opravdu udělal. Hlídá to `test-purekickz.js`, sekce 14.
+
+   Kusy bez SKU zůstávají vidět v náhledu (`pk_nahled`, klíč
+   `bez_sku`), kam se člověk podívá, když chce — nechodí za ním. */
+async function pkOhlasHotovo(env, hotovo) {
   const radky = []
     .concat((hotovo.vystaveno || []).map(x => '· vystaveno: ' + x))
     .concat((hotovo.stazeno || []).map(x => '· staženo: ' + x));
-  const pondeli = denVTydnu(prazskyDen(ted)) === TYDENNI_DEN;
-  const pripomenout = pondeli ? (bezSku || []) : [];
-  if (!radky.length && !pripomenout.length) return null;
+  if (!radky.length) return null;
   const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
   if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
 
-  let text = '';
-  if (radky.length) {
-    text += 'Srovnání skladu s ' + PK_JMENO + ' tohle u nich udělalo samo:\n\n'
-      + radky.join('\n') + '\n';
-  }
-  if (pripomenout.length) {
-    text += (text ? '\n' : '')
-      + 'Tyhle kusy tudy vystavit nejde — jejich API zakládá výhradně přes SKU,\n'
-      + 'a to u nich chybí. Musí se nahodit ručně v jejich portálu:\n\n'
-      + pripomenout.slice(0, NEJVIC_V_SEZNAMU)
-        .map(x => '· ' + (x.nazev || '?') + ' ' + (x.velikost || '')).join('\n')
-      + (pripomenout.length > NEJVIC_V_SEZNAMU
-        ? '\n· … a další ' + (pripomenout.length - NEJVIC_V_SEZNAMU) : '') + '\n';
-  }
   const kolik = radky.length;
   try {
     await posliMail(env, {
-      predmet: 'SKLAD × ' + PK_JMENO + ': ' + (kolik
-        ? kolik + (kolik === 1 ? ' změna' : kolik < 5 ? ' změny' : ' změn')
-        : 'kusy k ručnímu vystavení'),
-      text,
+      predmet: 'SKLAD × ' + PK_JMENO + ': ' + kolik
+        + (kolik === 1 ? ' změna' : kolik < 5 ? ' změny' : ' změn'),
+      text: 'Srovnání skladu s ' + PK_JMENO + ' tohle u nich udělalo samo:\n\n'
+        + radky.join('\n') + '\n',
     });
     return { odeslano: true, komu: env.MAIL_KOMU };
   } catch (e) {
@@ -2185,8 +2215,10 @@ async function pkOhlasHotovo(env, hotovo, bezSku, ted) {
 }
 
 /* Automatické srovnání. Stejná stavba jako u Pikastore — výjimka se
-   nesmí propadnout do logu a zmizet, zaražený běh se musí ozvat. */
-async function pkCron(env, ted) {
+   nesmí propadnout do logu a zmizet, zaražený běh se musí ozvat.
+   Datum si nebere schválně: co se odsud hlásí, nesmí záviset na tom,
+   kolikátého je (viz komentář nad `pkOhlasHotovo`). */
+async function pkCron(env) {
   if (!env.PUREKICKZ_TOKEN) return { stav: 'nenastaveno' };
   let v;
   try {
@@ -2201,7 +2233,7 @@ async function pkCron(env, ted) {
     await pkOhlasPotize(env, ['nezapisovalo se — ' + (v.duvod || 'bez důvodu')]);
     return v;
   }
-  await pkOhlasHotovo(env, v.provedeno || {}, (v.plan || {}).bez_sku || [], ted || Date.now());
+  await pkOhlasHotovo(env, v.provedeno || {});
   return v;
 }
 
@@ -3258,7 +3290,7 @@ async function appSrovnatBeh(env) {
     _appSrovnatPosledni = Date.now();
     try { await pikaCron(env); }
     catch (e) { console.error('Pikastore (na požádání): ' + (e && e.stack || e)); }
-    try { await pkCron(env, Date.now()); }
+    try { await pkCron(env); }
     catch (e) { console.error(PK_JMENO + ' (na požádání): ' + (e && e.stack || e)); }
   } while (_appSrovnatZnovu);
 }
@@ -3520,7 +3552,7 @@ export default {
          druhého ani ranní obhlídku. */
       try { await pikaCron(env); }
       catch (e) { console.error('Pikastore: ' + (e && e.stack || e)); }
-      try { await pkCron(env, Date.now()); }
+      try { await pkCron(env); }
       catch (e) { console.error(PK_JMENO + ': ' + (e && e.stack || e)); }
     }
 

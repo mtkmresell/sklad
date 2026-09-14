@@ -639,6 +639,17 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   na pozadí; bez zprávy by se o zaseknutém kusu majitel dozvěděl leda
   tak, že by si toho všiml v jejich portálu. Bez nastavené pošty
   zůstane potíž aspoň ve výsledku volání.
+- **Tatáž potíž se nehlásí pořád dokola** (`potizeUzSlyseny`,
+  `POTIZE_TICHO_MS` = 6 h; platí pro obě komise). Potíž je svou
+  povahou trvalá — kus, který jejich API odmítlo, se příště zkusí
+  znovu a odmítne se zas; nepodepsané podmínky shodí každý zápis,
+  dokud se nepodepíšou — a srovnání běží **po každém uložení
+  položky**. Bez tlumiče by kvůli jednomu zaseknutému kusu chodil
+  mail po minutách a přestal by se číst. Mlčí se jen na **úplně
+  stejný seznam potíží**; jiná potíž se ozve hned. Paměť je jen
+  v běžícím isolate, takže po studeném startu dojde jeden mail navíc
+  — schválně: říct potíž dvakrát je lepší než ji spolknout. Ve
+  výsledku volání potíž zůstává vždycky, tlumí se jen pošta.
 - Přesun do **Čeká** znamená stáhnout — **kromě prodeje na Pikastore**,
   tam už stažené je.
 - **Čerstvě přidaný kus se chvíli nevystavuje** (`PIKA_ODKLAD_NOVE_MIN`,
@@ -789,16 +800,26 @@ Vlastní je jen jejich API:
   **Čtyři z jedenadvaceti** kusů k vystavení u nich takhle už visely.
 - Limit je **60 požadavků za minutu**; `429` se nesmí zaměnit za
   neplatný klíč.
-- **Kus bez SKU se připomíná jednou týdně.** Vystavit ho tudy nejde
-  a majitel ho nahazuje ručně, takže by na něj jinak zapomněl. Je to
-  ale **stav, ne okamžik** — denně by se to přestalo číst, proto jen
-  v pondělí, ke stejnému dni jako obhlídka skladu.
+- **Kus bez SKU se mailem nepřipomíná.** Vystavit ho tudy nejde, ale
+  zůstává vidět v náhledu (`pk_nahled`, klíč `bez_sku`) a kusy ležící
+  bez inzerce hlásí jednou týdně ranní obhlídka (`tydenniBlok`).
 - **O změnách tady mail chodí** (`pkOhlasHotovo`), na rozdíl od
   Pikastore — Purekickz neposílá nic, takže bez mailu se o vystavení
   ani stažení neví. U vystaveného kusu je v něm i **cena**, ne jejich
   uuid: mail se čte proto, aby bylo na první pohled vidět, že kus visí
   a za kolik, a uuid k tomu neřekne nic. Cena u nich je rovnou payout
   v korunách, takže v mailu stojí přesně to, co majitel dostane.
+- **Ze srovnání se hlásí jen okamžik, nikdy stav — a „jednou denně" se
+  tu nedá zařídit datem.** Tady kdysi visela týdenní připomínka kusů
+  bez SKU s podmínkou „je pondělí". To platí celý den, jenže srovnání
+  neběží jednou denně: jede při každém cronu a hlavně po **každém
+  uložení položky** (šťouchnutí z aplikace, odstup 60 s). V pondělí
+  tak chodil mail o jednom triku po minutách, pořád stejný, a u kusu,
+  který u nich SKU nikdy mít nebude, by chodil navždy. Cokoli, co se
+  má ozvat jednou za den nebo týden, patří do ranní obhlídky — ta má
+  `HODINA_ODESLANI` a běží doopravdy jednou denně. `test-purekickz.js`
+  (sekce 14) proto pouští běh **dvakrát po sobě**: jeden běh tuhle
+  chybu neodhalí.
 - Stropy jsou vlastní (`PK_STROP_ZAPISU`, `PK_STROP_STAZENI`,
   `PK_STROP_CRON`), jinak platí totéž co u Pikastore.
 

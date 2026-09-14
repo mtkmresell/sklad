@@ -574,19 +574,31 @@ const radek = (o) => Object.assign({
   c = await cron();
   shoda('srovnaný sklad neudělá nic a mlčí', [c.zapisy.length, c.posta.length], [0, 0]);
 
-  /* Kus bez SKU se tudy vystavit nedá a musí se nahodit ručně. Je to
-     stav, ne okamžik — chodí proto jen v pondělí, jinak by se ta
-     připomínka po týdnu přestala číst. */
+  /* Kus bez SKU se tudy vystavit nedá — a mail se o něm neposílá.
+     Tohle je ta chyba, co se našla v provozu: připomínka tu visela
+     s podmínkou „je pondělí", jenže to platí celý den, a srovnání
+     neběží jednou denně — jede při každém cronu a hlavně po každém
+     uložení položky v aplikaci (šťouchnutí, odstup 60 s). V pondělí
+     tak chodil mail o jednom triku po minutách.
+
+     Podmínka na datum je proto pryč celá; mail ze srovnání smí nést
+     jen to, co ten běh opravdu udělal. Test pouští běh dvakrát po
+     sobě právě proto, že jeden běh by tuhle chybu neodhalil. */
   polozkySkladu = [{ id: 'ns', name: 'Kus bez SKU', size: 'L', category: 'obleceni',
     saleState: 'stock', location: 'Doma', targetPrice: 1000 }];
   scenar([]);
   c = await cron(UTERY);
-  shoda('v úterý se kus bez SKU nepřipomíná', [c.zapisy.length, c.posta.length], [0, 0]);
+  shoda('kus bez SKU se nepřipomíná v úterý', [c.zapisy.length, c.posta.length], [0, 0]);
   c = await cron(PONDELI);
-  ok('v pondělí ano', c.posta.length === 1
-    && /Kus bez SKU/.test((c.posta[0] || {}).text || ''), JSON.stringify(c.posta).slice(0, 250));
-  ok('a je z mailu jasné, že se má nahodit ručně',
-    /ručně/.test((c.posta[0] || {}).text || ''), (c.posta[0] || {}).text);
+  shoda('ani v pondělí', [c.zapisy.length, c.posta.length], [0, 0]);
+  c = await cron(PONDELI);
+  shoda('ani při druhém běhu téhož pondělí', [c.zapisy.length, c.posta.length], [0, 0]);
+
+  /* Informace se ale neztratila — jen za majitelem nechodí. V náhledu,
+     kam se podívá, když chce, kus zůstává. */
+  const nsNahled = await nahled();
+  shoda('a přesto je vidět v náhledu',
+    ((nsNahled.telo.plan || {}).bez_sku || []).map(x => x.nazev), ['Kus bez SKU']);
 
   // Potíž se musí ozvat
   polozkySkladu = [Object.assign({}, zaklad, { id: 'a' })];

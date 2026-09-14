@@ -243,6 +243,12 @@ Tři věci, na které se dá spolehnout:
   vlastní mail, takže dvě zprávy o jedné věci by znamenaly, že se
   přestanou číst obě. U Purekickz je to naopak: ti neposílají nic, tam
   chodí i mail o změnách.
+- **Tatáž potíž nechodí pořád dokola.** Zaseknutý kus se při každém
+  běhu zkusí znovu a zasekne se zas — a běhů je po každém uložení
+  položky jeden. Stejný seznam potíží se proto do šesti hodin
+  neopakuje; **jiná potíž se ozve hned** a ve výsledku volání zůstává
+  potíž vždycky. Po restartu Workeru dojde jeden mail navíc, což je
+  schválně: říct potíž dvakrát je lepší než ji spolknout.
 - **Pád komise neumlčí ranní obhlídku.** Jsou to dvě nezávislé věci
   a běží po sobě, ne jedna místo druhé.
 
@@ -282,8 +288,12 @@ se nechá být, ruční inzeráty se neopravují. Liší se jen jejich API:
   stažení nedalo dozvědět. U vystaveného kusu je v mailu i **cena**;
   je to rovnou payout v korunách, takže je na první pohled vidět, že
   kus visí a za kolik.
-- **Kus bez SKU** se jednou týdně (v pondělí) připomene mailem, ať se
-  nezapomene nahodit ručně.
+- **Kus bez SKU** se mailem nepřipomíná. Zůstává vidět v náhledu pod
+  `bez_sku` a kusy ležící bez inzerce hlásí jednou týdně ranní
+  obhlídka. Dřív se připomínal ze srovnání s podmínkou „je pondělí" —
+  jenže srovnání běží po každém uložení položky, takže v pondělí
+  chodil pořád stejný mail po minutách. **Ze srovnání se hlásí jen to,
+  co ten běh udělal; cokoli podle data patří do ranní obhlídky.**
 - Limit je **60 požadavků za minutu**.
 
 ## Kurz ČNB pro aplikaci
