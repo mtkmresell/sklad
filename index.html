@@ -1976,7 +1976,8 @@ var SYNC_FREQ_KEYS = ['carrier_freq', 'soldWhere_freq', 'payoutCustom_freq'];
    synchronizovaného nastavení nepatří, protože ten dokument čte i
    účetní — ale na odhlášeném zařízení ležet nemá. */
 function syncLocalOnlyKeys() {
-  return [SK, SK + '_savedAt', SK + '_dirty', SK_SNAP, SK_KOMISE_TOKEN, SK_KOMISE_STAV];
+  return [SK, SK + '_savedAt', SK + '_dirty', SK_SNAP, SK_KOMISE_TOKEN, SK_KOMISE_STAV,
+    SK_STOUCH_STAV];
 }
 
 // Doplní do cloudového balíčku všechna nastavení ze seznamu.
@@ -10134,7 +10135,14 @@ function openKomiseSettings() {
   var pole = document.getElementById('komiseTokenInput');
   var radek = document.getElementById('komiseStavRadek');
   pole.value = getKomiseToken();
-  radek.textContent = _komiseStavPopis();
+  /* Dva řádky, ne jeden: přenos prodejů a šťouchnutí jsou dvě různé
+     cesty a při hledání příčiny je potřeba vidět obě. */
+  radek.textContent = '';
+  [_komiseStavPopis(), _stouchPopis()].forEach(function (t) {
+    var d = document.createElement('div');
+    d.textContent = t;
+    radek.appendChild(d);
+  });
 
   function zpet() { ov.remove(); openSettings(); }
   document.getElementById('komiseClose').addEventListener('click', zpet);
@@ -10211,10 +10219,38 @@ function komiseSrovnatUrl() {
   return origin + '/' + encodeURIComponent(token) + '/srovnat';
 }
 
+/* Jak dopadlo poslední šťouchnutí. Vlastní klíč, ať to nepřepisuje
+   záznam o přenosu prodejů — jsou to dvě různé věci a při hledání
+   příčiny je potřeba vidět obě.
+
+   Bez tohohle se to nedalo vyšetřit vůbec: šťouchnutí je schválně tiché
+   (cron je záchranná síť, hláška by jen otravovala), takže „nestáhlo se
+   to" vypadalo úplně stejně jako „aplikace se vůbec neozvala", jako
+   „token tu není" a jako „konektor nemá tu adresu". Tři kola hádání.
+   Na mobilu se do konzole nikdo nedostane, takže jediné místo, kde to
+   jde říct, je Nastavení. */
+var SK_STOUCH_STAV = 'sklad_stouch_stav_v1';
+function stouchStav() {
+  try { return JSON.parse(localStorage.getItem(SK_STOUCH_STAV) || 'null'); } catch (e) { return null; }
+}
+function _stouchZapis(o) {
+  try {
+    localStorage.setItem(SK_STOUCH_STAV,
+      JSON.stringify(Object.assign({ kdy: new Date().toISOString() }, o)));
+  } catch (e) {}
+}
+
 function komiseStouchni() {
-  var url = komiseSrovnatUrl();
-  if (!url) return;                       // bez tokenu se neděje nic
   if (jeUctetni()) return;                // účetní komisi neřídí
+  var url = komiseSrovnatUrl();
+  if (!url) {
+    /* Token je schválně jen v tomhle prohlížeči a nesynchronizuje se.
+       Po vymazání dat stránky (a některá „tvrdá obnovení" ho smažou)
+       je pryč a šťouchání tiše přestane fungovat. */
+    _stouchZapis({ stav: 'nenastaveno',
+      chybi: !konektorOrigin() ? 'adresa konektoru' : 'token aplikace' });
+    return;
+  }
   /* Odstup smí šťouchnutí odložit, nikdy zahodit.
 
      První verze uvnitř odstupu prostě skončila. Vypadalo to neškodně,
@@ -10236,13 +10272,40 @@ function komiseStouchni() {
     return;
   }
   _komiseStouchPosledni = Date.now();
-  /* Odpověď nikoho nezajímá — konektor ji vrací hned a srovnání si
-     doběhne na pozadí. Chyba se polyká schválně: cron je záchranná
-     síť a hláška „nepovedlo se šťouchnout" by majiteli neřekla nic,
-     s čím by mohl něco udělat. */
+  /* Navenek se nic nehlásí — cron je záchranná síť a hláška
+     „nepovedlo se šťouchnout" by majiteli neřekla nic, s čím by mohl
+     něco udělat. Zapsat se to ale musí, jinak není podle čeho hledat. */
+  _stouchZapis({ stav: 'odesláno' });
   try {
-    fetch(url, { method: 'POST', cache: 'no-store' }).catch(function () {});
-  } catch (e) {}
+    fetch(url, { method: 'POST', cache: 'no-store' })
+      .then(function (r) {
+        return r.json().catch(function () { return null; }).then(function (t) {
+          _stouchZapis({ stav: r.ok ? 'ok' : 'odmítnuto', kod: r.status,
+            odpoved: t && t.stav ? String(t.stav) : null });
+        });
+      })
+      .catch(function (e) {
+        /* Sem spadne i zablokovaný CORS a vypnutá síť — z prohlížeče
+           se ty dva nedají rozlišit, hláška je schválně obecná. */
+        _stouchZapis({ stav: 'nedoručeno', chyba: String((e && e.message) || e).slice(0, 80) });
+      });
+  } catch (e) {
+    _stouchZapis({ stav: 'nedoručeno', chyba: String((e && e.message) || e).slice(0, 80) });
+  }
+}
+
+// Jedna věta o tom, jak dopadlo poslední šťouchnutí
+function _stouchPopis() {
+  if (!getKomiseToken()) return 'Šťouchnutí: token není nastavený — nešťouchá se.';
+  var s = stouchStav();
+  if (!s) return 'Šťouchnutí: zatím žádné.';
+  var cas = String(s.kdy || '').slice(11, 16);
+  if (s.stav === 'nenastaveno') return 'Šťouchnutí ' + cas + ': chybí ' + s.chybi + '.';
+  if (s.stav === 'nedoručeno') return 'Šťouchnutí ' + cas + ': nedorazilo — ' + (s.chyba || 'síť');
+  if (s.stav === 'odmítnuto') return 'Šťouchnutí ' + cas + ': konektor odmítl (' + s.kod + ')'
+    + (s.kod === 404 ? ' — starý worker, chybí /srovnat' : '');
+  if (s.stav === 'ok') return 'Šťouchnutí ' + cas + ': v pořádku (' + (s.odpoved || 'ok') + ')';
+  return 'Šťouchnutí ' + cas + ': odesláno, bez odpovědi.';
 }
 
 /* Po startu se počká na první snímek z cloudu. Bez nastaveného tokenu

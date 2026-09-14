@@ -707,6 +707,17 @@ konektoru „koukni se na to teď". Vystavování nových kusů to zrychlí taky
 - **Běh, do kterého přišlo další šťouchnutí, se zopakuje.** Konektor si
   sklad sebral na začátku; co majitel udělal potom, v těch datech není
   a bez opakování by to tenhle běh minulo.
+- **Šťouchnutí po sobě nechává stopu** (`SK_STOUCH_STAV`, vidět
+  v *Nastavení → Komisní prodej*). Navenek je tiché schválně, ale bez
+  záznamu vypadalo „nestáhlo se to" úplně stejně jako „aplikace se
+  neozvala", „token tu v prohlížeči není" a „nasazený worker tu adresu
+  nemá". Stálo to tři kola hádání nad ostrými daty. Rozlišuje se
+  `ok` / `odmítnuto` (s kódem — u `404` se rovnou řekne, že je starý
+  worker) / `nedoručeno` / `nenastaveno` (a co přesně chybí).
+  Na mobilu se do konzole nikdo nedostane, takže *Nastavení* je jediné
+  místo, kde to jde říct. **Token se nesynchronizuje**, takže na druhém
+  zařízení — a po vymazání dat stránky — prostě není a šťouchání tiše
+  přestane fungovat; tohle je jediný způsob, jak to poznat.
 
 Odpovídá se hned a srovnání běží na pozadí (`waitUntil`) — trvá vteřiny
 a aplikace na odpověď čeká z prohlížeče.

@@ -397,6 +397,71 @@ function nasadKonektor(odpoved) {
   check('ani nezachycené odmítnutí do konzole',
     kdyzSpadne.nezachycene.length === 0, JSON.stringify(kdyzSpadne.nezachycene));
   check('a nic se nehlásí', kdyzSpadne.toast === false);
+
+  /* ── Stopa po šťouchnutí ──────────────────────────────────────────
+     Šťouchnutí je schválně tiché, takže bez záznamu vypadá „nestáhlo
+     se to" úplně stejně jako „aplikace se neozvala", „token tu není"
+     a „konektor tu adresu nemá". Stálo to tři kola hádání; na mobilu
+     se do konzole nikdo nedostane, jediné místo je Nastavení. */
+  const stopa = await page.evaluate(async () => {
+    localStorage.removeItem('sklad_stouch_stav_v1');
+    _komiseStouchPosledni = 0;
+    _komiseStouchCeka = null;
+    window.fetch = async () => new Response('{"stav":"spuštěno"}',
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 200));
+    return { ulozeno: stouchStav(), popis: _stouchPopis() };
+  });
+  check('povedené šťouchnutí nechá stopu', stopa.ulozeno && stopa.ulozeno.stav === 'ok',
+    JSON.stringify(stopa.ulozeno));
+  check('a je z ní poznat, co konektor odpověděl', /spuštěno/.test(stopa.popis), stopa.popis);
+
+  /* 404 znamená jedinou konkrétní věc: nasazený worker tu adresu nemá.
+     Bez pojmenování by se to hledalo hodinu. */
+  const stary = await page.evaluate(async () => {
+    _komiseStouchPosledni = 0;
+    window.fetch = async () => new Response('Not found', { status: 404 });
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 200));
+    return { ulozeno: stouchStav(), popis: _stouchPopis() };
+  });
+  check('odmítnutí se zapíše i s kódem',
+    stary.ulozeno && stary.ulozeno.stav === 'odmítnuto' && stary.ulozeno.kod === 404,
+    JSON.stringify(stary.ulozeno));
+  check('a u 404 se rovnou řekne, že je starý worker',
+    /starý worker/.test(stary.popis), stary.popis);
+
+  const spadlo = await page.evaluate(async () => {
+    _komiseStouchPosledni = 0;
+    window.fetch = async () => { throw new Error('Failed to fetch'); };
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 200));
+    return { ulozeno: stouchStav(), popis: _stouchPopis() };
+  });
+  check('nedoručené šťouchnutí se pozná taky',
+    spadlo.ulozeno && spadlo.ulozeno.stav === 'nedoručeno', JSON.stringify(spadlo.ulozeno));
+  check('a nic se u toho nevyhodí', /nedorazilo/.test(spadlo.popis), spadlo.popis);
+
+  /* Token je, ale adresa konektoru chybí. Zvenku to vypadá stejně jako
+     kterákoli jiná porucha, a přitom se to spraví vyplněním jednoho
+     pole — musí to tedy být pojmenované, ne jen „nefunguje". */
+  const bezAdresy = await page.evaluate(async () => {
+    const puvodni = localStorage.getItem('sklad_konektor_url_v1');
+    localStorage.removeItem('sklad_konektor_url_v1');
+    localStorage.removeItem('sklad_stouch_stav_v1');
+    _komiseStouchPosledni = 0;
+    komiseStouchni();
+    await new Promise(r => setTimeout(r, 150));
+    const out = { ulozeno: stouchStav(), popis: _stouchPopis() };
+    if (puvodni) localStorage.setItem('sklad_konektor_url_v1', puvodni);
+    return out;
+  });
+  check('chybějící adresa konektoru se zapíše',
+    bezAdresy.ulozeno && bezAdresy.ulozeno.stav === 'nenastaveno'
+    && bezAdresy.ulozeno.chybi === 'adresa konektoru', JSON.stringify(bezAdresy.ulozeno));
+  check('a řekne se, co přesně chybí',
+    /chybí adresa konektoru/.test(bezAdresy.popis), bezAdresy.popis);
   await page.context().close();
 
   /* Bez tokenu se nesmí ozvat nikam — stejně jako u čtení prodejů. */
@@ -411,6 +476,10 @@ function nasadKonektor(odpoved) {
     return (window.__dotazy || []).filter(u => u.indexOf('/srovnat') !== -1).length;
   });
   check('bez tokenu se nešťouchá', bezTokenu === 0, String(bezTokenu));
+  // ...a i tohle se pozná, místo aby to jen tiše nic nedělalo
+  const bezTokenuPopis = await page.evaluate(() => _stouchPopis());
+  check('a je z Nastavení poznat proč', /token není nastavený/.test(bezTokenuPopis),
+    bezTokenuPopis);
   await page.context().close();
 
   /* A hlavně: šťouchá se až po potvrzeném zápisu do cloudu, ne při
