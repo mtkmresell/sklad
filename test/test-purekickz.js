@@ -483,6 +483,39 @@ const radek = (o) => Object.assign({
   ok('a hlásí se to zpět', ((z.telo.provedeno || {}).vystaveno || []).length === 1,
     JSON.stringify(z.telo.provedeno));
 
+  /* ── Model, který jejich e-shop nezná ────────────────────────────
+     „Product not found on the shop" **není potíž běhu, ale trvalý
+     stav**: dokud ho kluci z Purekickz nepřidají, dopadne každý další
+     pokus stejně. Než se to rozlišilo, chodil mail o potížích po
+     každém uložení položky v aplikaci — a stálo v něm pokaždé totéž,
+     co majitel už četl, a čtyřikrát pod sebou, protože tentýž model
+     leží doma ve čtyřech velikostech. */
+  const VANS = ['42', '43', '44', '45'].map((v, i) => ({
+    id: 'v' + i, name: 'Vans LX Old Skool 36', sku: 'VN000ZB8CDA', size: v,
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 3000 }));
+  polozkySkladu = VANS;
+  let pokusuOVystaveni = 0;
+  scenar([], (url, init) => {
+    if ((init && init.method) !== 'POST') return null;
+    pokusuOVystaveni++;
+    return Response.json(
+      { detail: 'Product not found on the shop (check sku / shopify_product_id)' },
+      { status: 400 });
+  });
+  z = await srovnat({ provest: true });
+  ok('neznámý model se nehlásí jako potíž', !(z.telo.potize || []).length,
+    JSON.stringify(z.telo.potize));
+  ok('ale neztratí se — je v náhledu', (z.telo.nezna_katalog || []).length > 0,
+    JSON.stringify(z.telo.nezna_katalog));
+  ok('a je u toho SKU, na které se má zeptat',
+    (z.telo.nezna_katalog || []).every(x => x.sku === 'VN000ZB8CDA'),
+    JSON.stringify(z.telo.nezna_katalog));
+  /* Jejich hláška mluví o produktu, ne o velikosti — zbylé velikosti
+     by dopadly stejně a jen by spálily strop zápisů. */
+  shoda('a zkusí se to jen jednou, ne u každé velikosti', pokusuOVystaveni, 1);
+  ok('všechny čtyři kusy jsou ale vypsané',
+    (z.telo.nezna_katalog || []).length === 4, JSON.stringify(z.telo.nezna_katalog));
+
   /* Stažení je u nich DELETE, ne zvláštní sloveso. */
   polozkySkladu = [Object.assign({}, zaklad, { id: 'a', saleState: 'waiting' })];
   scenar([radek({ id: 'ke-smazani', sku: 'AA-1', size: '42' })]);
@@ -599,6 +632,42 @@ const radek = (o) => Object.assign({
   const nsNahled = await nahled();
   shoda('a přesto je vidět v náhledu',
     ((nsNahled.telo.plan || {}).bez_sku || []).map(x => x.nazev), ['Kus bez SKU']);
+
+  /* **Jádro věci: běh, který nic nezměnil, nesmí poslat nic** — ani
+     kvůli modelu, který jejich e-shop nezná. Srovnání jede po každém
+     uložení položky, takže než se to rozlišilo, stačilo v aplikaci
+     zaškrtnout fajfku u libovolné položky a mail dorazil. Pokaždé
+     stejný, a majitel s ním nemůže dělat nic než napsat klukům. */
+  polozkySkladu = ['42', '43', '44', '45'].map((vel, i) => ({
+    id: 'w' + i, name: 'Vans LX Old Skool 36', sku: 'VN000ZB8CDA', size: vel,
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 3000 }));
+  scenar([], (url, init) => ((init && init.method) === 'POST'
+    ? Response.json({ detail: 'Product not found on the shop (check sku / shopify_product_id)' },
+      { status: 400 })
+    : null));
+  c = await cron();
+  shoda('běh, co nic nezměnil, kvůli neznámému modelu mlčí', c.posta.length, 0);
+
+  /* Když se ale mail stejně posílá, ať v něm majitel vidí, na co se
+     kluků zeptat. Sveze se — nikdy nejede sám. */
+  polozkySkladu = polozkySkladu.concat([{ id: 'jde', name: 'Kus, co projde', sku: 'OK-1',
+    size: '42', category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 2000 }]);
+  scenar([], (url, init) => {
+    if ((init && init.method) !== 'POST') return null;
+    const telo = JSON.parse(init.body || '{}');
+    if (telo.sku === 'OK-1') return Response.json({ id: 'nove' });
+    return Response.json(
+      { detail: 'Product not found on the shop (check sku / shopify_product_id)' },
+      { status: 400 });
+  });
+  c = await cron();
+  ok('a když se mail stejně posílá, sveze se s ním', c.posta.length === 1
+    && /VN000ZB8CDA/.test((c.posta[0] || {}).text || ''), JSON.stringify(c.posta).slice(0, 300));
+  ok('jedním řádkem na model, ne na každou velikost',
+    ((c.posta[0] || {}).text || '').split('VN000ZB8CDA').length === 2,
+    (c.posta[0] || {}).text);
+  ok('a je z toho jasné, že se má napsat jim',
+    /Napiš jim/.test((c.posta[0] || {}).text || ''), (c.posta[0] || {}).text);
 
   // Potíž se musí ozvat
   polozkySkladu = [Object.assign({}, zaklad, { id: 'a' })];

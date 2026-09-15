@@ -851,6 +851,25 @@ Vlastní je jen jejich API:
 - **Kus bez SKU se mailem nepřipomíná.** Vystavit ho tudy nejde, ale
   zůstává vidět v náhledu (`pk_nahled`, klíč `bez_sku`) a kusy ležící
   bez inzerce hlásí jednou týdně ranní obhlídka (`tydenniBlok`).
+- **„Product not found on the shop" není potíž, je to trvalý stav**
+  (`pkNeznaKatalog`). Ten model prostě v jejich e-shopu není a majitel
+  s tím sám nic nesvede — musí napsat klukům z Purekickz, ať ho
+  přidají, a do té doby dopadne každý další pokus stejně. Než se to
+  rozlišilo, chodil mail o potížích **po každém uložení položky**
+  v aplikaci, pokaždé se stejným textem, a u jednoho modelu ve čtyřech
+  velikostech čtyřikrát pod sebou. Do potíží proto nejde: zůstává
+  v náhledu (`nezna_katalog`) a **sveze se s mailem o změnách**, který
+  chodí jen tehdy, když se u nich opravdu něco stalo — sám od sebe
+  nedorazí nikdy. V mailu je **jeden řádek na model**
+  (`pkJedenZaModel`), ne na kus; majitel má napsat o jedinou věc.
+  Pozná se to podle textu hlášky, ne podle kódu — jejich dokumentace
+  chybové stavy nevyjmenovává a `400` i `404` u nich znamenají spoustu
+  jiných věcí, které majitel vidět má.
+- **Zbylé velikosti téhož SKU se už nezkouší.** Jejich hláška mluví
+  o produktu, ne o velikosti, takže by dopadly stejně — a bez toho se
+  u jednoho modelu spálily čtyři zápisy ze stropu. Platí jen v rámci
+  jednoho běhu; příští běh to zkusí znovu, protože konektor si mezi
+  běhy nic nepamatuje.
 - **O změnách tady mail chodí** (`pkOhlasHotovo`), na rozdíl od
   Pikastore — Purekickz neposílá nic, takže bez mailu se o vystavení
   ani stažení neví. U vystaveného kusu je v něm i **cena**, ne jejich

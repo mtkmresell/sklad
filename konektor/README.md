@@ -320,6 +320,13 @@ se nechá být, ruční inzeráty se neopravují. Liší se jen jejich API:
   jenže srovnání běží po každém uložení položky, takže v pondělí
   chodil pořád stejný mail po minutách. **Ze srovnání se hlásí jen to,
   co ten běh udělal; cokoli podle data patří do ranní obhlídky.**
+- **Model, který jejich e-shop nezná** („Product not found on the
+  shop"), taky nechodí mailem. Není to porucha, kterou by šlo příště
+  spravit — dokud ho kluci z Purekickz nepřidají, dopadne každý pokus
+  stejně, a mail by ti chodil po každém uložení položky. Najdeš ho
+  v náhledu pod `nezna_katalog` a **sveze se s mailem o změnách**,
+  který chodí jen tehdy, když se u nich opravdu něco stalo. Jeden
+  řádek na model, ne na každou velikost.
 - Limit je **60 požadavků za minutu**.
 
 ## Kurz ČNB pro aplikaci

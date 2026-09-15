@@ -1943,6 +1943,35 @@ async function pkVolej(env, cesta, moznosti) {
   }
 }
 
+/* „Product not found on the shop (check sku / shopify_product_id)" —
+   ten model prostě v jejich e-shopu není.
+
+   **Není to potíž běhu, je to trvalý stav.** Majitel s tím sám nic
+   nesvede: musí napsat klukům z Purekickz, ať ho do e-shopu přidají,
+   a do té doby dopadne každý další pokus stejně. A pokusů je hodně —
+   srovnání běží po každém uložení položky, takže než se hlásilo jako
+   potíž, chodil ten mail pokaždé, když majitel v aplikaci na cokoli
+   sáhl. Přitom v něm stálo přesně to, co už jednou četl.
+
+   Do mailu o potížích proto nejde; zůstává v náhledu (`pk_nahled`,
+   klíč `nezna_katalog`) a **sveze se s mailem o změnách**, který chodí
+   jen tehdy, když se u nich opravdu něco stalo. Nikdy tedy nedorazí
+   sám od sebe.
+
+   Poznává se podle textu hlášky. Jejich dokumentace chybové stavy
+   nevyjmenovává (stejně jako stavy inzerátů), takže se nedá jít po
+   kódu: `404` i `400` u nich znamenají spoustu jiných věcí a zahrnout
+   je celé by spolklo i chyby, o kterých majitel vědět má. */
+function pkNeznaKatalog(e) {
+  return /not found on the shop|product not found/i.test((e && e.message) || '');
+}
+
+function pkPopisNeznameho(u) {
+  const p = (u && u.popis) || {};
+  return { nazev: p.nazev || null, sku: (u.telo && u.telo.sku) || p.sku || null,
+    velikost: p.velikost || null };
+}
+
 async function pkKdoJsem(env) { return pkVolej(env, '/me'); }
 
 /* Celý výpis inzerátů. Stránkuje se přes limit/offset a **bez filtru na
@@ -2085,6 +2114,10 @@ async function pkProved(env, plan, volby) {
   volby = volby || {};
   const hotovo = { vystaveno: [], stazeno: [] };
   const potize = [];
+  /* Kusy, jejichž model jejich e-shop vůbec nezná. Není to potíž běhu,
+     je to **trvalý stav** — viz `pkNeznaKatalog`. */
+  const neznaKatalog = [];
+  const neznaSku = new Set();
   let zapisu = 0;
   const strop = Math.min(
     Number.isFinite(volby.nejvyse) && volby.nejvyse > 0 ? volby.nejvyse : PK_STROP_ZAPISU,
@@ -2108,6 +2141,17 @@ async function pkProved(env, plan, volby) {
   }
   for (const u of ukony.vystavit) {
     if (!zbyva()) break;
+    /* Ten model jejich e-shop nezná — zjistilo se to o pár řádků výš
+       u jiné velikosti téhož SKU. Zkoušet zbylé velikosti nemá smysl:
+       jejich hláška mluví o **produktu**, ne o velikosti, takže by
+       dopadly stejně. Bez tohohle se u jednoho modelu ve čtyřech
+       velikostech spálily čtyři zápisy ze stropu a v hlášení stály
+       čtyři úplně stejné řádky. */
+    const sku = u.telo && u.telo.sku;
+    if (sku && neznaSku.has(sku)) {
+      neznaKatalog.push(pkPopisNeznameho(u));
+      continue;
+    }
     try {
       await pkVolej(env, '/listings', {
         method: 'POST',
@@ -2121,11 +2165,20 @@ async function pkProved(env, plan, volby) {
       hotovo.vystaveno.push((u.popis.nazev || '') + ' ' + (u.popis.velikost || '')
         + ' → založeno za ' + kc(u.telo.payout)); zapisu++;
     } catch (e) {
+      /* „Ten produkt u nás není" není potíž běhu, kterou by šlo příště
+         vyřešit — je to trvalý stav, dokud ho oni nepřidají do e-shopu.
+         Do potíží (a tím do mailu) proto nepatří. */
+      if (pkNeznaKatalog(e)) {
+        if (sku) neznaSku.add(sku);
+        neznaKatalog.push(pkPopisNeznameho(u));
+        zapisu++;                       // pokus u nich proběhl, strop ho počítá
+        continue;
+      }
       potize.push('vystavení ' + (u.popis.nazev || '') + ': ' + e.message);
       if (e.pikaKod === 'token') break;
     }
   }
-  return { hotovo, potize, zapisu, strop,
+  return { hotovo, potize, neznaKatalog, zapisu, strop,
     zbylo: (ukony.stahnout.length + ukony.vystavit.length) - zapisu };
 }
 
@@ -2204,6 +2257,10 @@ async function pkNahled(env, volby) {
   odpoved.provedeno = vysledek.hotovo;
   odpoved.zapisu = vysledek.zapisu;
   if (vysledek.potize.length) odpoved.potize = vysledek.potize;
+  /* Kusy, jejichž model jejich e-shop nezná. Do potíží nepatří (trvalý
+     stav, ne chyba běhu), ale ztratit se nesmí — tohle je jediné
+     místo, kde se dá zjistit, na co se kluků z Purekickz zeptat. */
+  if ((vysledek.neznaKatalog || []).length) odpoved.nezna_katalog = vysledek.neznaKatalog;
   if (vysledek.zbylo > 0) {
     odpoved.poznamka = 'Zbývá ' + vysledek.zbylo + ' úkonů — strop je ' + vysledek.strop
       + ' zápisů na běh. Pusť to znovu, plán se přepočítá.';
@@ -2252,26 +2309,57 @@ async function pkOhlasPotize(env, potize) {
 
    Kusy bez SKU zůstávají vidět v náhledu (`pk_nahled`, klíč
    `bez_sku`), kam se člověk podívá, když chce — nechodí za ním. */
-async function pkOhlasHotovo(env, hotovo) {
+async function pkOhlasHotovo(env, hotovo, neznaKatalog) {
   const radky = []
     .concat((hotovo.vystaveno || []).map(x => '· vystaveno: ' + x))
     .concat((hotovo.stazeno || []).map(x => '· staženo: ' + x));
+  /* **Sveze se, nikdy nejede sám.** Kusy, jejichž model jejich e-shop
+     nezná, jsou trvalý stav — než je kluci z Purekickz přidají, dopadne
+     každý pokus stejně. Kdyby kvůli nim mail chodil, přišel by po
+     každém uložení položky a majitel by v něm pokaždé četl totéž.
+     Když se ale mail stejně posílá, ať v něm vidí, na co se zeptat. */
   if (!radky.length) return null;
   const chybi = MAIL_TAJEMSTVI.filter(k => !env[k]);
   if (chybi.length) return { odeslano: false, duvod: 'chybí ' + chybi.join(', ') };
 
   const kolik = radky.length;
+  let text = 'Srovnání skladu s ' + PK_JMENO + ' tohle u nich udělalo samo:\n\n'
+    + radky.join('\n') + '\n';
+  const nezna = pkJedenZaModel(neznaKatalog || []);
+  if (nezna.length) {
+    text += '\nTyhle modely jejich e-shop nezná, takže je tudy vystavit nejde.\n'
+      + 'Napiš jim, ať je přidají — do té doby s tím nic nenaděláš a už\n'
+      + 'se ti kvůli nim nic neozve:\n\n'
+      + nezna.slice(0, NEJVIC_V_SEZNAMU)
+        .map(x => '· ' + (x.nazev || '?') + (x.sku ? ' (' + x.sku + ')' : '')).join('\n')
+      + (nezna.length > NEJVIC_V_SEZNAMU
+        ? '\n· … a další ' + (nezna.length - NEJVIC_V_SEZNAMU) : '') + '\n';
+  }
   try {
     await posliMail(env, {
       predmet: 'SKLAD × ' + PK_JMENO + ': ' + kolik
         + (kolik === 1 ? ' změna' : kolik < 5 ? ' změny' : ' změn'),
-      text: 'Srovnání skladu s ' + PK_JMENO + ' tohle u nich udělalo samo:\n\n'
-        + radky.join('\n') + '\n',
+      text,
     });
     return { odeslano: true, komu: env.MAIL_KOMU };
   } catch (e) {
     return { odeslano: false, duvod: String((e && e.message) || e) };
   }
+}
+
+/* Jeden řádek na model, ne na kus. Tentýž model leží doma v několika
+   velikostech a v mailu by se čtyřikrát opakoval, přestože majitel má
+   klukům napsat o jedinou věc. */
+function pkJedenZaModel(kusy) {
+  const videno = new Set();
+  const ven = [];
+  for (const k of kusy) {
+    const klic = k.sku || k.nazev || '?';
+    if (videno.has(klic)) continue;
+    videno.add(klic);
+    ven.push(k);
+  }
+  return ven;
 }
 
 /* Automatické srovnání. Stejná stavba jako u Pikastore — výjimka se
@@ -2293,7 +2381,7 @@ async function pkCron(env) {
     await pkOhlasPotize(env, ['nezapisovalo se — ' + (v.duvod || 'bez důvodu')]);
     return v;
   }
-  await pkOhlasHotovo(env, v.provedeno || {});
+  await pkOhlasHotovo(env, v.provedeno || {}, v.nezna_katalog || []);
   return v;
 }
 
