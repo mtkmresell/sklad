@@ -174,6 +174,70 @@ const SEED = [{ id: 'i1', name: 'Nike Dunk Low Panda', category: 'sneakers', sku
   check('profil stojí nad typem',
     vProdano.indexOf('Profil') !== -1 && vProdano.indexOf('Profil') < vProdano.indexOf('Typ'),
     vProdano.slice(0, 160));
+  // Zisk a vývoj ceny jsou obojí o penězích a čtou se spolu
+  check('vývoj ceny stojí hned pod ziskem',
+    vProdano.indexOf('Zisk') < vProdano.indexOf('Vývoj ceny')
+      && vProdano.indexOf('Vývoj ceny') < vProdano.indexOf('Datum prodeje'),
+    vProdano.slice(0, 300));
+
+  /* Zisk je jediné číslo, kvůli kterému se sem člověk dívá — ať je hned
+     poznat, jestli je v plusu. */
+  const barvaZisku = await page.evaluate(async () => {
+    openDetail('i1');
+    await new Promise(r => setTimeout(r, 400));
+    const bunky = [...document.querySelectorAll('#moDetail td')];
+    const popisek = bunky.find(td => td.textContent.trim() === 'Zisk');
+    const hodnota = popisek && popisek.nextElementSibling;
+    const span = hodnota && hodnota.querySelector('span[style*="color"]');
+    const out = { text: hodnota ? hodnota.textContent.trim() : null,
+      barva: span ? span.getAttribute('style') : null };
+    cm('moDetail');
+    return out;
+  });
+  check('zisk je barevně zvýrazněný', !!barvaZisku.barva, JSON.stringify(barvaZisku));
+  check('a v plusu je zelený', /--accent/.test(barvaZisku.barva || ''),
+    JSON.stringify(barvaZisku));
+
+  // Ztráta musí být poznat taky — a jinou barvou
+  const ztrata = await page.evaluate(async () => {
+    const it = items.find(i => i.id === 'i1');
+    /* Uložený zisk má přednost před dopočítaným (viz `_itemProfit`),
+       takže nestačí srazit prodejní cenu — musí se přepsat i on. */
+    it.sellPrice = 100; it.profit = -900;
+    openDetail('i1');
+    await new Promise(r => setTimeout(r, 400));
+    const bunky = [...document.querySelectorAll('#moDetail td')];
+    const popisek = bunky.find(td => td.textContent.trim() === 'Zisk');
+    const span = popisek && popisek.nextElementSibling
+      && popisek.nextElementSibling.querySelector('span[style*="color"]');
+    const out = { text: popisek ? popisek.nextElementSibling.textContent.trim() : null,
+      barva: span ? span.getAttribute('style') : null };
+    it.sellPrice = 5200; delete it.profit;
+    cm('moDetail');
+    return out;
+  });
+  check('a ztráta červená', /--danger/.test(ztrata.barva || ''), JSON.stringify(ztrata));
+
+  /* Rozdíl v procentech nesmí zmizet, ani když je prodej v logu první —
+     to nastane, když se kus prodá a cílovka se doplní až potom. Dřív
+     vyšlo „konec === prvni" a v detailu zbyla jen šipka mezi čísly. */
+  const sProdejemPrvnim = await page.evaluate(async () => {
+    const it = items.find(i => i.id === 'i1');
+    const zaloha = it.priceLog;
+    it.priceLog = [{ p: 4985, d: '2026-09-16', s: 1 }, { p: 5200, d: '2026-09-17' }];
+    openDetail('i1');
+    await new Promise(r => setTimeout(r, 400));
+    const mo = document.getElementById('moDetail');
+    const text = mo ? mo.textContent.replace(/\s+/g, ' ') : '';
+    it.priceLog = zaloha;
+    cm('moDetail');
+    return text;
+  });
+  check('rozdíl se ukáže i s prodejem na prvním místě',
+    /Zdraženo o/.test(sProdejemPrvnim) && /%/.test(sProdejemPrvnim),
+    sProdejemPrvnim.slice(0, 300));
+  check('a netvrdí se „oproti první cílové ceně", když první byl prodej',
+    !/oproti první cílové ceně/.test(sProdejemPrvnim), sProdejemPrvnim.slice(0, 300));
 
   // ══════════════════════════════════════════════════════════════
   section('6) Historie jde do cloudu a přežije kolečko');
@@ -187,6 +251,65 @@ const SEED = [{ id: 'i1', name: 'Nike Dunk Low Panda', category: 'sneakers', sku
   check('historie je součástí položky v cloudu',
     !cloud.vHlavnim || (cloud.log && cloud.log.length === 3), JSON.stringify(cloud.log));
   check('tři záznamy zaberou pár desítek bajtů', cloud.velikost < 200, cloud.velikost + ' B');
+
+  // ══════════════════════════════════════════════════════════════
+  section('7) Detail kusu na skladě');
+  /* Sekce se čtou z DOMu, ne z textu — nadpis „Sklad" by se v jednom
+     dlouhém řetězci pletl s „Na skladě". */
+  const sekce = (dnuNazpet) => page.evaluate(async (dnu) => {
+    const it = items.find(i => i.id === 's1') || (items.push({
+      id: 's1', name: 'Kus na skladě', category: 'sneakers', buyPrice: 2000,
+      buyCurrency: 'CZK', saleState: 'stock', location: 'Doma', dateAdded: Date.now(),
+      condition: 'DS', targetPrice: 5000, stockIntent: 'flip', tags: [],
+    }), items[items.length - 1]);
+    const d = new Date(Date.now() - dnu * 86400000);
+    it.buyDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+      + '-' + String(d.getDate()).padStart(2, '0');
+    openDetail('s1');
+    await new Promise(r => setTimeout(r, 400));
+    const mo = document.getElementById('moDetail');
+    const out = [...mo.querySelectorAll('table')].map(t => ({
+      nadpis: t.previousElementSibling ? t.previousElementSibling.textContent.trim() : '',
+      radky: [...t.querySelectorAll('tr')].map(tr => ({
+        k: tr.cells[0].textContent.trim(), v: tr.cells[1].textContent.trim() })),
+    }));
+    cm('moDetail');
+    return out;
+  }, dnuNazpet);
+
+  const najdi = (sekce, nadpis) => sekce.find(x => x.nadpis === nadpis);
+  const klice = (s) => (s ? s.radky.map(r => r.k) : []);
+
+  let s3 = await sekce(3);
+  const vSkladu = najdi(s3, 'Sklad');
+  check('sekce Sklad existuje', !!vSkladu, JSON.stringify(s3.map(x => x.nadpis)));
+  /* Stav zboží popisuje kus, jak leží ve skladu — majitel si ho sem
+     vyžádal z Položky. */
+  check('Stav je pod nadpisem Sklad', klice(vSkladu).indexOf('Stav') !== -1,
+    JSON.stringify(klice(vSkladu)));
+  check('a v Položce už není',
+    klice(najdi(s3, 'Položka')).indexOf('Stav') === -1,
+    JSON.stringify(klice(najdi(s3, 'Položka'))));
+  /* Dvě různé věci se nesmí jmenovat stejně — místo uložení se proto
+     jmenuje Umístění, ne Sklad ani Stav. */
+  check('místo uložení se jmenuje Umístění', klice(vSkladu).indexOf('Umístění') !== -1,
+    JSON.stringify(klice(vSkladu)));
+
+  const plan = najdi(s3, 'Prodej');
+  check('cílovka a strategie mají vlastní sekci Prodej',
+    klice(plan).indexOf('Cílová cena') !== -1 && klice(plan).indexOf('Strategie') !== -1,
+    JSON.stringify(s3.map(x => ({ n: x.nadpis, r: x.radky.map(r => r.k) }))));
+  check('a ve Skladu už nejsou',
+    klice(vSkladu).indexOf('Cílová cena') === -1 && klice(vSkladu).indexOf('Strategie') === -1,
+    JSON.stringify(klice(vSkladu)));
+
+  /* „4 dní" je na první pohled špatně. Jeden den, dva až čtyři dny,
+     pět a víc dní. */
+  const dnu = (s) => (najdi(s, 'Sklad').radky.find(r => r.k === 'Na skladě') || {}).v;
+  check('3 dny se skloňují správně', dnu(s3) === '3 dny', String(dnu(s3)));
+  check('1 den taky', dnu(await sekce(1)) === '1 den', String(dnu(await sekce(1))));
+  check('5 dní taky', dnu(await sekce(5)) === '5 dní', String(dnu(await sekce(5))));
+  check('a 22 dní taky', dnu(await sekce(22)) === '22 dní', String(dnu(await sekce(22))));
 
   check('žádné JS chyby', errs.length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();

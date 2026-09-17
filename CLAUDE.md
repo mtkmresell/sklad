@@ -383,27 +383,40 @@ Pořadí řádků řídí pole `rows`, **ne** seznamy sekcí pod ním — `rende
 z `rows` jen vybírá podle názvu a pořadí nechává být. Kdo přeskládá `secBase`
 nebo `secStock` a čeká změnu na obrazovce, nedočká se.
 
-Tři věci si majitel vyžádal výslovně a nevracej je zpátky:
+Tohle si majitel vyžádal výslovně a nevracej to zpátky:
 
 - **Profil je první řádek**, nad Typem. Jestli je kus podnikatelský, nebo
   osobní, rozhoduje o dokladu i o tom, kam se počítá.
 - **Doručeno stojí až za Sledováním zásilky.** Je to výsledek zásilky, ne
   vlastnost kusu; obojí je jen u čekajících.
-- **Vývoj ceny se ukazuje jedině v Prodáno.** U kusu, který se ještě
-  neprodal, je to pouhá připomínka, že už se šlo s cenou dolů —
-  rozhodnutí to neovlivní a v detailu zabíralo dva řádky. Zapisuje se
-  dál (`HISTORIE CEN U POLOŽKY`) a jde do analytiky nezávisle na tom,
-  co je vidět.
+- **Vývoj ceny se ukazuje jedině v Prodáno**, a to **hned pod Ziskem** —
+  obojí je o penězích a čte se to spolu. U kusu, který se ještě neprodal,
+  je to pouhá připomínka, že už se šlo s cenou dolů; rozhodnutí to
+  neovlivní a v detailu zabíralo dva řádky. Zapisuje se dál (`HISTORIE
+  CEN U POLOŽKY`) a jde do analytiky nezávisle na tom, co je vidět.
+- **Zisk je barevně** — v plusu `--accent`, v minusu `--danger`. Je to
+  jediné číslo, kvůli kterému se sem člověk dívá.
+- **Stav zboží patří pod nadpis Sklad**, ne do Položky: popisuje kus tak,
+  jak leží ve skladu.
+- **Cílová cena a Strategie mají vlastní sekci `Prodej`** (`secPlan`),
+  spolu s vypršením inzerátů na Bazoši. Se skladem nesouvisí — je to
+  o tom, za co a jak se to má prodat.
 
 Nadpis prostřední sekce se **liší podle stavu**: `Sklad` u kusu na skladě
-(místo, dny, cílovka, strategie), `Zásilka` u čekajícího (sledovací číslo,
-doručení). Dřív bylo všude „Sklad" a u čekajícího kusu pak stálo
-`Sklad → Sklad: Doma`. Hlídá to `test-pricelog.js` a `test-tracking.js`.
+(stav, umístění, dny), `Zásilka` u čekajícího (sledovací číslo, doručení).
+Dřív bylo všude „Sklad" a u čekajícího kusu pak stálo `Sklad → Sklad: Doma`.
 
-**Pozor na sdílený název `Stav`.** Nesou ho dva různé řádky — stav zboží
-(DS) a u míst *Na cestě / Bude vráceno / Vráceno / Zrušeno* i místo
-uložení. `renderSection` filtruje podle názvu, takže by se řádek objevil
-v obou sekcích naráz; proto `Stav` **není** v `secStock`.
+**Místo uložení se jmenuje `Umístění`**, ať je hodnota jakákoli. Dřív to
+byl `Sklad` u kusu doma a `Stav` u kusu na cestě — jenže `Stav` nese
+i stav zboží (DS) a ten teď stojí v téže sekci. Dva stejně pojmenované
+řádky vedle sebe nejdou rozeznat a `renderSection` filtruje podle názvu,
+takže by se navíc oba objevily dvakrát. **Nepoužívej jeden název pro dva
+různé řádky.**
+
+**Dny se skloňují** (`dnyText`): 1 den, 2–4 dny, 5+ dní. „4 dní" je znát
+na první pohled.
+
+Hlídá to `test-pricelog.js` (sekce 5 a 7) a `test-tracking.js`.
 
 ### Fotky
 

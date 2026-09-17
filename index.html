@@ -6342,7 +6342,14 @@ function priceLogSummary(it){
   for(var i=log.length-1;i>=0;i--){ if(log[i].s){ prodej = log[i]; break; } }
   var posledniCil = null;
   for(var j=log.length-1;j>=0;j--){ if(!log[j].s){ posledniCil = log[j]; break; } }
-  var konec = prodej || posledniCil;
+  /* Rozdíl se počítá mezi **prvním a posledním** záznamem, tedy přesně
+     mezi čísly, která jsou v řádku vidět vedle sebe.
+
+     Dřív se bral poslední prodejní záznam, a když prodej stál v logu
+     jako první (kus se prodal a cílovka se doplnila až potom), vyšlo
+     `konec === prvni` a **procenta zmizela úplně** — v detailu zbyla
+     jen šipka mezi dvěma čísly a nikde nestálo, o kolik se to liší. */
+  var konec = log[log.length-1];
   var out = { log:log, prvni:prvni, posledniCil:posledniCil, prodej:prodej, zmen:log.length };
   if(konec && prvni && prvni.p>0 && konec!==prvni){
     out.rozdil = konec.p - prvni.p;
@@ -6368,7 +6375,9 @@ function priceLogHtml(it){
     h += '<div style="font-size:11px;color:'+(dolu?'var(--warning)':'var(--accent)')+';margin-top:2px;">'
       + (dolu?'Sleveno o ':'Zdraženo o ') + czk(Math.abs(Math.round(sum.rozdil)))
       + ' (' + (dolu?'−':'+') + Math.abs(Math.round(sum.procent)) + ' %)'
-      + (sum.prodej?' oproti první cílové ceně':'') + '</div>';
+      /* Dovětek jen když se opravdu porovnává proti cílové ceně. Když je
+         první záznam prodej, byla by to nepravda. */
+      + (sum.prodej && !sum.prvni.s ? ' oproti první cílové ceně':'') + '</div>';
   }
   return h;
 }
@@ -8501,7 +8510,7 @@ function openDetail(id) {
   // Počet dní na skladě — jen pro Na skladě, ne pro Čeká
   var daysInStock = null;
   if (!isPaid && !isWaiting) { var _pbd = parseBuyDate(it); if (_pbd) daysInStock = Math.floor((Date.now() - _pbd.getTime()) / 86400000); }
-  var daysStr = daysInStock !== null ? daysInStock + ' dní' + (daysInStock > 90 ? ' !' : '') : null;
+  var daysStr = daysInStock !== null ? dnyText(daysInStock) + (daysInStock > 90 ? ' !' : '') : null;
   /* Jak dlouho je balík doručený. Lhůtu na peníze má každý kupující
      i každá platforma jinou, takže se za majitele počítat nedá — číslo
      dní mu stačí, aby poznal, jestli má psát o peníze. */
@@ -8535,11 +8544,17 @@ function openDetail(id) {
       if (!checkedAt || !(it.platforms||[]).includes(bp)) return;
       var daysLeft = Math.ceil((checkedAt + BAZOS_EXPIRY_MS - Date.now()) / 86400000);
       var color = daysLeft <= 14 ? 'var(--danger)' : daysLeft <= 30 ? '#f0a500' : 'var(--muted)';
-      var label = daysLeft > 0 ? daysLeft + ' dní' : 'Expirováno';
+      var label = daysLeft > 0 ? dnyText(daysLeft) : 'Expirováno';
       bazosRows.push([bp + ' vyprší za', '<span style="color:'+color+';">'+label+'</span>', false]);
     });
   }
-  const profitStr = it.sellPrice ? czkSign(profit) : '—';
+  /* Zisk je jediné číslo v detailu, kvůli kterému se sem člověk dívá —
+     ať je hned poznat, jestli je v plusu. Zelená je tu accent, minus
+     červená; stejné barvy jako u karet nahoře (`sv-green` / `sv-red`). */
+  const profitStr = it.sellPrice
+    ? '<span style="color:' + (profit >= 0 ? 'var(--accent)' : 'var(--danger)')
+      + ';font-weight:700;">' + czkSign(profit) + '</span>'
+    : '—';
   const sellPriceStr = it.sellPrice ? (it.sellCurrency==='EUR' ? getSellOrig(it)+' €' : czk(it.sellPrice)) : '—';
   const rows = [
     /* Profil je první schválně: jestli je kus podnikatelský, nebo osobní,
@@ -8557,7 +8572,12 @@ function openDetail(id) {
     ['Číslo objednávky', it.orderNum||'—', !!(it.orderNum)],
     ...(!( it.buyWhere==='Výkup' && it.from) ? [['Od koho (vykup)', it.from||'—']] : []),
     ...(!isPaid ? [
-      [((['Na cestě','Bude vráceno','Vráceno','Zrušeno'].includes(it.location)) ? 'Stav' : 'Sklad'), it.location||'Doma'],
+      /* „Umístění" schválně pro všechny hodnoty. Dřív se to jmenovalo
+         `Sklad` u kusu doma a `Stav` u toho na cestě — jenže `Stav` nese
+         i stav zboží (DS), a ten teď stojí v téže sekci. Dva řádky
+         stejného jména vedle sebe by nešlo rozeznat a `renderSection`
+         filtruje podle jména, takže by se navíc oba objevily dvakrát. */
+      ['Umístění', it.location||'Doma'],
       ...(daysStr ? [['Na skladě', daysStr, false]] : []),
       ...(!isWaiting && it.targetPrice ? [['Cílová cena', (it.targetCurrency==='EUR'?targetEur(it)+' €':czk(it.targetPrice)), false]] : []),
       ...(!isWaiting && it.stockIntent ? [['Strategie', intentBadge(it.stockIntent), false]] : []),
@@ -8570,10 +8590,11 @@ function openDetail(id) {
     ...(isPaid ? [
       ['Prodejní cena', sellPriceStr],
       ['Zisk', profitStr],
+      /* Hned pod ziskem: obojí je o penězích a čte se to spolu. */
+      ...(priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
       ['Datum prodeje', fmtDate(it.saleDate)||'—'],
       ['Datum vyplacení', fmtDate(it.payoutDate||it.saleDate)||'—'],
       ['Kde prodáno', it.soldWhere||'—'],
-      ...(priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
       ['Číslo obj. prodeje', it.saleRef||'—', !!(it.saleRef)],
       ...(it.linkedCustomerId && _crmNameById(it.linkedCustomerId) ? [['Zákazník', '<span style="color:var(--accent);cursor:pointer;" onclick="openCustomerFromItem(\''+it.linkedCustomerId+'\')">'+escHtml(_crmNameById(it.linkedCustomerId))+' ›</span>', false]] : []),
       ['Způsob platby', it.paymentMethod||'—'],
@@ -8594,18 +8615,23 @@ function openDetail(id) {
     ...(it.saleInvoiceUrl ? [['Faktura vydaná', '<a href="'+it.saleInvoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
-  var secBase = ['Profil','Typ','SKU','Stav','Velikost'];
+  var secBase = ['Profil','Typ','SKU','Velikost'];
   var secBuy  = ['Nákupní cena','Datum nákupu','Kde koupeno','Číslo objednávky','Od koho (vykup)'];
-  /* `Vývoj ceny` tu schválně není. U kusu, který se ještě neprodal, je to
-     jen připomínka, že už jsi šel s cenou dolů — rozhodnutí to neovlivní
+  /* Sklad je o kusu samotném: v jakém je stavu, kde leží a jak dlouho.
+     `Vývoj ceny` tu schválně není — u kusu, který se ještě neprodal, je to
+     jen připomínka, že už jsi šel s cenou dolů; rozhodnutí to neovlivní
      a v detailu zabíralo dva řádky. Zapisuje se dál (`HISTORIE CEN
      U POLOŽKY`) a vidět je v Prodáno a v analytice. */
-  var secStock= ['Sklad','Na skladě','Cílová cena','Strategie','Sledování zásilky','Doručeno'];
-  var secSell = ['Prodejní cena','Zisk','Datum prodeje','Datum vyplacení','Kde prodáno','Vývoj ceny','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
+  var secStock= ['Stav','Umístění','Na skladě','Sledování zásilky','Doručeno'];
+  /* Za co a jak se to má prodat. Cílovka se strategií se skladem
+     nesouvisí a pod jeho nadpisem působily jako přílepek; Bazoš patří
+     sem ze stejného důvodu — je to o inzerátu, ne o uskladnění. */
+  var secPlan = ['Cílová cena','Strategie'];
+  var secSell = ['Prodejní cena','Zisk','Vývoj ceny','Datum prodeje','Datum vyplacení','Kde prodáno','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
   var secNote = ['Poznámka'];
   var secInvoice = ['Faktura','Faktura vydaná'];
-  // Bazos rows jsou dynamické — přidej je do sekce skladu
-  bazosRows.forEach(function(r){ secStock.push(r[0]); });
+  // Bazos rows jsou dynamické — vyprší u inzerátu, tedy do Prodeje
+  bazosRows.forEach(function(r){ secPlan.push(r[0]); });
 
   /* Nadpis sekce umí být i tlačítkem — s `kopie` se po kliknutí text
      dostane do schránky. Používá to „Nákup" pro název souboru
@@ -8637,7 +8663,8 @@ function openDetail(id) {
        leží a čeká na prodej (místo, dny, cílovka, strategie); na kus,
        co je na cestě ke kupujícímu, ne. */
     + (isPaid ? renderSection('Prodej', secSell)
-      : renderSection(isWaiting ? 'Zásilka' : 'Sklad', secStock))
+      : renderSection(isWaiting ? 'Zásilka' : 'Sklad', secStock)
+        + renderSection('Prodej', secPlan))
     + renderSection('Faktura', secInvoice)
     + renderSection('Poznámka', secNote);
 
@@ -10976,6 +11003,14 @@ function updateBulkBar(){
 /* CZK formátování — vždy celá čísla pro zobrazení */
 function czk(val) { return Math.round(val).toLocaleString('cs') + ' Kč'; }
 function czkSign(val) { var r=Math.round(val); return (r>=0?'+':'')+r.toLocaleString('cs')+' Kč'; }
+
+/* Dny česky. Jedna, dvě až čtyři, pět a víc — každá skupina má svůj tvar
+   a „4 dní" je znát na první pohled. Čísla nad dvacet se řídí posledním
+   místem jen do čtyřky: 21 dní, ne 21 den. */
+function dnyText(n) {
+  var k = Math.abs(Math.round(n));
+  return k + (k === 1 ? ' den' : (k >= 2 && k <= 4) ? ' dny' : ' dní');
+}
 
 /* Toast notifikace */
 function showToast(msg, type, duration) {
