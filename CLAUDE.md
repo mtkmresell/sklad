@@ -396,8 +396,9 @@ Tohle si majitel vyžádal výslovně a nevracej to zpátky:
   CEN U POLOŽKY`) a jde do analytiky nezávisle na tom, co je vidět.
 - **Zisk je barevně** — v plusu `--accent`, v minusu `--danger`. Je to
   jediné číslo, kvůli kterému se sem člověk dívá.
-- **Stav zboží patří pod nadpis Sklad**, ne do Položky: popisuje kus tak,
-  jak leží ve skladu.
+- **Stav zboží (DS, použité, poškozené) patří do Položky**, ne pod Sklad.
+  Je to vlastnost samotného kusu. Jednou se omylem přesunul pod Sklad
+  a majitel ho hned vrátil — pod Sklad patří `Umístění`, tedy kde kus je.
 - **Cílová cena a Strategie mají vlastní sekci `Prodej`** (`secPlan`),
   spolu s vypršením inzerátů na Bazoši. Se skladem nesouvisí — je to
   o tom, za co a jak se to má prodat.

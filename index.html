@@ -8615,14 +8615,16 @@ function openDetail(id) {
     ...(it.saleInvoiceUrl ? [['Faktura vydaná', '<a href="'+it.saleInvoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
-  var secBase = ['Profil','Typ','SKU','Velikost'];
+  var secBase = ['Profil','Typ','SKU','Stav','Velikost'];
   var secBuy  = ['Nákupní cena','Datum nákupu','Kde koupeno','Číslo objednávky','Od koho (vykup)'];
-  /* Sklad je o kusu samotném: v jakém je stavu, kde leží a jak dlouho.
+  /* Sklad je o tom, kde kus je a jak dlouho. **Stav zboží (DS, použité,
+     poškozené) sem nepatří** — je to vlastnost samotného kusu a majitel
+     ho chce v Položce; jednou se sem omylem přesunul a hned to vrátil.
      `Vývoj ceny` tu schválně není — u kusu, který se ještě neprodal, je to
      jen připomínka, že už jsi šel s cenou dolů; rozhodnutí to neovlivní
      a v detailu zabíralo dva řádky. Zapisuje se dál (`HISTORIE CEN
      U POLOŽKY`) a vidět je v Prodáno a v analytice. */
-  var secStock= ['Stav','Umístění','Na skladě','Sledování zásilky','Doručeno'];
+  var secStock= ['Umístění','Na skladě','Sledování zásilky','Doručeno'];
   /* Za co a jak se to má prodat. Cílovka se strategií se skladem
      nesouvisí a pod jeho nadpisem působily jako přílepek; Bazoš patří
      sem ze stejného důvodu — je to o inzerátu, ne o uskladnění. */

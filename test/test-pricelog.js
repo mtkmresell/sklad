@@ -283,13 +283,14 @@ const SEED = [{ id: 'i1', name: 'Nike Dunk Low Panda', category: 'sneakers', sku
   let s3 = await sekce(3);
   const vSkladu = najdi(s3, 'Sklad');
   check('sekce Sklad existuje', !!vSkladu, JSON.stringify(s3.map(x => x.nadpis)));
-  /* Stav zboží popisuje kus, jak leží ve skladu — majitel si ho sem
-     vyžádal z Položky. */
-  check('Stav je pod nadpisem Sklad', klice(vSkladu).indexOf('Stav') !== -1,
-    JSON.stringify(klice(vSkladu)));
-  check('a v Položce už není',
-    klice(najdi(s3, 'Položka')).indexOf('Stav') === -1,
+  /* **Stav zboží (DS, použité, poškozené) zůstává v Položce.** Je to
+     vlastnost samotného kusu, ne skladu; jednou se omylem přesunul pod
+     Sklad a majitel ho hned vrátil zpátky. */
+  check('Stav zboží zůstává v Položce',
+    klice(najdi(s3, 'Položka')).indexOf('Stav') !== -1,
     JSON.stringify(klice(najdi(s3, 'Položka'))));
+  check('a ve Skladu není', klice(vSkladu).indexOf('Stav') === -1,
+    JSON.stringify(klice(vSkladu)));
   /* Dvě různé věci se nesmí jmenovat stejně — místo uložení se proto
      jmenuje Umístění, ne Sklad ani Stav. */
   check('místo uložení se jmenuje Umístění', klice(vSkladu).indexOf('Umístění') !== -1,
