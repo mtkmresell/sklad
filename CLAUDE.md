@@ -377,6 +377,34 @@ se nepletlo s oddělovačem. `test-nazevdokladu.js` hlídá tvar do písmene —
 podle názvu se doklady v OneDrive hledají, takže odchylka je poznat až
 na hromadě souborů.
 
+### Detail položky
+
+Pořadí řádků řídí pole `rows`, **ne** seznamy sekcí pod ním — `renderSection`
+z `rows` jen vybírá podle názvu a pořadí nechává být. Kdo přeskládá `secBase`
+nebo `secStock` a čeká změnu na obrazovce, nedočká se.
+
+Tři věci si majitel vyžádal výslovně a nevracej je zpátky:
+
+- **Profil je první řádek**, nad Typem. Jestli je kus podnikatelský, nebo
+  osobní, rozhoduje o dokladu i o tom, kam se počítá.
+- **Doručeno stojí až za Sledováním zásilky.** Je to výsledek zásilky, ne
+  vlastnost kusu; obojí je jen u čekajících.
+- **Vývoj ceny se ukazuje jedině v Prodáno.** U kusu, který se ještě
+  neprodal, je to pouhá připomínka, že už se šlo s cenou dolů —
+  rozhodnutí to neovlivní a v detailu zabíralo dva řádky. Zapisuje se
+  dál (`HISTORIE CEN U POLOŽKY`) a jde do analytiky nezávisle na tom,
+  co je vidět.
+
+Nadpis prostřední sekce se **liší podle stavu**: `Sklad` u kusu na skladě
+(místo, dny, cílovka, strategie), `Zásilka` u čekajícího (sledovací číslo,
+doručení). Dřív bylo všude „Sklad" a u čekajícího kusu pak stálo
+`Sklad → Sklad: Doma`. Hlídá to `test-pricelog.js` a `test-tracking.js`.
+
+**Pozor na sdílený název `Stav`.** Nesou ho dva různé řádky — stav zboží
+(DS) a u míst *Na cestě / Bude vráceno / Vráceno / Zrušeno* i místo
+uložení. `renderSection` filtruje podle názvu, takže by se řádek objevil
+v obou sekcích naráz; proto `Stav` **není** v `secStock`.
+
 ### Fotky
 
 V paměti a v `localStorage` je fotka v položce jako `imgUrl` (data URI). Do cloudu jde

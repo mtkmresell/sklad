@@ -225,6 +225,7 @@ const SEED = [
     items.push({ id: 'dd1', name: 'Doručený kus', category: 'sneakers', buyPrice: 1000,
       buyCurrency: 'CZK', saleState: 'waiting', waitState: 'payout', location: 'Doma',
       sellPrice: 3000, saleDate: predDny(20), dorucenoOd: predDny(6),
+      trackingCarrier: 'PPL', trackingNum: '70704005386',
       dateAdded: 1, tags: [] });
     openDetail('dd1');
     await new Promise(r => setTimeout(r, 200));
@@ -244,6 +245,14 @@ const SEED = [
     vDetailu.s.slice(0, 300));
   check('a taky od kdy', /Doručeno[^|]*\d+\.\s*\d+\.\s*\d{4}/.test(vDetailu.s), vDetailu.s.slice(0, 300));
   check('bez data doručení se řádek neukáže', !/Doručeno/.test(vDetailu.bez), vDetailu.bez.slice(0, 200));
+  /* Doručení je výsledek zásilky, ne vlastnost kusu — patří až za
+     sledovací číslo. Majitel si to vyžádal. */
+  check('doručení stojí až za sledovacím číslem',
+    vDetailu.s.indexOf('Sledování zásilky') !== -1
+      && vDetailu.s.indexOf('Sledování zásilky') < vDetailu.s.indexOf('Doručeno'),
+    vDetailu.s.slice(0, 300));
+  /* U čekajícího kusu jde pod tím nadpisem hlavně doprava, ne sklad. */
+  check('a sekce se jmenuje Zásilka', /Zásilka/.test(vDetailu.s), vDetailu.s.slice(0, 300));
 
   check('žádné JS chyby', errs.filter(e => !/keySplines/.test(e)).length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();

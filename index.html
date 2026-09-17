@@ -8542,8 +8542,12 @@ function openDetail(id) {
   const profitStr = it.sellPrice ? czkSign(profit) : '—';
   const sellPriceStr = it.sellPrice ? (it.sellCurrency==='EUR' ? getSellOrig(it)+' €' : czk(it.sellPrice)) : '—';
   const rows = [
-    ['Typ', getCatLabel(it.category)||it.category],
+    /* Profil je první schválně: jestli je kus podnikatelský, nebo osobní,
+       rozhoduje o dokladu i o tom, kam se počítá — a hledá se to očima
+       nejčastěji. Pořadí řádků řídí tohle pole, ne seznamy sekcí níž:
+       `renderSection` z nich jen vybírá, řadit je nechává na `rows`. */
     ['Profil', isPersonal(it) ? '<span class="prof-badge">Osobní</span>' : 'Podnikání', false],
+    ['Typ', getCatLabel(it.category)||it.category],
     ['SKU', it.sku||'—', !!(it.sku)],
     ['Stav', COND_L[it.condition]||it.condition||'—'],
     ...(catHasSize(it.category)||it.size ? [['Velikost', sizeStr||'—']] : []),
@@ -8555,11 +8559,12 @@ function openDetail(id) {
     ...(!isPaid ? [
       [((['Na cestě','Bude vráceno','Vráceno','Zrušeno'].includes(it.location)) ? 'Stav' : 'Sklad'), it.location||'Doma'],
       ...(daysStr ? [['Na skladě', daysStr, false]] : []),
-      ...(dorucenoStr ? [['Doručeno', dorucenoStr, false]] : []),
       ...(!isWaiting && it.targetPrice ? [['Cílová cena', (it.targetCurrency==='EUR'?targetEur(it)+' €':czk(it.targetPrice)), false]] : []),
-      ...(priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
       ...(!isWaiting && it.stockIntent ? [['Strategie', intentBadge(it.stockIntent), false]] : []),
+      /* Doručeno až za sledovacím číslem: je to jeho výsledek, ne
+         vlastnost kusu. Obojí je jen u čekajících. */
       ...(trackingHtml ? [['Sledování zásilky', trackingHtml, false]] : []),
+      ...(dorucenoStr ? [['Doručeno', dorucenoStr, false]] : []),
       ...bazosRows,
     ] : []),
     ...(isPaid ? [
@@ -8589,9 +8594,13 @@ function openDetail(id) {
     ...(it.saleInvoiceUrl ? [['Faktura vydaná', '<a href="'+it.saleInvoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
-  var secBase = ['Typ','Profil','SKU','Stav','Velikost'];
+  var secBase = ['Profil','Typ','SKU','Stav','Velikost'];
   var secBuy  = ['Nákupní cena','Datum nákupu','Kde koupeno','Číslo objednávky','Od koho (vykup)'];
-  var secStock= ['Sklad','Na skladě','Doručeno','Cílová cena','Vývoj ceny','Strategie','Sledování zásilky'];
+  /* `Vývoj ceny` tu schválně není. U kusu, který se ještě neprodal, je to
+     jen připomínka, že už jsi šel s cenou dolů — rozhodnutí to neovlivní
+     a v detailu zabíralo dva řádky. Zapisuje se dál (`HISTORIE CEN
+     U POLOŽKY`) a vidět je v Prodáno a v analytice. */
+  var secStock= ['Sklad','Na skladě','Cílová cena','Strategie','Sledování zásilky','Doručeno'];
   var secSell = ['Prodejní cena','Zisk','Datum prodeje','Datum vyplacení','Kde prodáno','Vývoj ceny','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
   var secNote = ['Poznámka'];
   var secInvoice = ['Faktura','Faktura vydaná'];
@@ -8623,7 +8632,12 @@ function openDetail(id) {
 
   var sectionsHtml = renderSection('Položka', secBase)
     + renderSection('Nákup', secBuy, nazevSouboruDokladu(it))
-    + (isPaid ? renderSection('Prodej', secSell) : renderSection('Sklad', secStock))
+    /* U čekajícího kusu je pod tím nadpisem hlavně doprava — sledovací
+       číslo a jestli balík dorazil. „Sklad" sedí na kus, který doma
+       leží a čeká na prodej (místo, dny, cílovka, strategie); na kus,
+       co je na cestě ke kupujícímu, ne. */
+    + (isPaid ? renderSection('Prodej', secSell)
+      : renderSection(isWaiting ? 'Zásilka' : 'Sklad', secStock))
     + renderSection('Faktura', secInvoice)
     + renderSection('Poznámka', secNote);
 

@@ -139,15 +139,41 @@ const SEED = [{ id: 'i1', name: 'Nike Dunk Low Panda', category: 'sneakers', sku
   check('prodejní cena se zapíše se značkou prodeje',
     l.length === 3 && l[2].p === 5200 && l[2].s === 1, JSON.stringify(l));
 
-  const detail = await page.evaluate(async () => {
+  /* Po prodeji je kus v **Čeká**, ne v Prodáno — a tam vývoj ceny být
+     nemá. U neprodaného kusu je to jen připomínka, že už jsi šel dolů;
+     rozhodnutí to neovlivní a v detailu zabíralo dva řádky. Majitel si
+     to takhle vyžádal. Zapisuje se dál, jen se nezobrazuje. */
+  const vCeka = await page.evaluate(async () => {
     openDetail('i1');
     await new Promise(r => setTimeout(r, 400));
     const mo = document.getElementById('moDetail');
-    return { text: mo ? mo.textContent.replace(/\s+/g, ' ') : '' };
+    const text = mo ? mo.textContent.replace(/\s+/g, ' ') : '';
+    cm('moDetail');
+    return text;
   });
-  check('detail prodané položky ukazuje vývoj ceny',
-    /Vývoj ceny/.test(detail.text) && /Sleveno o/.test(detail.text), detail.text.slice(0, 200));
-  await page.evaluate(() => cm('moDetail'));
+  check('v Čeká se vývoj ceny neukazuje', !/Vývoj ceny/.test(vCeka), vCeka.slice(0, 220));
+  check('a sekce se tam jmenuje Zásilka, ne Sklad',
+    /Zásilka/.test(vCeka) && !/PoložkaSklad|NákupSklad/.test(vCeka), vCeka.slice(0, 220));
+
+  // Teprve v Prodáno má smysl — tam se majitel dívá zpětně
+  const vProdano = await page.evaluate(async () => {
+    changeWaitState('i1', 'completed');
+    await new Promise(r => setTimeout(r, 300));
+    openDetail('i1');
+    await new Promise(r => setTimeout(r, 400));
+    const mo = document.getElementById('moDetail');
+    const text = mo ? mo.textContent.replace(/\s+/g, ' ') : '';
+    cm('moDetail');
+    return text;
+  });
+  check('v Prodáno vývoj ceny je',
+    /Vývoj ceny/.test(vProdano) && /Sleveno o/.test(vProdano), vProdano.slice(0, 260));
+
+  /* Pořadí řádků si majitel vyžádal výslovně: profil rozhoduje o dokladu
+     i o tom, kam se kus počítá, takže patří nahoru. */
+  check('profil stojí nad typem',
+    vProdano.indexOf('Profil') !== -1 && vProdano.indexOf('Profil') < vProdano.indexOf('Typ'),
+    vProdano.slice(0, 160));
 
   // ══════════════════════════════════════════════════════════════
   section('6) Historie jde do cloudu a přežije kolečko');
