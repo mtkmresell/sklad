@@ -419,6 +419,27 @@ na první pohled.
 
 Hlídá to `test-pricelog.js` (sekce 5 a 7) a `test-tracking.js`.
 
+### Fajfky u platforem v mřížce
+
+Čtverečky u položky nejsou jen ozdoba — jsou to zapisovací tlačítka
+(`togglePlatItem`, jediná cesta, která obchází `sv()`). Zakázané se
+kreslí **zašedle** (`opacity:0.35`, `cursor:not-allowed`), ne že by
+chyběly: plný Bazoš, poškozený kus a **místo, kde se ta kategorie
+neprodává** (`platAcceptsCategory`, *Nastavení → místa prodeje*).
+
+Ta poslední dřív **úplně mizela** — řádek se tím rozjel a nešlo poznat,
+jestli místo chybí schválně, nebo se něco rozbilo. Majitel si vyžádal,
+ať je vidět. **Zašedlý ale není totéž co zakázaný**: dokud byl čtvereček
+schovaný, nešlo na něj kliknout a brána v `togglePlatItem` nebyla
+potřeba; od chvíle, kdy je vidět, tam být musí. Stejná past jako
+u pohledu účetního.
+
+**Odškrtnout jde vždycky**, u všech tří důvodů. Kategorie u místa se dá
+změnit kdykoli — kdyby šlo jen zaškrtávat, stará fajfka by zůstala viset
+navždy a kus by se tvářil jako vystavený tam, kde není.
+
+Hlídá to `test-poskozene.js`, sekce 6 a 7.
+
 ### Fotky
 
 V paměti a v `localStorage` je fotka v položce jako `imgUrl` (data URI). Do cloudu jde

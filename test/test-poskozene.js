@@ -32,6 +32,14 @@ const POLOZKY = [
   { id: 'visi', name: 'Vadné a vystavené', sku: 'PK-2', size: '44', category: 'sneakers',
     condition: 'poskozene', buyPrice: 3000, saleState: 'stock', location: 'Doma',
     dateAdded: 3, platforms: ['Pikastore'], tags: [] },
+  /* Kategorie, kterou Hypeboost nebere — viz sekce 7. A jeden kus, co
+     tam z dřívějška visí, aby šlo ověřit, že odškrtnout jde dál. */
+  { id: 'lego', name: 'LEGO Minifigurky', category: 'lego', condition: 'DS',
+    buyPrice: 99, saleState: 'stock', location: 'Doma', dateAdded: 4,
+    platforms: [], tags: [] },
+  { id: 'lego2', name: 'LEGO co visí', category: 'lego', condition: 'DS',
+    buyPrice: 99, saleState: 'stock', location: 'Doma', dateAdded: 5,
+    platforms: ['Hypeboost'], tags: [] },
 ];
 
 (async () => {
@@ -148,6 +156,60 @@ const POLOZKY = [
   check('u poškozeného je zakázaná', mrizka.vadnaKurzor === 'not-allowed', mrizka.vadnaKurzor);
   check('a napoví proč', /poškozený kus/.test(mrizka.vadnaTip || ''), mrizka.vadnaTip);
   check('u zdravého zůstala klikací', mrizka.zdravaKurzor === 'pointer', mrizka.zdravaKurzor);
+
+  // ══════════════════════════════════════════════════════════════
+  section('7) Místo, kde se ta kategorie neprodává');
+  /* Dřív ten čtvereček úplně chyběl a řádek se tím rozjel — nešlo
+     poznat, jestli místo zmizelo schválně, nebo se něco rozbilo.
+     Majitel si vyžádal, ať je vidět zašedlý, stejně jako u poškozeného
+     kusu. **Zašedlý ale není totéž co zakázaný**: dokud byl schovaný,
+     nešlo na něj kliknout a brána v zápisu nebyla potřeba. */
+  const kat = await page.evaluate(async () => {
+    const g = getPlatGroups();
+    g.platCategories = { Hypeboost: ['sneakers'] };   // LEGO tam nepatří
+    savePlatGroupsData(g);
+    platExpanded.platforms = true;
+    renderItems();
+    await new Promise(r => setTimeout(r, 200));
+    const bunka = (id, plat) => document.querySelector(
+      '[data-action="toggleplat"][data-id="' + id + '"][data-plat="' + plat + '"]');
+    const legoHb = bunka('lego', 'Hypeboost');
+    const botyHb = bunka('dobry', 'Hypeboost');
+    return {
+      jeTam: !!legoHb,
+      kurzor: legoHb && legoHb.style.cursor,
+      pruhlednost: legoHb && legoHb.style.opacity,
+      tip: legoHb && legoHb.getAttribute('data-tip'),
+      botyKurzor: botyHb && botyHb.style.cursor,
+    };
+  });
+  check('čtvereček tam je, nezmizel', kat.jeTam, JSON.stringify(kat));
+  check('je zašedlý jako u poškozeného kusu',
+    kat.kurzor === 'not-allowed' && kat.pruhlednost === '0.35', JSON.stringify(kat));
+  check('a napoví proč', /kategorie se tam neprodává/.test(kat.tip || ''), kat.tip);
+  check('u povolené kategorie zůstal klikací', kat.botyKurzor === 'pointer', kat.botyKurzor);
+
+  /* Zašedlý čtvereček musí i doopravdy odmítnout zápis — jinak by se
+     kus tvářil jako nabízený tam, kam vůbec nepatří. */
+  const zapis = await page.evaluate(() => {
+    const vysledek = togglePlatItem('lego', 'Hypeboost');
+    return { vysledek, plat: items.find(i => i.id === 'lego').platforms,
+      vUlozisti: (JSON.parse(localStorage.getItem('sklad_v3') || '[]')
+        .find(i => i.id === 'lego') || {}).platforms };
+  });
+  check('zaškrtnout to nejde', zapis.vysledek === false, JSON.stringify(zapis));
+  check('a nic se nezapsalo', (zapis.plat || []).length === 0, JSON.stringify(zapis.plat));
+  check('ani do úložiště', (zapis.vUlozisti || []).length === 0, JSON.stringify(zapis.vUlozisti));
+
+  /* Odškrtnout ale jít musí. Kategorie u místa se dá změnit kdykoli —
+     kdyby to šlo jen zaškrtnout, zůstala by stará fajfka viset navždy
+     a kus by se tvářil jako vystavený tam, kde není. */
+  const odskrtnuti = await page.evaluate(() => {
+    const vysledek = togglePlatItem('lego2', 'Hypeboost');
+    return { vysledek, plat: items.find(i => i.id === 'lego2').platforms };
+  });
+  check('odškrtnout jde dál', odskrtnuti.vysledek !== false
+    && (odskrtnuti.plat || []).length === 0, JSON.stringify(odskrtnuti));
 
   if (errs.length) { console.log('\n' + errs.slice(0, 5).join('\n')); failures += errs.length; }
   await browser.close();

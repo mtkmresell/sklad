@@ -4852,6 +4852,15 @@ function togglePlatItem(id, platform) {
       showToast('Poškozený kus se na ' + platform + ' nabízet nedá — jen přímý prodej.', 'err');
       return false;
     }
+    /* Místo, kde se tahle kategorie neprodává (*Nastavení → místa
+       prodeje*). Dokud byl čtvereček schovaný, nešlo na něj kliknout
+       a brána tu nebyla potřeba — teď je zašedlý, a **zašedlý není
+       totéž co zakázaný**. Bez tohohle by se fajfka dala nasadit
+       a kus by se tvářil jako nabízený tam, kam vůbec nepatří. */
+    if (!platAcceptsCategory(platform, items[idx].category || 'jine')) {
+      showToast(platform + ' tuhle kategorii nepřijímá — nastav ji v místech prodeje.', 'err');
+      return false;
+    }
     // Zaškrtáváme — zkontroluj limit pro Bazoš
     if (isBazos) {
       const currentCount = bazosActiveCount(platform);
@@ -5117,18 +5126,28 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
           return `<td style="border-left:1px solid var(--border);padding:3px 4px;">
             <div style="display:flex;gap:3px;align-items:center;">
               ${grp.map(p=>{
-                if(!platAcceptsCategory(p,it.category||'jine',GROUPS)) return '<span style="display:inline-block;width:18px;height:18px;flex-shrink:0;"></span>';
                 const on=(it.platforms||[]).includes(p);
                 const isBazosP = BAZOS_PLATS.includes(p);
                 const bazosFullP = isBazosP && !on && bazosActiveCount(p) >= BAZOS_LIMIT;
                 // Poškozený kus jen napřímo — viz POŠKOZENÝ KUS A PLATFORMY
                 const vadaP = !on && jePoskozene(it) && !platformaProPoskozene(p);
+                /* Místo, kde se tahle kategorie neprodává. Čtvereček tu
+                   dřív úplně chyběl a řádek se tím rozjel — sloupce
+                   nesedly pod sebe a nešlo poznat, jestli místo zmizelo
+                   schválně, nebo se něco rozbilo. Radši zašedlý, stejně
+                   jako u poškozeného kusu. Odškrtnout jde dál, jinak by
+                   po změně kategorie zůstala fajfka natrvalo viset. */
+                const mimoKatP = !on && !platAcceptsCategory(p, it.category||'jine', GROUPS);
                 const style = on
                   ? 'background:#c8ff0020;color:#8ab200;border-color:#c8ff0035;cursor:pointer;'
-                  : (bazosFullP || vadaP)
+                  : (bazosFullP || vadaP || mimoKatP)
                     ? 'background:var(--surface3);color:transparent;border-color:var(--border);opacity:0.35;cursor:not-allowed;'
                     : 'background:var(--surface3);color:transparent;border-color:var(--border);cursor:pointer;';
-                return `<span data-action="toggleplat" data-id="${it.id}" data-plat="${p}" data-tip="${bazosFullP?p+' — plný (50/50)':vadaP?p+' — poškozený kus, jen přímý prodej':p}" style="display:inline-block;width:18px;height:18px;border-radius:3px;border:1px solid;line-height:18px;font-size:9px;text-align:center;flex-shrink:0;${style}">
+                const tip = bazosFullP ? p+' — plný (50/50)'
+                  : vadaP ? p+' — poškozený kus, jen přímý prodej'
+                  : mimoKatP ? p+' — tahle kategorie se tam neprodává'
+                  : p;
+                return `<span data-action="toggleplat" data-id="${it.id}" data-plat="${p}" data-tip="${tip}" style="display:inline-block;width:18px;height:18px;border-radius:3px;border:1px solid;line-height:18px;font-size:9px;text-align:center;flex-shrink:0;${style}">
                   ${on?'✓':''}
                 </span>`;
               }).join('')}
@@ -5492,7 +5511,20 @@ function _sellLocationNeedsBuyer(val){
 
    Blokuje se jen **zaškrtnutí**. Odškrtnout jde vždycky: když už kus
    někde visí, je ta fajfka pravda a majitel potřebuje inzerát nejdřív
-   stáhnout a teprve pak ji zrušit. Hlídá to `test-poskozene.js`. */
+   stáhnout a teprve pak ji zrušit. Hlídá to `test-poskozene.js`.
+
+   ── Stejně vypadá místo, kde se ta kategorie neprodává ───────────────
+   U každého místa se dá nastavit, co se tam smí prodávat (*Nastavení →
+   místa prodeje*, `platAcceptsCategory`). Čtvereček u nepovolené
+   kategorie dřív **úplně zmizel** — řádek se tím rozjel a nešlo poznat,
+   jestli místo chybí schválně, nebo se něco rozbilo. Teď je zašedlý,
+   stejně jako u poškozeného kusu.
+
+   **Zašedlý ale není totéž co zakázaný.** Dokud byl schovaný, nešlo na
+   něj kliknout a brána v `togglePlatItem` nebyla potřeba; od chvíle,
+   kdy je vidět, tam být musí — jinak by šel zaškrtnout a kus by se
+   tvářil jako nabízený tam, kam vůbec nepatří. Sekce 7 v testu to
+   zkouší klikem i přes `localStorage`. */
 var POSKOZENE_POVOLENO = ['Klekt', 'Alias', 'Cardmarket'];
 
 function jePoskozene(it) { return !!it && it.condition === 'poskozene'; }
