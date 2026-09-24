@@ -81,6 +81,14 @@ uvedený účet jednu jmenovitě uvedenou složku. Zapisovat smí jedině
 majitel. Na co pravidlo nesedí, to Firestore odmítne samo — proto tu
 musí být `sklad` i `crm` pokryté, aplikace používá obojí.
 
+**Tohle je výchozí znění pro nový účet, ne to, co běží v provozu.**
+Skutečné je `firestore.rules` v kořeni repozitáře: má UID vyplněná,
+zná i účetního a čtečce navíc povoluje zápis do jediného místa —
+dokumentů `pozadavek_…`, kterými konektor předává aplikaci zaškrtnutí
+listingu (`konektor/README.md`). Sklad, archivy, fotky ani CRM to
+neodemyká, drží to jméno dokumentu. Když nastavuješ účet podle tohohle
+návodu, zkopíruj nakonec do konzole `firestore.rules`.
+
 ### Kdyby měla čtečka vidět jen sklad a ne zákazníky
 
 Místo posledního bloku dej tyhle dva:
@@ -154,6 +162,10 @@ curl -s -X PATCH \
 
 Musí přijít `PERMISSION_DENIED`. Kdyby to prošlo, pravidla nesedí —
 zkontroluj, že jsi dal Publish a že UID nejsou prohozená.
+
+Jméno `zkouska_zapisu` na tom není náhodou: v ostrém znění smí čtečka
+zapsat jedině do dokumentů `pozadavek_…`, takže tenhle pokus musí
+narazit i s nimi. Kdyby prošel, je vzorek napsaný moc široce.
 
 Tenhle příkaz je schválně mimo `sklad.js`. Do čtečky zápis nepatří ani
 na zkoušku.

@@ -4919,6 +4919,83 @@ function togglePlatItem(id, platform) {
   return true;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   POŽADAVKY Z KONEKTORU
+
+   Majitel si v chatu přes konektor projde listingy a řekne „tenhle kus
+   na Bazoši visí". Zapsat to ale konektor nesmí: do skladu zapisuje
+   **jedině aplikace**. Druhý zapisovatel by se pral s její
+   synchronizací — kdyby konektor přepsal cloud ve chvíli, kdy má
+   aplikace neodeslanou změnu, ta změna by zmizela. Přesně kvůli tomu
+   se tu kdysi prodaná položka vracela na sklad.
+
+   Konektor proto jen **položí požadavek** do vlastního dokumentu
+   (`pozadavek_…`). Aplikace ho uvidí ve snímku kolekce — poslouchá ji
+   celou, takže nic dotahovat nemusí — provede ho a smaže. Pravidla
+   Firestore pouštějí čtečku k zápisu jedině do dokumentů s tímhle
+   jménem; na sklad, archivy, fotky ani CRM nedosáhne.
+
+   Tři věci se nesmí rozbít:
+
+   - **Jde to přes `togglePlatItem`**, ne vedle něj. Tam jsou všechny
+     brány (poškozený kus, zakázaná kategorie, limit Bazoše, pohled
+     účetního) i srovnání celé skupiny. Druhá kopie těch pravidel by se
+     s první rozešla a požadavek z chatu by uměl víc než klik myší.
+   - **Z požadavku se bere jen dohodnutá hrstka polí** a jen platforma,
+     kterou aplikace zná (`PLATFORMS`). Dokument přijde po síti.
+   - **Starý požadavek se neprovádí, jen smaže.** Kdyby aplikace týden
+     neběžela, je sklad mezitím jinde a fajfka by dosedla na stav, na
+     který se ten požadavek vůbec nevztahoval.
+
+   Hlídá to `test-pozadavky.js`.
+══════════════════════════════════════════════════════════════════════ */
+var POZADAVEK_PREFIX = 'pozadavek_';
+var POZADAVEK_STARY_MS = 7 * 86400000;
+var POZADAVEK_NEJVIC = 200;
+
+// Co se z dokumentu smí vzít a v jakém tvaru
+function _pozadavekZmeny(v) {
+  var ven = [];
+  var pole = (v && Array.isArray(v.zmeny)) ? v.zmeny : [];
+  for (var i = 0; i < pole.length && ven.length < POZADAVEK_NEJVIC; i++) {
+    var z = pole[i] || {};
+    if (typeof z.id !== 'string' || !z.id) continue;
+    if (typeof z.platforma !== 'string' || PLATFORMS.indexOf(z.platforma) === -1) continue;
+    ven.push({ id: z.id, platforma: z.platforma, zaskrtnout: z.zaskrtnout !== false });
+  }
+  return ven;
+}
+
+function _provedPozadavky(snap) {
+  if (jeUctetni()) return;                 // účetní listingy neřídí
+  var kSmazani = [], zmeneno = 0, odmitnuto = 0;
+  snap.forEach(function (d) {
+    if (String(d.id).indexOf(POZADAVEK_PREFIX) !== 0) return;
+    kSmazani.push(d.id);
+    var v = d.data() || {};
+    var kdy = v.kdy ? new Date(v.kdy).getTime() : 0;
+    if (kdy && Date.now() - kdy > POZADAVEK_STARY_MS) return;   // jen se smaže
+    _pozadavekZmeny(v).forEach(function (z) {
+      var it = items.find(function (x) { return x.id === z.id; });
+      // Kus, se kterým majitel mezitím pohnul, se nechá být
+      if (!it || it.type === 'bulk' || (it.saleState && it.saleState !== 'stock')) { odmitnuto++; return; }
+      if (((it.platforms || []).indexOf(z.platforma) !== -1) === z.zaskrtnout) return;  // už to tak je
+      if (togglePlatItem(z.id, z.platforma)) zmeneno++; else odmitnuto++;
+    });
+  });
+  if (!kSmazani.length) return;
+  if (zmeneno) showToast('Z konektoru: ' + zmeneno + '× upraven listing.');
+  else if (odmitnuto) showToast('Požadavek z konektoru neprošel (' + odmitnuto + '×).', 'err');
+  /* Smaže se i ten, který se neprovedl — jinak by se o něj aplikace
+     pokoušela při každém snímku znovu a hláška by chodila pořád. */
+  var fns = window._fbFns, uid = _datovyUid();
+  if (!fns || !uid || !window._fbDb) return;
+  kSmazani.forEach(function (id) {
+    try { fns.deleteDoc(fns.doc(window._fbDb, 'users', uid, 'sklad', id)).catch(function () {}); }
+    catch (e) {}
+  });
+}
+
 function setView(mode) {
   viewMode = mode;
   document.getElementById('btnGrid').classList.toggle('active', mode === 'grid');
@@ -16483,6 +16560,9 @@ function _spustSkladPosluchace() {
       }
       // Našeptávač jede ze stejného snímku — nezávisle na tom, jestli se data měnila
       try { _applyItemCacheDoc(cloud.cache, data.itemCache); } catch(e) { console.warn('cache našeptávače:', e); }
+      /* Až úplně nakonec: požadavky z konektoru mají dosednout na
+         srovnaná data, ne na stav, který se o řádek níž ještě přepíše. */
+      try { _provedPozadavky(snap); } catch(e) { console.warn('požadavky z konektoru:', e); }
     }, function(err) {
       console.error('onSnapshot chyba:', err);
       var dot = document.getElementById('fbStatusDot');

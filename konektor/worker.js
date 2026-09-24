@@ -146,6 +146,20 @@ function rozbalPole(fields) {
   return out;
 }
 
+/* ── Zabalení hodnoty pro Firestore ─────────────────────────────────── */
+// Opak `rozbal`. Čísla schválně jako `doubleValue` — integerValue chce
+// řetězec a u ceny by se stejně zaokrouhlilo.
+function zabal(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'string') return { stringValue: v };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'number') return { doubleValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(zabal) } };
+  const fields = {};
+  for (const k of Object.keys(v)) fields[k] = zabal(v[k]);
+  return { mapValue: { fields } };
+}
+
 /* ── Čtení z cloudu ─────────────────────────────────────────────────── */
 async function prihlas(env) {
   const r = await fetch(AUTH_URL, {
@@ -208,6 +222,119 @@ async function nactiCrm(token, uid) {
   if (!r.ok) throw new Error('čtení CRM selhalo: ' + r.status);
   const d = rozbalPole((await r.json()).fields || {});
   return { customers: d.customers || [], partners: d.partners || [] };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   POŽADAVEK PRO APLIKACI
+
+   Jediné místo, kde konektor do cloudu **zapisuje** — a ani tady nesahá
+   na sklad. Do skladu píše jedině aplikace; druhý zapisovatel by se pral
+   s její synchronizací a neodeslaná změna by zmizela (v index.html
+   POŽADAVKY Z KONEKTORU).
+
+   Konektor proto položí lísteček do vlastního dokumentu `pozadavek_…`.
+   Aplikace ho vidí ve snímku kolekce, provede ho svojí běžnou cestou
+   (se všemi branami) a smaže. Pravidla Firestore čtečku k ničemu jinému
+   nepustí — drží to **jméno dokumentu**, takže `data`, `sold_*`,
+   `photo_*` ani `cache` pod ten vzorek nespadnou.
+
+   Projeví se to, až bude aplikace otevřená. Když je, tak do vteřiny;
+   když ne, při jejím dalším spuštění. Slibovat okamžitý zápis by byla
+   lež — a proto se to tak i odpovídá.
+══════════════════════════════════════════════════════════════════════ */
+const POZADAVEK_PREFIX = 'pozadavek_';
+const POZADAVEK_NEJVIC = 200;
+
+/* Platformy, které aplikace zná. Druhá kopie seznamu — v aplikaci je
+   `PLATFORMS` a rozejít se nesmí, jinak by konektor poslal lísteček
+   s místem, které aplikace zahodí, a vypadalo by to, že se nic
+   nestalo. `test-pozadavky.js` je porovnává. */
+const PLATFORMY = [
+  'StockX', 'Hypeboost', 'Klekt', 'Alias',
+  'TheBeast', 'Stuffsell', 'Purekickz', 'Pikastore', 'Sellect', 'Released', 'Tnsky',
+  'Adonio', 'Sneakerstore', 'Spikaprague', 'Section', 'Sneakysneakers', 'Sneakersnow',
+  'Facebook', 'Bazoš.cz', 'Bazoš.sk', 'Refresher', 'Vinted', 'Bazoš.pl',
+];
+
+async function zapisPozadavek(env, token, zmeny) {
+  const jmeno = POZADAVEK_PREFIX + Date.now().toString(36)
+    + '_' + Math.random().toString(36).slice(2, 8);
+  const telo = { fields: zabal({ kdy: new Date().toISOString(), zmeny }).mapValue.fields };
+  const r = await fetch(FS_BASE + '/users/' + env.SKLAD_UID + '/sklad/' + jmeno, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(telo),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    /* 403 tu znamená jedinou konkrétní věc: v konzoli Firebase leží
+       stará pravidla bez `jePozadavekCtecky`. Bez pojmenování by se to
+       hledalo hodinu. */
+    if (r.status === 403) {
+      throw new Error('Firestore zápis odmítl (403) — v konzoli nejspíš leží stará pravidla. '
+        + 'Publikuj znění z firestore.rules, je tam funkce jePozadavekCtecky.');
+    }
+    throw new Error('zápis požadavku selhal: ' + r.status + ' ' + t.slice(0, 160));
+  }
+  return jmeno;
+}
+
+/* Zaškrtnutí nebo odškrtnutí listingu u kusů na skladě. Nic nemění hned
+   — připraví lísteček, aplikace ho provede. */
+async function skladListing(env, volby) {
+  const zadane = Array.isArray(volby && volby.zmeny) ? volby.zmeny : [];
+  if (!zadane.length) {
+    return { stav: 'nic', poznamka: 'Nic k provedení — pošli `zmeny` jako seznam '
+      + '{ id, platforma, zaskrtnout }.' };
+  }
+  if (zadane.length > POZADAVEK_NEJVIC) {
+    return { stav: 'moc_zmen', poznamka: 'Najednou nejvýš ' + POZADAVEK_NEJVIC + ' změn.' };
+  }
+  const token = await prihlas(env);
+  const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
+  const polozky = slozPolozky(data, archivy);
+
+  /* Co nedává smysl, se pozná tady a řekne se to rovnou. Aplikace má
+     svoje brány taky (poškozený kus, zakázaná kategorie, limit Bazoše),
+     ale ty se projeví až u ní — a odpověď „hotovo" u kusu, který vůbec
+     neexistuje, by byla k ničemu. */
+  const zmeny = [], nelze = [];
+  for (const z of zadane) {
+    const id = z && z.id;
+    const platforma = z && z.platforma;
+    if (typeof id !== 'string' || !id) { nelze.push({ zmena: z, duvod: 'chybí id položky' }); continue; }
+    if (PLATFORMY.indexOf(platforma) === -1) {
+      nelze.push({ id, duvod: 'takovou platformu sklad nezná: ' + platforma }); continue;
+    }
+    const it = polozky.find(x => x && x.id === id);
+    if (!it) { nelze.push({ id, duvod: 'položka s tímhle id ve skladu není' }); continue; }
+    if (stavPolozky(it) !== 'stock') {
+      nelze.push({ id, nazev: it.name || null, duvod: 'kus není na skladě' }); continue;
+    }
+    const zaskrtnout = z.zaskrtnout !== false;
+    if (((it.platforms || []).indexOf(platforma) !== -1) === zaskrtnout) {
+      nelze.push({ id, nazev: it.name || null,
+        duvod: zaskrtnout ? 'už je zaškrtnuté' : 'zaškrtnuté ani není' });
+      continue;
+    }
+    zmeny.push({ id, platforma, zaskrtnout, nazev: it.name || null });
+  }
+
+  if (!zmeny.length) {
+    return { stav: 'nic_k_provedeni', nelze,
+      poznamka: 'Žádná ze změn nedává smysl — podrobnosti v `nelze`.' };
+  }
+  const dokument = await zapisPozadavek(env, token,
+    zmeny.map(z => ({ id: z.id, platforma: z.platforma, zaskrtnout: z.zaskrtnout })));
+  return {
+    stav: 'zadano',
+    dokument,
+    zadano: zmeny,
+    nelze: nelze.length ? nelze : undefined,
+    poznamka: 'Požadavek je uložený. **Provede ho aplikace**, ne konektor — do skladu '
+      + 'zapisuje jedině ona. Když ji má majitel otevřenou, je to do vteřiny; jinak při '
+      + 'jejím dalším spuštění. Konektor sám sklad nezměnil.',
+  };
 }
 
 /* ── Skládání a úprava ──────────────────────────────────────────────── */
@@ -442,6 +569,35 @@ const NASTROJE = [
     },
   },
   {
+    name: 'sklad_listing',
+    description: 'Zaškrtne nebo odškrtne, že kus na skladě visí na daném místě prodeje — '
+      + 'tytéž čtverečky, co jsou v mřížce. Jediný nástroj, který sklad mění. '
+      + 'ZAPISUJE, ale ne hned: konektor jen uloží požadavek a provede ho aplikace, '
+      + 'protože do skladu smí zapisovat jedině ona. Projeví se to, až bude aplikace '
+      + 'otevřená — když je, tak do vteřiny. Id položek vezmi ze sklad_polozky.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        zmeny: {
+          type: 'array',
+          description: 'Co změnit. Najednou nejvýš 200 změn.',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'Id položky ze sklad_polozky.' },
+              platforma: { type: 'string',
+                description: 'Přesný název místa prodeje, např. "Bazoš.cz" nebo "Vinted".' },
+              zaskrtnout: { type: 'boolean',
+                description: 'true = kus tam visí (výchozí), false = odškrtnout.' },
+            },
+            required: ['id', 'platforma'],
+          },
+        },
+      },
+      required: ['zmeny'],
+    },
+  },
+  {
     name: 'pika_prodeje',
     description: 'Co se prodalo na komisním prodeji Pikastore a ve skladu je ten kus pořád '
       + 'veden na skladě. Vrátí rovnou hodnoty, které se mají v položce vyplnit při přesunu '
@@ -496,6 +652,7 @@ async function spustNastroj(jmeno, args, env) {
     const cesty = Array.isArray(args.cesty) && args.cesty.length ? args.cesty : PIKA_ZAJIMAVE;
     return pikaSmlouva(cesty);
   }
+  if (jmeno === 'sklad_listing') return skladListing(env, { zmeny: args.zmeny });
   if (jmeno === 'pika_nahled') return pikaNahled(env);
   if (jmeno === 'pika_prodeje') return pikaProdeje(env);
   if (jmeno === 'pk_nahled') return pkNahled(env);

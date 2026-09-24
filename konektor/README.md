@@ -592,6 +592,7 @@ Až doména v Resendu projde ověřením, `MAIL_KOMU` může být jakákoli adre
 | `sklad_polozky` | řádky skladu s filtry (stav, profil, kategorie, platforma, hledání) |
 | `sklad_prodeje` | prodané, volitelně za jeden rok |
 | `sklad_zakaznici` | zákazníci a partneři z CRM |
+| `sklad_listing` | zaškrtne nebo odškrtne listing u kusů na skladě (jediný, který mění data) |
 | `pika_nahled` | rozdíl mezi skladem a komisním prodejem |
 | `pika_srovnat` | plán vystavení a stažení; s `provest: true` ho i provede |
 | `pika_prodeje` | co se u komisionáře prodalo a sklad to ještě neví |
@@ -607,14 +608,55 @@ Metriky se schválně nepočítají — kurzy EUR umí správně jen aplikace, k
 si pamatuje kurz ke dni nákupu i payoutu. Konektor vrací řádky a výpočet
 nechává na tom, kdo se ptá.
 
+### Zaškrtávání listingů z chatu
+
+Projít si v chatu, co kde visí, a rovnou to ve skladu odškrtnout — to je
+jediná věc, kterou konektor do skladu mění. A ani tu nemění sám.
+
+**Do skladu zapisuje jedině aplikace.** Druhý zapisovatel by se pral s její
+synchronizací: kdyby konektor přepsal cloud ve chvíli, kdy má aplikace
+neodeslanou změnu, ta změna by zmizela. Přesně tak se kdysi prodaná položka
+vracela na sklad.
+
+`sklad_listing` proto uloží **lísteček** do vlastního dokumentu
+`users/{uid}/sklad/pozadavek_…`. Aplikace poslouchá celou kolekci, takže ho
+uvidí v nejbližším snímku, provede ho svou běžnou cestou (`togglePlatItem`
+— se všemi branami: poškozený kus, zakázaná kategorie, limit Bazoše, pohled
+účetního) a smaže. Když má majitel aplikaci otevřenou, je to do vteřiny;
+když ne, při jejím dalším spuštění. **Odpověď proto neslibuje, že je
+hotovo** — konektor sám sklad nezměnil.
+
+```
+sklad_listing  zmeny: [{ id: "a3f…", platforma: "Bazoš.cz", zaskrtnout: true }]
+```
+
+Co nedává smysl, se pozná hned a vrátí se to v `nelze`: neznámá platforma,
+kus, který ve skladu není, kus, který není na skladě, a změna, která už
+tak je. Najednou nejvýš 200 změn.
+
+Mění se jedině fajfky u platforem, nic jiného. Pravidla Firestore pouštějí
+účet konektoru k zápisu **jen do dokumentů se jménem `pozadavek_…`** —
+na sklad, archivy, fotky ani CRM nedosáhne. Drží to jméno dokumentu, ne
+dobrá vůle konektoru.
+
+Starší lísteček než týden aplikace jen smaže a neprovede: sklad je mezitím
+jinde a fajfka by dosedla na stav, na který se ten požadavek nevztahoval.
+
+**Při změně je potřeba znovu publikovat `firestore.rules`** v konzoli
+Firebase — ta se nenasazuje sama. Bez nových pravidel vrátí Firestore 403
+a konektor to rovnou tak i řekne.
+
 ## Bezpečnost
 
 Adresa je veřejná, takže **token je jediný zámek**. Bez něj server odpoví
 404 a nic neprozradí, ani že tam něco je. Porovnání tokenu je odolné vůči
 měření času, aby se nedal uhodnout po znacích.
 
-Kdo token má, přečte si sklad. Zapsat nemůže ani s ním — to hlídají
-pravidla Firestore, ne tenhle soubor.
+Kdo token má, přečte si sklad. Změnit s ním jde **jedině zaškrtnutí
+listingu** — a to ještě ne přímo: konektor položí lísteček a provede ho
+aplikace. Do skladu, archivů, fotek ani CRM se ani s tokenem zapsat nedá,
+protože pravidla Firestore pouštějí účet konektoru jen do dokumentů se
+jménem `pozadavek_…`. Drží to pravidla, ne tenhle soubor.
 
 **Zneplatnění:** změň `MCP_TOKEN` v Cloudflare, znovu nasaď a v claude.ai
 přepiš adresu konektoru. Stará adresa okamžitě přestane fungovat.
@@ -639,7 +681,13 @@ node test/run.js konektor upozorneni
 
 `test-konektor.js` prochází protokol i data proti podstrčenému Firestore —
 zámek na adrese, handshake, seznam nástrojů, filtry, ořezávání odpovědí
-i to, že se nikam nezapisuje. Bez sítě a bez nasazení.
+i to, že se nikam nezapisuje mimo dvě povolená místa. Bez sítě a bez
+nasazení.
+
+`test-pozadavky.js` bere zaškrtávání listingů z obou stran: co konektor
+pustí a kam přesně zapíše, a co s lístečkem udělá aplikace v prohlížeči —
+včetně toho, čemu nevěří (cizí platforma, kus mimo sklad, týden starý
+lísteček, pohled účetního).
 
 `test-upozorneni.js` dělá totéž pro upozornění: podstrčí Firestore, poštu
 i čas a projde každý den života inzerátu i prodeje, aby ověřil, kdy přesně

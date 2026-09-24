@@ -17,7 +17,8 @@
 //
 // Role:
 //   majitel  p6JKNhfrbmZYaF8OIBxgd9durmq2   plný přístup ke svým datům
-//   čtečka   bvFwgv4M7wZkO3DshUUKFg0I5sB3   čte sklad i CRM, nezapisuje
+//   čtečka   bvFwgv4M7wZkO3DshUUKFg0I5sB3   čte sklad i CRM; zapsat smí
+//                                            jedině lísteček pozadavek_*
 //                                            (nastroje/sklad.js a konektor/)
 //   účetní   HyFRiNVfLaVvt2zzVr0s3313Ty42   čte jen sklad, na CRM nedosáhne
 //                                            (nastroje/UCETNI.md)
@@ -25,8 +26,9 @@
 // Co pravidlo nepovolí, to Firestore odmítne — proto tu musí být pokryté
 // obě kolekce, které aplikace používá, a nic jiného tu být nemusí.
 //
-// Hlídá to test/test-pravidla.js: žádné zbylé zástupné texty, zápis jen pro
-// majitele a účetní že opravdu není u CRM.
+// Hlídá to test/test-pravidla.js: žádné zbylé zástupné texty, že se čtečka
+// zápisem nedostane na `data`, `cache`, `sold_*` ani `photo_*`, a že účetní
+// opravdu není u CRM.
 
 rules_version = '2';
 
@@ -45,6 +47,18 @@ service cloud.firestore {
              && uid == 'p6JKNhfrbmZYaF8OIBxgd9durmq2';
     }
 
+    // Požadavek z konektoru. Čtečka nesmí sahat na sklad — do skladu
+    // zapisuje jedině aplikace, protože druhý zapisovatel by se pral
+    // s její synchronizací a neodeslaná změna by zmizela. Smí proto
+    // položit jen lísteček do dokumentu, který si aplikace přečte,
+    // provede a smaže (v index.html POŽADAVKY Z KONEKTORU).
+    //
+    // Jméno dokumentu je jediné, co to drží: `data`, `sold_*`, `photo_*`
+    // ani `cache` se pod tenhle vzorek nevejdou.
+    function jePozadavekCtecky(uid, dokument) {
+      return jeCtecka(uid) && dokument.matches('^pozadavek_[A-Za-z0-9_-]{1,60}$');
+    }
+
     // Účetní — čte jen sklad, na zákazníky nedosáhne
     function jeUcetni(uid) {
       return request.auth != null
@@ -55,7 +69,7 @@ service cloud.firestore {
     // Sklad, roční archivy prodejů, fotky, našeptávač
     match /users/{uid}/sklad/{dokument} {
       allow read:  if jeMajitel(uid) || jeCtecka(uid) || jeUcetni(uid);
-      allow write: if jeMajitel(uid);
+      allow write: if jeMajitel(uid) || jePozadavekCtecky(uid, dokument);
     }
 
     // Zákazníci a partneři — účetní tu schválně není

@@ -171,7 +171,13 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   const seznam = (await rpc('tools/list')).result.tools;
   shoda('nástroje', seznam.map(t => t.name).sort(),
     ['pika_nahled', 'pika_prodeje', 'pika_smlouva', 'pika_srovnat', 'pk_nahled',
-     'pk_srovnat', 'sklad_polozky', 'sklad_prodeje', 'sklad_souhrn', 'sklad_zakaznici']);
+     'pk_srovnat', 'sklad_listing', 'sklad_polozky', 'sklad_prodeje', 'sklad_souhrn',
+     'sklad_zakaznici']);
+  /* Jediný nástroj, který sklad mění. Ať je to znát z popisu — v chatu
+     je to poslední místo, kde si to Claude může přečíst, než to udělá. */
+  ok('u jediného zapisujícího nástroje je to v popisu vidět',
+    /ZAPISUJE/.test(seznam.find(t => t.name === 'sklad_listing').description),
+    (seznam.find(t => t.name === 'sklad_listing') || {}).description);
   ok('každý nástroj má popis', seznam.every(t => t.description && t.description.length > 30));
   ok('každý nástroj má schéma', seznam.every(t => t.inputSchema && t.inputSchema.type === 'object'));
   ok('u zákazníků je varování na osobní údaje',
@@ -235,7 +241,7 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   const zapisy = doFirestore.filter(v =>
     ['PATCH', 'PUT', 'DELETE'].includes(v.method) ||
     (v.method === 'POST' && !v.url.includes(':batchGet') && !v.url.includes('signIn')));
-  shoda('žádný zápisový požadavek do Firestore', zapisy.map(v => v.method + ' ' + v.url), []);
+  shoda('čtecí nástroje do Firestore nic nezapíšou', zapisy.map(v => v.method + ' ' + v.url), []);
 
   // Kam všude Worker vůbec sahá. Kdyby přibyla další adresa, ať se o tom ví.
   const hostitele = [...new Set(volani.map(v => new URL(v.url).host))].sort();
@@ -249,18 +255,34 @@ function pozadavek(cesta, telo, metoda = 'POST') {
      nesmí nikde. Dřív se to hlídalo tím, že se PATCH ani DELETE nesměly
      v souboru objevit vůbec; od napojení na Pikastore je ta podmínka
      příliš hrubá, ale zrušit se nesmí — jen zúžit. */
-  const zacatekPika = zdroj.indexOf('PIKASTORE — KOMISNÍ PRODEJ');
-  const konecPika = zdroj.indexOf('UPOZORNĚNÍ E-MAILEM');
-  ok('části se v souboru našly', zacatekPika > 0 && konecPika > zacatekPika);
-  const mimoPika = [];
+  const useky = [
+    ['PIKASTORE — KOMISNÍ PRODEJ', 'UPOZORNĚNÍ E-MAILEM'],
+    /* Jediné místo, kde se zapisuje do Firestore — a ani tam se nesahá
+       na sklad, jen se položí lísteček `pozadavek_…` pro aplikaci. */
+    ['POŽADAVEK PRO APLIKACI', '── Skládání a úprava'],
+  ].map(function (dvojice) {
+    const od = zdroj.indexOf(dvojice[0]), do_ = zdroj.indexOf(dvojice[1]);
+    ok('úsek „' + dvojice[0] + '" se v souboru našel', od > 0 && do_ > od, od + '..' + do_);
+    return [od, do_];
+  });
+  const mimo = [];
   const re = /['"](PATCH|DELETE|PUT)['"]/g;
   let m;
   while ((m = re.exec(zdroj)) !== null) {
-    if (m.index < zacatekPika || m.index > konecPika) {
-      mimoPika.push(m[1] + ' na znaku ' + m.index);
+    if (!useky.some(function (u) { return m.index > u[0] && m.index < u[1]; })) {
+      mimo.push(m[1] + ' na znaku ' + m.index);
     }
   }
-  shoda('zápisové sloveso jen v části o komisním prodeji', mimoPika, []);
+  shoda('zápisové sloveso jen v komisi a u lístečku', mimo, []);
+
+  /* Zápis do Firestore smí mířit **jedině** na dokument s tím jménem.
+     Kdyby se adresa poskládala jinak, čtečka by ji sice neprotlačila
+     přes pravidla, ale chyba by se hledala u nich místo tady. */
+  const zapisyVeZdroji = zdroj.match(/FS_BASE \+ [^;]*method: 'PATCH'/g) || [];
+  const cilLístečku = /POZADAVEK_PREFIX/.test(
+    zdroj.slice(zdroj.indexOf('async function zapisPozadavek'),
+      zdroj.indexOf('async function skladListing')));
+  ok('lísteček se zapisuje pod jméno pozadavek_…', cilLístečku);
 
   /* Do logu Workeru nesmí spadnout nic tajného. Dřív se to hlídalo tím,
      že se console nesměla použít vůbec — jenže cron bez logu je němý:

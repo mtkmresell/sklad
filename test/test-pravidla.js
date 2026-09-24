@@ -78,10 +78,41 @@ if (crm) {
 /* ── Kdo smí zapisovat ──────────────────────────────────────────────── */
 const zapisy = kod.match(/allow write:([^;]*)/g) || [];
 ok('zápis je definovaný u obou bloků', zapisy.length === 2, 'nalezeno: ' + zapisy.length);
-zapisy.forEach(function (z, i) {
-  ok('zápis #' + (i + 1) + ' povolen jen majiteli',
-    /jeMajitel/.test(z) && !/jeCtecka|jeUcetni/.test(z), z.trim());
-});
+const zapisSklad = zapisy[0] || '', zapisCrm = zapisy[1] || '';
+
+/* Do skladu píše majitel — a nově čtečka, ale **jen lísteček** pro
+   aplikaci (v index.html POŽADAVKY Z KONEKTORU). Sklad samotný jí
+   zůstává zapovězený: druhý zapisovatel by se pral se synchronizací
+   aplikace a neodeslaná změna by zmizela.
+
+   Vyjmenovává se kladně, ať nová role musí projít tudy. */
+ok('do skladu píše majitel', /jeMajitel/.test(zapisSklad), zapisSklad.trim());
+const terminy = zapisSklad.replace('allow write:', '').match(/je[A-Za-z]+/g) || [];
+ok('a kromě něj nanejvýš lísteček od čtečky',
+  terminy.every(function (t) { return t === 'jeMajitel' || t === 'jePozadavekCtecky'; }),
+  JSON.stringify(terminy));
+
+/* CRM nese jména a telefony zákazníků. Tam čtečka ani účetní nesmí
+   vůbec nic, ani lísteček. */
+ok('do CRM píše jedině majitel',
+  /jeMajitel/.test(zapisCrm) && !/jeCtecka|jeUcetni|jePozadavek/.test(zapisCrm), zapisCrm.trim());
+
+/* Celý ten lísteček drží jediná věc: jméno dokumentu. Vzorek se proto
+   vytáhne z pravidel a vyzkouší na jménech, která doopravdy existují —
+   kdyby pustil `data`, čtečka by mohla přepsat celý sklad. */
+if (/jePozadavekCtecky/.test(zapisSklad)) {
+  const telo = (kod.match(/function jePozadavekCtecky\([^)]*\)\s*\{([\s\S]*?)\n    \}/) || [])[1] || '';
+  ok('lísteček je vázaný na čtečku', /jeCtecka\(uid\)/.test(telo), telo.trim());
+  const vzorek = (telo.match(/matches\('([^']+)'\)/) || [])[1];
+  ok('a na jméno dokumentu', !!vzorek, telo.trim());
+  if (vzorek) {
+    const re = new RegExp(vzorek);
+    ok('vzorek nepustí čtečku na sklad',
+      !re.test('data') && !re.test('cache') && !re.test('sold_2026') && !re.test('photo_abc'),
+      vzorek);
+    ok('ale lísteček projde', re.test('pozadavek_a1b2c3'), vzorek);
+  }
+}
 ok('nikde není zápis bez podmínky', !/allow write:\s*if\s+true/.test(kod));
 ok('nikde není čtení bez podmínky', !/allow read:\s*if\s+true/.test(kod));
 ok('nikde není allow bez upřesnění operace', !/allow\s*:\s*if/.test(kod));

@@ -83,15 +83,19 @@ CRM je zvlášť v `users/{uid}/crm/main`.
 
 Kdo smí co číst, řeší pravidla Firestore. Kromě majitele jsou dvě role:
 **čtečka** pro AI (`nastroje/PRAVIDLA.md`) a **účetní** (`nastroje/UCETNI.md`).
-Zapisovat smí jedině majitel.
+Do skladu zapisuje jedině majitel — jediná výjimka jsou lístečky
+`pozadavek_…`, kterými konektor předává aplikaci zaškrtnutí listingu
+(`POŽADAVKY Z KONEKTORU` níž). Sklad, archivy, fotky ani CRM to
+neodemyká; drží to **jméno dokumentu**, ne dobrá vůle konektoru.
 
 Znění pravidel je ve `firestore.rules`. **Nenasazuje se samo** — do provozu se
 vkládá ručně v konzoli, takže při změně je potřeba upravit obojí. Soubor nese
 skutečná UID schválně: dokud tam byly zástupné texty, jednou se publikovala
 verze s nimi a odstřihlo to čtečku i účetního. UID nejsou tajemství, přístup
 dokazuje přihlášení. `test-pravidla.js` hlídá, že v souboru nezůstal
-nevyplněný zástupný text, že zápis nemá povolený nikdo kromě majitele
-a že účetní není u CRM — na tom stojí rozdíl mezi zamčeným a schovaným.
+nevyplněný zástupný text, že čtečka dál nedosáhne na `data`, `cache`,
+`sold_*` ani `photo_*` a že účetní není u CRM — na tom stojí rozdíl mezi
+zamčeným a schovaným.
 
 **Klíčové vlastnosti, které nesmíš rozbít:**
 
@@ -199,6 +203,45 @@ rozcestník a `togglePlatItem` si píše do `localStorage` sám, mimo `sv()`.
 `test-uctetni.js` kliká na všechno, na co v pohledu účetního jde
 kliknout, a kouká, jestli se `items` nebo úložiště změnily — sekce 9
 až 13.
+
+### Požadavky z konektoru (`POŽADAVKY Z KONEKTORU`)
+
+Majitel si v chatu přes konektor projde listingy a řekne „tenhle kus
+na Bazoši visí". Zapsat to ale konektor nesmí — **do skladu zapisuje
+jedině aplikace**. Druhý zapisovatel by se pral s její synchronizací:
+kdyby přepsal cloud ve chvíli, kdy má aplikace neodeslanou změnu, ta
+změna by zmizela. Přesně tak se kdysi prodaná položka vracela na sklad.
+
+Konektor proto jen **položí lísteček** do vlastního dokumentu
+`pozadavek_…` (`sklad_listing`, v konektoru `POŽADAVEK PRO APLIKACI`).
+Aplikace ho uvidí ve snímku kolekce — poslouchá ji celou, takže nic
+dotahovat nemusí — provede ho a smaže. Odpověď v chatu proto
+**neslibuje, že je hotovo**; když je aplikace otevřená, je to do
+vteřiny, jinak při jejím dalším spuštění.
+
+Čtyři věci se nesmí rozbít:
+
+- **Jde to přes `togglePlatItem`**, ne vedle něj. Tam jsou všechny brány
+  (poškozený kus, zakázaná kategorie, limit Bazoše, pohled účetního)
+  i srovnání celé skupiny. Druhá kopie těch pravidel by se s první
+  rozešla a požadavek z chatu by uměl víc než klik myší — stejná past
+  jako u zašedlých čtverečků.
+- **Z lístečku se bere jen dohodnutá hrstka polí** (`_pozadavekZmeny`)
+  a jen platforma, kterou aplikace zná. Dokument přijde po síti.
+  Konektor má **druhou kopii seznamu** (`PLATFORMY` proti `PLATFORMS`)
+  — rozejít se nesmí, jinak by poslal lísteček s místem, které aplikace
+  zahodí, a vypadalo by to, že se nic nestalo.
+- **Starý lísteček se neprovádí, jen smaže** (`POZADAVEK_STARY_MS`).
+  Kdyby aplikace týden neběžela, je sklad mezitím jinde a fajfka by
+  dosedla na stav, na který se ten požadavek vůbec nevztahoval. Mazat
+  se musí i neprovedený, jinak by se o něj aplikace pokoušela při
+  každém snímku znovu a hláška by chodila pořád.
+- **Vzorek jména v pravidlech je ten skutečný zámek.** `data`, `cache`,
+  `sold_*`, `photo_*` ani CRM se pod `^pozadavek_[A-Za-z0-9_-]{1,60}$`
+  nevejdou. Při jeho rozšíření se čtečce otevře sklad.
+
+`test-pozadavky.js` bere obě půlky — co konektor pustí a kam zapíše,
+a co s lístečkem udělá aplikace v prohlížeči.
 
 ### Úložiště prohlížeče
 
@@ -464,6 +507,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | proužek o staré kopii | `TOHLE NEJSOU ČERSTVÁ DATA` |
 | profily (Podnikání/Osobní) | `PROFILY` |
 | pohled účetního | `POHLED ÚČETNÍHO` |
+| požadavky z konektoru | `POŽADAVKY Z KONEKTORU` |
 | přihlašovací brána | `PŘIHLAŠOVACÍ BRÁNA` |
 | limit identifikované osoby | `RETAILEŘI & LIMIT` |
 | animace | `ANIMACE` (v CSS) |
@@ -499,6 +543,12 @@ logiku má schválně vlastní, protože se vkládá do prohlížeče jako jeden
 bez knihoven; `test-shoda.js` prohání obě cesty stejnými daty a porovnává,
 co z nich vypadne, aby se ty dvě kopie nerozešly.
 Podrobnosti v `konektor/README.md`.
+
+Do skladu ani konektor nezapisuje. Jedinou výjimkou je `sklad_listing`,
+a ani ten sklad nemění — položí lísteček `pozadavek_…` a provede ho
+aplikace (`POŽADAVKY Z KONEKTORU` výš). `test-konektor.js` hlídá, že
+zápis nepřibyl jinde: `fetch` s `PATCH` nebo `POST` smí být jen ve dvou
+vyjmenovaných částech souboru, jinak test spadne.
 
 Konektor navíc jednou denně obhlíží sklad a posílá e-mail, když je co říct —
 vypršení inzerátů na Bazoši, zaseknuté zásilky a payouty, pondělní obhlídku, měsíční souhrn
@@ -977,7 +1027,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 56 souborů
+node test/run.js              # kontrola syntaxe + všech 57 souborů
 node test/run.js archive      # jen vybrané
 ```
 
