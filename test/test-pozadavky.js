@@ -53,6 +53,16 @@ const POLOZKY = [
   { id: 'w1', name: 'Čeká na payout', category: 'sneakers', buyPrice: 5000, saleState: 'waiting' },
 ];
 
+/* Místa prodeje, jak je má majitel v nastavení. Schválně se liší od
+   výchozí sady: `Tuzex` si přidal sám a `Sneakysneakers` smazal.
+   V cloudu je to text (syncSettings, shape 'text'), ne objekt. */
+const MISTA = {
+  platforms: ['StockX', 'Hypeboost'],
+  eshopy: ['Pikastore', 'Purekickz', 'Tuzex'],
+  local: ['Bazoš.cz', 'Vinted', 'Instagram'],
+};
+
+let nastaveniMist = MISTA;      // jde zhasnout, viz sekce 4
 let volani = [];
 let zapsano = [];
 function odp(status, telo) {
@@ -70,7 +80,7 @@ global.fetch = async function (url, opts = {}) {
       const id = n.split('/').pop();
       if (id === 'data') {
         return { found: dok(n, { savedAt: '2026-09-01T09:00:00Z', itemsStock: POLOZKY,
-          archiveYears: [], items: [] }) };
+          archiveYears: [], items: [], platGroups: JSON.stringify(nastaveniMist) }) };
       }
       return { missing: n };
     }));
@@ -131,8 +141,12 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   };
   let n = await nelze({ id: 's1', platforma: 'Neexistuje' });
   ok('neznámé místo prodeje neprojde', n.stav === 'nic_k_provedeni'
-    && /nezná/.test((n.duvod || {}).duvod || ''), JSON.stringify(n));
+    && /v nastavení není/.test((n.duvod || {}).duvod || ''), JSON.stringify(n));
   ok('a nic se nezapíše', n.zapsano === 0, String(n.zapsano));
+  /* Bez výpisu se „to místo nemáš" nedá odlišit od „opsaný seznam ho
+     nezná" — a právě to tuhle chybu posledně schovalo. */
+  shoda('a rovnou se vypíše, co v nastavení je',
+    ((n.duvod || {}).mista_v_nastaveni || []).includes('Tuzex'), true);
 
   n = await nelze({ id: 'neni', platforma: 'Vinted' });
   ok('kus, který ve skladu není, taky ne',
@@ -166,21 +180,45 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
     /firestore\.rules|jePozadavekCtecky/.test(v.text), v.text.slice(0, 260));
   zapisOdpoved = () => odp(200, {});
 
-  sekce('4) Seznam platforem se nesmí rozejít s aplikací');
-  /* Konektor má svou kopii — je to jediný soubor bez knihoven. Kdyby se
-     rozešly, poslal by lísteček s místem, které aplikace zahodí, a
-     vypadalo by to, že se nic nestalo. */
+  sekce('4) Místa prodeje se čtou z nastavení, ne ze seznamu v kódu');
+  /* Tohle je ta chyba, kterou předchozí verze testu propustila: hlídala,
+     že se dvě kopie seznamu v kódu nerozejdou — jenže obě byly špatně.
+     Majitel si v aplikaci přidal `Tuzex`, `Cardmarket` a `Instagram`,
+     opsaný seznam je neznal a lísteček s nimi se zahodil. V chatu to
+     vypadalo, že takové místo prodeje vůbec neexistuje. Porovnávat dvě
+     kopie nestačí — ověřuje se, že žádná není. */
+  v = await nastroj('sklad_listing', { zmeny: [{ id: 's1', platforma: 'Tuzex' }] });
+  ok('místo přidané majitelem projde', v.data && v.data.stav === 'zadano', v.text.slice(0, 200));
+  shoda('a v lístečku je', (v.data.zadano || []).map(z => z.platforma), ['Tuzex']);
+
+  /* Druhý směr: co majitel smazal, platit přestane. Výchozí sada tohle
+     místo má, takže kdyby se ověřovalo proti ní, prošlo by. */
+  n = await nelze({ id: 's1', platforma: 'Sneakysneakers' });
+  ok('a smazané místo už neprojde, i když je ve výchozí sadě',
+    /v nastavení není/.test((n.duvod || {}).duvod || ''), JSON.stringify(n));
+
+  /* Žádný seznam míst prodeje nesmí v kódu zůstat — ani v konektoru,
+     ani v aplikaci. Jediná povolená kopie je výchozí sada pro první
+     spuštění, a ta bydlí v `getDefaultGroups()`. */
   const zdrojW = require('fs').readFileSync(
     path.resolve(__dirname, '..', 'konektor', 'worker.js'), 'utf8');
   const zdrojA = require('fs').readFileSync(
     path.resolve(__dirname, '..', 'index.html'), 'utf8');
-  const vytahni = (kod, jmeno) => {
-    const i = kod.indexOf(jmeno);
-    const od = kod.indexOf('[', i), doo = kod.indexOf('];', od);
-    return (kod.slice(od + 1, doo).match(/'[^']+'/g) || []).map(s => s.slice(1, -1));
-  };
-  shoda('konektor zná tytéž platformy jako aplikace',
-    vytahni(zdrojW, 'const PLATFORMY = '), vytahni(zdrojA, 'const PLATFORMS = '));
+  ok('konektor žádný seznam míst neopisuje', !/const PLATFORMY\s*=\s*\[/.test(zdrojW));
+  ok('a aplikace taky ne', !/const PLATFORMS\s*=\s*\[/.test(zdrojA));
+  /* `Sneakysneakers` je v aplikaci jen ve výchozí sadě. Kdyby se objevilo
+     i jinde, je to další opsaná kopie. */
+  shoda('jediná kopie v aplikaci je getDefaultGroups()',
+    (zdrojA.match(/'Sneakysneakers'/g) || []).length, 1);
+
+  /* Bez nastavení se neodmítá po jednom „tohle místo neznám" — to je
+     přesně ta hláška, která chybu posledně zamaskovala. */
+  nastaveniMist = {};
+  v = await nastroj('sklad_listing', { zmeny: [{ id: 's1', platforma: 'Vinted' }] });
+  ok('a když nastavení v cloudu chybí, řekne se to naplno',
+    v.data && v.data.stav === 'nezname_mista', v.text.slice(0, 200));
+  ok('a nic se nezapíše', zapsano.length === 0, String(zapsano.length));
+  nastaveniMist = MISTA;
 
   /* ══════════════════════════════════════════════════════════════════
      Aplikace
@@ -192,6 +230,9 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   const errs = [];
   page.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
   await page.route('**/firebasejs/**', route => route.abort());
+  /* Táž místa jako u konektoru — `Tuzex` navíc, `Sneakysneakers` pryč. */
+  await ctx.addInitScript((m) => localStorage.setItem('sklad_plat_groups_v1',
+    JSON.stringify(m)), MISTA);
   await ctx.addInitScript((s) => localStorage.setItem('sklad_v3', JSON.stringify(s)), [
     { id: 'a', name: 'Boty', category: 'sneakers', condition: 'DS', buyPrice: 1000,
       saleState: 'stock', location: 'Doma', dateAdded: 1, platforms: [], tags: [] },
@@ -238,6 +279,21 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   r = await proved([{ id: 'pozadavek_x2', data: { kdy: new Date().toISOString(),
     zmeny: [{ id: 'a', platforma: 'Vinted', zaskrtnout: false }] } }]);
   shoda('a odškrtnout jde taky', r.plat.a, []);
+
+  /* Tohle je ten nahlášený případ: `Tuzex` si majitel přidal sám, takže
+     v žádném seznamu v kódu není. Aplikace ho bere z `platGroups`. */
+  r = await proved([{ id: 'pozadavek_tuzex', data: { kdy: new Date().toISOString(),
+    zmeny: [{ id: 'a', platforma: 'Tuzex', zaskrtnout: true }] } }]);
+  shoda('a místo, které si majitel přidal sám, taky', r.plat.a, ['Tuzex']);
+  r = await proved([{ id: 'pozadavek_tuzex2', data: { kdy: new Date().toISOString(),
+    zmeny: [{ id: 'a', platforma: 'Tuzex', zaskrtnout: false }] } }]);
+  shoda('a jde i odškrtnout', r.plat.a, []);
+
+  /* Opačný směr — co majitel smazal, se neprovede, i když to výchozí
+     sada má. Jinak by fajfka naskočila u místa, které v nabídkách není. */
+  r = await proved([{ id: 'pozadavek_smazane', data: { kdy: new Date().toISOString(),
+    zmeny: [{ id: 'a', platforma: 'Sneakysneakers', zaskrtnout: true }] } }]);
+  shoda('smazané místo se neprovede ani v aplikaci', r.plat.a, []);
 
   sekce('6) Brány aplikace platí i pro lísteček');
   /* Jde to přes `togglePlatItem`, takže poškozený kus se na komisi

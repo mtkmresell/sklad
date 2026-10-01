@@ -227,10 +227,28 @@ vteřiny, jinak při jejím dalším spuštění.
   rozešla a požadavek z chatu by uměl víc než klik myší — stejná past
   jako u zašedlých čtverečků.
 - **Z lístečku se bere jen dohodnutá hrstka polí** (`_pozadavekZmeny`)
-  a jen platforma, kterou aplikace zná. Dokument přijde po síti.
-  Konektor má **druhou kopii seznamu** (`PLATFORMY` proti `PLATFORMS`)
-  — rozejít se nesmí, jinak by poslal lísteček s místem, které aplikace
-  zahodí, a vypadalo by to, že se nic nestalo.
+  a jen místo prodeje, které majitel **opravdu má v nastavení**.
+  Dokument přijde po síti.
+- **Místa prodeje se nikde neopisují do kódu.** Aplikace se ptá
+  `jeMistoProdeje()` (tedy `getPlatGroups()`), konektor `mistaProdeje()`
+  (tedy `platGroups` z cloudu). Jediná povolená kopie je výchozí sada
+  pro první spuštění v `getDefaultGroups()`.
+
+  Tohle už jednou padlo. V aplikaci ležel `const PLATFORMS`, který nic
+  neplnilo — nepoužíval se, takže nevadil, dokud se jím nezačalo ověřovat,
+  co smí přijít z konektoru. Majitel má místa prodeje přidaná v nastavení,
+  takže ten seznam neznal `Tuzex`, `Cardmarket` ani `Instagram` a lísteček
+  s nimi se **tiše zahodil**: v chatu to vypadalo, že takové místo prodeje
+  vůbec neexistuje, přestože v aplikaci celou dobu fungovalo. Naopak znal
+  `Sneakysneakers`, které už majitel smazal. Konektor měl kopii téhož.
+  **Porovnávat dvě kopie nestačí** — původní test přesně to dělal a prošel,
+  protože obě byly špatně. `test-pozadavky.js` (sekce 4) proto ověřuje, že
+  v kódu **žádný seznam míst není**, a prohání `Tuzex` i smazané
+  `Sneakysneakers` oběma stranami.
+- **Když nastavení míst v cloudu chybí, konektor to řekne naplno**
+  (`nezname_mista`). Odmítat po jednom „tohle místo neznám" je přesně ta
+  hláška, která tuhle chybu zamaskovala; u odmítnutého místa se proto
+  i vypisuje, co v nastavení je (`mista_v_nastaveni`).
 - **Starý lísteček se neprovádí, jen smaže** (`POZADAVEK_STARY_MS`).
   Kdyby aplikace týden neběžela, je sklad mezitím jinde a fajfka by
   dosedla na stav, na který se ten požadavek vůbec nevztahoval. Mazat
@@ -506,6 +524,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | ukládání do prohlížeče | `UKLÁDÁNÍ DO PROHLÍŽEČE` |
 | proužek o staré kopii | `TOHLE NEJSOU ČERSTVÁ DATA` |
 | profily (Podnikání/Osobní) | `PROFILY` |
+| místa prodeje (seznam, kategorie) | `getPlatGroups`, `jeMistoProdeje` |
 | pohled účetního | `POHLED ÚČETNÍHO` |
 | požadavky z konektoru | `POŽADAVKY Z KONEKTORU` |
 | přihlašovací brána | `PŘIHLAŠOVACÍ BRÁNA` |
@@ -826,8 +845,9 @@ a pletl se mezi ty, co se teprve mají nahodit. Čtyři věci:
   ručně zaškrtnutou platformu pokaždé smazalo. Až bude potřeba
   i odebírat, musí jít nejdřív odlišit fajfka od automatiky od ruční.
 - **Bere se jen `id` a `kde`**, a `kde` musí být jedno ze dvou jmen
-  v `KOMISE_PLATFORMY`, která jsou zároveň v `PLATFORMS`. Odpověď jde
-  po síti; jinak se názvem platformy dá propašovat cokoli.
+  v `KOMISE_PLATFORMY` a zároveň místo, které majitel v nastavení má
+  (`jeMistoProdeje()`). Odpověď jde po síti; jinak se názvem platformy
+  dá propašovat cokoli.
 - **Výpadek Purekickz nesmí shodit přenos prodejů** — jsou to dvě
   nezávislé věci a prodej je ta dražší. Jeho fajfky se pak nepřiloží
   a řekne se proč (`vystaveno_nezjisteno`); prázdný seznam by lhal, že

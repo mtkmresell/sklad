@@ -2052,11 +2052,26 @@ function clearSkladLocalStorage() {
     .forEach(function(k) { try { localStorage.removeItem(k); } catch(e) {} });
 }
 
-const PLATFORMS = [
-  'StockX','Hypeboost','Klekt','Alias',
-  'TheBeast','Stuffsell','Purekickz','Pikastore','Sellect','Released','Tnsky','Adonio','Sneakerstore','Spikaprague','Section','Sneakysneakers','Sneakersnow',
-  'Facebook','Bazoš.cz','Bazoš.sk','Refresher','Vinted','Bazoš.pl'
-];
+/* Místa prodeje NEJSOU zabudovaný seznam. Majitel si je přidává a maže
+   v *Nastavení → místa prodeje* a leží v `platGroups` (`getPlatGroups()`),
+   odkud je bere mřížka i všechny nabídky. Výchozí sada pro první
+   spuštění je v `getDefaultGroups()` — jinde kopie seznamu být nesmí.
+
+   Dřív tu jedna byla (`PLATFORMS`) a nic ji neplnilo. Nepoužívala se,
+   takže nevadila — až do chvíle, kdy se jí začalo ověřovat, co smí
+   přijít z konektoru. Ta kopie o `Tuzex`, `Cardmarket` ani `Instagram`
+   nevěděla a lísteček s nimi se **tiše zahazoval**: v chatu to vypadalo,
+   že takové místo prodeje vůbec neexistuje, přestože v aplikaci celou
+   dobu fungovalo. Naopak znala `Sneakysneakers`, které už majitel smazal.
+   Proto se ptej `jeMistoProdeje()`, ne seznamu. */
+function vsechnaMistaProdeje(groups) {
+  var g = groups || getPlatGroups();
+  return [].concat(g.platforms || [], g.eshopy || [], g.local || []);
+}
+function jeMistoProdeje(nazev, groups) {
+  return typeof nazev === 'string' && nazev !== ''
+    && vsechnaMistaProdeje(groups).indexOf(nazev) !== -1;
+}
 const CAT_L_BUILTIN = {sneakers:'Sneakers',obleceni:'Oblečení',pokemon:'Pokémon',lego:'LEGO',hotwheels:'Hot Wheels',alternate:'Alternate',sberatelske:'Sběratelské',jine:'Jiné'};
 const CAT_HAS_SIZE_BUILTIN = {sneakers:true, obleceni:true};
 
@@ -4941,8 +4956,10 @@ function togglePlatItem(id, platform) {
      brány (poškozený kus, zakázaná kategorie, limit Bazoše, pohled
      účetního) i srovnání celé skupiny. Druhá kopie těch pravidel by se
      s první rozešla a požadavek z chatu by uměl víc než klik myší.
-   - **Z požadavku se bere jen dohodnutá hrstka polí** a jen platforma,
-     kterou aplikace zná (`PLATFORMS`). Dokument přijde po síti.
+   - **Z požadavku se bere jen dohodnutá hrstka polí** a jen místo
+     prodeje, které majitel opravdu má (`jeMistoProdeje()`, tedy
+     `platGroups` z nastavení — ne žádný seznam v kódu). Dokument
+     přijde po síti.
    - **Starý požadavek se neprovádí, jen smaže.** Kdyby aplikace týden
      neběžela, je sklad mezitím jinde a fajfka by dosedla na stav, na
      který se ten požadavek vůbec nevztahoval.
@@ -4956,11 +4973,12 @@ var POZADAVEK_NEJVIC = 200;
 // Co se z dokumentu smí vzít a v jakém tvaru
 function _pozadavekZmeny(v) {
   var ven = [];
+  var g = getPlatGroups();          // jednou pro celý lísteček
   var pole = (v && Array.isArray(v.zmeny)) ? v.zmeny : [];
   for (var i = 0; i < pole.length && ven.length < POZADAVEK_NEJVIC; i++) {
     var z = pole[i] || {};
     if (typeof z.id !== 'string' || !z.id) continue;
-    if (typeof z.platforma !== 'string' || PLATFORMS.indexOf(z.platforma) === -1) continue;
+    if (!jeMistoProdeje(z.platforma, g)) continue;
     ven.push({ id: z.id, platforma: z.platforma, zaskrtnout: z.zaskrtnout !== false });
   }
   return ven;
@@ -10203,7 +10221,7 @@ function _komiseOdskrtniVystavene(odpoved) {
     var z = seznam[i] || {};
     var kde = z.kde;
     if (KOMISE_PLATFORMY.indexOf(kde) === -1) continue;
-    if (PLATFORMS.indexOf(kde) === -1) continue;   // platforma, kterou appka nezná
+    if (!jeMistoProdeje(kde)) continue;   // místo, které majitel v nastavení nemá
     var it = z.id ? items.find(function (x) { return x.id === z.id; }) : null;
     // Kus, se kterým majitel mezitím pohnul, se nechá být
     if (!it || it.type === 'bulk' || (it.saleState && it.saleState !== 'stock')) continue;

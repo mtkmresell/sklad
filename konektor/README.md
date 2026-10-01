@@ -630,9 +630,19 @@ hotovo** — konektor sám sklad nezměnil.
 sklad_listing  zmeny: [{ id: "a3f…", platforma: "Bazoš.cz", zaskrtnout: true }]
 ```
 
-Co nedává smysl, se pozná hned a vrátí se to v `nelze`: neznámá platforma,
-kus, který ve skladu není, kus, který není na skladě, a změna, která už
-tak je. Najednou nejvýš 200 změn.
+Co nedává smysl, se pozná hned a vrátí se to v `nelze`: místo prodeje,
+které v nastavení není, kus, který ve skladu není, kus, který není na
+skladě, a změna, která už tak je. Najednou nejvýš 200 změn.
+
+**Místa prodeje se čtou z nastavení v cloudu** (`platGroups`), ne ze
+seznamu v kódu — takže platí i ta, která si majitel přidal sám
+(*Tuzex*, *Cardmarket*, *Instagram*), a naopak ta smazaná přestanou
+platit. Opsaný seznam tu jednou byl a právě tyhle tři neznal: lísteček
+s nimi se zahodil a v chatu to vypadalo, že takové místo prodeje
+neexistuje. U odmítnutého místa se proto vrací i `mista_v_nastaveni`,
+ať je rozdíl mezi „tohle místo nemáš" a „konektor ho nezná" vidět na
+první pohled. Když nastavení v cloudu chybí celé, řekne se to zvlášť
+(`nezname_mista`) místo odmítání po jednom.
 
 Mění se jedině fajfky u platforem, nic jiného. Pravidla Firestore pouštějí
 účet konektoru k zápisu **jen do dokumentů se jménem `pozadavek_…`** —

@@ -245,16 +245,17 @@ async function nactiCrm(token, uid) {
 const POZADAVEK_PREFIX = 'pozadavek_';
 const POZADAVEK_NEJVIC = 200;
 
-/* Platformy, které aplikace zná. Druhá kopie seznamu — v aplikaci je
-   `PLATFORMS` a rozejít se nesmí, jinak by konektor poslal lísteček
-   s místem, které aplikace zahodí, a vypadalo by to, že se nic
-   nestalo. `test-pozadavky.js` je porovnává. */
-const PLATFORMY = [
-  'StockX', 'Hypeboost', 'Klekt', 'Alias',
-  'TheBeast', 'Stuffsell', 'Purekickz', 'Pikastore', 'Sellect', 'Released', 'Tnsky',
-  'Adonio', 'Sneakerstore', 'Spikaprague', 'Section', 'Sneakysneakers', 'Sneakersnow',
-  'Facebook', 'Bazoš.cz', 'Bazoš.sk', 'Refresher', 'Vinted', 'Bazoš.pl',
-];
+/* Místa prodeje se **čtou z nastavení v cloudu** (`platGroups`), ne
+   z seznamu v kódu. Majitel si je přidává a maže v aplikaci, takže
+   každá kopie tady by se dřív nebo později rozešla — a taky rozešla:
+   opsaný seznam neznal `Tuzex`, `Cardmarket` ani `Instagram`, lísteček
+   s nimi se zahodil a v chatu to vypadalo, že takové místo prodeje
+   neexistuje. Zná je `platformoveSkupiny()`, kterou konektor používá
+   i na lhůty payoutu. */
+function mistaProdeje(data) {
+  const g = platformoveSkupiny(data);
+  return [].concat(g.platforms || [], g.eshopy || [], g.local || []);
+}
 
 async function zapisPozadavek(env, token, zmeny) {
   const jmeno = POZADAVEK_PREFIX + Date.now().toString(36)
@@ -293,6 +294,16 @@ async function skladListing(env, volby) {
   const token = await prihlas(env);
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
   const polozky = slozPolozky(data, archivy);
+  const mista = mistaProdeje(data);
+
+  /* Bez nastavení by se odmítlo všechno s tím, že sklad takové místo
+     nezná — a to je přesně ta hláška, která tuhle chybu posledně
+     zamaskovala. Radši se řekne, že chybí samo nastavení. */
+  if (!mista.length) {
+    return { stav: 'nezname_mista', poznamka: 'V cloudu není nastavení míst prodeje '
+      + '(`platGroups`), takže nejde ověřit, kam se smí zaškrtávat. Otevři aplikaci, '
+      + 'ať se nastavení uloží, a zkus to znovu.' };
+  }
 
   /* Co nedává smysl, se pozná tady a řekne se to rovnou. Aplikace má
      svoje brány taky (poškozený kus, zakázaná kategorie, limit Bazoše),
@@ -303,8 +314,9 @@ async function skladListing(env, volby) {
     const id = z && z.id;
     const platforma = z && z.platforma;
     if (typeof id !== 'string' || !id) { nelze.push({ zmena: z, duvod: 'chybí id položky' }); continue; }
-    if (PLATFORMY.indexOf(platforma) === -1) {
-      nelze.push({ id, duvod: 'takovou platformu sklad nezná: ' + platforma }); continue;
+    if (mista.indexOf(platforma) === -1) {
+      nelze.push({ id, duvod: 'takové místo prodeje v nastavení není: ' + platforma,
+        mista_v_nastaveni: mista }); continue;
     }
     const it = polozky.find(x => x && x.id === id);
     if (!it) { nelze.push({ id, duvod: 'položka s tímhle id ve skladu není' }); continue; }
@@ -586,7 +598,11 @@ const NASTROJE = [
             properties: {
               id: { type: 'string', description: 'Id položky ze sklad_polozky.' },
               platforma: { type: 'string',
-                description: 'Přesný název místa prodeje, např. "Bazoš.cz" nebo "Vinted".' },
+                description: 'Přesný název místa prodeje, jak ho má majitel v nastavení '
+                  + '(*Nastavení → místa prodeje*) — např. "Bazoš.cz", "Vinted" nebo '
+                  + '"Tuzex". Seznam není nikde opsaný, bere se z jeho nastavení, takže '
+                  + 'platí i místa, která si přidal sám. Když si názvem nejsi jistý, '
+                  + 'vezmi ho z `platforms` u položek ze sklad_polozky.' },
               zaskrtnout: { type: 'boolean',
                 description: 'true = kus tam visí (výchozí), false = odškrtnout.' },
             },
