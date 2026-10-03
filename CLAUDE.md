@@ -10,7 +10,7 @@ jen přes GitHub API (workflow „pages build and deployment", id `256573624`), 
 ## Tvar projektu
 
 ```
-index.html     celá aplikace — 15 900 řádků, 86 % JS, 7 % CSS, 8 % HTML
+index.html     celá aplikace — 20 200 řádků, 86 % JS, 7 % CSS, 8 % HTML
 fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repozitáře
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
@@ -609,10 +609,40 @@ Medián je 12 řádků — soubor je velký, ale ne zanesený.
 Domluvené, ale zatím neudělané. **Připomeň je, dokud se nezavřou** — majitel
 o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
 
+### Čeká na ruční krok majitele
+
+Tři věci v tomhle projektu **se nenasazují samy** a kód v repozitáři o nich
+nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru.
+**Ptej se na ně**, místo abys předpokládal, že běží. Stav k 3. 10. 2026:
+
+| co | kde | stav |
+|---|---|---|
+| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **nevím, zeptej se** — čeká nasazení s `sklad_listing` a s opravou míst prodeje (Tuzex) |
+| `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **nevím, zeptej se** — bez nich e-mailová upozornění vůbec nechodí |
+
+Jak se nasazený worker pozná: **seznam nástrojů konektoru si chat stáhne
+při svém startu**, takže `sklad_listing` v už běžícím chatu nepřibude ani
+po nasazení — je potřeba nový chat. A když konektor na lísteček odpoví
+`403` s odkazem na `firestore.rules`, nasadil se worker a nepublikovala
+pravidla; `nezname_mista` naopak znamená, že v cloudu chybí nastavení
+míst prodeje (stačí otevřít aplikaci).
+
+Příkaz na ověření pravidel je v `nastroje/PRAVIDLA.md`, krok 5 —
+přihlásí se účtem čtečky a zkusí zápis, který nemá projít.
+
+### Názvy příspěvků na Instagramu
+
+Mechanika je hotová (`INSTAGRAM — DATABÁZE PŘÍSPĚVKŮ`), ale **seznam je
+prázdný** — majitel má doplnit názvy, které už na Instagramu visí.
+Dokud tam nic není, nová položka si Instagram sama nezaškrtne a celá
+funkce je naslepo. **Připomínej to**, majitel o to stál a opakovaně se
+k tomu nedostal.
+
 **Napojení na komisní prodej Pikastore** (`pikastore.consignthem.com`,
-API `consignthem.com/api/v1`). Čtecí půlka hotová — konektor umí `/me`
-i stránkovaný `/listings` a na `/<TOKEN>/pika` ukáže rozdíl mezi skladem
-a tím, co u nich visí. **Nic nezapisuje.**
+API `consignthem.com/api/v1`). Konektor umí `/me` i stránkovaný
+`/listings` a na `/<TOKEN>/pika` ukáže rozdíl mezi skladem a tím, co
+u nich visí.
 
 Vystavování, stahování i vracení do prodeje běží a je odzkoušené na
 ostrých datech. **Srovnání se pouští při každém spuštění cronu** —
