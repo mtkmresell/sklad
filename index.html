@@ -146,6 +146,9 @@ body.uctetni #moSettings .fs-uctetni { display:block !important; }
 /* Otevřená kalkulačka marže: nákupní ceny v seznamu jsou klikatelné (předvyplní kalkulačku) */
 .calc-open .td-buy, .calc-open .pv-buy { cursor:pointer; }
 .calc-open .td-buy:hover, .calc-open .pv-buy:hover { color:var(--accent) !important; }
+/* U kusu na skladě otevře klik na nákupní cenu kalkulačku i zavřenou */
+.calc-buy { cursor:pointer; }
+.calc-buy:hover { color:var(--accent) !important; }
 /* Na užších obrazovkách by se přepínač profilů překrýval s centrovanými taby — taby přejdou do toku a přepínač vedle nich */
 @media(max-width:1150px){
   .header-tabs{ position:static; transform:none; order:3; pointer-events:auto; }
@@ -1886,6 +1889,9 @@ function cleanupOverlays() {
     document.querySelectorAll('div[style*="position:fixed"][style*="inset:0"][style*="z-index:9999"]').forEach(function(el) { el.remove(); });
     // Zavři modaly — kromě přihlašovací brány, ta se Escapem obejít nedá
     document.querySelectorAll('.mo.open:not(.brana)').forEach(function(m) { m.classList.remove('open'); });
+    // Kalkulačka marže není .mo (plave v rohu), zavírá se zvlášť
+    var calc = document.getElementById('moCalc');
+    if (calc && calc.style.display !== 'none') toggleCalc();
     // Zavři cs-drop
     document.querySelectorAll('.cs-drop.open').forEach(function(d) { d.classList.remove('open'); });
     document.querySelectorAll('.cs-btn.open').forEach(function(b) { b.classList.remove('open'); });
@@ -5192,7 +5198,7 @@ function tableHTML(list) {
       <td style="text-align:center">${tSkuHtml}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center;cursor:pointer;" data-action="sizeunit">${convertSize(it.size, it.name) || `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center">${COND_L[it.condition]||it.condition||'—'}</td>
-      <td class="td-num td-buy" style="text-align:center">${buyStr}</td>
+      <td class="td-num td-buy${(it.saleState||'stock')==='stock'?' calc-buy':''}" style="text-align:center">${buyStr}</td>
       ${tab!=='waiting'?`<td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.buyDate)}</td>`:''}
       ${tab==='waiting'?`<td class="td-num td-sell" style="text-align:center">${it.sellPrice?(it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)):'—'}</td>`:''}
       ${(()=>{ if(tab!=='waiting') return ''; var sp=it.sellPrice||0,bp=it.buyPrice||0,ec=it.extraCosts||0,er=it.profitRateEur||eurRate||25; var bpCzk=it.buyCurrency==='EUR'?bp*er:bp; var spEurVal=it.sellCurrency==='EUR'?(it.sellPriceOrig||sp):null; var spCzk=spEurVal?spEurVal*er:sp; var profit=spCzk-bpCzk-ec; var roi=bpCzk>0?parseFloat(((profit/bpCzk)*100).toFixed(1)):null; var pc2=profit>0?'color:var(--accent)':profit<0?'color:var(--danger)':'color:var(--muted)'; return `<td class="td-num" style="${pc2};text-align:center;font-size:12px;">${sp?(profit>=0?'+':'')+Math.round(profit).toLocaleString('cs'):'—'}</td><td style="text-align:center;font-family:monospace;font-size:11px;${roi>0?'color:var(--accent)':roi<0?'color:var(--danger)':'color:var(--muted)'}">${roi!=null&&sp?((roi>=0?'+':'')+roi+'%'):'—'}</td><td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.buyDate)}</td><td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.saleDate)||'—'}</td>`; })()}
@@ -5402,7 +5408,7 @@ function cardHTML(it){
   const st=stMap[it.saleState||'stock'];
   const platHtml=(!customerMode&&it.platforms&&it.platforms.length)?`<div class="plats-row">${it.platforms.map(p=>`<span class="pc pc-on">${p}</span>`).join('')}</div>`:'';
   const priceHtml= customerMode ? '' : `<div class="card-prices">
-    <div class="pb"><div class="pl">Nákup</div><div class="pv pv-buy">${it.buyCurrency==='EUR'?(it.buyPrice||0)+' €':czk(it.buyPrice||0)}</div></div>
+    <div class="pb"><div class="pl">Nákup</div><div class="pv pv-buy${(it.saleState||'stock')==='stock'?' calc-buy':''}">${it.buyCurrency==='EUR'?(it.buyPrice||0)+' €':czk(it.buyPrice||0)}</div></div>
     ${(tab!=='stock'&&it.sellPrice)?`<div class="pb"><div class="pl">Prodej</div><div class="pv pv-sell">${it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)}</div></div>`:''}
     ${it.retailKc||it.retailEur?`<div class="pb"><div class="pl">Retail</div><div class="pv pv-retail">${it.retailKc?czk(it.retailKc):''}${it.retailKc&&it.retailEur?' / ':''}${it.retailEur?it.retailEur+'€':''}</div></div>`:''}
     ${(tab!=='stock'&&it.sellPrice)?`<span class="profit-b ${pc}">${ps}</span>`:''}
@@ -8683,6 +8689,12 @@ function openDetail(id) {
       + ';font-weight:700;">' + czkSign(profit) + '</span>'
     : '—';
   const sellPriceStr = it.sellPrice ? (it.sellCurrency==='EUR' ? getSellOrig(it)+' €' : czk(it.sellPrice)) : '—';
+  /* Prodejní cena se opisuje do faktur, takže se kopíruje holé číslo —
+     bez měny, bez mezer mezi tisíci, desetinná čárka. Měna je ta, ve
+     které prodej proběhl (u eurového prodeje eura, ne přepočet). */
+  const sellPriceKopie = it.sellPrice
+    ? String(it.sellCurrency==='EUR' ? getSellOrig(it) : it.sellPrice).replace('.', ',')
+    : false;
   const rows = [
     /* Profil je první schválně: jestli je kus podnikatelský, nebo osobní,
        rozhoduje o dokladu i o tom, kam se počítá — a hledá se to očima
@@ -8719,7 +8731,7 @@ function openDetail(id) {
        kus má jen to, co k němu dávno je: datum vyplacení ještě nezná a vývoj
        ceny se ukazuje jedině v Prodáno (viz `secStock`). */
     ...(isPaid || isWaiting ? [
-      ['Prodejní cena', sellPriceStr],
+      ['Prodejní cena', sellPriceStr, sellPriceKopie],
       ['Zisk', profitStr],
       /* Hned pod ziskem: obojí je o penězích a čte se to spolu. */
       ...(isPaid && priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
@@ -8785,9 +8797,12 @@ function openDetail(id) {
     out += '<div style="font-size:9px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--accent);padding:10px 12px 5px;border-bottom:1px solid var(--border);">'+nadpis+'</div>';
     out += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
     sRows.forEach(function(r) {
+      /* Třetí prvek řádku: `true` zkopíruje zobrazenou hodnotu, text
+         zkopíruje ten text (Prodejní cena dává číslo bez měny). */
       var k=r[0], v=r[1], copyable=r[2];
+      var kopirovat = typeof copyable === 'string' ? copyable : v;
       out += '<tr><td style="padding:7px 12px;color:var(--muted);font-family:monospace;font-size:11px;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:top;width:40%;">'+k+'</td>';
-      out += '<td style="padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:top;word-break:break-word;white-space:pre-wrap;overflow-wrap:anywhere;">'+(copyable?'<span class="copy-val" data-action="copytext" data-text="'+encodeURIComponent(v)+'">'+v+'</span>':v)+'</td></tr>';
+      out += '<td style="padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:top;word-break:break-word;white-space:pre-wrap;overflow-wrap:anywhere;">'+(copyable?'<span class="copy-val" data-action="copytext" data-text="'+encodeURIComponent(kopirovat)+'">'+v+'</span>':v)+'</td></tr>';
     });
     out += '</table></div>';
     return out;
@@ -10607,13 +10622,21 @@ document.addEventListener('mouseout', function(e) {
 document.addEventListener('click', function(e) {
   try {
   if (e.target.tagName === 'A' && e.target.href) { return; }
-  // Kalkulačka marže otevřená: klik na nákupní cenu položky ji předvyplní (včetně měny)
+  /* Klik na nákupní cenu předvyplní kalkulačku marže (včetně měny).
+     U kusu na skladě ji rovnou i otevře — tam se počítá, za kolik prodat;
+     u čekajícího a prodaného je cena hotová a klik dál otvírá detail,
+     dokud kalkulačka zavřená není. */
   var _calcEl = document.getElementById('moCalc');
-  if (_calcEl && _calcEl.style.display !== 'none') {
-    var _buyCell = e.target.closest('.td-buy, .pv-buy');
-    if (_buyCell) {
-      var _cIdEl = _buyCell.closest('[data-id]');
-      var _cIt = _cIdEl ? items.find(function(x){ return x.id === _cIdEl.dataset.id; }) : null;
+  var _buyCell = _calcEl && e.target.closest('.td-buy, .pv-buy');
+  if (_buyCell) {
+    var _calcOtevrena = _calcEl.style.display !== 'none';
+    var _cIdEl = _buyCell.closest('[data-id]');
+    var _cIt = _cIdEl ? items.find(function(x){ return x.id === _cIdEl.dataset.id; }) : null;
+    if (_cIt && !_calcOtevrena && (_cIt.saleState || 'stock') === 'stock' && _cIt.buyPrice) {
+      toggleCalc(true);
+      _calcOtevrena = true;
+    }
+    if (_calcOtevrena) {
       if (_cIt && _cIt.buyPrice) {
         var _cCur = _cIt.buyCurrency === 'EUR' ? 'EUR' : 'CZK';
         var _cbi = document.getElementById('calcBuy');
@@ -15509,7 +15532,7 @@ function checkStartupNotifications() {
 }
 
 // ── KALKULAČKA MARŽE ─────────────────────────────────────
-function toggleCalc() {
+function toggleCalc(bezFokusu) {
   var el = document.getElementById('moCalc');
   if (!el) return;
   var isOpen = el.style.display !== 'none';
@@ -15529,7 +15552,8 @@ function toggleCalc() {
         if (wrap) wrap.classList.add('cs-currency');
       }
     });
-    setTimeout(function(){ var i=document.getElementById('calcBuy'); if(i)i.focus(); }, 50);
+    // Otevřeno klikem na nákupní cenu: ta je vyplněná, fokus jde na prodejní
+    if (!bezFokusu) setTimeout(function(){ var i=document.getElementById('calcBuy'); if(i)i.focus(); }, 50);
   }
 }
 

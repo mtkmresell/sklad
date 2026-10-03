@@ -487,6 +487,18 @@ i stav zboží (DS) a ten teď stojí v téže sekci. Dva stejně pojmenované
 takže by se navíc oba objevily dvakrát. **Nepoužívej jeden název pro dva
 různé řádky.**
 
+**Prodejní cena se kopíruje jako holé číslo** — bez měny a mezer,
+s desetinnou čárkou, v měně prodeje (`sellPriceKopie`). Opisuje se do
+faktur. Třetí prvek řádku v `rows` je proto buď `true` (kopíruje se, co
+je vidět), nebo text, který se má zkopírovat místo toho.
+
+**Klik na nákupní cenu kusu na skladě otevře kalkulačku marže**
+(`KALKULAČKA MARŽE`) s vyplněným nákupem a fokusem na prodejní ceně —
+v tabulce i na kartě, místo detailu. U čekajícího a prodaného kusu klik
+dál otvírá detail; nákup odtud převezme jen už otevřená kalkulačka.
+Kalkulačka není `.mo`, takže ji globální Escape zavírá zvlášť.
+Hlídá to `test-kalkulacka.js`.
+
 **Dny se skloňují** (`dnyText`): 1 den, 2–4 dny, 5+ dní. „4 dní" je znát
 na první pohled.
 
@@ -1089,7 +1101,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 57 souborů
+node test/run.js              # kontrola syntaxe + všech 58 souborů
 node test/run.js archive      # jen vybrané
 ```
 
