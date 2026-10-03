@@ -1088,6 +1088,32 @@ výpadky sítě i souběh dvou zařízení. Podrobnosti v `test/README.md`.
 Když měníš cokoli kolem ukládání, pusť aspoň `test-archive`, `test-listener`,
 `test-syncsettings` a `test-photos`.
 
+## Pasti vývojového prostředí
+
+Tyhle nejsou o aplikaci, ale o tom, v čem se na ní pracuje. Každá z nich
+už jednou vypadala jako rozbitá práce, a přitom šlo o prostředí.
+
+- **Kontejner se umí vyměnit během práce.** Nová kopie repozitáře může
+  přijít na **jiné větvi** a o několik commitů **pozadu** — jednou to bylo
+  o jedenáct. Vypadá to, jako by zmizela půlka hotové práce; přitom je
+  celou dobu na GitHubu. Nic nepřepisuj a nejdřív se podívej:
+  ```bash
+  git log --oneline -3 && git status -sb
+  git fetch origin main && git log --oneline HEAD..origin/main
+  git merge --ff-only origin/main        # když je HEAD předek
+  ```
+  Taky se tím vysvětlí, proč soubor najednou „neobsahuje" něco, co jsi
+  tam psal. **Ověř si stav v souboru, ne v paměti** — tím vznikla chyba
+  s `PLATFORMS` (viz `POŽADAVKY Z KONEKTORU`).
+- **Celá sada testů trvá kolem šesti minut** a přeteče limit jednoho
+  příkazu. Pouštěj ji na pozadí.
+- **Jednotlivý test potřebuje `NODE_PATH`.** `node test/run.js` si ho
+  nastaví sám, přímé spuštění souboru ne a spadne na
+  `Cannot find module 'playwright'`. Správně:
+  `NODE_PATH=/opt/node22/lib/node_modules node test/test-archive.js`.
+- **`mtkmresell.github.io` odsud není dostupná** — nasazení se ověřuje
+  jen přes GitHub API, ne curlem (viz začátek souboru).
+
 ## Časté pasti
 
 - **`saveItem()` je asynchronní** (čeká na kurz ČNB). V testech na změnu čekej, ne `sleep`.

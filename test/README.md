@@ -15,11 +15,20 @@ node test/run.js cache listener
 Runner nejdřív ověří syntaxi všech `<script>` bloků v `index.html`, a teprve když projde,
 pustí testy. Každý soubor jde zvlášť a na konci je souhrn.
 
+Celá sada trvá **kolem šesti minut**. To bývá nad limitem jednoho příkazu,
+takže ji pouštěj na pozadí a výstup si přečti až po dokončení — jinak ti
+spadne do pozadí sama a chvíli nebudeš vědět, kde výpis je.
+
 Jednotlivý soubor jde spustit i přímo — vypíše každou kontrolu zvlášť:
 
 ```bash
-node test/test-archive.js
+NODE_PATH=/opt/node22/lib/node_modules node test/test-archive.js
 ```
+
+**To `NODE_PATH` tam musí být.** `run.js` si ho nastaví sám, přímé spuštění
+ne — a spadne to na `Cannot find module 'playwright'`, což vypadá jako
+rozbitý test, ne jako nenalezený balíček. Cesta platí pro vývojové
+prostředí Claude Code; jinde si `run.js` poradí sám (viz níž).
 
 ## Co je potřeba
 
