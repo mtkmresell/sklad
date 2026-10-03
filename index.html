@@ -565,6 +565,10 @@ select:hover{border-color:var(--accent);}
 .cs-drop::-webkit-scrollbar { width:3px; }
 .cs-drop::-webkit-scrollbar-thumb { background:rgba(200,255,0,0.25); border-radius:2px; }
 .cs-drop.open { display:flex; }
+/* Rolování v nabídce se nepřelévá do stránky — na mobilu jinak na konci
+   seznamu začala jet celá stránka a nabídka ujela pod prstem */
+.cs-drop { overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+.cs-drop.cs-nahoru { top:auto; bottom:calc(100% + 4px); }
 
 /* ── Psaní v nabídce (viz PSANÍ V DROPDOWNU) ─────────────────────────── */
 .cs-opt.cs-skryto { display:none; }
@@ -15633,6 +15637,41 @@ function initCustomSelect(selectEl) {
   const drop = document.createElement('div');
   drop.className = 'cs-drop';
   wrap.appendChild(drop);
+  /* NA MOBILU: ŤUKNUTÍ, NE TAH
+     Konec každého dotyku (`touchend`) se dřív bral jako výběr. Kdo v dlouhé
+     nabídce (místa prodeje) roloval, musel v půli zvednout prst a přehmátnout
+     — a ten zvednutý prst vybral položku, na které zrovna ležel, a nabídka
+     se zavřela. Výběr je proto jen ťuknutí: prst se skoro nepohnul a nabídka
+     se mezitím neodrolovala. Jinak je to tah a nic se nevybírá. */
+  var _dotyk = null;
+  function _dotykZacal(e) {
+    var t = e.touches && e.touches[0];
+    _dotyk = t ? { x: t.clientX, y: t.clientY, scroll: drop.scrollTop, okno: window.scrollY } : null;
+  }
+  function _jeTuknuti(e) {
+    var z = _dotyk; _dotyk = null;
+    var t = e.changedTouches && e.changedTouches[0];
+    if (!z || !t) return false;
+    return Math.abs(t.clientX - z.x) < 10 && Math.abs(t.clientY - z.y) < 10
+      && drop.scrollTop === z.scroll && window.scrollY === z.okno;
+  }
+  drop.addEventListener('touchstart', _dotykZacal, { passive: true });
+  btn.addEventListener('touchstart', _dotykZacal, { passive: true });
+  /* Nabídka se musí vejít na obrazovku. Pevných 220 px pod tlačítkem
+     u filtru dole na mobilu přetékalo pod okraj a konec seznamu nešel
+     odrolovat. Když dole není místo, otevře se nahoru. */
+  function _umisti() {
+    drop.classList.remove('cs-nahoru');
+    drop.style.maxHeight = '';
+    var r = btn.getBoundingClientRect();
+    var vyska = window.innerHeight;
+    var strop = window.matchMedia('(max-width:600px)').matches ? Math.round(vyska * 0.6) : 220;
+    var chci = Math.min(drop.scrollHeight, strop);
+    var dole = vyska - r.bottom - 12, nahore = r.top - 12;
+    var nahoru = dole < chci && nahore > dole;
+    if (nahoru) drop.classList.add('cs-nahoru');
+    drop.style.maxHeight = Math.max(120, Math.min(strop, nahoru ? nahore : dole)) + 'px';
+  }
   function buildOpts() {
     drop.innerHTML = '';
     Array.from(selectEl.options).forEach((opt, i) => {
@@ -15651,7 +15690,10 @@ function initCustomSelect(selectEl) {
         selectEl.dispatchEvent(new Event('change', {bubbles:true}));
       }
       el.addEventListener('click', _csOptPick);
-      el.addEventListener('touchend', function(e){ e.preventDefault(); _csOptPick(e); });
+      el.addEventListener('touchend', function(e){
+        if (!_jeTuknuti(e)) return;   // tah prstem, ne výběr
+        e.preventDefault(); _csOptPick(e);
+      });
       drop.appendChild(el);
     });
   }
@@ -15663,10 +15705,13 @@ function initCustomSelect(selectEl) {
     document.querySelectorAll('.cs-btn.open, .cdp-input.open').forEach(b => b.classList.remove('open'));
     document.querySelectorAll('.multi-filter-drop').forEach(d => { d.style.display = 'none'; });
     document.querySelectorAll('.multi-filter-btn').forEach(b => b.classList.remove('mf-open'));
-    if (!isOpen) { drop.classList.add('open'); btn.classList.add('open'); drop.scrollTop = 0; }
+    if (!isOpen) { drop.classList.add('open'); btn.classList.add('open'); drop.scrollTop = 0; _umisti(); }
   }
   btn.addEventListener('click', _csToggle);
-  btn.addEventListener('touchend', function(e){ e.preventDefault(); _csToggle(e); });
+  btn.addEventListener('touchend', function(e){
+    if (!_jeTuknuti(e)) return;   // rolování stránky přes tlačítko nabídku neotvírá
+    e.preventDefault(); _csToggle(e);
+  });
   // Sync při externím update
   selectEl._csSync = function() {
     label.textContent = selectEl.options[selectEl.selectedIndex]?.text || '';

@@ -40,6 +40,13 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   seznamu při startu, u vzniklého za běhu se `initCustomSelect()` volá ručně. Není to
   vidět, dokud se na nabídku neklikne; hlídá to `test-selecty.js`. Nabídky se pak taky
   samy umí prohledávat psaním (`PSANÍ V DROPDOWNU`) — bez vlastního vzhledu ne.
+- **Na mobilu vybírá jen ťuknutí, ne tah** (`NA MOBILU: ŤUKNUTÍ, NE TAH`
+  v `initCustomSelect()`). Dřív se jako výběr bral konec každého dotyku:
+  kdo v dlouhé nabídce míst prodeje roloval a přehmátl prstem, vybral
+  místo, na kterém prst zrovna ležel, a nabídka se zavřela. Výběr je jen
+  dotyk, při kterém se prst ani nabídka nepohnuly. Nabídka se navíc musí
+  vejít na obrazovku — pod filtrem u spodního okraje se otevře nahoru —
+  a rolování v ní se nepřelévá do stránky. Hlídá to `test-dotyk.js`.
 - Před commitem vždy `node test/run.js`.
 - **Hotovou a otestovanou změnu commituj a pushuj do `main` sám, bez ptaní.**
   Majitel si to tak výslovně řekl (3. 10. 2026): aplikaci jen obnoví a vyzkouší.
@@ -1101,7 +1108,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 58 souborů
+node test/run.js              # kontrola syntaxe + všech 59 souborů
 node test/run.js archive      # jen vybrané
 ```
 
