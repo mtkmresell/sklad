@@ -96,9 +96,15 @@ Když se změna kterékoli z nich týká, **řekni to majiteli výslovně**
 a uprav tabulku *Čeká na ruční krok majitele* v `CLAUDE.md`. Netvrď,
 že něco běží, dokud to nepotvrdí.
 
-## 7. Commit a push — jen na vyžádání
+## 7. Commit a push do `main` — sám, jakmile je to zelené
 
-- Commituj a pushuj **až když o to majitel řekne**. Pushuje se do `main`.
+- Majitel chce změny hned v provozu: aplikaci jen obnoví a vyzkouší.
+  **Když celá sada prošla a změna je hotová, commitni a pushni do `main`
+  bez ptaní** (na pracovní větvi klidně taky, ale provoz jede z `main`).
+- S červeným testem, rozpracovanou věcí nebo bez puštěných testů se
+  nepushuje — pak to řekni a nech být.
+- Před pushem `git fetch origin main`; když `main` mezitím utekl,
+  nejdřív ho slouč a testy pusť znovu.
 - Zpráva commitu česky, krátký nadpis o tom, co se změnilo pro člověka
   („Zakázaná kategorie zašedne, místo aby čtvereček zmizel"), v těle proč.
 - Nasazení na GitHub Pages ověř přes GitHub API (workflow „pages build

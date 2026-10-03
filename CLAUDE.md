@@ -41,7 +41,11 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   vidět, dokud se na nabídku neklikne; hlídá to `test-selecty.js`. Nabídky se pak taky
   samy umí prohledávat psaním (`PSANÍ V DROPDOWNU`) — bez vlastního vzhledu ne.
 - Před commitem vždy `node test/run.js`.
-- Commituj a pushuj až na vyžádání; pushuje se do `main`.
+- **Hotovou a otestovanou změnu commituj a pushuj do `main` sám, bez ptaní.**
+  Majitel si to tak výslovně řekl (3. 10. 2026): aplikaci jen obnoví a vyzkouší.
+  Podmínka je zelená celá sada `node test/run.js` — s chybou nebo bez testů se
+  nepushuje. Ruční kroky (pravidla Firestore, worker v Cloudflare) se tím
+  nenasazují a dál se musí říct.
 
 ## Data
 
