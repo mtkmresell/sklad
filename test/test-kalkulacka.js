@@ -65,6 +65,11 @@ const SEED = [
   check('nákupní cena je předvyplněná', s.buy === '3200' && s.cur === 'CZK', JSON.stringify(s));
   check('fokus je na prodejní ceně — stačí ji dopsat', s.fokus === 'calcSell', JSON.stringify(s));
   check('a detail položky se neotevřel', !s.detail, JSON.stringify(s));
+  /* Hláška „Nákup … vložen do kalkulačky" byla zbytečná — vyplněné číslo
+     je vidět přímo v kalkulačce. Majitel ji výslovně nechtěl. */
+  const hlasky = await page.evaluate(() => [...document.querySelectorAll('#_toastContainer .toast')]
+    .map(t => t.textContent.trim()).filter(t => /kalkulačk/i.test(t)));
+  check('a nevyskočí žádná hláška o kalkulačce', hlasky.length === 0, JSON.stringify(hlasky));
 
   // Druhý klik na jiný kus kalkulačku nezavře, jen přepíše nákup
   await klikniNakup('stock', 'sk2');

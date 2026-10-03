@@ -10647,7 +10647,7 @@ document.addEventListener('click', function(e) {
         // Rovnou fokus na prodejní cenu — stačí doplnit a je výsledek
         var _csi = document.getElementById('calcSell');
         if (_csi) { _csi.focus(); _csi.select(); }
-        showToast('Nákup ' + _cIt.buyPrice + ' ' + (_cCur === 'EUR' ? '€' : 'Kč') + ' vložen do kalkulačky.');
+        // Bez hlášky — vyplněné číslo je vidět přímo v kalkulačce
         return;
       }
     }
