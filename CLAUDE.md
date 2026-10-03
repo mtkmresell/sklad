@@ -468,6 +468,14 @@ Nadpis prostřední sekce se **liší podle stavu**: `Sklad` u kusu na skladě
 (stav, umístění, dny), `Zásilka` u čekajícího (sledovací číslo, doručení).
 Dřív bylo všude „Sklad" a u čekajícího kusu pak stálo `Sklad → Sklad: Doma`.
 
+**Čekající kus má sekci `Prodej` pod Nákupem a nad Zásilkou** — všechno,
+co se vyplnilo v okně Přesunout (cena, zisk, datum, kde prodáno, číslo
+prodeje, zákazník, poptávka). Dřív tam nebylo nic a číslo prodeje se
+hledalo v úpravě položky. Řádky jsou **tytéž jako v Prodáno** (`secSell`),
+jen bez data vyplacení a vývoje ceny. Sledování zásilky je v obou
+seznamech, takže se u čekajícího z Prodeje vyřazuje — jinak by se
+ukázalo dvakrát.
+
 **Místo uložení se jmenuje `Umístění`**, ať je hodnota jakákoli. Dřív to
 byl `Sklad` u kusu doma a `Stav` u kusu na cestě — jenže `Stav` nese
 i stav zboží (DS) a ten teď stojí v téže sekci. Dva stejně pojmenované

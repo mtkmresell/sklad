@@ -155,6 +155,47 @@ const SEED = [{ id: 'i1', name: 'Nike Dunk Low Panda', category: 'sneakers', sku
   check('a sekce se tam jmenuje Zásilka, ne Sklad',
     /Zásilka/.test(vCeka) && !/PoložkaSklad|NákupSklad/.test(vCeka), vCeka.slice(0, 220));
 
+  /* Co se vyplnilo v okně Přesunout, musí být vidět i v detailu čekajícího
+     kusu — dřív tam nebylo nic, číslo prodeje se dalo najít jedině v úpravě.
+     Sekce Prodej stojí pod Nákupem a nad Zásilkou. */
+  const ceka = await page.evaluate(async () => {
+    const it = items.find(i => i.id === 'i1');
+    Object.assign(it, { saleRef: 'OBJ-4471', soldWhere: 'Vinted', demandSource: 'instagram',
+      trackingCarrier: 'PPL', trackingNum: '40001234', waitState: 'sent' });
+    openDetail('i1');
+    await new Promise(r => setTimeout(r, 400));
+    const mo = document.getElementById('moDetail');
+    const out = [...mo.querySelectorAll('table')].map(t => ({
+      nadpis: t.previousElementSibling ? t.previousElementSibling.textContent.trim() : '',
+      radky: [...t.querySelectorAll('tr')].map(tr => ({
+        k: tr.cells[0].textContent.trim(), v: tr.cells[1].textContent.trim() })),
+    }));
+    cm('moDetail');
+    return out;
+  });
+  const nadpisy = ceka.map(x => x.nadpis);
+  const prodej = ceka.find(x => x.nadpis === 'Prodej');
+  const kl = prodej ? prodej.radky.map(r => r.k) : [];
+  const hodnota = (k) => ((prodej && prodej.radky.find(r => r.k === k)) || {}).v;
+  check('čekající kus má sekci Prodej', !!prodej, JSON.stringify(nadpisy));
+  check('a ta stojí pod Nákupem a nad Zásilkou',
+    nadpisy.indexOf('Nákup') < nadpisy.indexOf('Prodej')
+      && nadpisy.indexOf('Prodej') < nadpisy.indexOf('Zásilka'), JSON.stringify(nadpisy));
+  check('je v ní číslo prodeje', hodnota('Číslo obj. prodeje') === 'OBJ-4471', JSON.stringify(prodej));
+  check('kde prodáno a datum prodeje',
+    hodnota('Kde prodáno') === 'Vinted' && !!hodnota('Datum prodeje'), JSON.stringify(prodej));
+  check('prodejní cena, zisk i zdroj poptávky',
+    !!hodnota('Prodejní cena') && !!hodnota('Zisk') && hodnota('Poptávka') === 'Instagram',
+    JSON.stringify(prodej));
+  check('datum vyplacení tam není — payout ještě nedorazil',
+    kl.indexOf('Datum vyplacení') === -1, JSON.stringify(kl));
+  // `renderSection` vybírá podle jména — sledování nesmí vyskočit v obou sekcích
+  const sled = ceka.reduce((n, s) => n + s.radky.filter(r => r.k === 'Sledování zásilky').length, 0);
+  check('sledování zásilky je jen jednou, v Zásilce',
+    sled === 1 && kl.indexOf('Sledování zásilky') === -1, JSON.stringify(ceka.map(s => [s.nadpis, s.radky.map(r => r.k)])));
+  check('a žádná sekce Prodej navíc (cílovka, Bazoš)',
+    nadpisy.filter(n => n === 'Prodej').length === 1, JSON.stringify(nadpisy));
+
   // Teprve v Prodáno má smysl — tam se majitel dívá zpětně
   const vProdano = await page.evaluate(async () => {
     changeWaitState('i1', 'completed');

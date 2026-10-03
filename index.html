@@ -8714,18 +8714,26 @@ function openDetail(id) {
       ...(dorucenoStr ? [['Doručeno', dorucenoStr, false]] : []),
       ...bazosRows,
     ] : []),
-    ...(isPaid ? [
+    /* Co se vyplňuje v okně Přesunout, je vidět u Čeká i u Prodáno — jedna
+       sada řádků pro oba stavy, ať se popisky a pořadí nerozejdou. Čekající
+       kus má jen to, co k němu dávno je: datum vyplacení ještě nezná a vývoj
+       ceny se ukazuje jedině v Prodáno (viz `secStock`). */
+    ...(isPaid || isWaiting ? [
       ['Prodejní cena', sellPriceStr],
       ['Zisk', profitStr],
       /* Hned pod ziskem: obojí je o penězích a čte se to spolu. */
-      ...(priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
+      ...(isPaid && priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
       ['Datum prodeje', fmtDate(it.saleDate)||'—'],
-      ['Datum vyplacení', fmtDate(it.payoutDate||it.saleDate)||'—'],
+      ...(isPaid ? [['Datum vyplacení', fmtDate(it.payoutDate||it.saleDate)||'—']] : []),
       ['Kde prodáno', it.soldWhere||'—'],
       ['Číslo obj. prodeje', it.saleRef||'—', !!(it.saleRef)],
       ...(it.linkedCustomerId && _crmNameById(it.linkedCustomerId) ? [['Zákazník', '<span style="color:var(--accent);cursor:pointer;" onclick="openCustomerFromItem(\''+it.linkedCustomerId+'\')">'+escHtml(_crmNameById(it.linkedCustomerId))+' ›</span>', false]] : []),
+      ...(demandLabel(it.demandSource) ? [['Poptávka', demandLabel(it.demandSource)]] : []),
       ['Způsob platby', it.paymentMethod||'—'],
       ...(it.extraCosts ? [['Další náklady', (it.extraCurrency==='EUR'?it.extraCosts+' €':czk(it.extraCosts))]] : []),
+    ] : []),
+    /* U čekajícího je sledování v sekci Zásilka (`trackingHtml` výš). */
+    ...(isPaid ? [
       ...(it.trackingNum ? (function(){
         var _tl = (it.trackingCarrier?it.trackingCarrier+' · ':'')+it.trackingNum;
         var _isDpd = it.trackingCarrier==='DPD' && it.trackingNum;
@@ -8756,7 +8764,7 @@ function openDetail(id) {
      nesouvisí a pod jeho nadpisem působily jako přílepek; Bazoš patří
      sem ze stejného důvodu — je to o inzerátu, ne o uskladnění. */
   var secPlan = ['Cílová cena','Strategie'];
-  var secSell = ['Prodejní cena','Zisk','Vývoj ceny','Datum prodeje','Datum vyplacení','Kde prodáno','Číslo obj. prodeje','Zákazník','Způsob platby','Další náklady','Sledování zásilky'];
+  var secSell = ['Prodejní cena','Zisk','Vývoj ceny','Datum prodeje','Datum vyplacení','Kde prodáno','Číslo obj. prodeje','Zákazník','Poptávka','Způsob platby','Další náklady','Sledování zásilky'];
   var secNote = ['Poznámka'];
   var secInvoice = ['Faktura','Faktura vydaná'];
   // Bazos rows jsou dynamické — vyprší u inzerátu, tedy do Prodeje
@@ -8791,9 +8799,15 @@ function openDetail(id) {
        číslo a jestli balík dorazil. „Sklad" sedí na kus, který doma
        leží a čeká na prodej (místo, dny, cílovka, strategie); na kus,
        co je na cestě ke kupujícímu, ne. */
+    /* Prodej stojí nad Zásilkou: nejdřív co se prodalo a komu, pak kde
+       je balík. U kusu na skladě je pod tímtéž nadpisem plán prodeje
+       (cílovka, strategie) — oba stavy se nikdy nepotkají. */
     + (isPaid ? renderSection('Prodej', secSell)
-      : renderSection(isWaiting ? 'Zásilka' : 'Sklad', secStock)
-        + renderSection('Prodej', secPlan))
+      /* Sledování zásilky je jméno v obou seznamech a `renderSection` vybírá
+         podle jména — bez vyřazení by se u čekajícího ukázalo dvakrát. */
+      : isWaiting ? renderSection('Prodej', secSell.filter(function(k){ return secStock.indexOf(k) === -1; }))
+          + renderSection('Zásilka', secStock)
+      : renderSection('Sklad', secStock) + renderSection('Prodej', secPlan))
     + renderSection('Faktura', secInvoice)
     + renderSection('Poznámka', secNote);
 
