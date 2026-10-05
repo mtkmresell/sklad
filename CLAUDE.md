@@ -644,13 +644,18 @@ o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
 
 Tři věci v tomhle projektu **se nenasazují samy** a kód v repozitáři o nich
 nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru.
-**Ptej se na ně**, místo abys předpokládal, že běží. Stav k 3. 10. 2026:
+**Ptej se na ně**, místo abys předpokládal, že běží. Stav k 5. 10. 2026:
 
 | co | kde | stav |
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **nevím, zeptej se** — čeká nasazení s `sklad_listing` a s opravou míst prodeje (Tuzex) |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **nenasazeno** (zjištěno 5. 10.) — `sklad_listing` v Cloudflare je, ale **bez opravy míst prodeje**: odmítá Tuzex hláškou „takovou platformu sklad nezná", která je jen ve staré verzi (`f59f81d`). Nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **nevím, zeptej se** — bez nich e-mailová upozornění vůbec nechodí |
+
+**Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
+workeru nemá cenu hledat v aplikaci ani v nastavení míst prodeje —
+v repozitáři už není; `git log -S '<text hlášky>'` řekne, ve kterém
+commitu žila.
 
 Jak se nasazený worker pozná: **seznam nástrojů konektoru si chat stáhne
 při svém startu**, takže `sklad_listing` v už běžícím chatu nepřibude ani
