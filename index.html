@@ -569,6 +569,10 @@ select:hover{border-color:var(--accent);}
    seznamu začala jet celá stránka a nabídka ujela pod prstem */
 .cs-drop { overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
 .cs-drop.cs-nahoru { top:auto; bottom:calc(100% + 4px); }
+/* Nabídka partnerů u pole „Od koho" (VÝKUP OD PARTNERA) */
+.vykup-opt, .vykup-novy { padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--border); }
+.vykup-novy { color:var(--accent); font-weight:600; border-bottom:none; }
+.vykup-opt:hover, .vykup-novy:hover { background:var(--surface3); }
 
 /* ── Psaní v nabídce (viz PSANÍ V DROPDOWNU) ─────────────────────────── */
 .cs-opt.cs-skryto { display:none; }
@@ -1627,7 +1631,14 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
           <div id="locDrop" class="cs-drop" style="position:absolute;top:calc(100% + 4px);left:0;right:0;display:none;z-index:9999;"></div>
         </div>
       </div>
-      <div class="fi full"><label>Od koho (vykup)</label><input type="text" id="fFrom" placeholder="Jméno / kontakt prodávajícího"></div>
+      <div class="fi full"><label>Od koho (vykup)</label>
+        <div style="position:relative;">
+          <input type="text" id="fFrom" placeholder="Jméno prodejce — napojí se na partnera v CRM" autocomplete="off" oninput="vykupHledej()" onfocus="vykupHledej()" onblur="setTimeout(function(){var d=document.getElementById('fFromDrop');if(d)d.style.display='none'},200)">
+          <div id="fFromDrop" style="position:absolute;top:calc(100% + 4px);left:0;right:0;display:none;z-index:9999;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);max-height:180px;overflow-y:auto;"></div>
+          <input type="hidden" id="fFromPartnerId">
+        </div>
+        <div id="fFromHint" style="display:none;font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);margin-top:2px;"></div>
+      </div>
     </div>
   </div>
 
@@ -7247,6 +7258,7 @@ function openAddModal(){
   var _fBid0=document.getElementById('fBuyerCustomerId'); if(_fBid0) _fBid0.value='';
   var _fBs0=document.getElementById('fBuyerSearch'); if(_fBs0) _fBs0.value='';
   var _fBcr0=document.getElementById('fBuyerCustomerRow'); if(_fBcr0) _fBcr0.style.display='none';
+  vykupNaplnFormular(null);
   document.getElementById('moAdd').classList.add('open');
   var _moAddInner2 = document.querySelector('#moAdd .modal');
   if(_moAddInner2) _moAddInner2.scrollTop = 0;
@@ -7308,7 +7320,7 @@ function openEdit(id){
     var _dcw=document.getElementById('fDokladCisloWrap'); if(_dcw) _dcw.style.display=(it.dokladTyp==='ks')?'':'none';
     var _dc=document.getElementById('fDokladCislo'); if(_dc) _dc.value=it.dokladCislo||'';
   })();
-  document.getElementById('fFrom').value=it.from||'';
+  vykupNaplnFormular(it);
   setLocationFields(it.location||'');
   // fState removed
   var fws=document.getElementById('fWaitState'); if(fws && it.waitState){ fws.value=it.waitState; if(fws._csSync) fws._csSync(); }
@@ -7426,6 +7438,9 @@ async function saveItem(){
   const name=document.getElementById('fName').value.trim();
   const bp=parseFloat(document.getElementById('fBuy').value);
   if(!name||isNaN(bp)){showToast('Vyplň název a nákupní cenu.', 'err');return;}
+  // Od koho → partner v CRM. Až tady, po kontrole formuláře: neuložená
+  // položka nesmí v CRM nechat kartu navíc (viz VÝKUP OD PARTNERA)
+  var _vykup = vykupPriUlozeni();
   var fBuyCur2=document.getElementById('fBuyCurrency');
   var fSellCur2=document.getElementById('fSellCurrency');
   var fExtraCur2=document.getElementById('fExtraCurrency');
@@ -7444,7 +7459,8 @@ async function saveItem(){
     dokladTyp:(document.getElementById('fDokladTyp')?.value||'id'),
     fpCislo:(document.getElementById('fDokladTyp')?.value==='fp'?document.getElementById('fFpCislo')?.value||'':''),
     dokladCislo:(document.getElementById('fDokladTyp')?.value==='ks'?document.getElementById('fDokladCislo')?.value.trim()||'':''),
-    from:document.getElementById('fFrom').value.trim(),targetPrice:(function(){
+    from:_vykup.from, fromPartnerId:_vykup.id, fromPartnerCeka:_vykup.ceka?1:0,
+    targetPrice:(function(){
     var tp=parseFloat(document.getElementById('fTargetPrice')?.value)||null;
     var tc=document.getElementById('fTargetCurrency')?.value||'CZK';
     if(!tp) return null;
@@ -7558,6 +7574,7 @@ async function saveItem(){
       // Samotný dopravce bez čísla i bez vlastní URL je jen předvolba selectu — neukládej ho
       if (!_merged.trackingNum && !_merged.trackingUrl) delete _merged.trackingCarrier;
       items[i] = _merged;
+      _vykupUklid(items[i]);
       oznacCasyStavu(items[i], items[i].waitState);
       // Zákazník byl napojen/odpojen/změněn — přepočti statistiky obou stran
       var _newLinkedCustomerId = items[i].linkedCustomerId || '';
@@ -7602,6 +7619,7 @@ async function saveItem(){
     var _igPripravene = igPriprav(getIgPosts());
     for(var _qi=0; _qi<qty; _qi++){
       var _novy = {id:uid(),dateAdded:Date.now(),..._dNew};
+      _vykupUklid(_novy);
       // Na Instagramu příspěvek nikdy nezmizí — když tam název už je,
       // je kus vystavený, i když se naskladnil až teď
       igDoplnUNove(_novy, _igPripravene);
@@ -8699,6 +8717,12 @@ function openDetail(id) {
   const sellPriceKopie = it.sellPrice
     ? String(it.sellCurrency==='EUR' ? getSellOrig(it) : it.sellPrice).replace('.', ',')
     : false;
+  /* Od koho: napojený partner je odkaz na jeho kartu v CRM (VÝKUP OD PARTNERA).
+     Účetní do CRM nevidí, takže jméno nedohledá — ukáže se text z položky. */
+  const odKohoPartner = it.fromPartnerId ? _crmNameById(it.fromPartnerId) : '';
+  const odKohoHtml = odKohoPartner
+    ? '<span class="od-koho-partner" style="color:var(--accent);cursor:pointer;" onclick="openCustomerFromItem(\''+escHtml(it.fromPartnerId)+'\')">'+escHtml(odKohoPartner)+' ›</span>'
+    : (it.from ? escHtml(it.from) : '');
   const rows = [
     /* Profil je první schválně: jestli je kus podnikatelský, nebo osobní,
        rozhoduje o dokladu i o tom, kam se počítá — a hledá se to očima
@@ -8711,9 +8735,9 @@ function openDetail(id) {
     ...(catHasSize(it.category)||it.size ? [['Velikost', sizeStr||'—']] : []),
     ['Nákupní cena', it.buyPrice ? (it.buyCurrency==='EUR'?it.buyPrice+' €':czk(it.buyPrice)) : '—'],
     ['Datum nákupu', fmtDate(it.buyDate)||'—'],
-    ['Kde koupeno', it.buyWhere==='Výkup' && it.from ? 'Výkup · ' + it.from : it.buyWhere||'—'],
+    ['Kde koupeno', it.buyWhere==='Výkup' && odKohoHtml ? 'Výkup · ' + odKohoHtml : it.buyWhere||'—'],
     ['Číslo objednávky', it.orderNum||'—', !!(it.orderNum)],
-    ...(!( it.buyWhere==='Výkup' && it.from) ? [['Od koho (vykup)', it.from||'—']] : []),
+    ...(!( it.buyWhere==='Výkup' && odKohoHtml) ? [['Od koho (vykup)', odKohoHtml||'—', false]] : []),
     ...(!isPaid ? [
       /* „Umístění" schválně pro všechny hodnoty. Dřív se to jmenovalo
          `Sklad` u kusu doma a `Stav` u toho na cestě — jenže `Stav` nese
@@ -13709,6 +13733,7 @@ function renderCustomerCard(c) {
   // B2C štítky vztah + aktivita
   var _tb = crmMode==='b2c' ? (_crmTagBadge(c.tag_vztah)+_crmTagBadge(c.tag_aktivita)) : '';
   var tagsLine = _tb ? '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">'+_tb+'</div>' : '';
+  var nVykupu = crmMode === 'b2b' ? vykupyOd(c.id).length : 0;
   return '<div class="customer-card" data-cid="' + escHtml(c.id) + '" onclick="openCustomerDetail(\'' + c.id + '\')">' +
     '<div class="card-top">' +
       '<div style="flex:1;min-width:0;">' +
@@ -13727,6 +13752,8 @@ function renderCustomerCard(c) {
         (c.size_shoes_eu ? '<span>👟 EU ' + escHtml(c.size_shoes_eu) + '</span>' : '') +
         '<span>📦 ' + (c.stats_orders_count||0) + ' obj.</span>' +
         '<span>💰 ' + (c.stats_total_spent||0).toLocaleString('cs-CZ') + ' Kč</span>' +
+        // U partnera i to, co se od něj koupilo (VÝKUP OD PARTNERA)
+        (nVykupu ? '<span class="cc-vykupy">🛒 ' + vykupyText(nVykupu) + '</span>' : '') +
       '</div>' +
     '</div>' +
   '</div>';
@@ -13872,7 +13899,29 @@ function _crmTabOverview(c){
     ? '<div style="margin-top:16px;"><span class="crm-sec-label">Poznámka (detail)</span>'
       +'<div id="crmDetailNote" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;line-height:1.5;padding:9px 11px;white-space:pre-wrap;overflow-wrap:anywhere;">'+escHtml(c.note_special)+'</div></div>'
     : '';
-  return '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+brandsHtml
+  // Výkupy od partnera — druhá strana obchodu (VÝKUP OD PARTNERA)
+  var vyk=vykupyOd(c.id);
+  var vykHtml='';
+  if(vyk.length){
+    var vykKc=0, vykPosl=null;
+    vyk.forEach(function(it){
+      vykKc+=_vykupKc(it);
+      var t=_histTime(it.buyDate);
+      if(t && (!vykPosl || t>vykPosl)) vykPosl=t;
+    });
+    vykHtml='<div class="crm-vykupy" style="margin-top:16px;"><span class="crm-sec-label">Výkupy od partnera</span>'
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'
+      +[{l:'Kusů',v:vyk.length},
+        {l:'Nakoupeno',v:Math.round(vykKc).toLocaleString('cs-CZ')+' Kč'},
+        {l:'Poslední',v:vykPosl?new Date(vykPosl).toLocaleDateString('cs-CZ'):'—'}
+      ].map(function(s){
+        return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center;">'
+          +'<div style="font-size:8px;color:var(--muted);font-family:DM Mono,monospace;text-transform:uppercase;letter-spacing:0.6px;">'+s.l+'</div>'
+          +'<div style="font-size:14px;font-weight:700;font-family:Syne,sans-serif;margin-top:3px;">'+s.v+'</div></div>';
+      }).join('')
+      +'</div></div>';
+  }
+  return '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;">'+statsHtml+'</div>'+vykHtml+brandsHtml
     +noteHtml
     +wishHtml;
 }
@@ -14076,9 +14125,38 @@ function _crmTabHistory(c){
       entries.push({ kind:'sale', t:_histTime(it.payoutDate||it.saleDate||it.dateAdded), it:it });
     }
   });
+  // 3) Výkupy — co se od partnera koupilo (VÝKUP OD PARTNERA). Kus koupený
+  // a pak prodaný zpátky témuž partnerovi je tu dvakrát, jako výkup i prodej.
+  vykupyOd(c.id).forEach(function(it){
+    entries.push({ kind:'vykup', t:_histTime(it.buyDate||it.dateAdded), it:it });
+  });
   // Nejnovější první
   entries.sort(function(a,b){ return b.t - a.t; });
   var rows=entries.map(function(e){
+    if(e.kind==='vykup'){
+      var vit=e.it;
+      var vDat=e.t ? new Date(e.t).toLocaleDateString('cs-CZ') : '—';
+      var vStav = vit.saleState==='paid' ? '<span style="color:var(--accent);">Prodáno</span>'
+        : vit.saleState==='waiting' ? '<span style="color:var(--warning);">Čeká</span>'
+        : '<span>Na skladě</span>';
+      var vSub='';
+      if(vit.buyPrice) vSub+='<span style="color:var(--accent2);font-weight:600;">'
+        +Number(vit.buyPrice).toLocaleString('cs-CZ')+(vit.buyCurrency==='EUR'?' €':' Kč')+'</span>';
+      vSub+=(vSub?' · ':'')+vStav;
+      if(isPersonal(vit)) vSub+=' · <span class="prof-badge">Osobní</span>';
+      var vNazev=escHtml(vit.name||'—')+(vit.size?' <span style="color:var(--muted);font-weight:400;">'+escHtml(vit.size)+'</span>':'');
+      return '<div class="crm-hist-vykup" onclick="openSaleFromCrm(\''+escHtml(vit.id)+'\')" style="display:flex;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:4px;transition:background 0.12s;" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'
+        +'<div style="flex-shrink:0;width:62px;">'
+        +'<div style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;">'+vDat+'</div>'
+        +'<span style="font-size:9px;font-family:DM Mono,monospace;color:var(--accent2);text-transform:uppercase;">Výkup</span>'
+        +'</div>'
+        +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+vNazev+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+vSub+'</div>'
+        +'</div>'
+        +'<div style="flex-shrink:0;color:var(--muted);align-self:center;font-size:16px;">›</div>'
+        +'</div>';
+    }
     if(e.kind==='sale'){
       var it=e.it;
       var dStr=e.t ? new Date(e.t).toLocaleDateString('cs-CZ') : '—';
@@ -14150,6 +14228,9 @@ function openCustomerFromItem(custId){
   if(!custId) return;
   cm('moDetail');
   switchTab('customers');
+  // Partner (výkup od něj, prodej B2B) — ať je pod kartou i seznam partnerů, ne zákazníků
+  var mode = partners.some(function(p){ return p.id === custId; }) ? 'b2b' : 'b2c';
+  if (crmMode !== mode) crmSwitchMode(mode);
   openCustomerDetail(custId);
 }
 
@@ -14181,23 +14262,235 @@ function _crmCreateMinimal(name, mode){
   showToast((isB2b?'Partner':'Zákazník')+' „'+name+'" vytvořen.');
   return id;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   VÝKUP OD PARTNERA
+
+   Kus koupený od jiného prodejce (pole „Od koho" u nákupu) se napojí na
+   partnera v CRM přes `fromPartnerId` — stejně jako prodej na kupujícího
+   přes `linkedCustomerId`. Karta partnera pak v Historii ukazuje obě
+   strany obchodu: co se od něj koupilo i co se mu prodalo.
+
+   Text `from` zůstává vedle odkazu. Čte ho karta v mřížce, název souboru
+   s nákupním dokladem a pohled účetního, který do CRM nevidí a jméno
+   partnera by nedohledal.
+
+   Tři věci se nesmí rozbít:
+
+   - **Jen partneři (B2B), ne zákazníci.** Výkup je obchod s jiným
+     prodejcem. Zákazník stejného jména je jiný člověk, dokud se neprokáže
+     opak — „Honza" mezi zákazníky a „Honza" z Discordu spolu nemají nic
+     společného a výkup by tomu prvnímu přidal do historie cizí obchod.
+   - **Karta se zakládá při uložení položky, ne při psaní** — zavřený
+     formulář nesmí v CRM nechat partnera navíc. A jen pro jméno, které
+     se ve formuláři opravdu zapsalo: nová položka, přepsané pole, nebo
+     „Založit" v nabídce. Stará položka se jménem bez karty si ji při
+     úpravě ceny sama nezaloží, jinak by se smazaný partner vracel
+     s každou úpravou kusu, který se od něj kdysi koupil. Na existujícího
+     partnera stejného jména se napojí vždycky — to nic nezakládá.
+   - **Dokud nedorazilo CRM z cloudu, nový partner se nezakládá.**
+     `saveCrmToFirestore` zapisuje celý dokument, takže karta založená nad
+     starou kopií v telefonu by smazala, co mezitím přibylo na jiném
+     zařízení, a vedle partnera, kterého telefon ještě nezná, by založila
+     druhého. Položka si to poznamená (`fromPartnerCeka`) a napojí se,
+     až dorazí CRM i sklad (`vykupDopojCekajici`). Na sklad se čeká taky:
+     úprava položek před prvním snímkem by posunula razítko a stará
+     kopie by přebila novější cloud — viz `_fbCloudReady`.
+══════════════════════════════════════════════════════════════════════ */
+var _crmCloudReady = false;   // true po prvním snímku CRM (loadCrmFromFirestore)
+function _crmPripravene() { return !window._fbUser || _crmCloudReady; }
+
+function _vykupNorm(s) { return String(s || '').trim().toLowerCase(); }
+function _vykupPartnerPodleJmena(jmeno) {
+  var j = _vykupNorm(jmeno);
+  if (!j) return null;
+  return partners.find(function(p){ return _vykupNorm(p.name) === j; }) || null;
+}
+
+// Jak pole vypadalo při otevření formuláře a jestli majitel výslovně chce založit kartu
+var _vykupForm = { puvodni: '', puvodniId: '', zalozit: false };
+
+function vykupNaplnFormular(it) {
+  var el = document.getElementById('fFrom');
+  var hid = document.getElementById('fFromPartnerId');
+  var p = it && it.fromPartnerId ? partners.find(function(x){ return x.id === it.fromPartnerId; }) : null;
+  /* Přejmenovaný partner se ukáže pod novým jménem. Se starým by uložení
+     na jeho kartu nesedělo a vedle něj by vznikl druhý. */
+  var text = p ? (p.name || '') : ((it && it.from) || '');
+  if (el) el.value = text;
+  if (hid) hid.value = p ? p.id : '';
+  _vykupForm = {
+    puvodni: it ? text : '',
+    // Odkaz i tehdy, když partnera tohle zařízení zatím nezná (CRM ještě nedorazilo)
+    puvodniId: (it && it.fromPartnerId) || '',
+    // Kus, který na CRM teprve čeká, má jméno zapsané — založení platí dál
+    zalozit: !!(it && it.fromPartnerCeka),
+  };
+  var drop = document.getElementById('fFromDrop'); if (drop) drop.style.display = 'none';
+  vykupNapoveda();
+}
+
+/* Co se se jménem v poli stane při uložení. Jedno místo pro nápovědu
+   i pro uložení, ať nápověda neslibuje něco jiného, než se pak udělá. */
+function vykupRozhodni(text, vybraneId) {
+  var j = String(text || '').trim();
+  if (!j) return { akce: 'nic', id: '', jmeno: '' };
+  // Vybraný z nabídky (nebo už napojený) platí, dokud se jméno nepřepsalo
+  if (vybraneId) {
+    var p = partners.find(function(x){ return x.id === vybraneId; });
+    if (p && _vykupNorm(p.name) === _vykupNorm(j)) return { akce: 'napojeno', id: p.id, jmeno: p.name };
+  }
+  /* Napojený partner, kterého tohle zařízení zatím nezná — CRM ještě
+     nedorazilo, nebo karta vznikla jinde. Úprava kusu nesmí odkaz smazat
+     jen proto, že se kus upravil dřív, než CRM přišlo. */
+  var jenNeznamy = _vykupForm.puvodniId && _vykupNorm(j) === _vykupNorm(_vykupForm.puvodni)
+    && !partners.some(function(x){ return x.id === _vykupForm.puvodniId; });
+  if (jenNeznamy) return { akce: 'nezname', id: _vykupForm.puvodniId, jmeno: j };
+  var e = _vykupPartnerPodleJmena(j);
+  if (e) return { akce: 'napojit', id: e.id, jmeno: e.name };
+  if (_vykupForm.zalozit || _vykupNorm(j) !== _vykupNorm(_vykupForm.puvodni)) {
+    return { akce: 'zalozit', id: '', jmeno: j };
+  }
+  return { akce: 'bez', id: '', jmeno: j };
+}
+
+// Volá saveItem() — vrací, co se uloží do položky
+function vykupPriUlozeni() {
+  var text = String((document.getElementById('fFrom') || {}).value || '').trim();
+  var r = vykupRozhodni(text, (document.getElementById('fFromPartnerId') || {}).value || '');
+  if (r.akce === 'napojeno' || r.akce === 'napojit' || r.akce === 'nezname') return { from: text, id: r.id, ceka: false };
+  if (r.akce === 'zalozit') {
+    if (!_crmPripravene()) return { from: text, id: '', ceka: true };
+    return { from: text, id: _crmCreateMinimal(text, 'b2b') || '', ceka: false };
+  }
+  return { from: text, id: '', ceka: false };
+}
+
+// Prázdné klíče z položky pryč — ať se nevozí po cloudu
+function _vykupUklid(it) {
+  if (!it) return;
+  if (!it.fromPartnerId) delete it.fromPartnerId;
+  if (!it.fromPartnerCeka) delete it.fromPartnerCeka;
+}
+
+function vykupNapoveda() {
+  var el = document.getElementById('fFrom'), hint = document.getElementById('fFromHint');
+  if (!el || !hint) return;
+  var r = vykupRozhodni(el.value, (document.getElementById('fFromPartnerId') || {}).value || '');
+  var t = '', barva = 'var(--muted)';
+  if (r.akce === 'napojeno') { t = '✓ Partner v CRM: ' + escHtml(r.jmeno); barva = 'var(--accent)'; }
+  else if (r.akce === 'napojit') { t = '✓ Napojí se na partnera „' + escHtml(r.jmeno) + '“'; barva = 'var(--accent)'; }
+  else if (r.akce === 'nezname') {
+    t = _crmPripravene() ? '✓ Napojeno na partnera, kterého CRM nezná' : '✓ Napojeno na partnera — CRM se ještě načítá';
+    barva = 'var(--accent)';
+  }
+  else if (r.akce === 'zalozit') { t = '+ Uložením se založí partner „' + escHtml(r.jmeno) + '“'; }
+  else if (r.akce === 'bez') { t = 'Bez karty partnera — založíš ji v nabídce pole'; }
+  hint.innerHTML = t;
+  hint.style.color = barva;
+  hint.style.display = t ? '' : 'none';
+}
+
+// Nabídka partnerů pod polem „Od koho"
+function vykupHledej() {
+  vykupNapoveda();
+  var el = document.getElementById('fFrom'), drop = document.getElementById('fFromDrop');
+  if (!el || !drop) return;
+  var q = _vykupNorm(el.value);
+  var seznam = partners
+    .filter(function(p){ return !q || _vykupNorm(p.name).indexOf(q) !== -1; })
+    .sort(function(a, b){ return String(a.name || '').localeCompare(String(b.name || ''), 'cs'); })
+    .slice(0, 20);
+  var html = seznam.map(function(p){
+    var kontakt = p.contacts && p.contacts[0] && p.contacts[0].value
+      ? '<span style="color:var(--muted);font-size:11px;margin-left:6px;">' + escHtml(p.contacts[0].value) + '</span>' : '';
+    return '<div class="vykup-opt" data-pid="' + escHtml(p.id) + '">' + escHtml(p.name) + kontakt + '</div>';
+  }).join('');
+  if (q && !_vykupPartnerPodleJmena(el.value)) {
+    html += '<div class="vykup-novy">+ Založit partnera „' + escHtml(el.value.trim()) + '“</div>';
+  }
+  if (!html) { drop.style.display = 'none'; return; }
+  drop.innerHTML = html;
+  drop.style.display = 'block';
+  // mousedown místo click: klik by pole nejdřív rozostřil a nabídka by zmizela
+  drop.querySelectorAll('.vykup-opt').forEach(function(o){
+    o.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      var p = partners.find(function(x){ return x.id === o.dataset.pid; });
+      if (!p) return;
+      el.value = p.name || '';
+      var hid = document.getElementById('fFromPartnerId'); if (hid) hid.value = p.id;
+      drop.style.display = 'none';
+      vykupNapoveda();
+    });
+  });
+  var novy = drop.querySelector('.vykup-novy');
+  if (novy) novy.addEventListener('mousedown', function(e){
+    e.preventDefault();
+    _vykupForm.zalozit = true;   // karta vznikne až uložením položky
+    drop.style.display = 'none';
+    vykupNapoveda();
+  });
+}
+
+/* Doplní partnera položkám, které se uložily, než dorazilo CRM.
+   Volá se po snímku CRM i po snímku skladu — teprve když jsou tu oba. */
+function vykupDopojCekajici() {
+  if (jeUctetni() || !_crmPripravene()) return 0;
+  if (window._fbUser && !_fbCloudReady) return 0;
+  var n = 0;
+  (items || []).forEach(function(it){
+    if (!it.fromPartnerCeka) return;
+    delete it.fromPartnerCeka;
+    var j = String(it.from || '').trim();
+    if (j && !it.fromPartnerId) {
+      var p = _vykupPartnerPodleJmena(j);
+      var id = p ? p.id : _crmCreateMinimal(j, 'b2b');
+      if (id) it.fromPartnerId = id;
+    }
+    n++;
+  });
+  if (n) { sv(); try { renderItems(); } catch(e) {} }
+  return n;
+}
+
+// Výkupy od jednoho partnera (hlavička balíku je prodejní, ne nákupní — pryč)
+function vykupyOd(partnerId) {
+  if (!partnerId) return [];
+  return (items || []).filter(function(it){ return it.fromPartnerId === partnerId && it.type !== 'bulk'; });
+}
+// Nákupní cena v Kč — u eura kurzem ke dni nákupu, stejně jako jinde v aplikaci
+function _vykupKc(it) {
+  var kurz = it.buyCurrency === 'EUR' ? (it.buyRateEur || eurRate || 25) : 1;
+  return (it.buyPrice || 0) * kurz * (it.qty || 1);
+}
+function vykupyText(n) {
+  return n + (n === 1 ? ' výkup' : (n >= 2 && n <= 4) ? ' výkupy' : ' výkupů');
+}
+
 // Action handlers
 // Smaže kartu zákazníka/partnera. Napojené prodeje zůstávají, jen se odpojí.
 function deleteCustomer(id){
   var c=customers.find(function(x){return x.id===id;}) || partners.find(function(x){return x.id===id;}); if(!c) return;
   var isB2c=customers.some(function(x){return x.id===id;});
   var linked=(items||[]).filter(function(it){return it.linkedCustomerId===id;}).length;
+  var vykupu=(items||[]).filter(function(it){return it.fromPartnerId===id;}).length;
   var histCnt=(c.contact_history||[]).length;
   var detail=[];
   if(linked) detail.push(linked+' napojených prodejů se odpojí (položky zůstanou)');
+  // Jméno v „Od koho" u položek zůstane — smazaný partner se tím sám nevrátí (VÝKUP OD PARTNERA)
+  if(vykupu) detail.push(vykupyText(vykupu)+' se odpojí (jméno prodejce u položek zůstane)');
   if(histCnt) detail.push(histCnt+' záznamů historie se smaže');
   makeConfirmOverlay(
     'Smazat '+(isB2c?'zákazníka':'partnera')+' „'+escHtml(c.name)+'"?'
     +'<br><span style="color:var(--muted);font-size:12px;">'+(detail.length?detail.join(', ')+'. ':'')+'Akce je nevratná.</span>',
     'Smazat', 'var(--danger)', function(){
       function apply(){
-        if(linked){
-          items.forEach(function(it){ if(it.linkedCustomerId===id) it.linkedCustomerId=''; });
+        if(linked || vykupu){
+          items.forEach(function(it){
+            if(it.linkedCustomerId===id) it.linkedCustomerId='';
+            if(it.fromPartnerId===id) delete it.fromPartnerId;
+          });
           sv();
         }
         customers=customers.filter(function(x){return x.id!==id;});
@@ -14541,6 +14834,7 @@ function loadCrmFromFirestore() {
   var fns = window._fbFns;
   var docRef = fns.doc(window._fbDb, 'users', window._fbUser.uid, 'crm', 'main');
   if (_crmFbUnsub) { _crmFbUnsub(); _crmFbUnsub = null; }
+  _crmCloudReady = false;   // nový účet nebo nové přihlášení — CRM z cloudu teprve dorazí
   _crmFbUnsub = fns.onSnapshot(docRef, function(snap) {
     if (snap.exists()) {
       var d = snap.data();
@@ -14549,10 +14843,13 @@ function loadCrmFromFirestore() {
     } else {
       customers = []; partners = [];
     }
+    _crmCloudReady = true;
     try { localStorage.setItem('sklad_crm', JSON.stringify({customers:customers,partners:partners})); } catch(e) {}
     if (tab === 'customers') renderCustomers();
     updateCrmFollowupBadge();
     checkFollowupReminders();
+    // Výkupy uložené, než CRM dorazilo, se teď napojí na partnera (VÝKUP OD PARTNERA)
+    try { vykupDopojCekajici(); } catch(e) { console.warn('výkupy čekající na CRM:', e); }
   }, function(err) { console.error('CRM snapshot:', err); showToast('CRM sync chyba: '+(err.message||err),'err'); });
 }
 
@@ -16664,6 +16961,8 @@ function _spustSkladPosluchace() {
       /* Až úplně nakonec: požadavky z konektoru mají dosednout na
          srovnaná data, ne na stav, který se o řádek níž ještě přepíše. */
       try { _provedPozadavky(snap); } catch(e) { console.warn('požadavky z konektoru:', e); }
+      // Ze stejného důvodu až tady: výkupy, které čekaly na CRM (VÝKUP OD PARTNERA)
+      try { vykupDopojCekajici(); } catch(e) { console.warn('výkupy čekající na CRM:', e); }
     }, function(err) {
       console.error('onSnapshot chyba:', err);
       var dot = document.getElementById('fbStatusDot');

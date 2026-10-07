@@ -343,6 +343,47 @@ Dvě věci se nesmí rozbít:
 Velikosti se schválně neporovnávají, na Instagramu se neuvádí.
 `test-instagram.js` hlídá hlavně tu druhou půlku — co se spárovat **nesmí**.
 
+### Výkup od partnera (`VÝKUP OD PARTNERA`)
+
+Kus koupený od jiného prodejce (pole „Od koho" u nákupu) se napojí na
+partnera v CRM přes `fromPartnerId` — jako prodej na kupujícího přes
+`linkedCustomerId`. Na kartě partnera je pak v Historii vidět obojí:
+co se od něj koupilo (**Výkup**) i co se mu prodalo (**Prodej**);
+přehled má souhrn výkupů a karta v seznamu jejich počet. Napojuje se
+podle pole, ne podle „Kde koupeno" — majitel tam píše třeba Discord.
+
+Text `from` zůstává vedle odkazu: čte ho karta v mřížce, název souboru
+s nákupním dokladem a pohled účetního (do CRM nevidí, jméno nedohledá).
+
+Tři věci se nesmí rozbít:
+
+- **Jen partneři, ne zákazníci.** Zákazník stejného jména je jiný
+  člověk — „Honza" z Discordu by jinak přidal výkup do historie
+  „Honzovi", který si kdysi koupil boty.
+- **Karta se zakládá při uložení, a jen pro jméno, které se ve
+  formuláři zapsalo** (nová položka, přepsané pole, „Založit"
+  v nabídce). Stará položka se jménem bez karty si ji při úpravě ceny
+  nezaloží — jinak by se smazaný partner vracel s každou úpravou kusu,
+  který se od něj kdysi koupil. Na partnera stejného jména se ale
+  napojí vždycky, to nic nezakládá. Co se při uložení stane, říká
+  nápověda pod polem; počítá ji tatáž funkce jako uložení
+  (`vykupRozhodni`), ať neslibuje něco jiného.
+- **Dokud nedorazilo CRM z cloudu, nový partner se nezakládá.**
+  `saveCrmToFirestore` přepisuje celý dokument, takže karta založená
+  nad starou kopií v telefonu by smazala, co přibylo na jiném zařízení.
+  Položka si poznamená `fromPartnerCeka` a napojí se, **až dorazí CRM
+  i sklad** (`vykupDopojCekajici`, volá se z obou posluchačů) — úprava
+  položek před prvním snímkem skladu by posunula razítko a stará kopie
+  by přebila novější cloud (viz `_fbCloudReady`). Ze stejného důvodu
+  **úprava kusu nesmí odkaz smazat**, když partnera tohle zařízení
+  ještě nezná (karta vznikla jinde, CRM nedorazilo), a čekající kus
+  úpravou o čekání nepřijde.
+
+Starší výkupy se samy nenapojují. Hromadné napojení podle jmen by
+z volného textu („Pepa z bazaru 777…") udělalo hromadu karet.
+
+Hlídá to `test-vykup.js`.
+
 ### Přihlašovací brána
 
 Bez přihlášení se z aplikace neukáže nic (`PŘIHLAŠOVACÍ BRÁNA`). Brána je
@@ -577,6 +618,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | historie cen položky | `HISTORIE CEN U POLOŽKY` |
 | psaní v rozbalovací nabídce | `PSANÍ V DROPDOWNU` |
 | databáze příspěvků na Instagramu | `INSTAGRAM — DATABÁZE PŘÍSPĚVKŮ` |
+| výkup od partnera (Od koho → CRM) | `VÝKUP OD PARTNERA` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1113,7 +1155,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 59 souborů
+node test/run.js              # kontrola syntaxe + všech 60 souborů
 node test/run.js archive      # jen vybrané
 ```
 
