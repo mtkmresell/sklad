@@ -47,6 +47,19 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   dotyk, při kterém se prst ani nabídka nepohnuly. Nabídka se navíc musí
   vejít na obrazovku — pod filtrem u spodního okraje se otevře nahoru —
   a rolování v ní se nepřelévá do stránky. Hlídá to `test-dotyk.js`.
+- **Na mobilu roluje celá stránka, ne jen obsah** (`NA MOBILU ROLUJE CELÁ
+  STRÁNKA`). Na počítači stojí hlavička, statistiky a filtry pevně a roluje
+  jen `.main`. Na telefonu z obrazovky sebraly tři čtvrtiny a seznamu
+  zbylo kolem dvou set pixelů; tah prstem mimo ně táhl `body`, které
+  rolovat nejde, takže se stránka jen pružně natáhla a po puštění skočila
+  zpátky. Šlo to vidět hlavně u krátkého seznamu v Čeká a Na skladě.
+  Vodorovně ořezává `html`, ne `body` — přetékání na `body` z něj udělá
+  vlastní rolovací rám a přestane lepit hlavička; tlačítka v hlavičce se
+  proto zalamují, jinak by stránku rozšířila a telefon by ji oddálil.
+  Druhá polovina byla ve skrývání panelů při rolování: schovaný panel
+  zkrátil stránku tak, že se seznam vešel, rolování spadlo na nulu
+  a panel se vrátil. Schovává se proto, jen když po schování zbude co
+  rolovat. Hlídá to `test-rolovani.js`.
 - Před commitem vždy `node test/run.js`.
 - **Hotovou a otestovanou změnu commituj a pushuj do `main` sám, bez ptaní.**
   Majitel si to tak výslovně řekl (3. 10. 2026): aplikaci jen obnoví a vyzkouší.
@@ -603,6 +616,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | limit identifikované osoby | `RETAILEŘI & LIMIT` |
 | animace | `ANIMACE` (v CSS) |
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
+| rolování na mobilu | `NA MOBILU ROLUJE CELÁ STRÁNKA` |
 | cashflow z payoutů | `CASHFLOW Z PAYOUTŮ` |
 | prodejní doklad | `PRODEJNÍ DOKLAD` |
 | název souboru s nákupním dokladem | `NÁZEV SOUBORU S NÁKUPNÍM DOKLADEM` |
@@ -1155,7 +1169,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 60 souborů
+node test/run.js              # kontrola syntaxe + všech 61 souborů
 node test/run.js archive      # jen vybrané
 ```
 

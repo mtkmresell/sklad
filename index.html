@@ -443,6 +443,27 @@ header { flex-shrink: 0; }
 .main { flex: 1; overflow-y: auto; overflow-x: visible; padding: 0 18px 40px; min-height: 0; scrollbar-gutter: stable; }
 /* .main scrollbar — viz konec style bloku */
 
+/* NA MOBILU ROLUJE CELÁ STRÁNKA
+   Na počítači stojí hlavička, statistiky a filtry pevně a roluje jen
+   seznam (.main). Na telefonu ale ty tři zaberou tři čtvrtiny obrazovky
+   a na seznam zbylo pár řádků — kdo táhl prstem kdekoli nad nimi, táhl
+   stránku, která se rolovat nedá: pružila, a po puštění skočila zpátky.
+   U krátkého seznamu (pár kusů v Čeká, vyfiltrovaný sklad) se tak na
+   spodní řádky nedalo dostat vůbec. Tady roluje celý dokument, hlavička
+   zůstává přilepená nahoře (position:sticky) a statistiky s filtry
+   odjedou s obsahem. Hlídá to test-rolovani.js. */
+@media (max-width:700px) {
+  html, body { height:auto; }
+  /* Vodorovně ořezává stránka, ne body — přetečení u body by z něj
+     udělalo vlastní rolovací kontejner a přilepená hlavička by se
+     přilepila k němu, tedy k ničemu */
+  html { overflow-x:hidden; }
+  body { display:block; overflow:visible; }
+  .main, #customersSection { overflow:visible; min-height:0; }
+  /* Tlačítka v hlavičce se zalomí — dřív přetékala a schoval je rám */
+  .header-right { flex-wrap:wrap; justify-content:flex-end; flex-shrink:1; min-width:0; }
+}
+
 /* Sticky thead – řešeno JavaScriptem níže */
 .items-table { border-collapse: collapse; width: 100%; }
 .items-table thead th {
@@ -20146,8 +20167,12 @@ rebuildBrandTables();
     var slack = mainEl.scrollHeight - mainEl.clientHeight - st;
 
     if (down) {
-      if (st > 40  && slack > 80)  statsBar.classList.add('hide-panel');
-      if (st > 100 && slack > 80) filtersEl.classList.add('hide-panel');
+      /* Schovaný panel seznam zvětší o svou výšku. Když pod pozicí nezbývá
+         aspoň tolik, celý zbytek se vejde, prohlížeč vrátí rolování nahoru
+         a panel se při návratu zase ukáže — u krátkého seznamu to házelo
+         zpátky na začátek. Proto se porovnává s výškou panelu, ne s 80 px. */
+      if (st > 40  && slack > Math.max(80, statsBar.offsetHeight + 10))  statsBar.classList.add('hide-panel');
+      if (st > 100 && slack > Math.max(80, filtersEl.offsetHeight + 10)) filtersEl.classList.add('hide-panel');
     } else {
       if (filtersEl.classList.contains('hide-panel')) {
         filtersEl.classList.add('is-animating');
@@ -20211,7 +20236,8 @@ rebuildBrandTables();
     var headerEl  = document.querySelector('header');
     var headerH   = headerEl ? headerEl.offsetHeight : 0;
     var filtersVisible = !filtersEl.classList.contains('hide-panel');
-    var topOffset = filtersVisible ? filtersEl.getBoundingClientRect().bottom : headerH;
+    // Na mobilu filtry odjedou se stránkou — klon pak patří pod hlavičku, ne nad obrazovku
+    var topOffset = Math.max(headerH, filtersVisible ? filtersEl.getBoundingClientRect().bottom : 0);
     if (theadRect.bottom < topOffset + 5 && tableRect.bottom > topOffset + 30) {
       if (!cloneEl || cloneEl.querySelectorAll('th').length === 0) buildClone();
       syncCloneWidths();
@@ -20237,6 +20263,8 @@ rebuildBrandTables();
   window.addEventListener('resize', function() {
     syncCloneWidths(); updateTheadClone();
   });
+  // Na mobilu roluje celá stránka, ne .main (NA MOBILU ROLUJE CELÁ STRÁNKA)
+  window.addEventListener('scroll', function() { updateTheadClone(); }, { passive: true });
 })();
 </script>
 
