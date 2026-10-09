@@ -397,6 +397,50 @@ z volného textu („Pepa z bazaru 777…") udělalo hromadu karet.
 
 Hlídá to `test-vykup.js`.
 
+### Co chybí u položky (`CO CHYBÍ U POLOŽKY`)
+
+Oranžový trojúhelník v levém horním rohu řádku (i karty) říká, že
+u kusu něco chybí. Dřív se to dalo zjistit jen proklikáním položek
+po jedné. Detail pak nahoře vypíše, co přesně chybí (s tlačítkem
+Doplnit / Vystavit), a v Upravit se ta pole obarví a vyjmenují nahoře
+— formulář je dlouhý a odkaz na fakturu je až dole.
+
+Ovládá se tlačítkem **Co chybí** ve filtrech: hlavní vypínač, výběr
+pravidel (s počty v aktuální sekci) a filtr *Jen kusy, kde něco chybí*.
+Vypínač a pravidla jsou **nastavení** (`syncSettings`, pole `coChybi`),
+takže platí na mobilu i na počítači a přežijí obnovení — „ať je to
+zapnuté, dokud to nevypnu". Filtr je obyčejný filtr: obnovení stránky
+i křížek „smazat filtry" ho shodí, označení zůstane.
+
+Co znamená „chybí", majitel určil výslovně (9. 10. 2026) a nevracej to:
+
+- **Nákupní doklad = odkaz na soubor** (`invoiceUrl`), vždycky.
+  U kupní smlouvy nestačí jen její číslo.
+- **Doklady jen u podnikání.** Osobní kusy je nepotřebují — bez toho
+  by se rozsvítilo přes sto starých osobních prodejů. **Cílová cena**
+  se hlídá u obou profilů, jen u kusů na skladě.
+- **Prodejní doklad až po vyplacení** (jen Prodáno). Co se vystavuje,
+  určuje místo prodeje (`TYP DOKLADU U MÍSTA PRODEJE`): „Prodejní
+  doklad" je hotový, když má prodej `saleDocNum`, „Faktura (odkaz)"
+  když má `saleInvoiceUrl`, „Nic" se nehlídá.
+
+Tři věci se nesmí rozbít:
+
+- **Podmínky jsou jen v `CO_CHYBI_PRAVIDLA`.** Roh, filtr, počty,
+  detail i formulář se ptají `coChybi()`. Nové pravidlo se přidává
+  tam a nikam jinam.
+- **Balík (bulk) sám nic nehlídá**, jen přebírá, co chybí jeho kusům
+  (`coChybiRadek`). Prodejní doklad k balíku aplikace vystavit neumí,
+  takže by roh svítil napořád. Roh je na řádku balíku i zavřeného —
+  jinak by se kus bez dokladu schoval do sbaleného řádku.
+- **Roh nemá text.** Majitel ho chtěl jen jako značku; co chybí, je
+  v bublině při najetí myší a v detailu. Ve zjednodušeném mobilním
+  zobrazení je první buňka schovaná, takže tam roh kreslí řádek
+  (`tr.ma-chybi::before`).
+
+Hlídá to `test-chybi.js` — hlavně co se rozsvítit **nesmí** (osobní kus,
+Čeká, StockX, balík, vrácený kus a cílovka).
+
 ### Přihlašovací brána
 
 Bez přihlášení se z aplikace neukáže nic (`PŘIHLAŠOVACÍ BRÁNA`). Brána je
@@ -633,6 +677,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | psaní v rozbalovací nabídce | `PSANÍ V DROPDOWNU` |
 | databáze příspěvků na Instagramu | `INSTAGRAM — DATABÁZE PŘÍSPĚVKŮ` |
 | výkup od partnera (Od koho → CRM) | `VÝKUP OD PARTNERA` |
+| co u položky chybí (oranžový roh) | `CO CHYBÍ U POLOŽKY` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1162,6 +1207,13 @@ v `konektor/README.md`. **Ptej se, jestli to zapojil** — do té doby to
 je jen kód v repozitáři. Telegram se zvažoval a majitel ho odmítl:
 nepoužívá ho a časem by ho ignoroval.
 
+**Další kontroly do „Co chybí".** Majitel chtěl návrhy (9. 10. 2026) a ještě
+si nevybral. Navržené, s počty z ostrých dat toho dne: číslo objednávky
+u nákupu (12 kusů na skladě), číslo prodeje u prodeje (16 z 29), kurz ČNB
+u eurového prodeje (1 z 8), kus doma nikde nevystavený a odeslaný prodej
+bez sledovacího čísla (obojí teď 0, hlídalo by se do budoucna). **Zeptej
+se, které chce** — přidávají se jen do `CO_CHYBI_PRAVIDLA`.
+
 **Vlastní účet pro konektor.** Konektor i čtečka se hlásí stejným účtem, jehož
 heslo leží na dvou místech (prostředí Claude Code a trezor Cloudflare). Vypnout
 jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to úklid.
@@ -1169,7 +1221,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 61 souborů
+node test/run.js              # kontrola syntaxe + všech 62 souborů
 node test/run.js archive      # jen vybrané
 ```
 

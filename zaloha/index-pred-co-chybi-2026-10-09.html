@@ -302,10 +302,6 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
   body.mobile-simple .items-table .td-actions { width:100%; margin-top:8px; display:flex; gap:5px; }
   body.mobile-simple .items-table td:not(.td-name):not(.td-actions):not(.td-img-wrap):not(.td-sell):not(.td-buy) { display:none; }
   body.mobile-simple .items-table .td-sell, body.mobile-simple .items-table .td-buy { font-size:12px; display:inline; }
-  /* První buňka (a roh v ní) je tu schovaná — roh kreslí přímo řádek */
-  body.mobile-simple .items-table tbody tr.ma-chybi { position:relative; }
-  body.mobile-simple .items-table tbody tr.ma-chybi::before { content:''; position:absolute; top:0; left:0;
-    width:0; height:0; border-top:11px solid var(--chybi); border-right:11px solid transparent; }
 }
 .tr-cancelled td:first-child { border-left:3px dashed #b464ff !important; padding-left:7px; }
 
@@ -413,55 +409,6 @@ table { table-layout:auto; }
 .multi-filter-drop label:hover { background:var(--surface2); color:var(--text); }
 .multi-filter-drop label:has(input:checked) { color:var(--accent); background:rgba(200,255,0,0.06); }
 .multi-filter-drop label input[type=checkbox] { display:none; }
-.multi-filter-drop.mf-nahoru { top:auto; bottom:calc(100% + 4px); }
-
-/* ── CO CHYBÍ U POLOŽKY — oranžový roh a vše kolem něj ── */
-:root { --chybi:#ff8c1a; }
-.chybi-td { position:relative; }
-.chybi-roh { position:absolute; top:0; left:0; width:0; height:0; z-index:1;
-  border-top:11px solid var(--chybi); border-right:11px solid transparent; }
-.item-card.ma-chybi { position:relative; }
-.item-card .chybi-roh { border-top-width:18px; border-right-width:18px; border-top-left-radius:var(--radius); }
-.chybi-znak { display:inline-block; width:0; height:0; flex-shrink:0; margin-right:6px; vertical-align:top;
-  border-top:8px solid var(--chybi); border-right:8px solid transparent; }
-#chybiFilterBtn .chybi-znak { margin-top:3px; }
-#chybiFilterBtn .chybi-pocet { color:var(--chybi); font-weight:700; }
-.chybi-drop { min-width:230px; max-height:none; }
-.chybi-drop label { display:flex !important; align-items:center; gap:9px; }
-.chybi-drop label::before { content:''; width:12px; height:12px; flex-shrink:0; box-sizing:border-box;
-  border:1.5px solid var(--muted2); border-radius:3px; }
-.chybi-drop label:has(input:checked) { color:var(--chybi); background:rgba(255,140,26,0.07); }
-.chybi-drop label:has(input:checked)::before { background:var(--chybi); border-color:var(--chybi); }
-.chybi-drop .chybi-text { flex:1; }
-.chybi-drop .chybi-pocet-r { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted2); }
-.chybi-drop .chybi-oddel { border-top:1px solid var(--border); margin:4px 0; }
-.chybi-drop.chybi-vyp .chybi-pravidlo { opacity:0.45; }
-.chybi-box { border:1px solid rgba(255,140,26,0.4); background:rgba(255,140,26,0.06);
-  border-radius:var(--radius-sm); padding:10px 12px 6px; margin-bottom:12px; }
-.chybi-box-titul { display:flex; align-items:center; font-size:9px; font-family:'DM Mono',monospace;
-  text-transform:uppercase; letter-spacing:1px; color:var(--chybi); margin-bottom:4px; }
-.chybi-radek { display:flex; align-items:center; justify-content:space-between; gap:10px;
-  padding:5px 0; font-size:13px; border-top:1px solid rgba(255,140,26,0.12); }
-.chybi-radek:first-of-type { border-top:none; }
-.chybi-doplnit { background:none; border:1px solid rgba(255,140,26,0.55); color:var(--chybi);
-  border-radius:5px; font-family:inherit; font-size:11px; padding:3px 10px; cursor:pointer; white-space:nowrap; }
-.chybi-doplnit:hover { background:var(--chybi); color:#000; }
-.chybi-souhrn { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:-4px 0 14px;
-  padding:8px 10px; border:1px solid rgba(255,140,26,0.4); background:rgba(255,140,26,0.06);
-  border-radius:var(--radius-sm); font-size:12px; }
-.chybi-souhrn .chybi-znak { margin-right:0; }
-.chybi-souhrn-t { color:var(--chybi); font-family:'DM Mono',monospace; font-size:10px;
-  text-transform:uppercase; letter-spacing:0.5px; }
-.chybi-chip { border:1px solid rgba(255,140,26,0.5); color:var(--chybi); border-radius:20px;
-  padding:2px 9px; cursor:pointer; white-space:nowrap; }
-.chybi-chip:hover { background:var(--chybi); color:#000; }
-.chybi-chip-mimo { cursor:default; opacity:0.75; }
-.chybi-chip-mimo:hover { background:none; color:var(--chybi); }
-.fi.chybi-pole > label { color:var(--chybi); }
-.fi.chybi-pole > label::before { content:''; display:inline-block; width:0; height:0; margin-right:5px;
-  border-top:7px solid var(--chybi); border-right:7px solid transparent; vertical-align:top; margin-top:1px; }
-.fi.chybi-pole input[type=url], .fi.chybi-pole input[type=number], .fi.chybi-pole input[type=text] {
-  border-color:var(--chybi); box-shadow:0 0 0 1px rgba(255,140,26,0.25); }
 
 
 
@@ -1560,11 +1507,6 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <button class="multi-filter-btn" id="locFilterBtn" data-action="multifilter" data-filter="loc"><span class="mfb-label">Všechny sklady</span><span class="mfb-arrow">▾</span></button>
     <div class="multi-filter-drop" id="locFilterDrop" style="display:none;"></div>
   </div>
-  <!-- Co u položek chybí — viz CO CHYBÍ U POLOŽKY -->
-  <div class="multi-filter" id="chybiFilterWrap" style="position:relative;">
-    <button class="multi-filter-btn" id="chybiFilterBtn" data-action="multifilter" data-filter="chybi"><span class="mfb-label">Co chybí</span><span class="mfb-arrow">▾</span></button>
-    <div class="multi-filter-drop chybi-drop" id="chybiFilterDrop" style="display:none;"></div>
-  </div>
   <div id="localListingFilterWrap" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;row-gap:8px;">
     <select id="filterListingStatus">
       <option value="">Listing: vše</option>
@@ -1621,10 +1563,8 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 <div class="modal">
   <div class="mh">
     <div class="mt2" id="mTitle">Nová položka</div>
-
+    
   </div>
-  <!-- Co u upravované položky chybí — viz CO CHYBÍ U POLOŽKY -->
-  <div id="fChybiSouhrn" class="chybi-souhrn" style="display:none;"></div>
 
   <div class="fs"><div class="fs-title">Profil</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;" id="profileBtns">
@@ -2067,8 +2007,6 @@ function syncSettings() {
     { key: 'an_order_v2', field: 'anOrder', shape: 'json', keep: true },
     { key: 'sa_order', field: 'saOrder', shape: 'json', keep: true },
     { key: 'sklad_seller_v1', field: 'seller', shape: 'json', keep: true },
-    // Co se u položek označuje jako chybějící (CO CHYBÍ U POLOŽKY)
-    { key: SK_CO_CHYBI, field: 'coChybi', shape: 'json', keep: true },
   ];
   return _syncSettings;
 }
@@ -4408,8 +4346,6 @@ function switchTab(t){
   }
   // Sklad filtr: jen na Stock tabu
   setVis(floc, t==='stock');
-  // Co chybí: všude, kde jsou položky (CO CHYBÍ U POLOŽKY)
-  setVis(document.getElementById('chybiFilterWrap'), t==='stock' || t==='waiting' || t==='sold');
   setVis(document.getElementById('localListingFilterWrap'), t==='stock');
   // Místo prodeje: na Waiting a Sold tabu (ne na Stock, ne v analytice)
   setVis(fswhere, (t==='sold' || t==='waiting') && soldViewMode!=='analytics');
@@ -4606,7 +4542,6 @@ function getFiltered(){
         : list.filter(it => (it.platforms||[]).length === 0);
     }
   }
-  if(chybiJen) list=list.filter(chybiProjde);
   list.sort((a,b)=>{
     if(sort==='date-desc'){
       var _getDate=function(it){ if(tab==='waiting'){ var sd=it.saleDate||''; var d=null; if(/^\d{4}-\d{2}-\d{2}$/.test(sd)){d=new Date(sd+'T00:00:00');} else {var p=sd.split('.');if(p.length===3)d=new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0]));} return d&&!isNaN(d)?d:new Date(it.dateAdded||0); } return parseBuyDate(it)||new Date(it.dateAdded||0); };
@@ -5168,15 +5103,13 @@ function waitStateBadge(it) {
 
 function renderItems(){
   if(tab==='wishlist'){renderWishlist();return;}
-  // Čísla v nabídce „Co chybí" se mění s každou úpravou, proto pokaždé
-  buildChybiFilter();
   if(tab==='sold'){renderSoldView();renderStats();return;}
   // Do analytiky účetní nesmí — tlačítko sice nevidí, ale režim může zbýt
   // uložený z dřívějška nebo přijít jinou cestou
   if(jeUctetni() && stockViewMode==='analytics') stockViewMode='table';
   if(tab==='stock' && stockViewMode==='analytics'){
     // Skrýt filtry
-    ['.search-wrap','.view-toggle','#brandFilterWrap','#sizeFilterWrap','#catFilterWrap','#locFilterWrap','#chybiFilterWrap'].forEach(function(sel){
+    ['.search-wrap','.view-toggle','#brandFilterWrap','#sizeFilterWrap','#catFilterWrap','#locFilterWrap'].forEach(function(sel){
       var el=document.querySelector(sel); if(el) el.style.display='none';
     });
     var _btnSA=document.getElementById('btnStockAnalytics'); if(_btnSA) _btnSA.style.display='none';
@@ -5194,7 +5127,6 @@ function renderItems(){
     var _sf=document.getElementById('sizeFilterWrap'); if(_sf)_sf.style.display='';
     var _cf=document.getElementById('catFilterWrap'); if(_cf)_cf.style.display='';
     var _lf=document.getElementById('locFilterWrap'); if(_lf)_lf.style.display='';
-    var _chf=document.getElementById('chybiFilterWrap'); if(_chf)_chf.style.display='';
   }
   var vtEl = document.querySelector('.view-toggle');
   if(vtEl) vtEl.style.display = (tab==='stock') ? '' : 'none';
@@ -5294,11 +5226,9 @@ function tableHTML(list) {
     const tSkuHtml = it.sku
       ? `<span style="cursor:pointer;font-family:monospace;font-size:11px;color:var(--muted)" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${it.sku}">${it.sku}</span>`
       : `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`;
-    // Oranžový roh jde do první buňky, ať je v rohu řádku i s výběrem (CO CHYBÍ U POLOŽKY)
-    const roh = chybiRoh(it);
-    return `<tr class="${rClass}${roh?' ma-chybi':''}" style="cursor:pointer;" data-action="detail" data-id="${it.id}">
-      ${bulkMode?`<td class="bulk-cb-td${roh?' chybi-td':''}" data-action="bulktoggle" data-id="${it.id}">${roh}<input type="checkbox" ${bulkSelected.has(it.id)?'checked':''} class="bulk-cb-input"></td>`:''}
-      <td${!bulkMode&&roh?' class="chybi-td"':''}>${bulkMode?'':roh}<span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></td>
+    return `<tr class="${rClass}" style="cursor:pointer;" data-action="detail" data-id="${it.id}">
+      ${bulkMode?`<td class="bulk-cb-td" data-action="bulktoggle" data-id="${it.id}"><input type="checkbox" ${bulkSelected.has(it.id)?'checked':''} class="bulk-cb-input"></td>`:''}
+      <td><span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></td>
       <td style="padding:4px 6px;">${tImgHtml}</td>
       <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${tNameHtml}${profBadge(it)?' '+profBadge(it):''}</td>
       <td style="text-align:center">${tSkuHtml}</td>
@@ -5404,12 +5334,9 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
   var bulkRecs=items.filter(function(x){return x.type==='bulk'&&x.saleState==='waiting';});
   var out='';
   bulkRecs.forEach(function(rec){
-    // Filtr „Jen kusy, kde něco chybí" — balík zůstane, když chybí něco jeho kusu
-    if(!chybiProjde(rec)) return;
     var children=getBulkItems(rec.id);
     var isExp=expandedBulks.has(rec.id);
     var ws=rec.waitState||'sending';
-    var _bRoh=chybiRoh(rec);
     var wsMap={sending:'wsb-sending',sent:'wsb-sent',payout:'wsb-payout',returned:'wsb-returned',completed:'wsb-completed'};
     var wsLabelMap={sending:'Čeká na odeslání',sent:'Odesláno',payout:'Čeká na payout',returned:'Vráceno',completed:'Dokončeno'};
     var profitKc=rec.profit||0;
@@ -5427,9 +5354,9 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
     var _editIcon = '<button id="bedit_'+rec.id+'" onclick="event.stopPropagation();openBulkEditModal(\''+rec.id+'\')" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\';" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\';" style="opacity:0;pointer-events:none;transition:opacity 0.15s;margin-left:10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;flex-shrink:0;vertical-align:middle;">Upravit</button>';
     var _bulkLabel = '<span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:2px 5px;font-family:monospace;margin-right:6px;">BULK</span>'+rec.name+' <span style="font-size:10px;color:var(--muted);font-family:monospace;">('+children.length+' ks)</span>'+_editIcon;
     // Bulk hlavní řádek
-    out += '<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+(_bRoh?' ma-chybi':'')+'" onclick="toggleBulkExpand(\''+rec.id+'\')" onmouseover="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'1\';_eb.style.pointerEvents=\'auto\';}" onmouseout="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'0\';_eb.style.pointerEvents=\'none\';}">';
-    if(bulkMode) out += '<td class="'+(_bRoh?'chybi-td':'')+'" style="width:32px;">'+_bRoh+'</td>';
-    out += '<td colspan="3" class="td-name'+(!bulkMode&&_bRoh?' chybi-td':'')+'" style="font-weight:700;">'+(bulkMode?'':_bRoh)+_bulkLabel+'</td>';
+    out += '<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+'" onclick="toggleBulkExpand(\''+rec.id+'\')" onmouseover="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'1\';_eb.style.pointerEvents=\'auto\';}" onmouseout="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'0\';_eb.style.pointerEvents=\'none\';}">';
+    if(bulkMode) out += '<td style="width:32px;"></td>';
+    out += '<td colspan="3" class="td-name" style="font-weight:700;">'+_bulkLabel+'</td>';
     out += '<td></td>';
     out += '<td></td>';
     out += '<td></td>';
@@ -5472,10 +5399,9 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
         var chProfit = chSpKc - chBpKc;
         var chRoi = chBpKc > 0 ? ((chProfit/chBpKc)*100).toFixed(1) : null;
         var chPc = chProfit>0?'color:var(--accent)':chProfit<0?'color:var(--danger)':'color:var(--muted)';
-        var chRoh = chybiRoh(ch);
-        out += '<tr class="bulk-child-row'+(chRoh?' ma-chybi':'')+'" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
-        if(bulkMode) out += '<td class="'+(chRoh?'chybi-td':'')+'" style="width:32px;">'+chRoh+'</td>';
-        out += '<td class="'+(!bulkMode&&chRoh?'chybi-td':'')+'">'+(bulkMode?'':chRoh)+'<span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
+        out += '<tr class="bulk-child-row" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
+        if(bulkMode) out += '<td style="width:32px;"></td>';
+        out += '<td><span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
         out += '<td style="padding:4px 6px;">'+chImgHtml+'</td>';
         out += '<td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+chNameHtml+'</td>';
         out += '<td style="text-align:center;">'+chSkuHtml+'</td>';
@@ -5551,10 +5477,8 @@ function cardHTML(it){
   const nameHtml = it.stockxUrl
     ? `<a href="${it.stockxUrl}" target="_blank" style="color:inherit;text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${it.name}</a>`
     : it.name;
-  // Oranžový roh v rohu karty (CO CHYBÍ U POLOŽKY) — v nabídce zákazníkovi nemá co dělat
-  const roh = customerMode ? '' : chybiRoh(it);
-  return `<div class="item-card ${it.saleState==='waiting'?'s-waiting':it.saleState==='paid'?'s-paid':''}${roh?' ma-chybi':''}" data-id="${it.id}">
-    ${roh}${imgHtml}
+  return `<div class="item-card ${it.saleState==='waiting'?'s-waiting':it.saleState==='paid'?'s-paid':''}" data-id="${it.id}">
+    ${imgHtml}
     <div class="card-top"><div class="item-name">${nameHtml}</div><span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></div>
     ${metas.length?`<div class="card-meta">${metas.map(m=>m.type==='sku'?`<span class="mt" style="cursor:pointer" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${m.val}">${m.val}</span>`:`<span class="mt">${m.val}</span>`).join('')}</div>`:''}
     ${platHtml}${priceHtml}
@@ -7356,8 +7280,6 @@ function openAddModal(){
   var _fBs0=document.getElementById('fBuyerSearch'); if(_fBs0) _fBs0.value='';
   var _fBcr0=document.getElementById('fBuyerCustomerRow'); if(_fBcr0) _fBcr0.style.display='none';
   vykupNaplnFormular(null);
-  // Nová položka nic obarveného mít nesmí — zbylo by to z minulé úpravy
-  chybiVeFormulari(null);
   document.getElementById('moAdd').classList.add('open');
   var _moAddInner2 = document.querySelector('#moAdd .modal');
   if(_moAddInner2) _moAddInner2.scrollTop = 0;
@@ -7473,8 +7395,6 @@ function openEdit(id){
   else { modalEl.classList.remove('modal-stock'); modalEl.classList.remove('modal-waiting'); modalEl.classList.add('modal-paid'); }
   updateWaitStateVisibility();
   updateSizeVisibility();
-  // Pole, která u kusu chybí, se obarví (CO CHYBÍ U POLOŽKY)
-  chybiVeFormulari(it);
   document.getElementById('moAdd').classList.add('open');
   // Vypni autocomplete na všech inputech v modalu (Chrome ignoruje "off", respektuje "new-password")
   document.querySelectorAll('#moAdd input[type=text], #moAdd input[type=number], #moAdd input[type=url]').forEach(function(el){ el.setAttribute('autocomplete','new-password'); });
@@ -9022,8 +8942,7 @@ function openDetail(id) {
       potentialHtml += '</div>';
     }
   }
-  // Co u kusu chybí, stojí nahoře — kvůli tomu se sem teď člověk dívá (CO CHYBÍ U POLOŽKY)
-  document.getElementById('detailContent').innerHTML = chybiDetailHtml(it) + sectionsHtml + potentialHtml + btnsHtml;
+  document.getElementById('detailContent').innerHTML = sectionsHtml + potentialHtml + btnsHtml;
   currentDetailId = id;
   document.getElementById('moDetail').classList.add('open');
   var _moDetailInner = document.querySelector('#moDetail .modal');
@@ -9599,322 +9518,17 @@ function updateSaleInvoiceVisibility(it) {
 
    Osobní věci se prodávají mimo podnikání a doklad k nim nepatří —
    proto se ani nenabídne. U podnikání rozhoduje nastavení místa prodeje. */
-function lzeVystavitDoklad(it, g) {
+function lzeVystavitDoklad(it) {
   if (!it) return false;
   if (isPersonal(it)) return false;
-  return getPlatDocType(it.soldWhere, g) === 'doklad';
+  return getPlatDocType(it.soldWhere) === 'doklad';
 }
 
 // Místo dokladu se u prodeje schovává odkaz na fakturu vystavenou jinde
-function chceOdkazNaFakturu(it, g) {
+function chceOdkazNaFakturu(it) {
   if (!it || isPersonal(it)) return false;
-  return getPlatDocType(it.soldWhere, g) === 'faktura';
+  return getPlatDocType(it.soldWhere) === 'faktura';
 }
-
-/* ══════════════════════════════════════════════════════════════════════
-   CO CHYBÍ U POLOŽKY
-
-   Oranžový roh v levém horním rohu řádku (a karty) říká, že u kusu
-   něco chybí — nákupní doklad, prodejní doklad, cílová cena. Dřív se
-   to dalo zjistit jedině tak, že se položky proklikaly po jedné.
-   Detail pak vypíše, co přesně chybí, a v Upravit se ta pole obarví.
-
-   Označování je zapnuté, dokud ho majitel nevypne (tlačítko „Co chybí"
-   ve filtrech), a co se hlídá, si vybere. Je to nastavení, takže platí
-   na mobilu i na počítači (`syncSettings`). Seznam se tím nezužuje,
-   kusy se jen označí. Filtr „Jen kusy, kde něco chybí" je zvlášť
-   a chová se jako ostatní filtry: obnovení stránky ho shodí.
-
-   Co znamená „chybí", majitel určil výslovně (9. 10. 2026):
-
-   - **Nákupní doklad je odkaz na soubor**, vždycky. U kupní smlouvy
-     nestačí jen její číslo — bez odkazu se doklad stejně hledá ručně.
-   - **Doklady jen u podnikání.** Osobní kusy je nepotřebují; kdyby
-     se hlídaly, rozsvítilo by se přes sto starých osobních prodejů.
-     Cílová cena se hlídá u obou profilů, prodávají se oba.
-   - **Prodejní doklad až po vyplacení** (Prodáno). Datum na dokladu je
-     datum vyplacení, takže doklad vystavený dřív by nesl jiné datum
-     než ten konečný. Co se vystavuje, určuje místo prodeje (TYP DOKLADU
-     U MÍSTA PRODEJE): u „Prodejní doklad" je hotovo, když má prodej
-     číslo dokladu, u „Faktura (odkaz)" když má odkaz na fakturu
-     vydanou. U „Nic" (StockX) se nehlídá nic.
-
-   Tři věci se nesmí rozbít:
-
-   - **Podmínky jsou jen v `CO_CHYBI_PRAVIDLA`.** Roh, filtr, počty,
-     detail i formulář se ptají `coChybi()`. Druhá kopie podmínek by se
-     rozešla a roh by svítil u něčeho, co detail neumí vysvětlit.
-   - **Balík (bulk) sám nic nehlídá**, jen přebírá, co chybí jeho
-     kusům. Prodejní doklad k balíku aplikace vystavit neumí (balík
-     nemá detail), takže by u něj roh svítil napořád a nešel by zhasnout.
-     Roh na řádku balíku je proto vidět, i když je balík zavřený —
-     jinak by se kus bez dokladu schoval do sbaleného řádku.
-   - **Vrácený a zrušený kus cílovou cenu nepotřebuje**, prodávat se
-     nebude. Nákupní doklad ano — nákup proběhl.
-
-   Hlídá to test-chybi.js.
-══════════════════════════════════════════════════════════════════════ */
-var SK_CO_CHYBI = 'sklad_co_chybi_v1';
-
-/* Místa prodeje a nastavení se čtou z localStorage. Roh se počítá pro
-   každý řádek, takže se tu přečtené pamatuje, dokud se text v úložišti
-   nezmění — jiná změna se tím nepřehlédne. */
-var _chybiPamet = {};
-function _chybiCti(klic, nacti) {
-  var raw = null;
-  try { raw = localStorage.getItem(klic); } catch(e) {}
-  var p = _chybiPamet[klic];
-  if (p && p.raw === raw) return p.v;
-  var v = nacti(raw);
-  _chybiPamet[klic] = { raw: raw, v: v };
-  return v;
-}
-function _chybiSkupiny() { return _chybiCti(SK_GROUPS, function() { return getPlatGroups(); }); }
-
-function _chybiPrazdne(v) { return !String(v == null ? '' : v).trim(); }
-function _chybiNaSklade(it) { return !it.saleState || it.saleState === 'stock'; }
-
-var CO_CHYBI_PRAVIDLA = [
-  { id: 'nakup', nazev: 'Nákupní doklad',
-    plati: function(it) { return !isPersonal(it); },
-    chybi: function(it) { return _chybiPrazdne(it.invoiceUrl); },
-    popis: function() { return 'Nákupní doklad — odkaz na fakturu přijatou'; },
-    pole:  function() { return 'fInvoiceUrl'; } },
-  { id: 'prodej', nazev: 'Prodejní doklad',
-    // Kus z balíku se prodal s balíkem — doklad patří k němu, ne ke kusu
-    plati: function(it, g) {
-      return it.saleState === 'paid' && !it.bulkId
-        && (lzeVystavitDoklad(it, g) || chceOdkazNaFakturu(it, g));
-    },
-    chybi: function(it, g) {
-      return lzeVystavitDoklad(it, g) ? !it.saleDocNum : _chybiPrazdne(it.saleInvoiceUrl);
-    },
-    popis: function(it, g) {
-      return lzeVystavitDoklad(it, g) ? 'Prodejní doklad — ještě nebyl vystavený'
-        : 'Faktura vydaná — odkaz na ni';
-    },
-    pole:  function(it, g) { return lzeVystavitDoklad(it, g) ? '' : 'fSaleInvoiceUrl'; } },
-  { id: 'cilovka', nazev: 'Cílová cena',
-    plati: function(it) {
-      return _chybiNaSklade(it) && it.location !== 'Vráceno' && it.location !== 'Zrušeno';
-    },
-    chybi: function(it) { return !(parseFloat(it.targetPrice) > 0); },
-    popis: function() { return 'Cílová cena'; },
-    pole:  function() { return 'fTargetPrice'; } },
-];
-
-// Nastavení: zapnuto + která pravidla. Co v uloženém chybí, je zapnuté.
-function getCoChybi() {
-  return _chybiCti(SK_CO_CHYBI, function(raw) {
-    var o = null;
-    try { o = JSON.parse(raw || 'null'); } catch(e) {}
-    if (!o || typeof o !== 'object') o = {};
-    var pravidla = {};
-    CO_CHYBI_PRAVIDLA.forEach(function(p) {
-      pravidla[p.id] = !(o.pravidla && o.pravidla[p.id] === false);
-    });
-    return { zapnuto: o.zapnuto !== false, pravidla: pravidla };
-  });
-}
-function _setCoChybi(o) {
-  _ulozLokal(SK_CO_CHYBI, JSON.stringify({ zapnuto: !!o.zapnuto, pravidla: o.pravidla }));
-  _ioCloudSync();
-}
-
-/* Co u položky chybí, podle zapnutých pravidel. Prázdné pole = nic.
-   S `vse` se ptá na všechna pravidla bez ohledu na vypínače — kvůli
-   počtům v nabídce, ať je vidět, co by se rozsvítilo. */
-function coChybi(it, vse) {
-  if (!it || it.type === 'bulk') return [];
-  var nast = getCoChybi();
-  if (!vse && !nast.zapnuto) return [];
-  var g = _chybiSkupiny();
-  var out = [];
-  CO_CHYBI_PRAVIDLA.forEach(function(p) {
-    if (!vse && !nast.pravidla[p.id]) return;
-    if (!p.plati(it, g) || !p.chybi(it, g)) return;
-    out.push({ id: p.id, nazev: p.nazev, popis: p.popis(it, g), pole: p.pole(it, g) });
-  });
-  return out;
-}
-
-// Řádek balíku nese, co chybí jeho kusům — každou věc jednou
-function coChybiRadek(it) {
-  if (!it) return [];
-  if (it.type !== 'bulk') return coChybi(it);
-  var out = [];
-  getBulkItems(it.id).forEach(function(ch) {
-    coChybi(ch).forEach(function(c) {
-      if (!out.some(function(x) { return x.id === c.id; })) out.push(c);
-    });
-  });
-  return out;
-}
-
-/* Oranžový roh. Jde do první buňky řádku (ta dostane `chybi-td`)
-   nebo do karty; text je jen v bublině při najetí myší — v řádku
-   samotném majitel text nechtěl. */
-function chybiRoh(it) {
-  var c = coChybiRadek(it);
-  if (!c.length) return '';
-  var tip = (it.type === 'bulk' ? 'Kusům v balíku chybí: ' : 'Chybí: ')
-    + c.map(function(x) { return x.nazev.toLowerCase(); }).join(', ');
-  return '<span class="chybi-roh" data-tip="' + escHtml(tip) + '"></span>';
-}
-
-// Filtr „Jen kusy, kde něco chybí" — jako ostatní filtry obnovení nepřežije
-var chybiJen = false;
-function chybiProjde(it) { return !chybiJen || coChybiRadek(it).length > 0; }
-
-// Kusy v aktuální sekci a profilu — z nich se počítají čísla v nabídce
-function _chybiKusySekce() {
-  return (items || []).filter(function(it) {
-    if (it.type === 'bulk') return false;
-    if (tab === 'stock') { if (!_chybiNaSklade(it) || it.bulkId) return false; }
-    else if (tab === 'waiting') { if (it.saleState !== 'waiting') return false; }
-    else if (tab === 'sold') { if (it.saleState !== 'paid') return false; }
-    else return false;
-    // Čeká je společné pro oba profily — stejně jako v getFiltered()
-    return tab === 'waiting' || profMatch(it);
-  });
-}
-
-/* Tlačítko „Co chybí" ve filtrech a jeho nabídka. Skládá se při každém
-   překreslení, protože čísla v ní se mění s každou úpravou položky. */
-function buildChybiFilter() {
-  var drop = document.getElementById('chybiFilterDrop');
-  var btn = document.getElementById('chybiFilterBtn');
-  if (!drop || !btn) return;
-  var nast = getCoChybi();
-  if (!nast.zapnuto) chybiJen = false;
-  var pocty = {}, celkem = 0;
-  _chybiKusySekce().forEach(function(it) {
-    var c = coChybi(it, true);
-    c.forEach(function(x) { pocty[x.id] = (pocty[x.id] || 0) + 1; });
-    if (nast.zapnuto && c.some(function(x) { return nast.pravidla[x.id]; })) celkem++;
-  });
-  var radek = function(trida, zaskrtnuto, onchange, text, pocet) {
-    return '<label class="' + trida + '" onclick="event.stopPropagation()">'
-      + '<input type="checkbox"' + (zaskrtnuto ? ' checked' : '') + ' onchange="' + onchange + '">'
-      + '<span class="chybi-text">' + text + '</span>'
-      + (pocet != null ? '<span class="chybi-pocet-r">' + pocet + '</span>' : '')
-      + '</label>';
-  };
-  var h = radek('chybi-hlavni', nast.zapnuto, 'chybiZapni(this.checked)', 'Označovat, co chybí');
-  h += '<div class="chybi-oddel"></div>';
-  CO_CHYBI_PRAVIDLA.forEach(function(p) {
-    h += radek('chybi-pravidlo', nast.pravidla[p.id], 'chybiPravidlo(\'' + p.id + '\',this.checked)',
-      escHtml(p.nazev), pocty[p.id] || 0);
-  });
-  if (nast.zapnuto) {
-    h += '<div class="chybi-oddel"></div>';
-    h += radek('chybi-jen', chybiJen, 'chybiJenPrepni(this.checked)', 'Jen kusy, kde něco chybí');
-  }
-  drop.innerHTML = h;
-  drop.classList.toggle('chybi-vyp', !nast.zapnuto);
-  var lbl = btn.querySelector('.mfb-label');
-  if (lbl) lbl.innerHTML = nast.zapnuto
-    ? '<span class="chybi-znak"></span>Chybí <span class="chybi-pocet">' + celkem + '</span>'
-    : 'Co chybí';
-  btn.classList.toggle('active', chybiJen);
-  btn.classList.toggle('chybi-sviti', nast.zapnuto && celkem > 0);
-  // Prodáno jde kolem renderItems a „✕" by o filtru jinak nevěděl
-  updateClearFiltersBtn();
-}
-
-function chybiZapni(zap) {
-  var n = getCoChybi();
-  if (!zap) chybiJen = false;
-  _setCoChybi({ zapnuto: !!zap, pravidla: n.pravidla });
-  renderItems();
-}
-function chybiPravidlo(id, zap) {
-  var n = getCoChybi();
-  var pravidla = Object.assign({}, n.pravidla);
-  pravidla[id] = !!zap;
-  _setCoChybi({ zapnuto: n.zapnuto, pravidla: pravidla });
-  renderItems();
-}
-function chybiJenPrepni(zap) {
-  chybiJen = !!zap && getCoChybi().zapnuto;
-  renderItems();
-}
-
-/* V detailu: co přesně chybí. „Doplnit" otevře úpravu rovnou na tom
-   poli; prodejní doklad se vystavuje tlačítkem, ne v úpravě. */
-function chybiDetailHtml(it) {
-  var c = coChybi(it);
-  if (!c.length) return '';
-  var h = '<div class="chybi-box"><div class="chybi-box-titul"><span class="chybi-znak"></span>Chybí</div>';
-  c.forEach(function(x) {
-    var akce = x.pole
-      ? '<button class="chybi-doplnit uc-skryt" data-action="chybidoplnit" data-id="' + escHtml(it.id)
-        + '" data-pole="' + x.pole + '">Doplnit</button>'
-      : (x.id === 'prodej'
-        ? '<button class="chybi-doplnit" onclick="openSaleDocument(\'' + escHtml(it.id) + '\')">Vystavit</button>'
-        : '');
-    h += '<div class="chybi-radek"><span>' + escHtml(x.popis) + '</span>' + akce + '</div>';
-  });
-  return h + '</div>';
-}
-
-/* V Upravit: pole, která chybí, se obarví a nahoře se vyjmenují — formulář
-   je dlouhý a odkaz na fakturu je až dole. Jakmile se pole vyplní,
-   obarvení zmizí. Nová položka nic obarveného nemá. */
-var _chybiFormPole = [];
-function chybiVeFormulari(it) {
-  var mo = document.getElementById('moAdd');
-  if (!mo) return;
-  mo.querySelectorAll('.chybi-pole').forEach(function(el) { el.classList.remove('chybi-pole'); });
-  var sou = document.getElementById('fChybiSouhrn');
-  var c = it ? coChybi(it) : [];
-  _chybiFormPole = [];
-  var chips = [];
-  c.forEach(function(x) {
-    var el = x.pole ? document.getElementById(x.pole) : null;
-    var fi = el && el.closest('.fi');
-    if (fi) {
-      fi.classList.add('chybi-pole');
-      _chybiFormPole.push(x.pole);
-      chips.push('<span class="chybi-chip" data-pole="' + x.pole + '" onclick="chybiNaPole(\'' + x.pole + '\')">'
-        + escHtml(x.nazev) + '</span>');
-    } else {
-      chips.push('<span class="chybi-chip chybi-chip-mimo">' + escHtml(x.nazev) + ' (v detailu)</span>');
-    }
-  });
-  if (sou) {
-    sou.innerHTML = chips.length
-      ? '<span class="chybi-znak"></span><span class="chybi-souhrn-t">Chybí:</span>' + chips.join('')
-      : '';
-    sou.style.display = chips.length ? '' : 'none';
-  }
-}
-// Vyplněné pole zhasne (a vrátí se, když se zase vymaže)
-function _chybiFormObnov() {
-  if (!_chybiFormPole.length) return;
-  var zbyva = 0;
-  _chybiFormPole.forEach(function(id) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    var prazdne = _chybiPrazdne(el.value);
-    var fi = el.closest('.fi');
-    if (fi) fi.classList.toggle('chybi-pole', prazdne);
-    var chip = document.querySelector('#fChybiSouhrn .chybi-chip[data-pole="' + id + '"]');
-    if (chip) chip.style.display = prazdne ? '' : 'none';
-    if (prazdne) zbyva++;
-  });
-  var sou = document.getElementById('fChybiSouhrn');
-  if (sou && !zbyva && !sou.querySelector('.chybi-chip-mimo')) sou.style.display = 'none';
-}
-function chybiNaPole(id) {
-  var el = document.getElementById(id);
-  if (!el) return;
-  try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(e) { el.scrollIntoView(); }
-  try { el.focus({ preventScroll: true }); } catch(e) { el.focus(); }
-}
-document.addEventListener('input', function(e) {
-  if (e.target && e.target.closest && e.target.closest('#moAdd')) _chybiFormObnov();
-}, true);
 
 /* Číslo dokladu ve tvaru ROK-NNN; jednou přidělené se už nemění.
 
@@ -11151,14 +10765,6 @@ document.addEventListener('click', function(e) {
     return;
   }
   if (action === 'multifilter') { toggleMultiFilter(btn.dataset.filter); return; }
-  // „Doplnit" v detailu: rovnou do úpravy na chybějící pole (CO CHYBÍ U POLOŽKY)
-  if (action === 'chybidoplnit') {
-    var _pole = btn.dataset.pole;
-    cm('moDetail');
-    openEdit(id);
-    setTimeout(function(){ chybiNaPole(_pole); }, 150);
-    return;
-  }
   if (action === 'setview') { setView(btn.dataset.view); return; }
   if (action === 'closemodal') { if(e.target===btn) cm(btn.dataset.mo); return; }
   if (action === 'saveitem') { saveItem(); return; }
@@ -11370,7 +10976,7 @@ function toggleMultiFilter(type) {
   // Zavři VŠECHNY dropdowny - cs-drop, cdp-cal, multi-filter-drop
   document.querySelectorAll('.cs-drop.open, .cdp-cal.open').forEach(d => d.classList.remove('open'));
   document.querySelectorAll('.cs-btn.open, .cdp-input.open').forEach(b => b.classList.remove('open'));
-  ['size','brand','tag','cat','loc','chybi'].forEach(t => {
+  ['size','brand','tag','cat','loc'].forEach(t => {
     const d = document.getElementById(t+'FilterDrop');
     const b = document.getElementById(t+'FilterBtn');
     if (d) d.style.display = 'none';
@@ -11379,16 +10985,8 @@ function toggleMultiFilter(type) {
   if (!isOpen) {
     // setTimeout 0 – otevři až po tom co všechny click listenery doběhnou
     setTimeout(function() {
-      drop.classList.remove('mf-nahoru');
       drop.style.display = 'block';
       btn.classList.add('mf-open');
-      /* Pod tlačítkem u spodního okraje (na mobilu běžně) by nabídka
-         přetekla mimo obrazovku — pak se otevře nahoru, stejně jako
-         rozbalovací nabídky (initCustomSelect). */
-      var r = drop.getBoundingClientRect(), b = btn.getBoundingClientRect();
-      if (r.bottom > window.innerHeight - 8 && b.top - 8 > window.innerHeight - b.bottom) {
-        drop.classList.add('mf-nahoru');
-      }
     }, 0);
   }
 }
@@ -11555,14 +11153,12 @@ function updateClearFiltersBtn() {
   var hasSearch = si && si.value.trim().length > 0;
   var hasMulti = selectedBrands.size > 0 || selectedSizes.size > 0 || selectedTags.size > 0 || selectedCategories.size > 0 || selectedLocations.size > 0;
   var hasDropdown = (document.getElementById('filterSoldWhere')?.value || '') !== '' || (document.getElementById('filterWaitState')?.value || '') !== '';
-  var active = hasSearch || hasMulti || hasDropdown || chybiJen;
+  var active = hasSearch || hasMulti || hasDropdown;
   btn.style.display = active ? '' : 'none';
 }
 
 function clearAllFilters() {
   selectedBrands.clear(); selectedSizes.clear(); selectedTags.clear(); selectedCategories.clear(); selectedLocations.clear();
-  // Filtr „jen kusy, kde něco chybí" padá s ostatními; označování rohem zůstává
-  chybiJen = false;
   updateFilterBtn('brand', selectedBrands, 'Všechny značky');
   updateFilterBtn('size', selectedSizes, 'Všechny vel.');
   updateFilterBtn('tag', selectedTags, 'Všechny štítky');
@@ -16104,7 +15700,7 @@ function _init() {
   try{initAllCustomInputs();}catch(e){console.error('customInputs',e);}
   // Globální handler pro zavření multi-filter-drop při kliknutí mimo
   document.addEventListener('click', function(e) {
-    var insideMF = e.target.closest('#brandFilterWrap, #sizeFilterWrap, #catFilterWrap, #locFilterWrap, #chybiFilterWrap, .multi-filter-drop');
+    var insideMF = e.target.closest('#brandFilterWrap, #sizeFilterWrap, #catFilterWrap, #locFilterWrap, .multi-filter-drop');
     if (!insideMF) {
       var drops = document.querySelectorAll('.multi-filter-drop');
       drops.forEach(function(d) { d.style.display = 'none'; });
@@ -18174,7 +17770,6 @@ function renderSoldView(){
     if(soldYearFilter!=='all'&&_yr!==soldYearFilter)return false;
     if(soldMonthFilter!=='all'&&_mo!==soldMonthFilter)return false;
     if(soldWhereFilter&&(it.soldWhere||'')!==soldWhereFilter)return false;
-    if(!chybiProjde(it))return false;
     if(soldQ){
       var _hit=[it.name,it.sku,it.orderNum,it.saleRef,it.soldWhere,it.buyWhere].some(function(v){ return (v||'').toLowerCase().includes(soldQ); });
       // Bulk balík: prohledej i názvy a SKU položek uvnitř
@@ -18198,8 +17793,6 @@ function renderSoldView(){
   if(_fswEl){var _fswWrapEl=_fswEl.closest('.cs-wrap')||_fswEl;_fswWrapEl.style.display=soldViewMode==='analytics'?'none':'';}
   var _srchWrapEl=document.querySelector('.search-wrap');
   if(_srchWrapEl) _srchWrapEl.style.display=soldViewMode==='analytics'?'none':'';
-  var _chybiWrapEl=document.getElementById('chybiFilterWrap');
-  if(_chybiWrapEl) _chybiWrapEl.style.display=soldViewMode==='analytics'?'none':'';
   if(soldViewMode==='analytics'){
     grid.innerHTML=renderSoldAnalytics(sold,soldAll,stats,years);setTimeout(function(){
     animateCountUp();initCumChart();initAnDragDrop();
@@ -18248,7 +17841,7 @@ function renderSoldView(){
   html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">Obrat: '+czk(stats.totalRevenue)+'</span>';
   html+='<button class="sold-btn-action" onclick="soldViewMode=\'analytics\';renderSoldView();" style="background:var(--accent);color:#000;border:none;">Analytika →</button>';
   html+='</div>';
-  if(!sold.length){html+='<div style="text-align:center;padding:40px;color:var(--muted);">'+(chybiJen?'Tady nic nechybí':'Žádné prodeje v tomto období')+'</div></div>';grid.innerHTML=html;initSoldSelects();return;}
+  if(!sold.length){html+='<div style="text-align:center;padding:40px;color:var(--muted);">Žádné prodeje v tomto období</div></div>';grid.innerHTML=html;initSoldSelects();return;}
   var groups=groupSoldByDate(sold);
   groups.forEach(function(grp){
     var gs=calcSoldStats(grp.items);
@@ -18290,9 +17883,8 @@ function renderSoldView(){
           + '</span>';
         var _bHover = ' onmouseover="var _b=document.getElementById(\'bact_'+it.id+'\');if(_b){_b.style.opacity=\'1\';_b.style.pointerEvents=\'auto\';}"'
           + ' onmouseout="var _b=document.getElementById(\'bact_'+it.id+'\');if(_b){_b.style.opacity=\'0\';_b.style.pointerEvents=\'none\';}"';
-        var _bRohS=chybiRoh(it);
-        html+='<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+(_bRohS?' ma-chybi':'')+'" onclick="toggleBulkExpand(\''+it.id+'\')"'+_bHover+' style="border-bottom:1px solid rgba(255,255,255,0.04);">';
-        html+='<td class="'+(_bRohS?'chybi-td':'')+'" style="padding:6px 8px;">'+_bRohS+'<span class="bulk-folder-icon'+(isExp?' open':'')+'" style="font-size:10px;color:var(--muted);margin-right:5px;">▶</span><span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:1px 5px;font-family:monospace;">BULK</span></td>';
+        html+='<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+'" onclick="toggleBulkExpand(\''+it.id+'\')"'+_bHover+' style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+        html+='<td style="padding:6px 8px;"><span class="bulk-folder-icon'+(isExp?' open':'')+'" style="font-size:10px;color:var(--muted);margin-right:5px;">▶</span><span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:1px 5px;font-family:monospace;">BULK</span></td>';
         html+='<td style="padding:6px 8px;font-size:13px;font-weight:700;font-family:\'Syne\',sans-serif;">'+it.name+(profBadge(it)?' '+profBadge(it):'')+_bAkce+'</td>';
         html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+children.length+' ks</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">—</td>';
@@ -18317,9 +17909,8 @@ function renderSoldView(){
             var itemProfit=it.itemPrices&&it.itemPrices[ch.id]?(it.itemPrices[ch.id]-buyKcC):null;
             var ipc=itemProfit!=null?(itemProfit>0?'var(--accent)':itemProfit<0?'var(--danger)':'var(--muted)'):'var(--muted)';
             // Klikací na detail — stejně jako v Čeká, kde to fungovalo odjakživa
-            var _chRohS=chybiRoh(ch);
-            html+='<tr class="bulk-child-row'+(_chRohS?' ma-chybi':'')+'" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
-            html+='<td class="'+(_chRohS?'chybi-td':'')+'" style="padding:3px 8px;">'+_chRohS+'<span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
+            html+='<tr class="bulk-child-row" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
+            html+='<td style="padding:3px 8px;"><span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
             html+='<td style="padding:3px 8px;color:var(--muted2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+ch.name+'</td>';
             html+='<td style="padding:3px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(ch.sku||'—')+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+convertSize(ch.size,ch.name)+'</td>';
@@ -18345,9 +17936,8 @@ function renderSoldView(){
       var pc=profit>0?'var(--accent)':profit<0?'var(--danger)':'var(--muted)';
       var bs=bc==='EUR'?(it.buyPrice||0)+' €':czk(it.buyPrice||0);
       var ss=it.sellPrice?(sc==='EUR'?getSellOrig(it)+' €':czk(it.sellPrice)):'—';
-      var _rohS=chybiRoh(it);
-      html+='<tr class="'+(_rohS?'ma-chybi':'')+'" style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" data-action="detail" data-id="'+it.id+'" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">';
-      html+='<td class="'+(_rohS?'chybi-td':'')+'" style="padding:6px 8px;">'+_rohS+'<span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span></td>';
+      html+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" data-action="detail" data-id="'+it.id+'" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">';
+      html+='<td style="padding:6px 8px;"><span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span></td>';
       html+='<td style="padding:6px 8px;font-size:13px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(it.stockxUrl?'<a href="'+buildStockxUrlWithSize(it.stockxUrl,it.name,it.size)+'" target="_blank" class="stockx-link" onclick="event.stopPropagation()">'+it.name+'</a>':it.name)+(profBadge(it)?' '+profBadge(it):'')+'</td>';
       html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(it.sku||'—')+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);cursor:pointer;" data-action="sizeunit">'+convertSize(it.size,it.name)+'</td>';
