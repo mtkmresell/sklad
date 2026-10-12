@@ -258,7 +258,7 @@ Tedy každé tři hodiny. Kdyby se ti to zdálo často, klidně míň — když
 sklad a komise sedí, běh **neudělá vůbec nic** a neposílá ani mail.
 Ticho je správný stav.
 
-Tři věci, na které se dá spolehnout:
+Na tohle se dá spolehnout:
 
 - **Automatický běh má nižší strop než ruční** (`PIKA_STROP_CRON`, deset
   zápisů). U ručního běhu si plán přečteš a zarazíš ho; u automatického
@@ -275,6 +275,11 @@ Tři věci, na které se dá spolehnout:
   neopakuje; **jiná potíž se ozve hned** a ve výsledku volání zůstává
   potíž vždycky. Po restartu Workeru dojde jeden mail navíc, což je
   schválně: říct potíž dvakrát je lepší než ji spolknout.
+- **Inzerát, který obchod nahradil, potíž není.** Když zboží nabídneš
+  jejich cestou (submission), založí k němu obchod nový inzerát a starý
+  už vrátit do prodeje nejde (`409 replaced_by_submission_piece`).
+  Kus u nich visí pod tím novým, takže se o tom mail neposílá — je to
+  vidět jen ve výsledku (`nahrazeno_obchodem`).
 - **Pád komise neumlčí ranní obhlídku.** Jsou to dvě nezávislé věci
   a běží po sobě, ne jedna místo druhé.
 

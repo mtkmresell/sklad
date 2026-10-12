@@ -885,9 +885,13 @@ async function pikaVolej(env, cesta, moznosti) {
     }
     /* Ostatní 4xx jsou o tom, co jsme poslali — opakovat nemá co pomoct.
        404 tu znamená „není to tvoje", ne „už to zmizelo"; smazat kvůli
-       němu vystavení by byla chyba. */
-    throw pikaChyba('Pikastore odmítl ' + cesta.split('?')[0] + ': ' + odpoved.status
+       němu vystavení by byla chyba. Jejich kód odmítnutí jde s chybou
+       dál, ať se dá poznat, co je potíž a co jen trvalý stav
+       (`PIKA_NAHRAZENO`). */
+    const chyba = pikaChyba('Pikastore odmítl ' + cesta.split('?')[0] + ': ' + odpoved.status
       + (znacka ? ' ' + znacka : '') + (telo && telo.detail ? ' — ' + telo.detail : ''), 'odmitnuto');
+    chyba.pikaZnacka = znacka;
+    throw chyba;
   }
 }
 
@@ -1081,10 +1085,20 @@ function pikaText(v) {
    kus založil podruhé vedle toho, který u nich už visí.
 
    Zlomkové velikosti (41 1/3) musí lomítko udržet, jinak by se
-   „41 1/3" a „41" slily v jednu. */
+   „41 1/3" a „41" slily v jednu.
+
+   **Pomlčka v rozsahu je u nich typografická.** Kus, který obchod
+   založí sám (z nabídky, `submission`), dostane velikost „EU 45–46"
+   s pomlčkou „–", sklad vede „45-46" se spojovníkem. Dokud se to
+   nesrovnávalo, konektor kus nespároval, myslel si, že nevisí, a při
+   každém běhu zkoušel vrátit do prodeje starý inzerát, který obchod
+   tím novým nahradil — a majiteli chodil mail několikrát denně
+   (ostrá data, Crocsy, 12. 10. 2026). Všechny pomlčky se proto berou
+   jako spojovník. */
 const PIKA_JEDNA_VELIKOST = ['os', 'o/s', 'onesize', 'one size', 'uni', 'universal', 'u'];
 function pikaVelikost(v) {
-  let s = pikaText(v).replace(/^eu\s*/, '').replace(/\s+/g, '');
+  let s = pikaText(v).replace(/^eu\s*/, '').replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/\s+/g, '');
   if (PIKA_JEDNA_VELIKOST.indexOf(s) !== -1) return 'os';
   // Rozsah dvou písmenných velikostí (s/m, l/xl) — bereme první část
   const m = s.match(/^([a-z]{1,3})\/[a-z]{1,3}$/);
@@ -1572,9 +1586,21 @@ function pikaOtisk(text) {
     + '-a' + hex.slice(17, 20) + '-' + hex.slice(20, 32);
 }
 
+/* Inzerát, který obchod nahradil kusem z nabídky (`submission`) —
+   majitel jim zboží nabídl jejich cestou a obchod k němu založil nový
+   inzerát. Starý už vrátit do prodeje nejde a nikdy nepůjde, takže
+   to **není potíž, je to trvalý stav**: kus u nich visí pod novým
+   inzerátem a majitel s tím nemá co dělat. Do mailu proto nepatří —
+   kdyby se nový kus jednou nespároval (zápis, který ještě neznáme),
+   chodil by o tom mail po každém běhu, jako se to stalo kvůli „EU 45–46"
+   (`pikaVelikost`). A založit místo něj nový se taky nesmí: to by byl
+   druhý inzerát na tentýž pár. Zůstává vidět ve výsledku
+   (`nahrazeno_obchodem`). Pozná se podle kódu z jejich odpovědi. */
+const PIKA_NAHRAZENO = 'replaced_by_submission_piece';
+
 async function pikaProved(env, plan, volby) {
   volby = volby || {};
-  const hotovo = { vystaveno: [], aktivovano: [], stazeno: [] };
+  const hotovo = { vystaveno: [], aktivovano: [], stazeno: [], nahrazeno_obchodem: [] };
   const potize = [];
   let zapisu = 0;
   /* Strop na jeden běh. Kromě jejich limitu 120 zápisů za minutu se
@@ -1605,7 +1631,14 @@ async function pikaProved(env, plan, volby) {
     try {
       await pikaVolej(env, '/listings/' + u.id + '/activate', { method: 'POST' });
       hotovo.aktivovano.push(u.popis); zapisu++;
-    } catch (e) { potize.push('vrácení do prodeje ' + u.popis + ': ' + e.message); if (e.pikaKod === 'token') break; }
+    } catch (e) {
+      if (e.pikaZnacka === PIKA_NAHRAZENO) {
+        hotovo.nahrazeno_obchodem.push({ id: u.popis, nazev: u.nazev, velikost: u.velikost });
+        continue;
+      }
+      potize.push('vrácení do prodeje ' + u.popis + ': ' + e.message);
+      if (e.pikaKod === 'token') break;
+    }
   }
   for (const u of ukony.vystavit) {
     if (!zbyva()) break;
@@ -1624,7 +1657,9 @@ async function pikaProved(env, plan, volby) {
     }
   }
   return { hotovo, potize, zapisu, strop,
-    zbylo: (ukony.stahnout.length + ukony.aktivovat.length + ukony.vystavit.length) - zapisu };
+    // Nahrazený inzerát není nedodělaný úkon — vrátit už ho nejde
+    zbylo: (ukony.stahnout.length + ukony.aktivovat.length + ukony.vystavit.length) - zapisu
+      - hotovo.nahrazeno_obchodem.length };
 }
 
 /* Tatáž potíž se nehlásí pořád dokola.

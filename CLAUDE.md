@@ -745,12 +745,12 @@ o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
 
 Tři věci v tomhle projektu **se nenasazují samy** a kód v repozitáři o nich
 nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru.
-**Ptej se na ně**, místo abys předpokládal, že běží. Stav k 5. 10. 2026:
+**Ptej se na ně**, místo abys předpokládal, že běží. Stav k 12. 10. 2026:
 
 | co | kde | stav |
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **nenasazeno** (zjištěno 5. 10.) — `sklad_listing` v Cloudflare je, ale **bez opravy míst prodeje**: odmítá Tuzex hláškou „takovou platformu sklad nezná", která je jen ve staré verzi (`f59f81d`). Nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (12. 10.) — v repozitáři je oprava mailů „SKLAD × Pikastore: 3 věcí se nepovedlo" (`replaced_by_submission_piece`, pomlčka ve velikosti). Nasazený worker je aspoň ze 13. 9. (umí odklad čerstvých kusů), ale jestli má i opravu míst prodeje z 1. 10., se nepoznalo: stará verze odmítá Tuzex hláškou „takovou platformu sklad nezná" (`f59f81d`), nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. Nasazením dorazí obojí. **Dokud se nenasadí, maily chodí dál.** |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **nevím, zeptej se** — bez nich e-mailová upozornění vůbec nechodí |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
@@ -933,7 +933,21 @@ v prohlížeči. Druhá kopie pravidel v aplikaci by se rozešla.
   u nich už visí — nebo, u inzerátu bez SKU, by se nikdy nespároval
   a nestáhl, i kdyby se kus prodal jinde. Velikostí se to nedotkne,
   přeskakuje se jen samotné písmeno mezi mezerami. Zlomkové velikosti
-  (41 1/3) si lomítko musí udržet.
+  (41 1/3) si lomítko musí udržet. **Pomlčka v rozsahu velikostí je
+  u nich typografická** („EU 45–46"), sklad má spojovník („45-46") —
+  všechny pomlčky se berou jako spojovník.
+- **Inzerát nahrazený kusem z nabídky není potíž** (`PIKA_NAHRAZENO`).
+  Když majitel zboží obchodu nabídne jejich cestou (`submission`),
+  obchod k němu založí nový inzerát a ten starý tím nahradí; vrátit ho
+  do prodeje už nejde (`409 replaced_by_submission_piece`). Našlo se to
+  na ostrých datech (12. 10. 2026): Crocsy prošly nabídkou, nové
+  inzeráty nesly „EU 45–46", konektor je kvůli pomlčce nespároval
+  a **při každém běhu zkoušel vrátit ty staré — mail o „potíži" chodil
+  několikrát denně** a tlumič ho nezastavil, protože jeho paměť žije
+  jen v jednom isolate. Takové odmítnutí proto nejde do potíží ani do
+  mailu, jen do výsledku (`nahrazeno_obchodem`), a **nový inzerát se
+  místo něj nezakládá** — byl by to druhý na tentýž pár. Jiné odmítnutí
+  vrácení do prodeje potíž dál je. Hlídá to `test-pikastore.js`, sekce 21.
 - **Co se nepovede, přijde mailem** (`pikaOhlasPotize`). Srovnání běží
   na pozadí; bez zprávy by se o zaseknutém kusu majitel dozvěděl leda
   tak, že by si toho všiml v jejich portálu. Bez nastavené pošty

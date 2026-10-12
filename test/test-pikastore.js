@@ -721,6 +721,11 @@ const ME = {
     ['L', 'L/XL', 'Nike Flame Club Cap Navy', 'Nike Flame Club Cap Navy'],
     ['L', 'L', 'Corteiz Snickers White Tee', 'Corteiz White Snickers Tee'],
     ['EU42', '42', 'Air Jordan 12 Retro Flu Game 2025', 'Jordan 12 Retro Flu Game (2025)'],
+    /* Rozsah u kusů, které obchod založil sám (z nabídky): „EU 45–46"
+       s typografickou pomlčkou a mezerou, sklad „45-46". Ostrá data,
+       Crocsy (12. 10. 2026) — viz sekce 21. */
+    ['EU 45–46', '45-46', 'Crocs Classic Clog Cars', 'Crocs Classic Clog Cars'],
+    ['EU 42—43', '42-43', 'Crocs Classic Clog Cars', 'Crocs Classic Clog Cars'],
   ];
   for (const [velJejich, velNase, nazevJejich, nazevNase] of dvojice) {
     scenarSeSkladem(
@@ -742,6 +747,15 @@ const ME = {
   p = (await pika()).telo.plan;
   ok('zlomkovou velikost neslévá s celou', (p.vystavit || []).length === 1,
     '41 1/3 není 41 | ' + JSON.stringify(p.vystavit));
+  // Ani rozsah se nesmí slít s první velikostí z něj
+  scenarSeSkladem(
+    [{ id: 'x', name: 'Pantofle', sku: 'P-1', size: '45', category: 'sneakers',
+      saleState: 'stock', location: 'Doma', targetPrice: 1000 }],
+    [{ id: 'R-8', short_id: 'R-8', sku: 'P-1', size: 'EU 45–46', status: 'listed',
+      price_cents: 133300, commission_rate_bp: 2500 }]);
+  p = (await pika()).telo.plan;
+  ok('rozsah 45–46 neslévá se 45', (p.vystavit || []).length === 1,
+    '45 není 45-46 | ' + JSON.stringify(p.vystavit));
 
   sekce('12) Zápisy');
   let odeslane = [];
@@ -1699,6 +1713,79 @@ const ME = {
   ok('a o pádu komise se taky ví',
     cronPosta.some(x => /Pikastore/.test(x.subject || '')),
     JSON.stringify(cronPosta.map(x => x.subject)));
+
+  sekce('21) Inzerát, který obchod nahradil kusem z nabídky');
+  /* Ostrá data (12. 10. 2026). Crocsy prošly u Pikastore nabídkou
+     (submission) — obchod jim založil nové inzeráty a ty staré, které
+     kdysi založil konektor, tím nahradil; zůstaly jako `withdrawn`.
+     Nové nesou velikost po jejich: „EU 45–46" s typografickou pomlčkou,
+     sklad vede „45-46". Konektor je nespároval, myslel si, že kus nevisí,
+     a při každém běhu zkoušel ty staré vrátit do prodeje. Pikastore to
+     odmítl `409 replaced_by_submission_piece` a majiteli chodil mail
+     několikrát denně — přestože bylo všechno v pořádku. */
+  const CROCS = { name: 'Crocs Crocband Clog Cars Lightning McQueen Dinoco', sku: '213582-90H',
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 3500 };
+  const crocsSklad = ['45-46', '43-44', '43-44', '42-43', '41-42']
+    .map((v, i) => Object.assign({ id: 'cr' + i, size: v }, CROCS));
+  const crocsRadek = (kratke, vel, stav) => ({ id: 'uuid-' + kratke, short_id: kratke,
+    name: 'Crocs Classic Clog Cars Lightning McQueen Dinoco', sku: '213582-90H', size: vel,
+    status: stav, price_cents: 469000, commission_rate_bp: 2500, master_product_id: 'mp-crocs',
+    created_at: '2026-09-21T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' });
+  const crocsUNich = [
+    crocsRadek('L073604', '45-46', 'withdrawn'), crocsRadek('L076822', 'EU 45–46', 'listed'),
+    crocsRadek('L073605', '43-44', 'withdrawn'), crocsRadek('L076823', 'EU 43–44', 'listed'),
+    crocsRadek('L073767', '42-43', 'withdrawn'), crocsRadek('L076825', 'EU 42–43', 'listed'),
+    crocsRadek('L073706', 'EU 42–43', 'listed'), crocsRadek('L073600', '41-42', 'listed'),
+  ];
+  const nahrazujici = (url, init) => {
+    odeslane.push({ url, method: (init && init.method) || 'GET' });
+    if (/\/activate$/.test(url)) {
+      return Response.json({ error: 'replaced_by_submission_piece' }, { status: 409 });
+    }
+    return Response.json({ id: 'novy', short_id: 'N-1', status: 'listed' });
+  };
+  scenarSeSkladem(crocsSklad, crocsUNich, nahrazujici);
+  p = (await pika()).telo.plan;
+  shoda('kus z nabídky („EU 45–46") se spáruje — nic se nevrací do prodeje',
+    p.vratit_do_prodeje || [], []);
+  shoda('ani se nezakládá nový', p.vystavit || [], []);
+  ok('a jejich kusy nejsou „neznámé"',
+    !(p.visi_navic_nezname || []).some(x => /Crocs/.test(x.nazev || '')),
+    JSON.stringify(p.visi_navic_nezname));
+  c = await cron();
+  shoda('cron nic nezkouší a nepíše', [c.zapisy.length, c.posta.length], [0, 0]);
+
+  /* Kdyby se nový kus přece jen nespároval (jiný zápis, který ještě
+     neznáme), nahrazený inzerát se zkusí vrátit a obchod odmítne.
+     To ale není potíž: kus u nich visí pod novým inzerátem a majitel
+     s tím nic dělat nemá. Mail by byl jen spam — a založit místo toho
+     nový by znamenal druhý inzerát na tentýž pár. */
+  scenarSeSkladem([crocsSklad[0]], [crocsRadek('L073604', '45-46', 'withdrawn'),
+    Object.assign(crocsRadek('L076822', 'XL', 'listed'), { sku: 'JINE-1', name: 'Jiný zápis' })],
+  nahrazujici);
+  c = await cron();
+  ok('nahrazený inzerát se zkusí vrátit', c.zapisy.some(x => /\/activate$/.test(x.url)),
+    JSON.stringify(c.zapisy.map(x => x.method + ' ' + x.url)));
+  ok('ale nic se nezakládá', !c.zapisy.some(x => /\/listings$/.test(x.url)),
+    JSON.stringify(c.zapisy.map(x => x.method + ' ' + x.url)));
+  shoda('a mail nechodí', c.posta.length, 0);
+  const sNahrazenym = await srovnat({ provest: true });
+  ok('ve výsledku to není potíž', !(sNahrazenym.potize || []).length
+    && sNahrazenym.stav === 'provedeno', JSON.stringify(sNahrazenym.potize) + ' ' + sNahrazenym.stav);
+  ok('ale je vidět, co obchod nahradil',
+    ((sNahrazenym.provedeno || {}).nahrazeno_obchodem || []).some(x => /L073604/.test(JSON.stringify(x))),
+    JSON.stringify(sNahrazenym.provedeno));
+  ok('a nestraší jako nedodělaný úkon', !/Zbývá/.test(sNahrazenym.poznamka || ''),
+    sNahrazenym.poznamka);
+
+  // Jiné odmítnutí vrácení do prodeje potíž dál je — to se ztratit nesmí
+  scenarSeSkladem([crocsSklad[0]], [crocsRadek('L073604', '45-46', 'withdrawn')], (url, init) => {
+    odeslane.push({ url, method: (init && init.method) || 'GET' });
+    return Response.json({ error: 'listing_locked', detail: 'zamčeno při inventuře' }, { status: 409 });
+  });
+  c = await cron();
+  ok('jiné 409 při vracení do prodeje mail pošle', c.posta.length === 1
+    && /zamčeno při inventuře/.test((c.posta[0] || {}).text || ''), JSON.stringify(c.posta).slice(0, 200));
 
   global.fetch = fetchPredCronem;
 
