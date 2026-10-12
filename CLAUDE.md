@@ -751,7 +751,7 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
 | `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (12. 10.) — v repozitáři je oprava mailů „SKLAD × Pikastore: 3 věcí se nepovedlo" (`replaced_by_submission_piece`, pomlčka ve velikosti). Nasazený worker je aspoň ze 13. 9. (umí odklad čerstvých kusů), ale jestli má i opravu míst prodeje z 1. 10., se nepoznalo: stará verze odmítá Tuzex hláškou „takovou platformu sklad nezná" (`f59f81d`), nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. Nasazením dorazí obojí. **Dokud se nenasadí, maily chodí dál.** |
-| `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **nevím, zeptej se** — bez nich e-mailová upozornění vůbec nechodí |
+| `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
 workeru nemá cenu hledat v aplikaci ani v nastavení míst prodeje —
