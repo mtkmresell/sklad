@@ -216,6 +216,9 @@ header{flex-wrap:wrap;gap:8px;padding:10px 12px;}
 .crm-contact-link{color:var(--text);text-decoration:none;cursor:pointer;transition:color 0.15s;}
 .crm-contact-link:hover{color:var(--accent);}
 .crm-contact-link.is-copied{color:var(--accent);}
+.crm-vydejna-odkaz{display:inline-block;margin-top:6px;font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:2px 7px;text-decoration:none;white-space:nowrap;transition:color 0.15s,border-color 0.15s;}
+.crm-vydejna-odkaz.je-odkaz{color:var(--accent);border-color:var(--accent);}
+.crm-vydejna-odkaz:hover{color:var(--accent);border-color:var(--accent);}
 /* Nebezpečná akce v patičce detailu (mazání zákazníka) */
 .crm-danger-btn:hover{border-color:var(--danger)!important;color:var(--danger)!important;}
 .customer-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;cursor:pointer;transition:border-color 0.2s,transform 0.15s;display:flex;flex-direction:column;min-width:0;}
@@ -14376,6 +14379,93 @@ function _crmContactUrl(type, value){
   }
 }
 
+// ── VÝDEJNÍ MÍSTO U ZÁKAZNÍKA ──
+// Text výdejního místa se dřív musel kopírovat a hledat ručně, aby bylo
+// vidět, co je to za výdejnu a kdy má otevřeno. Teď se k němu dá vložit
+// odkaz ze stránky dopravce (nebo z map) a karta na něj prokliká.
+// Stránku dopravce prohlížeč přečíst nesmí (CORS), takže se z odkazu bere
+// jen to, co je napsané v něm samém: dopravce podle domény a u Map Google
+// i název s adresou. Otevírací dobu schválně neopisujeme — mění se a opsaná
+// by časem lhala; odkaz ukáže vždycky tu aktuální.
+var VYDEJNA_DOPRAVCI = [
+  { re: /(^|\.)(zasilkovna\.(cz|sk)|packeta\.[a-z.]+)$/, n: 'Zásilkovna' },
+  { re: /(^|\.)(ppl|pplparcelshop)\.(cz|sk|com)$/, n: 'PPL' },
+  { re: /(^|\.)(dpd\.(com|cz|sk)|dpdgroup\.com)$/, n: 'DPD' },
+  { re: /(^|\.)(gls-czech\.com|gls-group\.(com|eu)|gls\.cz)$/, n: 'GLS' },
+  { re: /(^|\.)balikovna\.cz$/, n: 'Balíkovna' },
+  { re: /(^|\.)(ceskaposta|postaonline)\.cz$/, n: 'Česká pošta' },
+  { re: /(^|\.)alza\.(cz|sk)$/, n: 'AlzaBox' },
+  { re: /(^|\.)(wedo|intime)\.cz$/, n: 'WE|DO' },
+  { re: /(^|\.)dhl\.(com|cz|de)$/, n: 'DHL' },
+  { re: /(^|\.)ups\.com$/, n: 'UPS' },
+  { re: /(^|\.)mapy\.(cz|com)$/, n: 'Mapy.cz' }
+];
+// Rozbor vloženého odkazu: null, když to odkaz není (jen http/https —
+// cokoli jiného by v href umělo spustit kód)
+function vydejnaRozbor(text){
+  var v = String(text || '').trim();
+  if (!/^https?:\/\/[^\s]+$/i.test(v)) return null;
+  var u; try { u = new URL(v); } catch (e) { return null; }
+  var host = u.hostname.toLowerCase().replace(/^www\./, '');
+  var r = { url: u.href, host: host, dopravce: '', nazev: '' };
+  // Mapy Google: /maps/place/<název, adresa>/@… nese obojí přímo v adrese
+  var mapy = /(^|\.)google\.[a-z.]+$/.test(host) && /^\/maps/.test(u.pathname);
+  if (mapy || host === 'maps.app.goo.gl' || (host === 'goo.gl' && /^\/maps/.test(u.pathname))) {
+    r.dopravce = 'Mapy Google';
+    var m = u.pathname.match(/\/maps\/place\/([^\/]+)/);
+    if (m) {
+      try { r.nazev = decodeURIComponent(m[1].replace(/\+/g, ' ')).replace(/\s+/g, ' ').trim(); }
+      catch (e) { r.nazev = ''; }
+    }
+    return r;
+  }
+  for (var i = 0; i < VYDEJNA_DOPRAVCI.length; i++) {
+    if (VYDEJNA_DOPRAVCI[i].re.test(host)) { r.dopravce = VYDEJNA_DOPRAVCI[i].n; break; }
+  }
+  return r;
+}
+// Kam vede proklik v kartě: vložený odkaz, a bez něj aspoň hledání v mapě
+// (dopravce z „Doručení" + text výdejního místa). Mapy ukážou i otevírací dobu.
+function vydejnaOdkaz(c){
+  var r = vydejnaRozbor(c && c.pickup_url);
+  if (r) return { href: r.url, popis: r.dopravce || r.host, tip: 'Otevřít výdejní místo' + (r.dopravce ? ' (' + r.dopravce + ')' : ''), odkaz: true };
+  var text = String((c && c.pickup) || '').trim();
+  if (!text) return null;
+  var dop = '';
+  var pref = c.delivery_preference || '';
+  Object.keys(CARRIERS).forEach(function(n){ if (_crmSlug(n) === pref) dop = n; });
+  // Dopravce se přidá, jen když už v textu není („GLS Box …" nemá být „DPD GLS Box …")
+  if (dop && _crmSlug(text).indexOf(_crmSlug(dop)) !== -1) dop = '';
+  var q = (dop ? dop + ' ' : '') + text;
+  return { href: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q),
+    popis: 'Najít v mapě', tip: 'Hledat „' + q + '" v Mapách Google', odkaz: false };
+}
+// Formulář: vložený odkaz doplní název a řekne, co z něj poznal
+function vydejnaFormObnov(){
+  var pole = document.getElementById('crmFldPickupUrl');
+  var nazev = document.getElementById('crmFldPickup');
+  var hint = document.getElementById('crmPickupHint');
+  if (!pole || !hint) return;
+  var v = pole.value.trim();
+  if (!v) { hint.textContent = ''; return; }
+  var r = vydejnaRozbor(v);
+  if (!r) { hint.textContent = 'Tohle nevypadá jako odkaz — má začínat https://'; hint.style.color = 'var(--danger)'; return; }
+  hint.style.color = 'var(--muted)';
+  var doplneno = false;
+  if (r.nazev && nazev && !nazev.value.trim()) { nazev.value = r.nazev; doplneno = true; }
+  hint.textContent = (r.dopravce || r.host) + ' — v kartě zákazníka bude proklik'
+    + (doplneno ? '; název a adresa se doplnily z odkazu' : '');
+}
+// Odkaz vložený rovnou do pole s názvem se přestěhuje, kam patří
+function vydejnaNazevVstup(){
+  var nazev = document.getElementById('crmFldPickup');
+  var pole = document.getElementById('crmFldPickupUrl');
+  if (!nazev || !pole || !vydejnaRozbor(nazev.value)) return;
+  pole.value = nazev.value.trim();
+  nazev.value = '';
+  vydejnaFormObnov();
+}
+
 // Kontakty, které se po kliknutí kopírují místo otevírání
 function _crmContactCopies(type){
   return ['email','telefon'].indexOf((type||'').toLowerCase()) !== -1;
@@ -14416,8 +14506,11 @@ function _crmTabContacts(c){
       +'</div>';
   }).join('');
   // Kam posílat — výdejní místo se u opakovaných zákazníků ptá pořád dokola
+  var vydejna = vydejnaOdkaz(c);
+  var vydejnaR = vydejnaRozbor(c.pickup_url);
   var dorucRadky = [
-    { l: 'Výdejní místo', v: c.pickup },
+    // Bez názvu, jen s odkazem, se řádek jmenuje podle toho, co se z odkazu poznalo
+    { l: 'Výdejní místo', v: c.pickup || (vydejnaR ? (vydejnaR.nazev || vydejnaR.dopravce || vydejnaR.host) : ''), odkaz: vydejna },
     { l: 'Adresa', v: c.address },
   ].filter(function(x){ return (x.v || '').trim(); });
   var doruc = '';
@@ -14427,9 +14520,12 @@ function _crmTabContacts(c){
       + dorucRadky.map(function(x, i){
           return '<div class="crm-contact-row row-anim" style="animation-delay:'+((rowsPocet+i)*20)+'ms;">'
             + '<span style="font-size:10px;color:var(--muted);font-family:DM Mono,monospace;width:80px;flex-shrink:0;">'+x.l+'</span>'
+            + '<div style="flex:1;min-width:0;">'
             + '<span class="crm-contact-link" data-tip="Kliknutím zkopíruješ" data-copy="'+escHtml(x.v)+'" onclick="crmCopyContact(this)" '
-            + 'style="flex:1;font-size:13px;min-width:0;overflow-wrap:anywhere;white-space:pre-line;">'+escHtml(x.v)+'</span>'
-            + '</div>';
+            + 'style="display:block;font-size:13px;overflow-wrap:anywhere;white-space:pre-line;">'+escHtml(x.v)+'</span>'
+            // Proklik pod textem, ne vedle — na mobilu by název zmáčkl do sloupečku
+            + (x.odkaz ? '<a class="crm-vydejna-odkaz'+(x.odkaz.odkaz?' je-odkaz':'')+'" href="'+escHtml(x.odkaz.href)+'" target="_blank" rel="noopener" data-tip="'+escHtml(x.odkaz.tip)+'">'+escHtml(x.odkaz.popis)+' ↗</a>' : '')
+            + '</div></div>';
         }).join('')
       + '</div>';
   }
@@ -15231,6 +15327,8 @@ function openEditCustomerModal(id){
   var _dic=document.getElementById('crmFldDic'); if(_dic) _dic.value=c.dic||'';
   var _web=document.getElementById('crmFldWeb'); if(_web) _web.value=c.web||'';
   var _pick=document.getElementById('crmFldPickup'); if(_pick) _pick.value=c.pickup||'';
+  var _pickUrl=document.getElementById('crmFldPickupUrl'); if(_pickUrl) _pickUrl.value=c.pickup_url||'';
+  vydejnaFormObnov();
   var _addr=document.getElementById('crmFldAddress'); if(_addr) _addr.value=c.address||'';
   document.getElementById('crmFldFollowupDate').value=c.followup_date||'';
   document.getElementById('crmFldFollowupNote').value=c.followup_note||'';
@@ -15533,9 +15631,10 @@ function openNewCustomerModal() {
   crmNewRating = 0;
   _crmContactIdx = 0;
   _crmUpdateModalForMode(crmMode);
-  ['crmFldName','crmFldNoteQuick','crmFldNoteSpecial','crmFldShoeEu','crmFldTop','crmFldBottom','crmFldSizeNote','crmFldFollowupNote','crmFldIco','crmFldDic','crmFldWeb','crmFldPickup','crmFldAddress'].forEach(function(id){
+  ['crmFldName','crmFldNoteQuick','crmFldNoteSpecial','crmFldShoeEu','crmFldTop','crmFldBottom','crmFldSizeNote','crmFldFollowupNote','crmFldIco','crmFldDic','crmFldWeb','crmFldPickup','crmFldPickupUrl','crmFldAddress'].forEach(function(id){
     var el = document.getElementById(id); if(el) el.value = '';
   });
+  vydejnaFormObnov();
   document.getElementById('crmFldStatus').value = crmMode==='b2b' ? 'aktivni' : 'bezny';
   document.getElementById('crmFldFollowupDate').value = '';
   crmRenderStars(0);
@@ -15639,6 +15738,8 @@ function saveNewCustomer() {
     dic: ((document.getElementById('crmFldDic')||{}).value||'').trim(),
     web: ((document.getElementById('crmFldWeb')||{}).value||'').trim(),
     pickup: ((document.getElementById('crmFldPickup')||{}).value||'').trim(),
+    // Jen skutečný odkaz — co neprojde rozborem, se neuloží (do href by to nepatřilo)
+    pickup_url: (vydejnaRozbor((document.getElementById('crmFldPickupUrl')||{}).value)||{}).url || '',
     address: ((document.getElementById('crmFldAddress')||{}).value||'').trim(),
     size_shoes_eu: (document.getElementById('crmFldShoeEu').value||'').trim(),
     size_clothing_top: (document.getElementById('crmFldTop').value||'').trim(),
@@ -20789,7 +20890,12 @@ rebuildBrandTables();
         </div>
         <div class="fi full">
           <label>Výdejní místo (kam posílat)</label>
-          <input type="text" id="crmFldPickup" placeholder="Zásilkovna Praha 7, Dělnická 12">
+          <input type="text" id="crmFldPickup" placeholder="Zásilkovna Praha 7, Dělnická 12" oninput="vydejnaNazevVstup()">
+        </div>
+        <div class="fi full">
+          <label>Odkaz na výdejní místo</label>
+          <input type="url" id="crmFldPickupUrl" placeholder="Vlož odkaz ze stránky dopravce nebo z Map Google" oninput="vydejnaFormObnov()">
+          <div id="crmPickupHint" style="font-size:11px;color:var(--muted);margin-top:4px;min-height:14px;"></div>
         </div>
         <div class="fi full">
           <label>Adresa</label>

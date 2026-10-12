@@ -397,6 +397,23 @@ z volného textu („Pepa z bazaru 777…") udělalo hromadu karet.
 
 Hlídá to `test-vykup.js`.
 
+### Výdejní místo u zákazníka (`VÝDEJNÍ MÍSTO U ZÁKAZNÍKA`)
+
+Vedle textu výdejního místa má karta zákazníka i **odkaz** (`pickup_url`),
+vložený ručně ze stránky dopravce nebo z Map Google. V kartě je pod
+názvem proklik popsaný dopravcem (podle domény). Bez odkazu vede proklik
+aspoň na **hledání v Mapách Google** (dopravce z „Doručení" + text místa),
+takže i staré záznamy jdou otevřít jedním klikem — mapy ukážou i otevírací
+dobu. Majitel chtěl přestat kopírovat adresu a googlit ji ručně (12. 10. 2026).
+
+**Stránku dopravce prohlížeč nepřečte** (CORS), takže se z odkazu bere jen
+to, co je v něm napsané: u Map Google název s adresou (`/maps/place/…`) —
+ten doplní prázdné pole s názvem, ručně napsaný nikdy nepřepíše. Ze stránek
+dopravců se název **nehádá** a otevírací doba se schválně neopisuje: mění
+se a opsaná by časem lhala. Kdyby majitel chtěl adresu a hodiny vytahovat
+ze stránky dopravce, musel by to dělat konektor. Ukládá se jen `http(s)`
+odkaz, protože jde do `href`. Hlídá to `test-crmaddress.js`, sekce 5 až 7.
+
 ### Co chybí u položky (`CO CHYBÍ U POLOŽKY`)
 
 Oranžový trojúhelník v levém horním rohu řádku (i karty) říká, že
@@ -678,6 +695,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | databáze příspěvků na Instagramu | `INSTAGRAM — DATABÁZE PŘÍSPĚVKŮ` |
 | výkup od partnera (Od koho → CRM) | `VÝKUP OD PARTNERA` |
 | co u položky chybí (oranžový roh) | `CO CHYBÍ U POLOŽKY` |
+| výdejní místo zákazníka (odkaz) | `VÝDEJNÍ MÍSTO U ZÁKAZNÍKA` |
 
 ## Čtení dat mimo prohlížeč
 
