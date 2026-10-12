@@ -378,6 +378,22 @@ function prodanoPred(ted, dnu) {
   nastavSklad([{ id: 'c', name: 'Na Bazoši', saleState: 'stock', platforms: ['Bazoš.cz'] }]);
   ok('když není co projít, mlčí i v pondělí', (await cron(PONDELI)).length === 0);
 
+  /* Ostrá data 12. 10. 2026: mail hlásil 100 nevystavených kusů, 93 z nich
+     držených (Hold) nebo ještě na cestě. Ty do seznamu práce nepatří. */
+  nastavSklad([
+    { id: 'h1', name: 'Držený box', saleState: 'stock', platforms: [], stockIntent: 'hold', buyDate: '2026-05-01' },
+    { id: 'h2', name: 'Nucené držení', saleState: 'stock', platforms: [], stockIntent: 'forced_hold', buyDate: '2026-05-01' },
+    { id: 'h3', name: 'Ještě na cestě', saleState: 'stock', platforms: [], location: 'Na cestě', buyDate: '2026-05-01' },
+    { id: 'h4', name: 'Vrácený kus', saleState: 'stock', platforms: [], location: 'Vráceno', buyDate: '2026-05-01' },
+    { id: 'h5', name: 'Flip doma bez inzerátu', saleState: 'stock', platforms: [], stockIntent: 'flip', buyDate: '2026-05-01' },
+  ]);
+  const drzene = (await cron(PONDELI))[0] || {};
+  ok('kus k prodeji doma bez inzerátu se hlásí', /Flip doma bez inzerátu/.test(drzene.text || ''), drzene.text);
+  ok('držené ani nedoma ne', !/Držený box|Nucené držení|Ještě na cestě|Vrácený kus/.test(drzene.text || ''), drzene.text);
+  ok('a počet sedí', /Nikde nevystaveno \(1\)/.test(drzene.text || ''), drzene.text);
+  nastavSklad([{ id: 'h1', name: 'Držený box', saleState: 'stock', platforms: [], stockIntent: 'hold' }]);
+  ok('samé držené kusy — v pondělí mlčí', (await cron(PONDELI)).length === 0);
+
   // Dlouhý výčet by zprávu nafoukl a stejně by se nečetl
   nastavSklad(Array.from({ length: 20 }, (_, i) => ({
     id: 'x' + i, name: 'Kus ' + i, saleState: 'stock', platforms: [], buyDate: '2026-05-01',

@@ -2897,6 +2897,12 @@ function zasilkaBlok(polozky, dnes) {
    ozvou, když se něco stane; tenhle chodí každé pondělí, protože o to
    majitel stál — je to připomínka rituálu, ne událost. Proto taky mlčí,
    když není co projít, jinak by z něj byl otravný budík. */
+const OBHLIDKA_DRZENO = ['hold', 'forced_hold'];
+function neniKVystaveni(it) {
+  if (OBHLIDKA_DRZENO.indexOf(it.stockIntent) !== -1) return true;
+  const misto = it.location || 'Doma';
+  return PIKA_MISTA_PRYC.indexOf(misto) !== -1 || PIKA_MISTA_NEDOMA.indexOf(misto) !== -1;
+}
 function tydenniBlok(polozky, dnes, skupiny) {
   const komisni = new Set(skupiny.eshopy || []);
 
@@ -2911,6 +2917,12 @@ function tydenniBlok(polozky, dnes, skupiny) {
     const lezi = porizeno === null ? null : Math.round((dnes - porizeno) / DEN);
     const zaznam = { nazev: it.name || it.id, lezi, kde };
 
+    /* „Nikde nevystaveno" má být seznam práce, ne výpis skladu. Kus se
+       strategií Hold / Forced hold se prodávat nemá a kus, který není
+       doma (na cestě, vrací se), vystavit nejde. Dokud tu byly, mail
+       12. 10. 2026 hlásil 100 kusů, z nich 93 takových — hlavně
+       držené Pokémon boxy — a majitel ho právem nazval nesmyslem. */
+    if (!kde.length && neniKVystaveni(it)) continue;
     if (!kde.length) bezInzerce.push(zaznam);
     else if (kde.some(p => komisni.has(p))) vKomisi.push(zaznam);
   }

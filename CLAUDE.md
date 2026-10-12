@@ -726,7 +726,11 @@ Tři věci se hlásí schválně jinak, než by se čekalo. **Inzerát až v den
 vypršení**, ne dopředu — Bazoš ho archivuje a nahodí se jedním kliknutím,
 takže předem se nedá dělat nic než ho smazat a vystavit znovu. **Pondělní
 obhlídka** je jediná, která hlásí stav místo okamžiku: chodí každé pondělí,
-protože o to majitel stál, ale mlčí, když není co projít. **Payout
+protože o to majitel stál, ale mlčí, když není co projít. Do seznamu
+„Nikde nevystaveno" **nepatří kusy se strategií Hold / Forced hold ani kusy,
+které nejsou doma** (na cestě, vrací se) — 12. 10. 2026 mail hlásil 100 kusů,
+z toho 93 takových, a majitel ho právem odbyl jako nesmysl (`neniKVystaveni`).
+**Payout
 podle lhůty nastavené u platformy** (`getPayoutDays` v aplikaci, *Nastavení
 → místa prodeje*), pak po týdnech. Ta čísla jsou tím pádem na dvou místech;
 `test-upozorneni.js` porovnává `DEFAULT_PAYOUT_DAYS` s konstantami
