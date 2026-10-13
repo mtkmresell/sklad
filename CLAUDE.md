@@ -1210,15 +1210,25 @@ Vlastní je jen jejich API:
   chodilo patnáct stejných mailů za den. Teď je to v `nezna_katalog`
   s `chybi: 'velikost'` a **zbylé velikosti téhož SKU se zkouší dál**
   — hláška mluví o jedné velikosti.
-- **Chybějící velikost je rozdělaná — majitel chce, ať to jde přes
-  API** (13. 10. 2026). „Tato velikost zatím není na komisi" v portálu
-  znamená jen, že tu velikost zatím nikdo nevystavil; portál ji přidat
-  umí, API odpovídá „Ask the platform to add it first". Jak to portál
-  dělá, odsud vidět nejde (jejich doména je pro vývojové prostředí
-  zablokovaná). Proto `pk_api` — čte popis jejich API a zadané cesty,
-  **jen GET** — a chyby nesou **celé tělo odpovědi** (`pkZbytekChyby`,
-  v náhledu `hlaska`). Po nasazení workeru se z toho zjistí, co poslat
-  jinak. Ruční vystavení v portálu majitel výslovně odmítl jako řešení.
+- **Velikost se dohledává v jejich zápisu** (`pkVelikostZNabidky`).
+  Podle jejich dokumentace (majitel ji poslal 13. 10. 2026) vrací API
+  u nesedící velikosti `400` s `"code": "size_not_available"` **a
+  seznamem `available_sizes`**, a samo varuje před překlepy „42,5" proti
+  „42.5". Konektor ten seznam dřív zahazoval — velikost, kterou e-shop
+  má, jen zapsanou jinak („EU 41", „Medium"), pak vypadala jako
+  chybějící, přestože ji majitel v portálu přidal bez potíží. Teď se
+  z nabídnutých vezme ta, která znamená totéž (`pkVelikostKlic`), a kus
+  se pošle znovu. **Jen když je taková právě jedna** a nikdy přes jinou
+  číselnou soustavu (US 8 ≠ 41) — pověsit kus na jinou velikost je
+  horší než ho nevystavit. Opravdu chybějící velikost přes API podle
+  jejich dokumentace nevznikne („napiš nám a velikost doplníme"); v
+  náhledu i v obhlídce je pak vidět, co u nich je (`velikosti_u_nich`).
+  Kódy `product_not_found` a `size_not_available` se berou přednostně
+  před textem hlášky. Majitel ruční vystavení v portálu odmítl jako
+  řešení — chce, ať to jde přes API.
+- **`pk_api` a celé tělo chyby** — diagnostika jejich API (jen GET)
+  a `pkZbytekChyby`, ať je v hlášení vidět všechno, co k odmítnutí
+  řekli, ne jen první věta.
 - **Co Purekickz nevezme (model i velikost), připomene pondělní
   obhlídka** — blok „Purekickz nevezme" v `tydenniBlok`, z běhu, který
   jede ve stejném cronu těsně před zprávou. Ze srovnání se to hlásit

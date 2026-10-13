@@ -806,6 +806,79 @@ const radek = (o) => Object.assign({
   const hl = ((z.telo.nezna_katalog || [])[0] || {}).hlaska || '';
   ok('u chybějící velikosti je v náhledu celá jejich odpověď',
     /available_sizes/.test(hl) && /42\.5/.test(hl), JSON.stringify(z.telo.nezna_katalog));
+  /* ── Velikost zapsaná v e-shopu jinak ─────────────────────────────
+     Jejich dokumentace: 400 „size_not_available" se seznamem
+     available_sizes; sami varují před překlepy „42,5" vs „42.5". Když
+     e-shop tutéž velikost jen píše jinak, kus se má vystavit pod jejich
+     zápisem — ne skončit mezi „nevezmou". */
+  const jedenKus = (size, sku) => [{ id: 'jk', name: 'Vans OTW Old Skool 36 Pearlized Pack Pink Black',
+    sku: sku || 'VN000E8VHLE', size, category: 'sneakers', saleState: 'stock', location: 'Doma',
+    targetPrice: 5000 }];
+  function sNabidkou(nabidka, kod) {
+    const poslane = [];
+    scenar([], (url, init) => {
+      if ((init && init.method) !== 'POST') return null;
+      const t = JSON.parse(init.body || '{}');
+      poslane.push(t.size);
+      if (nabidka.indexOf(t.size) !== -1) return Response.json({ id: 'nove' });
+      return Response.json({ detail: 'nesedí', code: kod || 'size_not_available',
+        available_sizes: nabidka }, { status: 400 });
+    });
+    return poslane;
+  }
+  polozkySkladu = jedenKus('41');
+  let poslane = sNabidkou(['40', 'EU 41', '42']);
+  z = await srovnat({ provest: true });
+  shoda('velikost zapsaná jinak se pošle znovu jejich zápisem', poslane, ['41', 'EU 41']);
+  ok('a kus se vystaví', ((z.telo.provedeno || {}).vystaveno || []).length === 1
+    && /EU 41/.test(z.telo.provedeno.vystaveno[0]) && !(z.telo.nezna_katalog || []).length,
+    JSON.stringify(z.telo));
+  ok('není to potíž', !(z.telo.potize || []).length, JSON.stringify(z.telo.potize));
+
+  polozkySkladu = jedenKus('42,5');
+  poslane = sNabidkou(['42', '42.5', '43']);
+  z = await srovnat({ provest: true });
+  shoda('desetinná čárka proti tečce', poslane, ['42,5', '42.5']);
+
+  polozkySkladu = [Object.assign(jedenKus('M', 'IX8507-010')[0], { name: 'Nike x One Piece Graphic T-Shirt',
+    category: 'obleceni', targetPrice: 2200 })];
+  poslane = sNabidkou(['Small', 'Medium', 'Large']);
+  z = await srovnat({ provest: true });
+  shoda('písmenná velikost proti slovu', poslane, ['M', 'Medium']);
+
+  // Co znamená totéž jen napůl, se neposílá
+  polozkySkladu = jedenKus('41');
+  poslane = sNabidkou(['EU 41', '41 EU']);
+  z = await srovnat({ provest: true });
+  shoda('dvě kandidátky = nevíme, nic se nehádá', poslane, ['41']);
+  polozkySkladu = jedenKus('41');
+  poslane = sNabidkou(['US 8', 'US 9']);
+  z = await srovnat({ provest: true });
+  shoda('jiná číselná soustava se nepřevádí', poslane, ['41']);
+  const nk = (z.telo.nezna_katalog || [])[0] || {};
+  ok('a v náhledu je vidět, co u nich je', nk.chybi === 'velikost'
+    && JSON.stringify(nk.velikosti_u_nich) === '["US 8","US 9"]', JSON.stringify(nk));
+  polozkySkladu = jedenKus('41');
+  poslane = sNabidkou(['40', '42']);
+  z = await srovnat({ provest: true });
+  shoda('opravdu chybějící velikost se zkusí jen jednou', poslane, ['41']);
+
+  // Podle kódu z dokumentace, ne jen podle textu
+  polozkySkladu = jedenKus('41', 'IX8507-100');
+  scenar([], (url, init) => ((init && init.method) === 'POST'
+    ? Response.json({ detail: 'nic', code: 'product_not_found' }, { status: 404 }) : null));
+  z = await srovnat({ provest: true });
+  ok('product_not_found se pozná podle kódu',
+    ((z.telo.nezna_katalog || [])[0] || {}).chybi === 'model' && !(z.telo.potize || []).length,
+    JSON.stringify(z.telo));
+
+  // Pondělní obhlídka vypíše, co u nich je — ať je vidět případný překlep
+  polozkySkladu = jedenKus('41');
+  sNabidkou(['40', '42']);
+  c = await cron(Date.parse('2026-09-07T08:00:00Z'));
+  const obh = (c.posta.find(x => /^Sklad:/.test(x.subject || '')) || {}).text || '';
+  ok('obhlídka u chybějící velikosti vypíše, co mají', /chybí velikost 41 \(mají: 40, 42\)/.test(obh), obh);
+
   global.fetch = fetchPredCronem;
 
   const cteni = [];

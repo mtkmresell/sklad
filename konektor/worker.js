@@ -2173,6 +2173,7 @@ async function pkVolej(env, cesta, moznosti) {
       + (navic ? ' ' + navic : ''), odpoved.status === 404 ? 'nenalezeno' : 'odmitnuto');
     chyba.pkTelo = telo;
     chyba.pkStatus = odpoved.status;
+    chyba.pkKod = (telo && typeof telo.code === 'string') ? telo.code : null;
     throw chyba;
   }
 }
@@ -2253,6 +2254,8 @@ async function pkApi(env, volby) {
    kódu: `404` i `400` u nich znamenají spoustu jiných věcí a zahrnout
    je celé by spolklo i chyby, o kterých majitel vědět má. */
 function pkNeznaKatalog(e) {
+  // Jejich dokumentace: 404 s "code": "product_not_found". Text je záloha.
+  if (e && e.pkKod === 'product_not_found') return true;
   return /not found on the shop|product not found/i.test((e && e.message) || '');
 }
 
@@ -2271,15 +2274,54 @@ function pkNeznaKatalog(e) {
    Na rozdíl od neznámého modelu se **zbylé velikosti téhož SKU zkouší
    dál** — hláška mluví o jedné velikosti a ostatní projít můžou. */
 function pkNeznaVelikost(e) {
+  // Jejich dokumentace: 400 s "code": "size_not_available" a `available_sizes`
+  if (e && e.pkKod === 'size_not_available') return true;
   return /size\b.*\bdoes not exist on this product/i.test((e && e.message) || '');
+}
+
+/* ── VELIKOST V JEJICH ZÁPISU ────────────────────────────────────────
+   Jejich dokumentace: když velikost nesedí, vrátí API `size_not_available`
+   **se seznamem `available_sizes`** a samo upozorňuje na překlepy typu
+   „42,5" místo „42.5". Sklad píše velikosti po svém („41", „M") a e-shop
+   je může mít zapsané jinak („EU 41", „41 EU", „Medium"). Dokud konektor
+   ten seznam zahazoval, vypadala taková velikost jako chybějící, přestože
+   v e-shopu byla — majitel ji v portálu přidal bez potíží.
+
+   Z nabídnutých se proto vezme ta, která **znamená totéž**, a pošle se
+   znovu. Jen když je taková právě jedna: dvě kandidátky znamenají, že
+   nevíme, a pověsit kus na jinou velikost by znamenalo prodat něco, co
+   majitel nemá. Číselné soustavy se nepřevádějí — „US 8" není „41". */
+const PK_VELIKOST_SLOVA = { xsmall: 'xs', small: 's', medium: 'm', large: 'l',
+  xlarge: 'xl', xxlarge: 'xxl', xxxlarge: 'xxxl' };
+function pkVelikostKlic(v) {
+  let s = pikaVelikost(v).replace(/,/g, '.').replace(/^(.+?)eu$/, '$1').replace(/^size/, '');
+  const slovo = s.replace(/[-_.]/g, '');
+  if (PK_VELIKOST_SLOVA[slovo]) s = PK_VELIKOST_SLOVA[slovo];
+  return s;
+}
+function pkNabizeneVelikosti(e) {
+  const t = e && e.pkTelo;
+  const seznam = t && (t.available_sizes || t.availableSizes);
+  if (!Array.isArray(seznam)) return [];
+  return seznam.map(x => (x && typeof x === 'object')
+    ? (x.size || x.name || x.title || x.value || x.label || '') : x)
+    .map(x => String(x == null ? '' : x).trim()).filter(Boolean);
+}
+function pkVelikostZNabidky(e, nase) {
+  const klic = pkVelikostKlic(nase);
+  if (!klic) return null;
+  const shody = pkNabizeneVelikosti(e).filter(x => pkVelikostKlic(x) === klic && x !== String(nase).trim());
+  return shody.length === 1 ? shody[0] : null;
 }
 
 function pkPopisNeznameho(u, chybi, e) {
   const p = (u && u.popis) || {};
-  return { nazev: p.nazev || null, sku: (u.telo && u.telo.sku) || p.sku || null,
+  const nabizene = pkNabizeneVelikosti(e);
+  return Object.assign({ nazev: p.nazev || null, sku: (u.telo && u.telo.sku) || p.sku || null,
     velikost: p.velikost || null, chybi: chybi || 'model',
     // Jejich celá odpověď — co dalšího k tomu řekli (viz pkZbytekChyby)
-    hlaska: (e && e.message) || null };
+    hlaska: (e && e.message) || null },
+    nabizene.length ? { velikosti_u_nich: nabizene } : {});
 }
 
 async function pkKdoJsem(env) { return pkVolej(env, '/me'); }
@@ -2486,8 +2528,33 @@ async function pkProved(env, plan, volby) {
       }
       // Model znají, jen tuhle velikost ne — viz pkNeznaVelikost
       if (pkNeznaVelikost(e)) {
-        neznaKatalog.push(pkPopisNeznameho(u, 'velikost', e));
         zapisu++;
+        /* Nejdřív zkusit, jestli ji nemají jen jinak zapsanou — viz
+           pkVelikostZNabidky. Jednou, se stejnou cenou i SKU. */
+        const jejich = pkVelikostZNabidky(e, u.telo.size);
+        if (jejich && zbyva()) {
+          const telo2 = Object.assign({}, u.telo, { size: jejich });
+          try {
+            await pkVolej(env, '/listings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(telo2),
+            });
+            zapisu++;
+            hotovo.vystaveno.push((u.popis.nazev || '') + ' ' + (u.popis.velikost || '')
+              + ' (u nich „' + jejich + '") → založeno za ' + kc(u.telo.payout));
+            continue;
+          } catch (e2) {
+            zapisu++;
+            if (!pkNeznaVelikost(e2)) {
+              potize.push('vystavení ' + (u.popis.nazev || '') + ' (velikost „' + jejich + '"): ' + e2.message);
+              if (e2.pikaKod === 'token') break;
+              continue;
+            }
+            e = e2;
+          }
+        }
+        neznaKatalog.push(pkPopisNeznameho(u, 'velikost', e));
         continue;
       }
       potize.push('vystavení ' + (u.popis.nazev || '') + ': ' + e.message);
@@ -2679,11 +2746,18 @@ function pkJedenZaModel(kusy) {
   return ven;
 }
 
+// Které velikosti u toho modelu e-shop má — ať je vidět, jestli nejde o překlep
+function pkMajiVelikosti(x) {
+  const v = (x && x.velikosti_u_nich) || [];
+  if (!v.length) return '';
+  return ' (mají: ' + v.slice(0, 15).join(', ') + (v.length > 15 ? ', …' : '') + ')';
+}
+
 // Co přesně jim napsat — model, nebo jen velikost u modelu, který znají
 function pkNeznaRadek(x) {
   const kdo = (x.nazev || '?') + (x.sku ? ' (' + x.sku + ')' : '');
   return x.chybi === 'velikost'
-    ? kdo + ' — chybí velikost ' + (x.velikost || '?')
+    ? kdo + ' — chybí velikost ' + (x.velikost || '?') + pkMajiVelikosti(x)
     : kdo + ' — model v e-shopu není';
 }
 
@@ -3075,7 +3149,8 @@ function tydenniBlok(polozky, dnes, skupiny, pkNevezme) {
     polozky2.push(...orizniSeznam(nevezme.map(x => ({
       hlavni: (x.nazev || '?') + (x.sku ? ' (' + x.sku + ')' : ''),
       vedlejsi: x.chybi === 'velikost'
-        ? 'v jejich e-shopu chybí velikost ' + (x.velikost || '?') + ' — napiš jim, ať ji přidají'
+        ? 'v jejich e-shopu chybí velikost ' + (x.velikost || '?') + pkMajiVelikosti(x)
+          + ' — napiš jim, ať ji doplní'
         : 'model v jejich e-shopu není — napiš jim, ať ho přidají',
     })), nevezme.length));
   }
