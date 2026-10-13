@@ -1210,6 +1210,15 @@ Vlastní je jen jejich API:
   chodilo patnáct stejných mailů za den. Teď je to v `nezna_katalog`
   s `chybi: 'velikost'` a **zbylé velikosti téhož SKU se zkouší dál**
   — hláška mluví o jedné velikosti.
+- **Chybějící velikost je rozdělaná — majitel chce, ať to jde přes
+  API** (13. 10. 2026). „Tato velikost zatím není na komisi" v portálu
+  znamená jen, že tu velikost zatím nikdo nevystavil; portál ji přidat
+  umí, API odpovídá „Ask the platform to add it first". Jak to portál
+  dělá, odsud vidět nejde (jejich doména je pro vývojové prostředí
+  zablokovaná). Proto `pk_api` — čte popis jejich API a zadané cesty,
+  **jen GET** — a chyby nesou **celé tělo odpovědi** (`pkZbytekChyby`,
+  v náhledu `hlaska`). Po nasazení workeru se z toho zjistí, co poslat
+  jinak. Ruční vystavení v portálu majitel výslovně odmítl jako řešení.
 - **Co Purekickz nevezme (model i velikost), připomene pondělní
   obhlídka** — blok „Purekickz nevezme" v `tydenniBlok`, z běhu, který
   jede ve stejném cronu těsně před zprávou. Ze srovnání se to hlásit

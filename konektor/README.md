@@ -612,6 +612,7 @@ Až doména v Resendu projde ověřením, `MAIL_KOMU` může být jakákoli adre
 | `pika_smlouva` | co jejich veřejný kontrakt (`openapi.json`) slibuje |
 | `pk_nahled` | totéž pro druhý komisní prodej (Purekickz) |
 | `pk_srovnat` | provede to u Purekickz; bez `provest: true` jen plán |
+| `pk_api` | diagnostika jejich API: popis API a zadané cesty, jen GET, nic nemění |
 
 Odpovědi jsou omezené na 60 položek a zhruba 180 000 znaků; celý sklad má
 přes 600 kB a do jedné odpovědi se nevejde. Když je toho víc, konektor to

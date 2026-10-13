@@ -786,7 +786,56 @@ const radek = (o) => Object.assign({
   ok('jiné odmítnutí je pořád potíž s mailem',
     c.posta.length === 1 && /payout must be positive/.test(c.posta[0].text || ''),
     JSON.stringify(c.posta).slice(0, 250));
+  /* ══════════════════════════════════════════════════════════════════ */
+  sekce('15) Chyba nese celé tělo, diagnostika jen čte');
+  /* Jejich dokumentace chybové stavy nevyjmenovává. Dokud se z těla
+     bralo jen `detail`, nedalo se zjistit, co dalšího k odmítnutí
+     říkají — a právě tam může stát, co se má poslat jinak. */
+  polozkySkladu = [Object.assign({}, zaklad, { id: 'a' })];
+  scenar([], (url, init) => ((init && init.method) === 'POST'
+    ? Response.json({ detail: 'payout too low', minimum: 1500, hint: 'use variant' },
+      { status: 400 }) : null));
+  c = await cron(UTERY);
+  const potizText = (c.posta[0] || {}).text || '';
+  ok('do mailu o potíži jde i zbytek těla chyby',
+    /minimum/.test(potizText) && /1500/.test(potizText) && /use variant/.test(potizText), potizText);
+  scenar([], (url, init) => ((init && init.method) === 'POST'
+    ? Response.json({ detail: 'Size "42" does not exist on this product.',
+      available_sizes: ['41.5', '42.5'] }, { status: 400 }) : null));
+  z = await srovnat({ provest: true });
+  const hl = ((z.telo.nezna_katalog || [])[0] || {}).hlaska || '';
+  ok('u chybějící velikosti je v náhledu celá jejich odpověď',
+    /available_sizes/.test(hl) && /42\.5/.test(hl), JSON.stringify(z.telo.nezna_katalog));
   global.fetch = fetchPredCronem;
+
+  const cteni = [];
+  const predDiag = global.fetch;
+  global.fetch = async (vstup, init) => {
+    const url = String(vstup && vstup.url ? vstup.url : vstup);
+    if (url.includes('consignor-api')) {
+      cteni.push({ url, method: (init && init.method) || 'GET', klic: (init && init.headers || {})['X-API-Key'] });
+      return new Response(url.endsWith('/openapi.json') ? '{"paths":{"/listings":{}}}' : 'nic',
+        { status: url.endsWith('/openapi.json') ? 200 : 404, headers: { 'content-type': 'application/json' } });
+    }
+    return predDiag(vstup, init);
+  };
+  const diag = await bezLogu(() => worker.fetch(new Request('https://sklad.mtkm.workers.dev/' + ENV.MCP_TOKEN + '/mcp', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'pk_api', arguments: { sku: 'VN000E8VHLE', cesty: ['/listings?limit=1', 'mimo-lomitko', '/a b'] } } }),
+  }), ENV));
+  global.fetch = predDiag;
+  const diagText = await diag.text();
+  ok('diagnostika jen čte', cteni.length > 0 && cteni.every(x => x.method === 'GET'),
+    JSON.stringify(cteni.map(x => x.method)));
+  ok('a klíč jde v hlavičce, ne v adrese',
+    cteni.every(x => x.klic === ENV.PUREKICKZ_TOKEN && !x.url.includes(ENV.PUREKICKZ_TOKEN)), '');
+  ok('zkusí popis API i cesty s produktem',
+    cteni.some(x => x.url.endsWith('/openapi.json')) && cteni.some(x => /VN000E8VHLE/.test(x.url))
+      && cteni.some(x => x.url.endsWith('/listings?limit=1')), JSON.stringify(cteni.map(x => x.url)));
+  ok('cesty, které nejsou cesty, se nevolají',
+    !cteni.some(x => /mimo-lomitko|a b|a%20b/.test(x.url)), JSON.stringify(cteni.map(x => x.url)));
+  ok('a vrátí, co odpověděli', /paths/.test(diagText) && /404/.test(diagText), diagText.slice(0, 300));
 
   // Adresa je pod tokenem
   const r404 = await bezLogu(() => worker.fetch(

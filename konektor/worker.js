@@ -558,6 +558,23 @@ const NASTROJE = [
     inputSchema: { type: 'object', properties: {} },
   },
   {
+    name: 'pk_api',
+    description: 'Diagnostika API druhého komisního prodeje (Purekickz): projde jejich '
+      + 'adresy s popisem API (openapi, docs) a zadané cesty, a vrátí stav a začátek '
+      + 'odpovědi. Jen GET — nic u nich nezakládá ani nemění. Slouží k tomu, aby se '
+      + 'napojení psalo podle toho, co jejich API opravdu umí.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cesty: {
+          type: 'array', items: { type: 'string' },
+          description: 'Další cesty k přečtení, např. ["/listings?limit=1", "/products?sku=X"].',
+        },
+        sku: { type: 'string', description: 'SKU, pro které se zkusí cesty s produktem.' },
+      },
+    },
+  },
+  {
     name: 'pk_srovnat',
     description: 'Srovná druhý komisní prodej (Purekickz) se skladem — vystaví, co má viset, '
       + 'a stáhne, co se prodalo jinde. Cena se posílá jako payout, oni si k ní připočtou '
@@ -672,6 +689,7 @@ async function spustNastroj(jmeno, args, env) {
   if (jmeno === 'pika_nahled') return pikaNahled(env);
   if (jmeno === 'pika_prodeje') return pikaProdeje(env);
   if (jmeno === 'pk_nahled') return pkNahled(env);
+  if (jmeno === 'pk_api') return pkApi(env, { cesty: args.cesty, sku: args.sku });
   if (jmeno === 'pk_srovnat') {
     return pkNahled(env, { provest: !!args.provest, jen: args.jen, nejvyse: args.nejvyse });
   }
@@ -2146,9 +2164,73 @@ async function pkVolej(env, cesta, moznosti) {
       continue;
     }
     const detail = (telo && (telo.detail || telo.message || telo.error)) || ('HTTP ' + odpoved.status);
-    throw pikaChyba(PK_JMENO + ' odmítl ' + (m.method || 'GET') + ' ' + cesta + ': ' + detail,
-      odpoved.status === 404 ? 'nenalezeno' : 'odmitnuto');
+    /* Zbytek těla chyby se nezahazuje. Jejich dokumentace chybové stavy
+       nevyjmenovává a v dalších polích může stát právě to, co chybí
+       (které velikosti produkt má, co se má poslat jinak). Dokud se
+       bralo jen `detail`, nedalo se to zjistit. */
+    const navic = pkZbytekChyby(telo);
+    const chyba = pikaChyba(PK_JMENO + ' odmítl ' + (m.method || 'GET') + ' ' + cesta + ': ' + detail
+      + (navic ? ' ' + navic : ''), odpoved.status === 404 ? 'nenalezeno' : 'odmitnuto');
+    chyba.pkTelo = telo;
+    chyba.pkStatus = odpoved.status;
+    throw chyba;
   }
+}
+
+// Co v těle chyby stojí navíc k hlášce — zkrácené, ať se vejde do mailu
+function pkZbytekChyby(telo) {
+  if (!telo || typeof telo !== 'object') return '';
+  const zbytek = {};
+  for (const k of Object.keys(telo)) {
+    if (k === 'detail' || k === 'message' || k === 'error') continue;
+    zbytek[k] = telo[k];
+  }
+  if (!Object.keys(zbytek).length) return '';
+  const t = JSON.stringify(zbytek);
+  return '(' + (t.length > 400 ? t.slice(0, 400) + '…' : t) + ')';
+}
+
+/* ── DIAGNOSTIKA API ─────────────────────────────────────────────────
+   Jejich API má dokumentaci jen v portálu a odsud do ní nevidíme.
+   Tohle projde adresy, kde popis API bývá, a cesty, které se zadají,
+   a vrátí stav a začátek odpovědi. **Jen GET** — nic se nezakládá ani
+   nemění, takže se to smí pouštět kdykoli.
+
+   Vzniklo kvůli „Size "41" does not exist on this product. Ask the
+   platform to add it first." (13. 10. 2026): v portálu jde tatáž
+   velikost přidat („Tato velikost zatím není na komisi" znamená jen,
+   že ji zatím nikdo nevystavil) a přes API ne. Než se tělo zápisu
+   změní, musí být vidět, co API doopravdy přijímá. */
+const PK_API_CESTY = ['', '/', '/openapi.json', '/openapi', '/docs', '/help', '/schema', '/me'];
+const PK_API_SKU_CESTY = ['/products?sku={sku}', '/products/{sku}', '/products/{sku}/sizes',
+  '/catalog?sku={sku}', '/sizes?sku={sku}', '/variants?sku={sku}', '/search?q={sku}'];
+async function pkApi(env, volby) {
+  if (!env.PUREKICKZ_TOKEN) return { stav: 'nenastaveno', chybi: ['PUREKICKZ_TOKEN'] };
+  volby = volby || {};
+  const sku = String(volby.sku || '').trim();
+  let cesty = PK_API_CESTY.slice();
+  if (sku) cesty = cesty.concat(PK_API_SKU_CESTY.map(c => c.replace('{sku}', encodeURIComponent(sku))));
+  if (Array.isArray(volby.cesty)) {
+    cesty = cesty.concat(volby.cesty.map(c => String(c || '').trim())
+      .filter(c => c.startsWith('/') && !/\s/.test(c)));
+  }
+  const vysledky = [];
+  for (const cesta of cesty.slice(0, 30)) {
+    try {
+      const o = await fetch(PK_BASE + cesta, {
+        method: 'GET',
+        headers: { 'X-API-Key': env.PUREKICKZ_TOKEN, Accept: 'application/json' },
+      });
+      const text = await o.text();
+      vysledky.push({ cesta: cesta || '(kořen)', status: o.status,
+        typ: o.headers.get('content-type') || null,
+        allow: o.headers.get('allow') || null,
+        telo: text.length > 4000 ? text.slice(0, 4000) + '…' : text });
+    } catch (e) {
+      vysledky.push({ cesta: cesta || '(kořen)', chyba: String((e && e.message) || e) });
+    }
+  }
+  return { stav: 'ok', zaklad: PK_BASE, vysledky };
 }
 
 /* „Product not found on the shop (check sku / shopify_product_id)" —
@@ -2192,10 +2274,12 @@ function pkNeznaVelikost(e) {
   return /size\b.*\bdoes not exist on this product/i.test((e && e.message) || '');
 }
 
-function pkPopisNeznameho(u, chybi) {
+function pkPopisNeznameho(u, chybi, e) {
   const p = (u && u.popis) || {};
   return { nazev: p.nazev || null, sku: (u.telo && u.telo.sku) || p.sku || null,
-    velikost: p.velikost || null, chybi: chybi || 'model' };
+    velikost: p.velikost || null, chybi: chybi || 'model',
+    // Jejich celá odpověď — co dalšího k tomu řekli (viz pkZbytekChyby)
+    hlaska: (e && e.message) || null };
 }
 
 async function pkKdoJsem(env) { return pkVolej(env, '/me'); }
@@ -2396,13 +2480,13 @@ async function pkProved(env, plan, volby) {
          Do potíží (a tím do mailu) proto nepatří. */
       if (pkNeznaKatalog(e)) {
         if (sku) neznaSku.add(sku);
-        neznaKatalog.push(pkPopisNeznameho(u, 'model'));
+        neznaKatalog.push(pkPopisNeznameho(u, 'model', e));
         zapisu++;                       // pokus u nich proběhl, strop ho počítá
         continue;
       }
       // Model znají, jen tuhle velikost ne — viz pkNeznaVelikost
       if (pkNeznaVelikost(e)) {
-        neznaKatalog.push(pkPopisNeznameho(u, 'velikost'));
+        neznaKatalog.push(pkPopisNeznameho(u, 'velikost', e));
         zapisu++;
         continue;
       }

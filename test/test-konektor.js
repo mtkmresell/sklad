@@ -170,7 +170,7 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   /* ── Seznam nástrojů ──────────────────────────────────────────────── */
   const seznam = (await rpc('tools/list')).result.tools;
   shoda('nástroje', seznam.map(t => t.name).sort(),
-    ['pika_nahled', 'pika_prodeje', 'pika_smlouva', 'pika_srovnat', 'pk_nahled',
+    ['pika_nahled', 'pika_prodeje', 'pika_smlouva', 'pika_srovnat', 'pk_api', 'pk_nahled',
      'pk_srovnat', 'sklad_listing', 'sklad_polozky', 'sklad_prodeje', 'sklad_souhrn',
      'sklad_zakaznici']);
   /* Jediný nástroj, který sklad mění. Ať je to znát z popisu — v chatu
