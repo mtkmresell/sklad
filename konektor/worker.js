@@ -2174,10 +2174,28 @@ function pkNeznaKatalog(e) {
   return /not found on the shop|product not found/i.test((e && e.message) || '');
 }
 
-function pkPopisNeznameho(u) {
+/* „Size "41" does not exist on this product. Ask the platform to add it
+   first." — model jejich e-shop zná, ale **tuhle velikost u něj nemá**.
+
+   Stejný případ jako neznámý model, jen o patro níž: trvalý stav, ne
+   porucha běhu. Ověřeno na ostrých datech (13. 10. 2026): Vans
+   VN000E8VHLE v 41 a tričko IX8507-010 v M. Přes jejich portál se oba
+   vystavit daly — portál zjevně chybějící velikost u produktu založí,
+   API to neumí a samo radí napsat jim. Dokud se to nerozlišilo, šlo to
+   do mailu o potížích a ten chodil po každém uložení položky: patnáct
+   stejných mailů za den, a tlumič je nezastavil, protože jeho paměť
+   žije jen v jednom isolate.
+
+   Na rozdíl od neznámého modelu se **zbylé velikosti téhož SKU zkouší
+   dál** — hláška mluví o jedné velikosti a ostatní projít můžou. */
+function pkNeznaVelikost(e) {
+  return /size\b.*\bdoes not exist on this product/i.test((e && e.message) || '');
+}
+
+function pkPopisNeznameho(u, chybi) {
   const p = (u && u.popis) || {};
   return { nazev: p.nazev || null, sku: (u.telo && u.telo.sku) || p.sku || null,
-    velikost: p.velikost || null };
+    velikost: p.velikost || null, chybi: chybi || 'model' };
 }
 
 async function pkKdoJsem(env) { return pkVolej(env, '/me'); }
@@ -2357,7 +2375,7 @@ async function pkProved(env, plan, volby) {
        čtyři úplně stejné řádky. */
     const sku = u.telo && u.telo.sku;
     if (sku && neznaSku.has(sku)) {
-      neznaKatalog.push(pkPopisNeznameho(u));
+      neznaKatalog.push(pkPopisNeznameho(u, 'model'));
       continue;
     }
     try {
@@ -2378,8 +2396,14 @@ async function pkProved(env, plan, volby) {
          Do potíží (a tím do mailu) proto nepatří. */
       if (pkNeznaKatalog(e)) {
         if (sku) neznaSku.add(sku);
-        neznaKatalog.push(pkPopisNeznameho(u));
+        neznaKatalog.push(pkPopisNeznameho(u, 'model'));
         zapisu++;                       // pokus u nich proběhl, strop ho počítá
+        continue;
+      }
+      // Model znají, jen tuhle velikost ne — viz pkNeznaVelikost
+      if (pkNeznaVelikost(e)) {
+        neznaKatalog.push(pkPopisNeznameho(u, 'velikost'));
+        zapisu++;
         continue;
       }
       potize.push('vystavení ' + (u.popis.nazev || '') + ': ' + e.message);
@@ -2465,9 +2489,9 @@ async function pkNahled(env, volby) {
   odpoved.provedeno = vysledek.hotovo;
   odpoved.zapisu = vysledek.zapisu;
   if (vysledek.potize.length) odpoved.potize = vysledek.potize;
-  /* Kusy, jejichž model jejich e-shop nezná. Do potíží nepatří (trvalý
-     stav, ne chyba běhu), ale ztratit se nesmí — tohle je jediné
-     místo, kde se dá zjistit, na co se kluků z Purekickz zeptat. */
+  /* Kusy, jejichž model (nebo velikost) jejich e-shop nezná. Do potíží
+     nepatří (trvalý stav, ne chyba běhu), ale ztratit se nesmí — odsud
+     je bere mail o změnách i pondělní obhlídka. */
   if ((vysledek.neznaKatalog || []).length) odpoved.nezna_katalog = vysledek.neznaKatalog;
   if (vysledek.zbylo > 0) {
     odpoved.poznamka = 'Zbývá ' + vysledek.zbylo + ' úkonů — strop je ' + vysledek.strop
@@ -2535,11 +2559,10 @@ async function pkOhlasHotovo(env, hotovo, neznaKatalog) {
     + radky.join('\n') + '\n';
   const nezna = pkJedenZaModel(neznaKatalog || []);
   if (nezna.length) {
-    text += '\nTyhle modely jejich e-shop nezná, takže je tudy vystavit nejde.\n'
-      + 'Napiš jim, ať je přidají — do té doby s tím nic nenaděláš a už\n'
-      + 'se ti kvůli nim nic neozve:\n\n'
-      + nezna.slice(0, NEJVIC_V_SEZNAMU)
-        .map(x => '· ' + (x.nazev || '?') + (x.sku ? ' (' + x.sku + ')' : '')).join('\n')
+    text += '\nTohle jejich e-shop nezná, takže to tudy vystavit nejde.\n'
+      + 'Napiš jim, ať to přidají — do té doby s tím nic nenaděláš. Připomene\n'
+      + 'se ti to v pondělní obhlídce:\n\n'
+      + nezna.slice(0, NEJVIC_V_SEZNAMU).map(x => '· ' + pkNeznaRadek(x)).join('\n')
       + (nezna.length > NEJVIC_V_SEZNAMU
         ? '\n· … a další ' + (nezna.length - NEJVIC_V_SEZNAMU) : '') + '\n';
   }
@@ -2557,17 +2580,27 @@ async function pkOhlasHotovo(env, hotovo, neznaKatalog) {
 
 /* Jeden řádek na model, ne na kus. Tentýž model leží doma v několika
    velikostech a v mailu by se čtyřikrát opakoval, přestože majitel má
-   klukům napsat o jedinou věc. */
+   klukům napsat o jedinou věc. U chybějící velikosti je ta věc model
+   **a** velikost — dvě různé velikosti jsou dvě různé prosby. */
 function pkJedenZaModel(kusy) {
   const videno = new Set();
   const ven = [];
   for (const k of kusy) {
-    const klic = k.sku || k.nazev || '?';
+    const klic = (k.sku || k.nazev || '?')
+      + (k.chybi === 'velikost' ? '|' + (k.velikost || '') : '');
     if (videno.has(klic)) continue;
     videno.add(klic);
     ven.push(k);
   }
   return ven;
+}
+
+// Co přesně jim napsat — model, nebo jen velikost u modelu, který znají
+function pkNeznaRadek(x) {
+  const kdo = (x.nazev || '?') + (x.sku ? ' (' + x.sku + ')' : '');
+  return x.chybi === 'velikost'
+    ? kdo + ' — chybí velikost ' + (x.velikost || '?')
+    : kdo + ' — model v e-shopu není';
 }
 
 /* Automatické srovnání. Stejná stavba jako u Pikastore — výjimka se
@@ -2903,8 +2936,14 @@ function neniKVystaveni(it) {
   const misto = it.location || 'Doma';
   return PIKA_MISTA_PRYC.indexOf(misto) !== -1 || PIKA_MISTA_NEDOMA.indexOf(misto) !== -1;
 }
-function tydenniBlok(polozky, dnes, skupiny) {
+function tydenniBlok(polozky, dnes, skupiny, pkNevezme) {
   const komisni = new Set(skupiny.eshopy || []);
+  /* Co Purekickz nevezme, protože jejich e-shop nezná model nebo
+     velikost. Ze srovnání se to schválně nehlásí (běží po každém
+     uložení a mail by chodil pořád), ale zapadnout to nesmí — jinak se
+     majitel nedozví, o co si má říct. Bere se z běhu, který jel těsně
+     před touhle zprávou ve stejném cronu. */
+  const nevezme = pkJedenZaModel(pkNevezme || []);
 
   const bezInzerce = [];
   const vKomisi = [];
@@ -2926,7 +2965,7 @@ function tydenniBlok(polozky, dnes, skupiny) {
     if (!kde.length) bezInzerce.push(zaznam);
     else if (kde.some(p => komisni.has(p))) vKomisi.push(zaznam);
   }
-  if (!bezInzerce.length && !vKomisi.length) return null;
+  if (!bezInzerce.length && !vKomisi.length && !nevezme.length) return null;
 
   const podleStari = (a, b) => (b.lezi || 0) - (a.lezi || 0);
   const naRadek = z => ({
@@ -2947,9 +2986,20 @@ function tydenniBlok(polozky, dnes, skupiny) {
     polozky2.push(...orizniSeznam(vKomisi.map(naRadek), vKomisi.length));
   }
 
+  if (nevezme.length) {
+    polozky2.push({ hlavni: '— ' + PK_JMENO + ' nevezme (' + nevezme.length + ') —' });
+    polozky2.push(...orizniSeznam(nevezme.map(x => ({
+      hlavni: (x.nazev || '?') + (x.sku ? ' (' + x.sku + ')' : ''),
+      vedlejsi: x.chybi === 'velikost'
+        ? 'v jejich e-shopu chybí velikost ' + (x.velikost || '?') + ' — napiš jim, ať ji přidají'
+        : 'model v jejich e-shopu není — napiš jim, ať ho přidají',
+    })), nevezme.length));
+  }
+
   const casti = [];
   if (bezInzerce.length) casti.push(bezInzerce.length + '× bez inzerce');
   if (vKomisi.length) casti.push(vKomisi.length + '× v komisi');
+  if (nevezme.length) casti.push(nevezme.length + '× ' + PK_JMENO + ' nevezme');
 
   return {
     nadpis: 'Pondělní obhlídka',
@@ -3492,7 +3542,8 @@ function zkusebniZprava(dnes) {
 }
 
 /* ── Složení celé zprávy ────────────────────────────────────────────── */
-function sestavZpravu(polozky, ted, data, crm) {
+function sestavZpravu(polozky, ted, data, crm, volby) {
+  volby = volby || {};
   const cas = prazskeCasti(ted);
   const dnes = prazskyDen(ted);
   const skupiny = platformoveSkupiny(data);
@@ -3503,7 +3554,7 @@ function sestavZpravu(polozky, ted, data, crm) {
     bazosBlok(polozky, dnes),
     zasilkaBlok(polozky, dnes),
     payoutBlok(polozky, dnes, skupiny),
-    denVTydnu(dnes) === TYDENNI_DEN ? tydenniBlok(polozky, dnes, skupiny) : null,
+    denVTydnu(dnes) === TYDENNI_DEN ? tydenniBlok(polozky, dnes, skupiny, volby.pkNevezme) : null,
     cas.den === 1 ? mesicniBlok(polozky, cas, dnes, crm) : null,
   ].flat().filter(Boolean);
 
@@ -3580,7 +3631,7 @@ const MAIL_TAJEMSTVI = ['RESEND_API_KEY', 'MAIL_KOMU'];
 
 // Načte sklad a vrátí, co by se poslalo. Odesílá se až o patro výš, ať se
 // dá totéž použít i pro náhled bez odeslání.
-async function pripravUpozorneni(env) {
+async function pripravUpozorneni(env, volby) {
   const token = await prihlas(env);
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
   if (!data) throw new Error('v cloudu nejsou žádná data — zkontroluj SKLAD_UID');
@@ -3594,7 +3645,7 @@ async function pripravUpozorneni(env) {
     ? await nactiCrm(token, env.SKLAD_UID)
     : null;
 
-  return { polozky, zprava: sestavZpravu(polozky, ted, data, crm) };
+  return { polozky, zprava: sestavZpravu(polozky, ted, data, crm, volby) };
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -3972,6 +4023,7 @@ export default {
      ten, kterému zrovna vychází desátá v Praze — přechod na letní čas se
      nemusí hlídat dvakrát do roka. */
   async scheduled(event, env, ctx) {
+    let pkVysledek = null;
     /* Komise napřed: mail pak vychází z čerstvě srovnaného stavu.
        Když spadne, ranní obhlídka musí proběhnout stejně — jsou to dvě
        nezávislé věci a jedna nesmí umlčet druhou. */
@@ -3980,7 +4032,7 @@ export default {
          druhého ani ranní obhlídku. */
       try { await pikaCron(env); }
       catch (e) { console.error('Pikastore: ' + (e && e.stack || e)); }
-      try { await pkCron(env); }
+      try { pkVysledek = await pkCron(env); }
       catch (e) { console.error(PK_JMENO + ': ' + (e && e.stack || e)); }
     }
 
@@ -3995,7 +4047,8 @@ export default {
     }
 
     try {
-      const { zprava } = await pripravUpozorneni(env);
+      const { zprava } = await pripravUpozorneni(env,
+        { pkNevezme: (pkVysledek && pkVysledek.nezna_katalog) || [] });
       if (!zprava) return;  // ticho je správný stav
       await posliMail(env, zprava);
       console.log('odesláno: ' + zprava.predmet);

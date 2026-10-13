@@ -772,7 +772,7 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 | co | kde | stav |
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (12. 10.) — v repozitáři je oprava mailů „SKLAD × Pikastore: 3 věcí se nepovedlo" (`replaced_by_submission_piece`, pomlčka ve velikosti). Nasazený worker je aspoň ze 13. 9. (umí odklad čerstvých kusů), ale jestli má i opravu míst prodeje z 1. 10., se nepoznalo: stará verze odmítá Tuzex hláškou „takovou platformu sklad nezná" (`f59f81d`), nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. Nasazením dorazí obojí. **Dokud se nenasadí, maily chodí dál.** |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (13. 10.) — v repozitáři je oprava mailů „SKLAD × Pikastore: 3 věcí se nepovedlo" (`replaced_by_submission_piece`, pomlčka ve velikosti), mailů „SKLAD × Purekickz: 2 věci se nepovedlo" (chybějící velikost u modelu, `pkNeznaVelikost`) a pondělní obhlídky (držené kusy, „Purekickz nevezme"). Nasazený worker je aspoň ze 13. 9. (umí odklad čerstvých kusů), ale jestli má i opravu míst prodeje z 1. 10., se nepoznalo: stará verze odmítá Tuzex hláškou „takovou platformu sklad nezná" (`f59f81d`), nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. Nasazením dorazí obojí. **Dokud se nenasadí, maily chodí dál.** |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
@@ -1201,6 +1201,21 @@ Vlastní je jen jejich API:
   Pozná se to podle textu hlášky, ne podle kódu — jejich dokumentace
   chybové stavy nevyjmenovává a `400` i `404` u nich znamenají spoustu
   jiných věcí, které majitel vidět má.
+- **Chybějící velikost u známého modelu je totéž o patro níž**
+  (`pkNeznaVelikost`): „Size "41" does not exist on this product. Ask
+  the platform to add it first." Ostrá data 13. 10. 2026 — Vans
+  VN000E8VHLE v 41 a tričko IX8507-010 v M. **Přes jejich portál se
+  oba vystavit daly**, portál chybějící velikost u produktu zjevně
+  založí, API ne a samo radí napsat jim. Dokud to šlo do potíží,
+  chodilo patnáct stejných mailů za den. Teď je to v `nezna_katalog`
+  s `chybi: 'velikost'` a **zbylé velikosti téhož SKU se zkouší dál**
+  — hláška mluví o jedné velikosti.
+- **Co Purekickz nevezme (model i velikost), připomene pondělní
+  obhlídka** — blok „Purekickz nevezme" v `tydenniBlok`, z běhu, který
+  jede ve stejném cronu těsně před zprávou. Ze srovnání se to hlásit
+  nesmí (běží po každém uložení), ale dokud se to jen „vezlo" s mailem
+  o změnách, majitel se o modelu, který u nich chybí, nemusel dozvědět
+  vůbec — přesně tak zapadlo tričko IX8507-100.
 - **Zbylé velikosti téhož SKU se už nezkouší.** Jejich hláška mluví
   o produktu, ne o velikosti, takže by dopadly stejně — a bez toho se
   u jednoho modelu spálily čtyři zápisy ze stropu. Platí jen v rámci

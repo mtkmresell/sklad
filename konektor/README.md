@@ -332,6 +332,14 @@ se nechá být, ruční inzeráty se neopravují. Liší se jen jejich API:
   v náhledu pod `nezna_katalog` a **sveze se s mailem o změnách**,
   který chodí jen tehdy, když se u nich opravdu něco stalo. Jeden
   řádek na model, ne na každou velikost.
+- **Velikost, kterou jejich e-shop u modelu nemá** („Size "41" does not
+  exist on this product. Ask the platform to add it first."), je totéž:
+  přes jejich portál se kus vystavit dá, přes API ne, dokud tu velikost
+  nepřidají. Mail o potížích kvůli tomu nechodí, ostatní velikosti téhož
+  modelu se vystaví normálně.
+- **Co Purekickz nevezme, připomene pondělní obhlídka** (blok
+  „Purekickz nevezme") — neznámý model i chybějící velikost, s tím, o co
+  si u nich říct.
 - Limit je **60 požadavků za minutu**.
 
 ## Kurz ČNB pro aplikaci

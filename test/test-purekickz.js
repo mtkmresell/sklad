@@ -708,6 +708,84 @@ const radek = (o) => Object.assign({
   ok('pád komise nevyletí z cronu ven', vyletelo === null, vyletelo);
   ok('a ozve se mailem', posta.some(x => /Purekickz/.test(x.subject || '')),
     JSON.stringify(posta.map(x => x.subject)));
+
+  /* ══════════════════════════════════════════════════════════════════ */
+  sekce('15) Velikost, kterou jejich e-shop u modelu nemá');
+  /* Ostrá data 13. 10. 2026: Vans VN000E8VHLE v 41 a tričko IX8507-010
+     v M. Model znají, velikost u něj ne — „Ask the platform to add it
+     first". Šlo to do mailu o potížích a ten chodil po každém uložení
+     položky (patnáct stejných za den). Je to trvalý stav jako neznámý
+     model: do potíží nepatří, zbylé velikosti se zkouší dál a připomene
+     se to jednou týdně v pondělní obhlídce. */
+  const BEZ_VELIKOSTI = 'Size "41" does not exist on this product. Ask the platform to add it first.';
+  const NEZNA_MODEL = 'Product not found on the shop (check sku / shopify_product_id)';
+  const vansy = ['41', '42'].map((v, i) => ({ id: 'vs' + i,
+    name: 'Vans OTW Old Skool 36 Pearlized Pack Pink Black', sku: 'VN000E8VHLE', size: v,
+    category: 'sneakers', saleState: 'stock', location: 'Doma', targetPrice: 5000,
+    platforms: ['Pikastore'] }));
+  const tricko = { id: 'tr', name: 'Nike x One Piece Graphic T-Shirt', sku: 'IX8507-100',
+    size: 'L', category: 'obleceni', saleState: 'stock', location: 'Doma', targetPrice: 2200,
+    platforms: ['Pikastore'] };
+  polozkySkladu = vansy.concat([tricko]);
+  const pokusy = [];
+  const odmitni = (url, init) => {
+    if ((init && init.method) !== 'POST') return null;
+    const t = JSON.parse(init.body || '{}');
+    pokusy.push(t.sku + ' ' + t.size);
+    if (t.sku === 'IX8507-100') return Response.json({ detail: NEZNA_MODEL }, { status: 400 });
+    if (t.size === '41') return Response.json({ detail: BEZ_VELIKOSTI }, { status: 400 });
+    return Response.json({ id: 'nove-' + t.size });
+  };
+  scenar([], odmitni);
+  z = await srovnat({ provest: true });
+  ok('chybějící velikost není potíž', !(z.telo.potize || []).length, JSON.stringify(z.telo.potize));
+  const vel41 = (z.telo.nezna_katalog || []).find(x => x.velikost === '41');
+  ok('ale je v náhledu i s tím, co chybí',
+    vel41 && vel41.chybi === 'velikost' && vel41.sku === 'VN000E8VHLE', JSON.stringify(z.telo.nezna_katalog));
+  ok('neznámý model je tam taky, s jiným důvodem',
+    (z.telo.nezna_katalog || []).some(x => x.sku === 'IX8507-100' && x.chybi === 'model'),
+    JSON.stringify(z.telo.nezna_katalog));
+  /* Hláška mluví o jedné velikosti — ostatní projít můžou. U neznámého
+     modelu je to naopak (viz sekce 12). */
+  ok('jiná velikost téhož modelu se zkusí a projde',
+    pokusy.includes('VN000E8VHLE 42') && ((z.telo.provedeno || {}).vystaveno || []).length === 1,
+    JSON.stringify([pokusy, z.telo.provedeno]));
+
+  // Jen trvalé stavy, nic nového se nestalo → ticho, i dvakrát po sobě
+  polozkySkladu = [vansy[0], tricko];
+  scenar([], odmitni);
+  c = await cron(UTERY);
+  shoda('cron kvůli chybějící velikosti nepošle nic', c.posta.length, 0);
+  c = await cron(UTERY);
+  shoda('ani při druhém běhu', c.posta.length, 0);
+
+  /* Pondělní obhlídka (10:00 v Praze) to ale řekne — jednou týdně, se
+     vším, o co si má majitel u Purekickz říct. */
+  const PONDELI_RANO = Date.parse('2026-09-07T08:00:00Z');
+  const UTERY_RANO = Date.parse('2026-09-08T08:00:00Z');
+  c = await cron(PONDELI_RANO);
+  const obhlidka = c.posta.find(x => /^Sklad:/.test(x.subject || '')) || {};
+  ok('v pondělní obhlídce je seznam, co Purekickz nevezme',
+    /Purekickz nevezme/.test(obhlidka.text || ''), JSON.stringify(c.posta.map(x => x.subject)));
+  ok('i s chybějící velikostí',
+    /VN000E8VHLE[\s\S]{0,40}\n?[\s\S]{0,40}chybí velikost 41/.test(obhlidka.text || ''), obhlidka.text);
+  ok('i s neznámým modelem', /IX8507-100[\s\S]{0,80}model v jejich e-shopu není/.test(obhlidka.text || ''),
+    obhlidka.text);
+  ok('a předmět to zmíní', /Purekickz nevezme/.test(obhlidka.subject || ''), obhlidka.subject);
+  ok('mail o potížích přitom nepřišel', !c.posta.some(x => /nepovedl/.test(x.subject || '')),
+    JSON.stringify(c.posta.map(x => x.subject)));
+  c = await cron(UTERY_RANO);
+  ok('v úterní ranní zprávě to není', !c.posta.some(x => /Purekickz nevezme/.test(x.text || '')),
+    JSON.stringify(c.posta.map(x => x.subject)));
+
+  // Opravdová potíž (jiné odmítnutí) se ozývá dál
+  polozkySkladu = [vansy[0]];
+  scenar([], (url, init) => ((init && init.method) === 'POST'
+    ? Response.json({ detail: 'payout must be positive' }, { status: 400 }) : null));
+  c = await cron(UTERY);
+  ok('jiné odmítnutí je pořád potíž s mailem',
+    c.posta.length === 1 && /payout must be positive/.test(c.posta[0].text || ''),
+    JSON.stringify(c.posta).slice(0, 250));
   global.fetch = fetchPredCronem;
 
   // Adresa je pod tokenem
