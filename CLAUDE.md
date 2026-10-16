@@ -1312,7 +1312,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 64 souborů
+node test/run.js              # kontrola syntaxe + všech 65 souborů
 node test/run.js archive      # jen vybrané
 ```
 

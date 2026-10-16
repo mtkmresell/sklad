@@ -11948,12 +11948,34 @@ function bulkEditTags(){
   if(cancelBtn) cancelBtn.addEventListener('click', function(){ overlay.remove(); });
 }
 
+/* Seznam toho, co se jde smazat. Dřív okno řeklo jen počet — kus
+   označený omylem navíc se tak smazal bez povšimnutí, protože kolik jich
+   mělo být, člověk z hlavy neví. Každý řádek nese, podle čeho se kus
+   pozná: název, SKU, velikost, nákup a kde je. */
+function bulkDeleteSeznam(ids){
+  var stavy = { stock:'Na skladě', waiting:'Čeká', paid:'Prodáno' };
+  return ids.map(function(id){ return items.find(function(x){ return x.id===id; }); })
+    .filter(Boolean)
+    .map(function(it){
+      var cena = it.buyPrice ? (it.buyCurrency==='EUR'
+        ? (Math.round(it.buyPrice*100)/100).toLocaleString('cs-CZ')+'\u00a0€' : czk(it.buyPrice)) : '';
+      var meta = [it.sku, it.size, cena, it.type==='bulk' ? 'balík' : (stavy[it.saleState]||'')]
+        .filter(Boolean).map(escHtml).join(' · ');
+      return '<div class="bd-radek" style="padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;">'
+        + '<div style="font-size:13px;font-weight:600;overflow-wrap:anywhere;">'+escHtml(it.name||'(bez názvu)')+'</div>'
+        + (meta ? '<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-top:2px;">'+meta+'</div>' : '')
+        + '</div>';
+    }).join('');
+}
+
 function bulkDelete(){
   const n=bulkSelected.size;
+  const slovo = n===1 ? 'položku' : (n<5 ? 'položky' : 'položek');
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  overlay.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;max-width:360px;width:90%;text-align:center;">'+
-    '<div style="font-size:15px;font-weight:600;margin-bottom:8px;">Smazat '+n+' položek?</div>'+
+  overlay.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;max-width:440px;width:90%;text-align:center;">'+
+    '<div style="font-size:15px;font-weight:600;margin-bottom:8px;">Smazat '+n+' '+slovo+'?</div>'+
+    '<div id="_bdSeznam" style="max-height:min(46vh,340px);overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);margin:12px 0 10px;">'+bulkDeleteSeznam(Array.from(bulkSelected))+'</div>'+
     '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5;">Tato akce je nevratná.</div>'+
     '<div style="display:flex;gap:10px;justify-content:center;">'+
     '<button id="_bdNo" style="padding:9px 22px;border:1px solid var(--border);background:none;color:var(--muted);border-radius:var(--radius-sm);cursor:pointer;">Zrušit</button>'+
