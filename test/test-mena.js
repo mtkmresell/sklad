@@ -40,6 +40,15 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
     check('jeden klik přepne na EUR', s1.v === 'EUR' && s1.label === 'EUR', JSON.stringify(s1));
     check('a nabídka se neotevře', !s1.otevreno, JSON.stringify(s1));
     check('ozve se change (přepočty)', (await page.evaluate(() => window._zmen)) === 1);
+    const anim = await page.evaluate(() => {
+      const w = document.getElementById('fBuyCurrency').closest('.cs-wrap');
+      return { pop: w.querySelector('.cs-btn').classList.contains('cs-mena-pop'),
+        label: w.querySelector('.cs-label').className };
+    });
+    check('přepnutí má animaci', anim.pop && /cs-mena-zdola/.test(anim.label), JSON.stringify(anim));
+    await page.waitForTimeout(600);
+    check('po animaci nezůstane v tlačítku stará měna', await page.evaluate(() =>
+      !document.getElementById('fBuyCurrency').closest('.cs-wrap').querySelector('.cs-mena-duch')));
     await klik(btn);
     let s2 = await stav('fBuyCurrency');
     check('druhý klik vrátí CZK', s2.v === 'CZK' && s2.label === 'CZK' && !s2.otevreno, JSON.stringify(s2));

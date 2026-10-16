@@ -45,8 +45,11 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   se nerozbaluje — klik na tlačítko přepne na tu druhou (majitel jinou
   měnu nepoužívá a dva kliky zdržovaly). Vzhled tlačítka zůstal a změna
   jde ven stejným `change`, takže přepočty se nemění. Pozná se podle
-  obsahu, ne podle id, takže platí i pro kalkulačku (Kč/€). Hlídá to
-  `test-mena.js`.
+  obsahu, ne podle id, takže platí i pro kalkulačku (Kč/€). Přepnutí
+  má animaci jako váleček (`_animujMenu`, CSS `menaZdola`/`menaPop`):
+  stará měna odjede jako „duch", nová přijede, na EUR nahoru, na CZK
+  dolů. Je to jen vzhled — hodnota, štítek i `change` jsou nastavené
+  hned, na animaci nic nečeká. Hlídá to `test-mena.js`.
 - **Na mobilu vybírá jen ťuknutí, ne tah** (`NA MOBILU: ŤUKNUTÍ, NE TAH`
   v `initCustomSelect()`). Dřív se jako výběr bral konec každého dotyku:
   kdo v dlouhé nabídce míst prodeje roloval a přehmátl prstem, vybral
