@@ -16550,8 +16550,30 @@ function initCustomSelect(selectEl) {
     });
   }
   buildOpts();
+  /* MĚNA SE PŘEPÍNÁ KLIKEM
+     Měna má jen dvě možnosti (CZK a EUR) a majitel jinou nepoužívá.
+     Rozbalit nabídku a pak vybrat byly dva kliky; teď jeden klik
+     přepne na tu druhou. Vzhled tlačítka zůstává, změna jde ven stejným
+     `change` jako výběr z nabídky, takže přepočty fungují beze změny.
+     Pozná se podle obsahu, ne podle id — platí to i pro kalkulačku. */
+  function _jenDveMeny() {
+    var v = Array.from(selectEl.options).map(function(o){ return o.value; }).sort().join(',');
+    return v === 'CZK,EUR';
+  }
+  function _prepniMenu() {
+    selectEl.selectedIndex = selectEl.selectedIndex === 0 ? 1 : 0;
+    label.textContent = selectEl.options[selectEl.selectedIndex].text;
+    buildOpts();
+    selectEl.dispatchEvent(new Event('change', {bubbles:true}));
+  }
   function _csToggle(e) {
     e.stopPropagation();
+    if (_jenDveMeny()) {
+      document.querySelectorAll('.cs-drop.open, .cdp-cal.open').forEach(d => d.classList.remove('open'));
+      document.querySelectorAll('.cs-btn.open, .cdp-input.open').forEach(b => b.classList.remove('open'));
+      if (!selectEl.disabled) _prepniMenu();
+      return;
+    }
     const isOpen = drop.classList.contains('open');
     document.querySelectorAll('.cs-drop.open, .cdp-cal.open').forEach(d => d.classList.remove('open'));
     document.querySelectorAll('.cs-btn.open, .cdp-input.open').forEach(b => b.classList.remove('open'));

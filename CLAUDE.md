@@ -40,6 +40,13 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   seznamu při startu, u vzniklého za běhu se `initCustomSelect()` volá ručně. Není to
   vidět, dokud se na nabídku neklikne; hlídá to `test-selecty.js`. Nabídky se pak taky
   samy umí prohledávat psaním (`PSANÍ V DROPDOWNU`) — bez vlastního vzhledu ne.
+- **Měna se přepíná jedním klikem** (`MĚNA SE PŘEPÍNÁ KLIKEM`
+  v `initCustomSelect()`). Nabídka s právě dvěma možnostmi CZK a EUR
+  se nerozbaluje — klik na tlačítko přepne na tu druhou (majitel jinou
+  měnu nepoužívá a dva kliky zdržovaly). Vzhled tlačítka zůstal a změna
+  jde ven stejným `change`, takže přepočty se nemění. Pozná se podle
+  obsahu, ne podle id, takže platí i pro kalkulačku (Kč/€). Hlídá to
+  `test-mena.js`.
 - **Na mobilu vybírá jen ťuknutí, ne tah** (`NA MOBILU: ŤUKNUTÍ, NE TAH`
   v `initCustomSelect()`). Dřív se jako výběr bral konec každého dotyku:
   kdo v dlouhé nabídce míst prodeje roloval a přehmátl prstem, vybral
@@ -1302,7 +1309,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 63 souborů
+node test/run.js              # kontrola syntaxe + všech 64 souborů
 node test/run.js archive      # jen vybrané
 ```
 
