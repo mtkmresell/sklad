@@ -14198,6 +14198,35 @@ function openCustomerDetail(id) {
   _renderCrmDetailHeader(c);
   crmDetailTab('overview');
   document.getElementById('customerDetailModal').classList.add('open');
+  _crmDetailNavObnov();
+}
+
+/* Listování mezi kartami šipkami, jako v detailu položky (navigateDetail).
+   Pořadí i výběr jsou ty, které jsou zrovna vidět v seznamu — filtr,
+   hledání i režim zákazníci/partneři platí. Na konci se jde dokola.
+   Detail otevřený odjinud (analytika, prodej), když kartu seznam
+   zrovna neukazuje, nikam nelistuje. */
+function crmDetailSeznam() {
+  var list = document.getElementById('crmList');
+  if (!list) return [];
+  return [].slice.call(list.querySelectorAll('.customer-card[data-cid]')).map(function(el){ return el.dataset.cid; });
+}
+function navigateCustomerDetail(dir) {
+  var ids = crmDetailSeznam();
+  var idx = ids.indexOf(crmDetailId);
+  if (idx === -1 || ids.length < 2) return;
+  var dalsi = (idx + dir + ids.length) % ids.length;
+  var tab = crmDetailCurrentTab;
+  openCustomerDetail(ids[dalsi]);
+  // Zůstat na stejné záložce — kdo prochází kontakty, chce vidět kontakty
+  if (tab && tab !== 'overview') crmDetailTab(tab);
+}
+function _crmDetailNavObnov() {
+  var ids = crmDetailSeznam();
+  var jde = ids.length > 1 && ids.indexOf(crmDetailId) !== -1;
+  ['crmDetailPrev', 'crmDetailNext'].forEach(function(id){
+    var b = document.getElementById(id); if (b) b.style.display = jde ? '' : 'none';
+  });
 }
 
 function closeCustomerDetail() {
@@ -17102,12 +17131,17 @@ document.addEventListener('keydown', function(e) {
   var openModal = document.querySelector('.modal-overlay.open, .modal-overlay.vis');
   
   var detailOpen = document.getElementById('moDetail')?.classList.contains('open');
+  // Karta zákazníka — jen když nad ní není otevřené jiné okno (úprava, nabídka)
+  var crmDetailOpen = document.getElementById('customerDetailModal')?.classList.contains('open')
+    && !document.querySelector('.mo.open:not(#customerDetailModal)');
   switch(e.key) {
     case 'ArrowLeft':
       if (detailOpen) { e.preventDefault(); navigateDetail(-1); }
+      else if (crmDetailOpen) { e.preventDefault(); navigateCustomerDetail(-1); }
       break;
     case 'ArrowRight':
       if (detailOpen) { e.preventDefault(); navigateDetail(1); }
+      else if (crmDetailOpen) { e.preventDefault(); navigateCustomerDetail(1); }
       break;
     case 'n': case 'N':
       if (!openModal) { e.preventDefault(); openAddModal(); }
@@ -20972,6 +21006,8 @@ rebuildBrandTables();
       <button class="icon-btn" onclick="openOfferBuilder(crmDetailId)" style="border-color:var(--accent);color:var(--accent);">Nabídka</button>
       <button class="icon-btn" onclick="openEditCustomerModal(crmDetailId)">Upravit</button>
       <div style="flex:1;"></div>
+      <button class="icon-btn" id="crmDetailPrev" onclick="navigateCustomerDetail(-1)" data-tip="Předchozí karta (←)" aria-label="Předchozí karta">‹</button>
+      <button class="icon-btn" id="crmDetailNext" onclick="navigateCustomerDetail(1)" data-tip="Další karta (→)" aria-label="Další karta">›</button>
       <button class="icon-btn crm-danger-btn" onclick="deleteCustomer(crmDetailId)">Smazat</button>
     </div>
   </div>

@@ -414,6 +414,17 @@ se a opsaná by časem lhala. Kdyby majitel chtěl adresu a hodiny vytahovat
 ze stránky dopravce, musel by to dělat konektor. Ukládá se jen `http(s)`
 odkaz, protože jde do `href`. Hlídá to `test-crmaddress.js`, sekce 5 až 7.
 
+### Listování kartami zákazníků
+
+V detailu zákazníka přepínají **šipky ← →** (a tlačítka ‹ › v patičce,
+na mobilu klávesnice není) na předchozí a další kartu — jako detail
+položky v Na skladě (`navigateDetail`). Pořadí i výběr bere
+`navigateCustomerDetail` z karet, které **jsou zrovna vidět v seznamu**
+(`#crmList`), takže filtr i hledání platí; na konci se jde dokola.
+Zůstává otevřená záložka. Šipka v textovém poli ani nad jiným oknem
+nic nepřepne a karta otevřená odjinud (analytika), kterou seznam
+neukazuje, se nelistuje. Hlídá to `test-crmnav.js`.
+
 ### Co chybí u položky (`CO CHYBÍ U POLOŽKY`)
 
 Oranžový trojúhelník v levém horním rohu řádku (i karty) říká, že
@@ -1291,7 +1302,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 62 souborů
+node test/run.js              # kontrola syntaxe + všech 63 souborů
 node test/run.js archive      # jen vybrané
 ```
 
