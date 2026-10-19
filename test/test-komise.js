@@ -319,6 +319,56 @@ function nasadKonektor(odpoved) {
   await page.context().close();
 
   // ══════════════════════════════════════════════════════════════
+  section('5c) Průběžná kontrola, dokud je aplikace otevřená');
+  /* 19. 10. 2026: na Pikastore se prodaly Jordany, konektor o tom věděl,
+     ale aplikace se ptala jen při startu — a otevřená visela celý den. */
+  page = await otevri({ url: KONEKTOR, token: TOKEN });
+  await page.evaluate(nasadKonektor, { stav: 'ok', k_preneseni: [] });
+  await cloudDorazil(page);
+  // Startovní kontrola se ptá do vteřiny po doletu snímku — ať doběhne
+  await page.waitForFunction(() => _komisePrubeznePosledni > 0 && !_komisePrubezneBezi, { timeout: 5000 });
+  const prubezne = await page.evaluate(async (p) => {
+    const out = {};
+    const pockej = () => new Promise(r => setTimeout(r, 300));
+    // Jen v zavřené záložce se neptá
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    window.__odpoved = { stav: 'ok', k_preneseni: [p] };
+    out.skryto = komiseKontrolaPrubezna('casovac');
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    // Otevřené okno (třeba úprava právě toho kusu) přesun odloží
+    openEdit('a');
+    await pockej();
+    out.okno = komiseKontrolaPrubezna('casovac');
+    out.stavSOknem = items.find(x => x.id === 'a').saleState;
+    document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));
+    // Bez okna, s viditelnou záložkou se prodej přenese
+    out.spusteno = komiseKontrolaPrubezna('casovac');
+    await pockej();
+    out.stavPo = items.find(x => x.id === 'a').saleState;
+    out.kde = items.find(x => x.id === 'a').soldWhere;
+    // Návrat do záložky hned potom se nesype — odstup
+    out.navrat = komiseKontrolaPrubezna('navrat');
+    _komisePrubeznePosledni = 0;
+    window.__dotazy = [];
+    document.dispatchEvent(new Event('visibilitychange'));
+    await pockej();
+    out.navratDotazu = window.__dotazy.filter(u => u.indexOf('/prodeje') !== -1).length;
+    out.casovacMs = KOMISE_KONTROLA_MS;
+    return out;
+  }, prodej());
+  check('v zavřené záložce se neptá', prubezne.skryto === 'skryto', prubezne.skryto);
+  check('s otevřeným oknem se nic nepřesune', prubezne.okno === 'okno' && prubezne.stavSOknem === 'stock',
+    JSON.stringify(prubezne));
+  check('jinak se prodej přenese i bez nového otevření aplikace',
+    prubezne.spusteno === 'spusteno' && prubezne.stavPo === 'waiting' && prubezne.kde === 'Pikastore',
+    JSON.stringify(prubezne));
+  check('návrat do záložky hned po kontrole se nesype', prubezne.navrat === 'odstup', prubezne.navrat);
+  check('návrat do záložky po odstupu se zeptá', prubezne.navratDotazu === 1, String(prubezne.navratDotazu));
+  check('kontroluje se po pár minutách', prubezne.casovacMs > 0 && prubezne.casovacMs <= 10 * 60000,
+    String(prubezne.casovacMs));
+  await page.context().close();
+
+  // ══════════════════════════════════════════════════════════════
   section('6) Když konektor neodpoví');
   page = await otevri({ url: KONEKTOR, token: TOKEN });
   await page.evaluate(nasadKonektor, { __selze: true });

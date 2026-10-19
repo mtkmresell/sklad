@@ -10824,8 +10824,9 @@ function openKomiseSettings() {
 
     + '<div class="fs"><div class="fs-title">Přenos prodejů</div>'
     + '<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:10px;">'
-    + 'Co se prodá u komisionáře, se po startu aplikace samo přesune do Čeká — '
-    + 'vyplní se payout, datum prodeje a místo. Číslo objednávky si doplníš sám. '
+    + 'Co se prodá u komisionáře (Pikastore, Purekickz), se samo přesune do Čeká — po startu aplikace, '
+    + 'pak každých pár minut, dokud je otevřená, a hned po návratu do ní. '
+    + 'Vyplní se payout, datum prodeje a místo. Číslo objednávky si doplníš sám. '
     + 'Před každým přesunem se uloží záloha, takže se to dá vrátit.</div>'
     + '<div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:10px;">'
     + 'Token je vlastní pro aplikaci (<code>APP_TOKEN</code> v Cloudflare) a zůstává '
@@ -11057,9 +11058,52 @@ function _behPopis(b) {
     if (++pokusu > 120) { clearInterval(t); return; }   // dvě minuty a dost
     if (!window._fbUser || !_fbCloudReady) return;
     clearInterval(t);
-    komisePrenesProdeje(false);
+    // Sdílí pojistku s průběžnou kontrolou níž — dva běhy naráz nejsou potřeba
+    if (_komisePrubezneBezi) return;
+    _komisePrubezneBezi = true;
+    _komisePrubeznePosledni = Date.now();
+    Promise.resolve(komisePrenesProdeje(false)).catch(function () {})
+      .then(function () { _komisePrubezneBezi = false; });
   }, 1000);
 })();
+
+/* PRŮBĚŽNÁ KONTROLA PRODEJŮ Z KOMISE
+   Dokud se přenos ptal jen při startu, prodej u Pikastore se do skladu
+   dostal až při dalším otevření aplikace — a ta na počítači klidně
+   visí otevřená celý den. Majiteli se 19. 10. 2026 prodaly Jordany
+   a kus zůstal ve sloupci Na skladě, přestože konektor o prodeji věděl.
+
+   Proto se aplikace ptá i průběžně (`KOMISE_KONTROLA_MS`) a hned, jak
+   se k ní člověk vrátí (záložka znovu vidět). Pravidla jsou stejná jako
+   při startu, včetně zálohy před přesunem. Navíc:
+   - **ne, když je otevřené nějaké okno.** Člověk může mít zrovna
+     v úpravě právě ten kus; přesun pod rukama by se uložením formuláře
+     přepsal zpátky na sklad.
+   - **ne v zavřené záložce** — tam to nikdo nevidí a stačí to po návratu.
+   - **jeden běh naráz** a návrat do záložky nejvýš jednou za minutu,
+     ať přepínání oken nesype dotazy na konektor. */
+var KOMISE_KONTROLA_MS = 5 * 60 * 1000;
+var KOMISE_NAVRAT_ODSTUP_MS = 60 * 1000;
+var _komisePrubeznePosledni = 0;
+var _komisePrubezneBezi = false;
+function komiseKontrolaPrubezna(duvod) {
+  if (document.hidden) return 'skryto';
+  if (!komiseProdejeUrl()) return 'nenastaveno';
+  if (!window._fbUser || !_fbCloudReady) return 'ceka-na-cloud';
+  if (jeUctetni()) return 'uctetni';
+  if (document.querySelector('.mo.open')) return 'okno';
+  if (_komisePrubezneBezi) return 'bezi';
+  if (duvod === 'navrat' && Date.now() - _komisePrubeznePosledni < KOMISE_NAVRAT_ODSTUP_MS) return 'odstup';
+  _komisePrubezneBezi = true;
+  _komisePrubeznePosledni = Date.now();
+  Promise.resolve(komisePrenesProdeje(false)).catch(function () {})
+    .then(function () { _komisePrubezneBezi = false; });
+  return 'spusteno';
+}
+setInterval(function () { komiseKontrolaPrubezna('casovac'); }, KOMISE_KONTROLA_MS);
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) komiseKontrolaPrubezna('navrat');
+});
 
 autoRate = localStorage.getItem('autoRate') !== 'false';
 if (autoRate) fetchCnbRate(); // fetch on startup silently

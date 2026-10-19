@@ -1045,6 +1045,15 @@ nesmí rozbít:
 - **Z odpovědi se bere jen dohodnutá hrstka polí** (`KOMISE_POLE`)
   a jen kus, který je pořád na skladě. Odpověď přijde po síti; bez
   toho by změna konektoru přepsala nákupní cenu nebo hotový prodej.
+- **Ptá se průběžně, ne jen při startu** (`PRŮBĚŽNÁ KONTROLA PRODEJŮ
+  Z KOMISE`): po spuštění, každých `KOMISE_KONTROLA_MS` (5 minut)
+  a při návratu do záložky (nejdřív minutu po minulém dotazu). Dřív
+  se ptala jen při startu, takže kus prodaný u komise, zatímco byla
+  aplikace otevřená, ležel na skladě až do dalšího obnovení. Skrytá
+  záložka se neptá, a **otevřené okno taky ne** — přesun by se pod
+  rukama pral s rozepsanou úpravou. Startovní a průběžná kontrola
+  sdílí `_komisePrubezneBezi`, ať neběží dvě naráz. Hlídá to
+  `test-komise.js`, sekce 5c.
 
 **Stejnou cestou se odškrtává, co u nich visí** (`vystaveno` v odpovědi
 na `/prodeje`, v aplikaci `_komiseOdskrtniVystavene`). Konektor kus
@@ -1281,10 +1290,12 @@ Vlastní je jen jejich API:
 - Stropy jsou vlastní (`PK_STROP_ZAPISU`, `PK_STROP_STAZENI`,
   `PK_STROP_CRON`), jinak platí totéž co u Pikastore.
 
-Aplikace se kvůli nim měnit nemusí: `/<APP_TOKEN>/prodeje` vrací
-`soldWhere` z odpovědi a `KOMISE_POLE` bere libovolné místo prodeje,
-takže až se dopíšou zápisy, stačí přidat jejich prodeje do
-`k_preneseni`.
+**Prodeje z Purekickz jdou do `k_preneseni` taky** (`pkProdejeKPreneseni`,
+stejná funkce jako u Pikastore s jiným jménem a výpočtem payoutu).
+Jejich `payout` je rovnou to, co majitel dostane, takže se nic
+neodečítá. **Jeden kus doma se nesmí přenést dvakrát** — když se tentýž
+model a velikost prodá u obou komisí naráz, druhý prodej si vezme další
+kus ze skupiny, nebo žádný (`vynechat`). Hlídá to `test-pikastore.js`.
 
 **Doklady za měsíc v jednom souboru.** Typ dokladu u místa prodeje už
 existuje (`TYP DOKLADU U MÍSTA PRODEJE`), takže to, co tohle blokovalo, je

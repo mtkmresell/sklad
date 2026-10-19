@@ -985,7 +985,17 @@ function pikaPayoutKc(r) {
 
    Zapisovat do cloudu smí **jedině aplikace**; konektor jen řekne, co
    se stalo. Druhý zapisovatel by se pral s její synchronizací. */
-function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
+/* `volby` dovolí totéž pro Purekickz (`pkProdejeKPreneseni`): jiné
+   jméno, jiný výpočet payoutu a seznam kusů, které už si vzal jiný
+   komisionář — jeden kus doma nemůže odejít dvěma kupcům. */
+function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu, volby) {
+  volby = volby || {};
+  const jmeno = volby.jmeno || PIKA_JMENO;
+  const vypocetPayoutu = volby.payout || pikaPayoutKc;
+  const uNich = volby.uNich || (r => ({ id: r.short_id || r.id, na_pulte_kc: pikaKc(pikaZaklad(r)),
+    provize_pct: Number.isFinite(Number(r.commission_rate_bp))
+      ? Number(r.commission_rate_bp) / 100 : null }));
+  const vzate = volby.vynechat || new Set();
   const { skupiny } = pikaSkupiny(polozky, radky, null);
   const ven = [];
   for (const s of skupiny) {
@@ -996,11 +1006,12 @@ function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
     /* Kusy doma, které ještě čekají na to, že se prodej zapíše.
        Bere se ten nejdéle ležící — u dvou stejných je to jedno, ale
        ať je to pokaždé stejné a nepřehazuje se to. */
-    const doma = s.chtene.map(x => x.it)
+    const doma = s.chtene.map(x => x.it).filter(it => !vzate.has(it.id))
       .sort((a, b) => (a.dateAdded || 0) - (b.dateAdded || 0));
     for (let i = 0; i < prodane.length && i < doma.length; i++) {
       const r = prodane[i], it = doma[i];
-      const payout = pikaPayoutKc(r);
+      vzate.add(it.id);
+      const payout = vypocetPayoutu(r);
       /* Číslo objednávky chodí majiteli na Discord, kam konektor nevidí.
          A když u jejich řádku chybí provize, payout se nedá spočítat —
          přesun je i tak přednější (kus se fyzicky prodal), ale cena se
@@ -1009,16 +1020,14 @@ function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
       if (payout == null) rucne.push('sellPrice');
       ven.push({
         polozka: { id: it.id, nazev: it.name, sku: it.sku || null, velikost: it.size || null },
-        u_nich: { id: r.short_id || r.id, na_pulte_kc: pikaKc(pikaZaklad(r)),
-          provize_pct: Number.isFinite(Number(r.commission_rate_bp))
-            ? Number(r.commission_rate_bp) / 100 : null },
+        u_nich: uNich(r),
         vyplnit: {
           saleState: 'waiting',
           waitState: 'sending',
           sellPrice: payout,
           sellCurrency: 'CZK',
           saleDate: String(r.updated_at || '').slice(0, 10) || null,
-          soldWhere: PIKA_JMENO,
+          soldWhere: jmeno,
           extraCosts: 0,
         },
         doplnit_rucne: rucne,
@@ -1026,6 +1035,23 @@ function pikaProdejeKPreneseni(polozky, radky, razitkoSkladu) {
     }
   }
   return ven;
+}
+
+/* Prodeje z Purekickz k přenosu do Čeká. Pravidla párování a čerstvosti
+   jsou tatáž jako u Pikastore (proto se sdílí `pikaProdejeKPreneseni`);
+   liší se jen peníze: **jejich `payout` je rovnou to, co majitel dostane,
+   v korunách** — poplatek si připočítávají navrch, nic se neodečítá. */
+function pkProdejeKPreneseni(polozky, radky, razitkoSkladu, vynechat) {
+  return pikaProdejeKPreneseni(polozky, radky, razitkoSkladu, {
+    jmeno: PK_JMENO,
+    vynechat,
+    payout: r => {
+      const n = Number(r && r.payout);
+      return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+    },
+    uNich: r => ({ id: r.id, na_pulte_kc: r.list_price != null ? Number(r.list_price) : null,
+      provize_pct: null }),
+  });
 }
 
 /* Přichází tenhle kus vůbec v úvahu? Viz hlavička sekce. */
@@ -1898,7 +1924,8 @@ async function pikaProdeje(env) {
   const token = await prihlas(env);
   const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
   const polozky = slozPolozky(data, archivy);
-  const prodeje = pikaProdejeKPreneseni(polozky, radky, data.savedAt);
+  const vzate = new Set();
+  const prodeje = pikaProdejeKPreneseni(polozky, radky, data.savedAt, { vynechat: vzate });
 
   /* Co u nich visí, ať si to aplikace odškrtne. Purekickz je nepovinný
      a **jeho výpadek nesmí shodit přenos prodejů** — to jsou dvě
@@ -1911,6 +1938,9 @@ async function pikaProdeje(env) {
     try {
       const { radky: pkRadky } = await pkVypis(env);
       vystaveno.push(...komiseVystavene(polozky, pkRadky, PK_STAVY_CINNE, PK_JMENO));
+      /* Prodeje z Purekickz jdou stejnou cestou do Čeká. Kus, který si
+         už vzal prodej z Pikastore, se podruhé nepřesouvá. */
+      prodeje.push(...pkProdejeKPreneseni(polozky, pkRadky, data.savedAt, vzate));
     } catch (e) {
       nezjisteno.push({ kde: PK_JMENO, chyba: String((e && e.message) || e).slice(0, 120) });
     }

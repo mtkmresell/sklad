@@ -1180,6 +1180,54 @@ const ME = {
     !!pkSpadl && (pkSpadl.vystaveno_nezjisteno || [])
       .some(x => x.kde === 'Purekickz' && /dole/.test(x.chyba || '')),
     JSON.stringify((pkSpadl || {}).vystaveno_nezjisteno));
+  /* ── Prodej z Purekickz jde stejnou cestou do Čeká ────────────────
+     Jejich `payout` je rovnou to, co majitel dostane (v korunách) —
+     nic se z něj neodečítá. */
+  function sPurekickz(pkRadky) {
+    const puvodni = global.fetch;
+    global.fetch = async (vstup, init) => {
+      const u = String(vstup && vstup.url ? vstup.url : vstup);
+      if (u.includes('consignor-api')) {
+        return Response.json({ total: pkRadky.length, listings: pkRadky });
+      }
+      return puvodni(vstup, init);
+    };
+    return () => { global.fetch = puvodni; };
+  }
+  const pkProdany = { id: 'pk-1', sku: 'T-1', size: 'S', name: 'Tričko', status: 'sold',
+    payout: 820, list_price: 1090, quantity: 1,
+    updated_at: new Date(Date.now() - 7200000).toISOString() };
+  const ENV_PK = Object.assign({}, ENV, { PUREKICKZ_TOKEN: 'pk_live_testovaci' });
+  scenarSeSkladem(DVOJCATA, [], zapisovyScenar);
+  let vratit = sPurekickz([pkProdany]);
+  let sPk;
+  try { sPk = await prodeje(ENV_PK); } finally { vratit(); }
+  const pkZapis = (sPk.k_preneseni || [])[0] || {};
+  ok('prodej z Purekickz se najde', (sPk.k_preneseni || []).length === 1, JSON.stringify(sPk).slice(0, 300));
+  shoda('s místem Purekickz a jejich payoutem beze změny',
+    [(pkZapis.vyplnit || {}).soldWhere, (pkZapis.vyplnit || {}).sellPrice, (pkZapis.vyplnit || {}).saleState],
+    ['Purekickz', 820, 'waiting']);
+  ok('i s datem prodeje', (pkZapis.vyplnit || {}).saleDate
+    === new Date(Date.now() - 7200000).toISOString().slice(0, 10), JSON.stringify(pkZapis.vyplnit));
+  // Starý prodej (dávno před razítkem skladu) se znovu nepřenáší
+  vratit = sPurekickz([Object.assign({}, pkProdany, { updated_at: '2026-01-01T00:00:00Z' })]);
+  try { sPk = await prodeje(ENV_PK); } finally { vratit(); }
+  shoda('starý prodej z Purekickz se nepřenáší', (sPk.k_preneseni || []).length, 0);
+  /* Jeden kus doma nemůže odejít dvěma kupcům: prodej u obou komisí
+     a doma jediný kus → přesune se jednou, ne dvakrát. */
+  scenarSeSkladem([DVOJCATA[0]], [prodanyRadek], zapisovyScenar);
+  vratit = sPurekickz([pkProdany]);
+  try { sPk = await prodeje(ENV_PK); } finally { vratit(); }
+  shoda('jeden kus se nepřesune dvakrát', (sPk.k_preneseni || []).map(x => x.polozka.id), ['a']);
+  // Dva kusy doma, prodej u obou → každý jiný kus
+  scenarSeSkladem(DVOJCATA, [prodanyRadek], zapisovyScenar);
+  vratit = sPurekickz([pkProdany]);
+  try { sPk = await prodeje(ENV_PK); } finally { vratit(); }
+  shoda('dva prodeje, dva různé kusy',
+    (sPk.k_preneseni || []).map(x => x.polozka.id + ':' + x.vyplnit.soldWhere).sort(),
+    ['a:Pikastore', 'b:Purekickz']);
+  scenarSeSkladem([DVOJCATA[0]], [prodanyRadek], zapisovyScenar);
+
   ok('datum prodeje je den, kdy se to u nich prodalo',
     zapis.vyplnit.saleDate === new Date(Date.now() - 3600000).toISOString().slice(0, 10),
     zapis.vyplnit.saleDate);
