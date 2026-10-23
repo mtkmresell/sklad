@@ -101,7 +101,7 @@ body.uctetni #btnCustomerMode,
 body.uctetni #btnStockAnalytics,
 body.uctetni #btnPayoutCal,
 body.uctetni .bulk-bar,
-/* „Analytika →" v Prodáno se skládá až za běhu a nemá vlastní id */
+/* „Analytika" v Prodáno se skládá až za běhu a nemá vlastní id */
 body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 
 /* Úpravy položek — účetní se jen dívá.
@@ -1579,7 +1579,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 </div>
 <div id="statsBarWrap" style="position:relative;overflow:hidden;flex-shrink:0;">
   <div class="stats-bar" id="statsBar"></div>
-  <button id="btnStockAnalytics" onclick="stockViewMode='analytics';renderItems();" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Analytika →</button>
+  <button id="btnStockAnalytics" onclick="stockViewMode='analytics';renderItems();" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Analytika</button>
   <button id="btnPayoutCal" onclick="openPayoutCalendar()" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'" style="display:none;position:absolute;right:18px;top:50%;transform:translateY(-50%);background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;">Cashflow</button>
 </div>
 
@@ -18604,7 +18604,7 @@ function renderSoldView(){
   html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--accent);font-weight:700;background:rgba(200,255,0,0.12);padding:2px 8px;border-radius:4px;border:1px solid rgba(200,255,0,0.3);">'+czk(stats.totalProfit)+'</span>';
   html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">Inv: '+czk(stats.totalCost)+'</span>';
   html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">Obrat: '+czk(stats.totalRevenue)+'</span>';
-  html+='<button class="sold-btn-action" onclick="soldViewMode=\'analytics\';renderSoldView();" style="background:var(--accent);color:#000;border:none;">Analytika →</button>';
+  html+='<button class="sold-btn-action" onclick="soldViewMode=\'analytics\';renderSoldView();" style="background:var(--accent);color:#000;border:none;">Analytika</button>';
   html+='</div>';
   if(!sold.length){html+='<div style="text-align:center;padding:40px;color:var(--muted);">'+(chybiJen?'Tady nic nechybí':'Žádné prodeje v tomto období')+'</div></div>';grid.innerHTML=html;initSoldSelects();return;}
   var groups=groupSoldByDate(sold);
