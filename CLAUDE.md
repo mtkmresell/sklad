@@ -40,6 +40,15 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   seznamu při startu, u vzniklého za běhu se `initCustomSelect()` volá ručně. Není to
   vidět, dokud se na nabídku neklikne; hlídá to `test-selecty.js`. Nabídky se pak taky
   samy umí prohledávat psaním (`PSANÍ V DROPDOWNU`) — bez vlastního vzhledu ne.
+- **Napsané se ukazuje přímo v poli nabídky**, ne v řádku nad seznamem
+  (`PSANÍ V DROPDOWNU`, `.cs-psani`). Majitel to chtěl (23. 10. 2026) —
+  u Kde prodáno se text psal „pod okno". Pole se jen zprůhlední a přes něj
+  leží napsané s počtem shod; **hodnota pole se nemění**, protože Kde
+  prodáno a Umístění vybírají už stiskem myši a úklid po kliknutí by
+  vybrané přepsal. Enter u nich proto posílá i `mousedown` (dřív nevybral
+  nic). **První Escape ruší jen psaní** a dál se nepustí — globální Escape
+  jinak zavřel celé okno Přesunout i s vyplněnou cenou. Hlídá to
+  `test-psani.js`, sekce 11.
 - **Měna se přepíná jedním klikem** (`MĚNA SE PŘEPÍNÁ KLIKEM`
   v `initCustomSelect()`). Nabídka s právě dvěma možnostmi CZK a EUR
   se nerozbaluje — klik na tlačítko přepne na tu druhou (majitel jinou

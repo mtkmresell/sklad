@@ -675,6 +675,28 @@ select:hover{border-color:var(--accent);}
   animation:csKurzor 1s step-end infinite;
 }
 @keyframes csKurzor { 50% { opacity:0; } }
+/* Napsané se ukazuje přímo v poli, ne v řádku pod ním. Pole samo
+   zprůhlední a přes něj leží .cs-psani se stejným odsazením — hodnota
+   v poli zůstává nedotčená, takže zrušené psaní nic nepřepíše. */
+.cs-pise { color:transparent !important; border-color:var(--accent) !important; }
+.cs-pise::placeholder { color:transparent !important; }
+.cs-pise > * { visibility:hidden; }
+.cs-psani {
+  position:absolute; z-index:2; box-sizing:border-box;
+  display:flex; align-items:center; gap:8px;
+  pointer-events:none; font-size:13px; color:var(--text);
+}
+.cs-psani-text { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cs-psani-text::after {
+  content:''; display:inline-block; width:1.5px; height:1.05em; margin-left:1px;
+  vertical-align:-0.15em; background:var(--accent);
+  animation:csKurzor 1s step-end infinite;
+}
+.cs-psani-pocet {
+  font-family:'DM Mono',monospace; font-size:10px; color:var(--muted2);
+  white-space:nowrap; flex-shrink:0;
+}
+.cs-psani-pocet.nic { color:var(--danger); }
 .cs-hledani-pocet {
   font-family:'DM Mono',monospace; font-size:10px; color:var(--muted2);
   white-space:nowrap; flex-shrink:0;
@@ -16731,6 +16753,14 @@ function initCustomSelect(selectEl) {
    Nejdřív se hledá podle začátku slova, a teprve když nic nesedí, tak
    kdekoli uvnitř. Napsané „s" tak nabídne Section a StockX, ne Pikastore.
    Diakritika a velikost písmen nehrají roli, „zasilkovna" najde Zásilkovnu.
+
+   Napsané se ukazuje PŘÍMO V POLI nabídky (s kurzorem a počtem shod), ne
+   v řádku nahoře v rozbalené nabídce. Majitel to tak chtěl (23. 10. 2026):
+   psaní do řádku pod oknem působilo, jako by se psalo jinam, než kam patří.
+   Hodnota pole se přitom nemění — přes zprůhledněné pole se jen položí
+   .cs-psani. Kde prodáno a Umístění vybírají už při stisku myši, a úklid
+   po kliknutí by vybranou hodnotu jinak přepsal tou původní.
+   Řádek v nabídce zůstává jen pro nabídku, ke které se pole najít nedá.
 ══════════════════════════════════════════════════════════════════════ */
 (function() {
   var buffer = '';
@@ -16779,11 +16809,51 @@ function initCustomSelect(selectEl) {
       + '<span class="cs-hledani-pocet">' + (pocet ? pocet + '×' : 'nic nenalezeno') + '</span>';
   }
 
+  // Pole, ke kterému nabídka patří: tlačítko od initCustomSelect, ruční
+  // .cs-display, nebo pole jen pro čtení u Kde prodáno a Umístění
+  function oknoNabidky(drop) {
+    var p = drop.parentNode;
+    if (!p) return null;
+    for (var i = 0; i < p.children.length; i++) {
+      var el = p.children[i];
+      if (el === drop) continue;
+      if (el.classList.contains('cs-btn') || el.classList.contains('cs-display')) return el;
+      if (el.tagName === 'INPUT' && el.type !== 'hidden') return el;
+    }
+    return null;
+  }
+
+  function ukazVOkne(drop, text, pocet) {
+    var okno = oknoNabidky(drop);
+    if (!okno) { napoveda(drop, text, pocet); return; }
+    var p = okno.parentNode;
+    var el = null;
+    for (var i = 0; i < p.children.length; i++) if (p.children[i].classList.contains('cs-psani')) el = p.children[i];
+    if (!text) { if (el) el.remove(); okno.classList.remove('cs-pise'); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'cs-psani';
+      p.insertBefore(el, okno.nextSibling);
+    }
+    if (getComputedStyle(p).position === 'static') p.style.position = 'relative';
+    var cs = getComputedStyle(okno);
+    el.style.left = okno.offsetLeft + 'px';
+    el.style.top = okno.offsetTop + 'px';
+    el.style.width = okno.offsetWidth + 'px';
+    el.style.height = okno.offsetHeight + 'px';
+    el.style.paddingLeft = (parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth)) + 'px';
+    el.style.paddingRight = (parseFloat(cs.paddingLeft) + parseFloat(cs.borderRightWidth)) + 'px';
+    el.style.fontSize = cs.fontSize;
+    okno.classList.add('cs-pise');
+    el.innerHTML = '<span class="cs-psani-text">' + text.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</span>'
+      + '<span class="cs-psani-pocet' + (pocet ? '' : ' nic') + '">' + (pocet ? pocet + '×' : 'nic nenalezeno') + '</span>';
+  }
+
   function filtruj(drop) {
     var vsechny = polozky(drop);
     if (!buffer) {
       vsechny.forEach(function(o) { o.classList.remove('cs-skryto', 'cs-najeto'); });
-      napoveda(drop, '');
+      ukazVOkne(drop, '');
       return;
     }
     var q = bezDiakritiky(buffer);
@@ -16794,7 +16864,7 @@ function initCustomSelect(selectEl) {
     // Když nic nesedí, seznam zůstane celý — ať je vidět, že se jen nic
     // nenašlo, místo prázdného okna
     vsechny.forEach(function(o) { o.classList.toggle('cs-skryto', sedi.length > 0 && sedi.indexOf(o) === -1); });
-    napoveda(drop, buffer, sedi.length);
+    ukazVOkne(drop, buffer, sedi.length);
     zvyrazni(drop, sedi[0] || null);
   }
 
@@ -16819,7 +16889,8 @@ function initCustomSelect(selectEl) {
     document.querySelectorAll('.cs-opt.cs-skryto, .cs-opt.cs-najeto').forEach(function(o) {
       o.classList.remove('cs-skryto', 'cs-najeto');
     });
-    document.querySelectorAll('.cs-hledani').forEach(function(h) { h.remove(); });
+    document.querySelectorAll('.cs-hledani, .cs-psani').forEach(function(h) { h.remove(); });
+    document.querySelectorAll('.cs-pise').forEach(function(o) { o.classList.remove('cs-pise'); });
   }
 
   function zrus() {
@@ -16842,13 +16913,16 @@ function initCustomSelect(selectEl) {
     }
     if (e.key === 'Enter') {
       var vyber = drop.querySelector('.cs-opt.cs-najeto') || viditelne(drop)[0];
-      if (vyber) { e.preventDefault(); zrus(); vyber.click(); }
+      if (vyber) {
+        e.preventDefault(); zrus();
+        // Kde prodáno a Umístění vybírají stiskem myši, ostatní kliknutím.
+        // Když stisk nabídku zavřel, je vybráno a druhý výběr by byl navíc.
+        vyber.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        if (drop.offsetParent !== null && getComputedStyle(drop).display !== 'none') vyber.click();
+      }
       return;
     }
-    if (e.key === 'Escape') {
-      if (buffer) { e.preventDefault(); zrus(); filtruj(drop); }  // první Escape zruší psaní
-      return;                                                     // druhý zavře nabídku jinde
-    }
+    if (e.key === 'Escape') return;   // viz zachycení Escapu níž
     if (e.key === 'Backspace') {
       e.preventDefault();
       buffer = buffer.slice(0, -1);
@@ -16862,6 +16936,21 @@ function initCustomSelect(selectEl) {
       filtruj(drop);
     }
   });
+
+  /* První Escape zruší jen psaní, druhý teprve zavře nabídku. Globální
+     Escape (zavře všechna okna) sedí na document a je zaregistrovaný dřív,
+     takže psaní v Kde prodáno zavřelo celé okno Přesunout i s tím, co
+     v něm bylo vyplněné. Proto se Escape chytá už na window v zachytávací
+     fázi a dál nepustí. */
+  window.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape' || !buffer) return;
+    var drop = otevrenaNabidka();
+    if (!drop || drop !== patriK) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    zrus();
+    filtruj(drop);
+  }, true);
 
   // Kliknutí nabídku buď otevře, zavře, nebo v ní vybere — pokaždé psaní končí
   document.addEventListener('click', function() { zrus(); }, true);
