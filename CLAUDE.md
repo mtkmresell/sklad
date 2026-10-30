@@ -57,8 +57,14 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   otevře jiné `.mo`, kopie se nad ním rozplyne (`.okno-duch`) a nové
   okno naváže na už ztmavené pozadí (`.mo-prechod`). Je to **jen vzhled**,
   `open` se mění okamžitě. Třída `.mo-prechod` se sundává až při zavření
-  — sundaná za chodu by roztmívání pozadí spustila znovu. Okno zavřené
-  jinak než přes `cm()` se nerozplyne, jen zmizí jako dřív. Hlídá to
+  — sundaná za chodu by roztmívání pozadí spustila znovu. Okna, která
+  se skládají za běhu a vkládají do `body` (Kurzy měn, Komisní prodej,
+  Retaileři, Údaje pro doklad, Posty, Databáze našeptávače, Dropdowny),
+  hlídá druhý pozorovatel; ta bez třídy `.mo` dostanou stejný vjezd jako
+  ostatní. Zpočátku se řešila jen okna z HTML a tahle se objevovala bez
+  přechodu. Okno zavřené jinak než přes `cm()` se nerozplyne, jen zmizí
+  jako dřív — **nové tlačítko pod Nástroje se musí do `test-prechod.js`,
+  sekce 5, přidat**. Hlídá to
   `test-prechod.js`.
 - **Měna se přepíná jedním klikem** (`MĚNA SE PŘEPÍNÁ KLIKEM`
   v `initCustomSelect()`). Nabídka s právě dvěma možnostmi CZK a EUR

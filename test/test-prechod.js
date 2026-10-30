@@ -58,6 +58,41 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
   check('po cm + otevření je nové okno otevřené okamžitě', await page.evaluate(() =>
     document.getElementById('moSizeTables').classList.contains('open') && !document.getElementById('moSettings').classList.contains('open')));
 
+  section('5) Každé tlačítko pod Nástroje v Nastavení');
+  // Část oken je v HTML (.mo), část se skládá za běhu a do stránky se vkládá
+  // (Kurzy měn, Komisní prodej, Údaje pro doklad…) — první druh se hlídal
+  // sám, druhý se dřív jen objevil bez přechodu.
+  const pocet = await page.evaluate(() => document.querySelectorAll('#moSettings .tool-grid .btn-sec').length);
+  check('v Nástrojích je jedenáct tlačítek', pocet === 11, String(pocet));
+  for (let i = 0; i < pocet; i++) {
+    await page.evaluate(() => {
+      document.querySelectorAll('.mo.open, .okno-duch').forEach(m => { m.classList.remove('open'); if (m.classList.contains('okno-duch')) m.remove(); });
+      ['retailersMgrOv', 'kurzyOverlay', 'komiseOverlay', 'itemCacheMgr', 'igMgrOverlay', 'sellerOv'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); });
+      document.querySelectorAll('body > div[style*="position:fixed"]').forEach(e => e.remove());
+      openSettings();
+    });
+    await page.waitForTimeout(450);
+    const r = await page.evaluate((i) => new Promise(res => {
+      const btn = document.querySelectorAll('#moSettings .tool-grid .btn-sec')[i];
+      const nazev = btn.textContent.trim();
+      const pred = new Set(Array.from(document.body.children));
+      btn.click();
+      const v = []; let k = 0;
+      (function f() {
+        const nove = Array.from(document.body.children).filter(e => !pred.has(e) && !e.classList.contains('okno-duch') && e.offsetWidth > 300);
+        const mo = Array.from(document.querySelectorAll('.mo.open')).filter(m => m.id !== 'moSettings');
+        const cil = nove[0] || mo[0];
+        const a = cil ? parseFloat((getComputedStyle(cil).backgroundColor.match(/[\d.]+\)$/) || ['0'])[0]) : 0;
+        v.push({ a, duch: !!document.querySelector('.okno-duch'), je: !!cil });
+        if (++k < 12) requestAnimationFrame(f); else res({ nazev, v });
+      })();
+    }), i);
+    const po = r.v.slice(1);
+    check(r.nazev + ': okno se otevřelo', po.some(x => x.je));
+    check(r.nazev + ': pozadí nikdy nezprůhlední', po.filter(x => x.je).every(x => x.a > 0.8), JSON.stringify(po.map(x => x.a)));
+    check(r.nazev + ': Nastavení se rozplyne', po.some(x => x.duch));
+  }
+
   check('žádné JS chyby', errs.length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();
   console.log(failures ? `\n${failures} TESTŮ SELHALO` : '\nVŠECHNY TESTY PROŠLY');

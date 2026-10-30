@@ -7906,6 +7906,37 @@ var _oknoDuch = null;
     // Co se do konce tohoto okamžiku neotevřelo, nepatří k přechodu
     Promise.resolve().then(function() { Promise.resolve().then(function() { _oknoDuch = null; }); });
   };
+  // Ukáže ducha starého okna nad novým a nové okno naváže na ztmavené pozadí
+  function prevezmi(mo) {
+    var d = _oknoDuch.kopie; _oknoDuch = null;
+    mo.classList.add('mo-prechod');
+    document.body.appendChild(d);
+    d.addEventListener('animationend', function() { d.remove(); });
+    setTimeout(function() { d.remove(); }, 500);
+  }
+  // Okna, která se do stránky přidávají za běhu (Kurzy měn, Komisní prodej,
+  // Retaileři, Údaje pro doklad…), se otevírají vložením do `body`, ne
+  // změnou třídy — hlídá je druhý pozorovatel. Ta bez třídy `.mo` nemají
+  // vlastní vjezd, tak dostanou stejný jako ostatní okna.
+  new MutationObserver(function(zmeny) {
+    if (!_oknoDuch) return;
+    for (var i = 0; i < zmeny.length; i++) {
+      for (var j = 0; j < zmeny[i].addedNodes.length; j++) {
+        var el = zmeny[i].addedNodes[j];
+        if (el.nodeType !== 1 || el.classList.contains('okno-duch') || el.classList.contains('brana')) continue;
+        var jeMo = el.classList.contains('mo') && el.classList.contains('open');
+        var jeVrstva = !jeMo && el.style && el.style.position === 'fixed' && el.firstElementChild;
+        if (!jeMo && !jeVrstva) continue;
+        if (jeVrstva && el.firstElementChild.animate && !matchMedia('(prefers-reduced-motion:reduce)').matches) {
+          el.firstElementChild.animate(
+            [{ transform: 'translateY(20px) scale(0.98)', opacity: 0 }, { transform: 'none', opacity: 1 }],
+            { duration: 220, easing: 'cubic-bezier(0.34, 1.2, 0.64, 1)' });
+        }
+        prevezmi(el);
+        return;
+      }
+    }
+  }).observe(document.body, { childList: true });
   new MutationObserver(function(zmeny) {
     // Třída se smí sundat až při zavření — sundaná za chodu by roztmívání
     // pozadí spustila znovu a okno by podruhé bliklo
@@ -7915,11 +7946,7 @@ var _oknoDuch = null;
       var mo = zmeny[i].target;
       if (!mo.classList || !mo.classList.contains('mo') || !mo.classList.contains('open')) continue;
       if (mo.id === _oknoDuch.id || mo.classList.contains('brana')) continue;
-      var d = _oknoDuch.kopie; _oknoDuch = null;
-      mo.classList.add('mo-prechod');
-      document.body.appendChild(d);
-      d.addEventListener('animationend', function() { d.remove(); });
-      setTimeout(function() { d.remove(); }, 500);
+      prevezmi(mo);
       return;
     }
   }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
