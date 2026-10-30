@@ -68,15 +68,24 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
     await page.evaluate(() => {
       document.querySelectorAll('.mo.open, .okno-duch').forEach(m => { m.classList.remove('open'); if (m.classList.contains('okno-duch')) m.remove(); });
       ['retailersMgrOv', 'kurzyOverlay', 'komiseOverlay', 'itemCacheMgr', 'igMgrOverlay', 'sellerOv'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); });
-      document.querySelectorAll('body > div[style*="position:fixed"]').forEach(e => e.remove());
+      document.querySelectorAll('body > div[style*="position:fixed"], body > div[style*="position: fixed"], #itemCacheMgr').forEach(e => e.remove());
       openSettings();
     });
     await page.waitForTimeout(450);
-    const r = await page.evaluate((i) => new Promise(res => {
-      const btn = document.querySelectorAll('#moSettings .tool-grid .btn-sec')[i];
-      const nazev = btn.textContent.trim();
-      const pred = new Set(Array.from(document.body.children));
-      btn.click();
+    // Kliká se skutečnou myší, ne btn.click() z kódu. Při opravdovém kliknutí
+    // se mezi posluchači spouští mikroúlohy, z kódu ne — a právě na tom
+    // přechod u Správy platforem, Importu a Exportu padal, zatímco test
+    // klikající z kódu procházel.
+    await page.evaluate(() => {
+      window.__pred = new Set(Array.from(document.body.children));
+      window.__duchu = 0;
+      window.__duchPoz = new MutationObserver(z => z.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('okno-duch')) window.__duchu++; })));
+      window.__duchPoz.observe(document.body, { childList: true });
+    });
+    const nazev = await page.evaluate((i) => document.querySelectorAll('#moSettings .tool-grid .btn-sec')[i].textContent.trim(), i);
+    await page.locator('#moSettings .tool-grid .btn-sec').nth(i).click();
+    const r = await page.evaluate((nazev) => new Promise(res => {
+      const pred = window.__pred;
       const v = []; let k = 0;
       (function f() {
         const nove = Array.from(document.body.children).filter(e => !pred.has(e) && !e.classList.contains('okno-duch') && e.offsetWidth > 300);
@@ -87,13 +96,13 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
         // Duch musí ležet nad novým oknem, jinak ho není vidět
         const nad = !duch || !cil || (parseInt(getComputedStyle(duch).zIndex, 10) > (parseInt(getComputedStyle(cil).zIndex, 10) || 0));
         v.push({ a, duch: !!duch, je: !!cil, nad });
-        if (++k < 12) requestAnimationFrame(f); else res({ nazev, v });
+        if (++k < 12) requestAnimationFrame(f); else { window.__duchPoz.disconnect(); res({ nazev, v, duchu: window.__duchu }); }
       })();
-    }), i);
+    }), nazev);
     const po = r.v.slice(1);
     check(r.nazev + ': okno se otevřelo', po.some(x => x.je));
     check(r.nazev + ': pozadí nikdy nezprůhlední', po.filter(x => x.je).every(x => x.a > 0.8), JSON.stringify(po.map(x => x.a)));
-    check(r.nazev + ': Nastavení se rozplyne', po.some(x => x.duch));
+    check(r.nazev + ': Nastavení se rozplyne', r.duchu === 1, String(r.duchu));
     check(r.nazev + ': a je vidět nad novým oknem', po.every(x => x.nad), JSON.stringify(po.map(x => x.nad)));
   }
 

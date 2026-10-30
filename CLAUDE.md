@@ -65,7 +65,13 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   přechodu. **Duch musí mít `z-index` o jedna vyšší než nové okno** —
   ta za běhu mají vrstvy 300 až 9999 a na pevných 201 nebyl vidět, takže
   majitel po první verzi hlásil „nic se nezměnilo"; testy to nezachytily,
-  protože ducha jen našly v DOM, ne že je vidět. Okno zavřené jinak než přes `cm()` se nerozplyne, jen zmizí
+  protože ducha jen našly v DOM, ne že je vidět. **Kopie platí do konce
+  celého kliknutí** (`setTimeout 0`), ne jen do mikroúlohy: u Správy
+  platforem, Importu a Exportu zavírá Nastavení `onclick` na tlačítku
+  a okno otevírá až rozcestník kliků o posluchač dál — a mezi posluchači
+  skutečného kliknutí se mikroúlohy spouští. Majitel to po druhé verzi
+  hlásil znovu; **test proto kliká myší** (`locator.click`), `btn.click()`
+  z kódu tenhle rozdíl nepozná. Okno zavřené jinak než přes `cm()` se nerozplyne, jen zmizí
   jako dřív — **nové tlačítko pod Nástroje se musí do `test-prechod.js`,
   sekce 5, přidat**. Hlídá to
   `test-prechod.js`.

@@ -7958,8 +7958,15 @@ var _oknoDuch = null;
   }
   window._oknoUlozDuch = function(mo) {
     try { _oknoDuch = uloz(mo); } catch (e) { _oknoDuch = null; }
-    // Co se do konce tohoto okamžiku neotevřelo, nepatří k přechodu
-    Promise.resolve().then(function() { Promise.resolve().then(function() { _oknoDuch = null; }); });
+    // Co se do konce tohoto kliknutí neotevřelo, nepatří k přechodu.
+    // Platí až do další úlohy, ne jen do mikroúlohy: u Správy platforem,
+    // Importu a Exportu zavírá Nastavení `onclick` na tlačítku a nové okno
+    // otevírá až rozcestník kliků o posluchač dál — a mezi posluchači se
+    // mikroúlohy spouštějí. Kopie tak mizela dřív, než se okno otevřelo,
+    // a přechod u nich nebyl (30. 10. 2026). Test to s `btn.click()` z kódu
+    // nepoznal, protože tam se mikroúlohy mezi posluchači nespouští.
+    var tento = _oknoDuch;
+    setTimeout(function() { if (_oknoDuch === tento) _oknoDuch = null; }, 0);
   };
   // Ukáže ducha starého okna nad novým a nové okno naváže na ztmavené pozadí
   function prevezmi(mo) {
