@@ -83,7 +83,10 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
         const mo = Array.from(document.querySelectorAll('.mo.open')).filter(m => m.id !== 'moSettings');
         const cil = nove[0] || mo[0];
         const a = cil ? parseFloat((getComputedStyle(cil).backgroundColor.match(/[\d.]+\)$/) || ['0'])[0]) : 0;
-        v.push({ a, duch: !!document.querySelector('.okno-duch'), je: !!cil });
+        const duch = document.querySelector('.okno-duch');
+        // Duch musí ležet nad novým oknem, jinak ho není vidět
+        const nad = !duch || !cil || (parseInt(getComputedStyle(duch).zIndex, 10) > (parseInt(getComputedStyle(cil).zIndex, 10) || 0));
+        v.push({ a, duch: !!duch, je: !!cil, nad });
         if (++k < 12) requestAnimationFrame(f); else res({ nazev, v });
       })();
     }), i);
@@ -91,6 +94,7 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
     check(r.nazev + ': okno se otevřelo', po.some(x => x.je));
     check(r.nazev + ': pozadí nikdy nezprůhlední', po.filter(x => x.je).every(x => x.a > 0.8), JSON.stringify(po.map(x => x.a)));
     check(r.nazev + ': Nastavení se rozplyne', po.some(x => x.duch));
+    check(r.nazev + ': a je vidět nad novým oknem', po.every(x => x.nad), JSON.stringify(po.map(x => x.nad)));
   }
 
   check('žádné JS chyby', errs.length === 0, JSON.stringify(errs.slice(0, 3)));

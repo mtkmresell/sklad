@@ -7910,6 +7910,10 @@ var _oknoDuch = null;
   function prevezmi(mo) {
     var d = _oknoDuch.kopie; _oknoDuch = null;
     mo.classList.add('mo-prechod');
+    // Nová okna skládaná za běhu mají vlastní vrstvy (300, 350, 1100, 9999).
+    // Duch na pevných 201 by pod nimi nebyl vidět a přechod by vypadal,
+    // jako by se nic nezměnilo.
+    d.style.zIndex = (parseInt(getComputedStyle(mo).zIndex, 10) || 200) + 1;
     document.body.appendChild(d);
     d.addEventListener('animationend', function() { d.remove(); });
     setTimeout(function() { d.remove(); }, 500);

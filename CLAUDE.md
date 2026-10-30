@@ -62,7 +62,10 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   Retaileři, Údaje pro doklad, Posty, Databáze našeptávače, Dropdowny),
   hlídá druhý pozorovatel; ta bez třídy `.mo` dostanou stejný vjezd jako
   ostatní. Zpočátku se řešila jen okna z HTML a tahle se objevovala bez
-  přechodu. Okno zavřené jinak než přes `cm()` se nerozplyne, jen zmizí
+  přechodu. **Duch musí mít `z-index` o jedna vyšší než nové okno** —
+  ta za běhu mají vrstvy 300 až 9999 a na pevných 201 nebyl vidět, takže
+  majitel po první verzi hlásil „nic se nezměnilo"; testy to nezachytily,
+  protože ducha jen našly v DOM, ne že je vidět. Okno zavřené jinak než přes `cm()` se nerozplyne, jen zmizí
   jako dřív — **nové tlačítko pod Nástroje se musí do `test-prechod.js`,
   sekce 5, přidat**. Hlídá to
   `test-prechod.js`.
