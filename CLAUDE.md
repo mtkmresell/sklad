@@ -49,6 +49,17 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   nic). **První Escape ruší jen psaní** a dál se nepustí — globální Escape
   jinak zavřel celé okno Přesunout i s vyplněnou cenou. Hlídá to
   `test-psani.js`, sekce 11.
+- **Přechod z okna do okna nebliká** (`PŘECHOD MEZI OKNY`, u `cm()`).
+  Zavřít okno a hned otevřít jiné (Nastavení → Tabulky velikostí) dřív
+  na okamžik ukázalo aplikaci pod nimi: nové okno se roztmívalo od
+  průhledného, jako střih videa s prázdným políčkem mezi záběry (23. 10.
+  2026). `cm()` si proto před zavřením uloží kopii okna a když se hned
+  otevře jiné `.mo`, kopie se nad ním rozplyne (`.okno-duch`) a nové
+  okno naváže na už ztmavené pozadí (`.mo-prechod`). Je to **jen vzhled**,
+  `open` se mění okamžitě. Třída `.mo-prechod` se sundává až při zavření
+  — sundaná za chodu by roztmívání pozadí spustila znovu. Okno zavřené
+  jinak než přes `cm()` se nerozplyne, jen zmizí jako dřív. Hlídá to
+  `test-prechod.js`.
 - **Měna se přepíná jedním klikem** (`MĚNA SE PŘEPÍNÁ KLIKEM`
   v `initCustomSelect()`). Nabídka s právě dvěma možnostmi CZK a EUR
   se nerozbaluje — klik na tlačítko přepne na tu druhou (majitel jinou
@@ -1332,7 +1343,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 65 souborů
+node test/run.js              # kontrola syntaxe + všech 66 souborů
 node test/run.js archive      # jen vybrané
 ```
 

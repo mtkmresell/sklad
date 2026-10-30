@@ -1076,6 +1076,21 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   animation: overlayIn 0.2s ease forwards;
 }
 
+/* 2b. Přechod z jednoho okna do druhého (PŘECHOD MEZI OKNY)
+   Nové okno naváže na už ztmavené pozadí, nezačíná od průhledného.
+   Staré okno se jako „duch" (kopie) rozplyne nad ním. */
+.mo.mo-prechod.open { animation:none; }
+@keyframes oknoOdchod {
+  from { opacity:1; transform:none; }
+  to   { opacity:0; transform:translateY(-8px) scale(0.985); }
+}
+.okno-duch {
+  position:fixed; z-index:201; margin:0 !important; box-sizing:border-box;
+  pointer-events:none; overflow:hidden;
+  animation:oknoOdchod 0.16s ease-in forwards;
+}
+@media(prefers-reduced-motion:reduce){ .okno-duch { display:none; } }
+
 /* 3. Item karta — scroll animace (IntersectionObserver) */
 @keyframes cardIn {
   from { opacity: 0; transform: translateY(14px); }
@@ -7861,8 +7876,59 @@ async function saveItem(){
   showToast(editId ? 'Položka upravena' : (qty>1 ? qty+'× položka přidána' : 'Položka přidána'));
 }
 
+/* PŘECHOD MEZI OKNY
+   Zavřít okno a hned otevřít jiné (Nastavení → Tabulky velikostí) dřív
+   blikalo: pozadí zmizelo a nové okno se roztmívalo od nuly, takže se na
+   okamžik ukázala aplikace pod nimi — „černý snímek" mezi dvěma záběry.
+   Teď si cm() před zavřením uloží kopii okna, a když se v témže
+   okamžiku otevře jiné `.mo`, kopie se nad ním rozplyne a nové okno
+   naváže na už ztmavené pozadí (`.mo-prechod`). Když se nic neotevře,
+   kopie se zahodí a zavření je okamžité jako dřív. Jen vzhled — stav
+   oken (`open`) se mění hned, nic na animaci nečeká. */
+var _oknoDuch = null;
+(function() {
+  function uloz(mo) {
+    var vnitrek = mo.querySelector('.modal, .sell-modal, .img-modal, .csv-modal');
+    if (!vnitrek || !vnitrek.offsetParent && getComputedStyle(vnitrek).position !== 'fixed') return null;
+    var r = vnitrek.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    var kopie = vnitrek.cloneNode(true);
+    kopie.removeAttribute('id');
+    kopie.querySelectorAll('[id]').forEach(function(e) { e.removeAttribute('id'); });
+    kopie.classList.add('okno-duch');
+    kopie.style.left = r.left + 'px'; kopie.style.top = r.top + 'px';
+    kopie.style.width = r.width + 'px'; kopie.style.height = r.height + 'px';
+    kopie.style.maxHeight = 'none'; kopie.style.maxWidth = 'none';
+    return { id: mo.id, kopie: kopie };
+  }
+  window._oknoUlozDuch = function(mo) {
+    try { _oknoDuch = uloz(mo); } catch (e) { _oknoDuch = null; }
+    // Co se do konce tohoto okamžiku neotevřelo, nepatří k přechodu
+    Promise.resolve().then(function() { Promise.resolve().then(function() { _oknoDuch = null; }); });
+  };
+  new MutationObserver(function(zmeny) {
+    // Třída se smí sundat až při zavření — sundaná za chodu by roztmívání
+    // pozadí spustila znovu a okno by podruhé bliklo
+    document.querySelectorAll('.mo.mo-prechod:not(.open)').forEach(function(m) { m.classList.remove('mo-prechod'); });
+    if (!_oknoDuch) return;
+    for (var i = 0; i < zmeny.length; i++) {
+      var mo = zmeny[i].target;
+      if (!mo.classList || !mo.classList.contains('mo') || !mo.classList.contains('open')) continue;
+      if (mo.id === _oknoDuch.id || mo.classList.contains('brana')) continue;
+      var d = _oknoDuch.kopie; _oknoDuch = null;
+      mo.classList.add('mo-prechod');
+      document.body.appendChild(d);
+      d.addEventListener('animationend', function() { d.remove(); });
+      setTimeout(function() { d.remove(); }, 500);
+      return;
+    }
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+})();
+
 function cm(id){
-  document.getElementById(id).classList.remove('open');
+  var _mo = document.getElementById(id);
+  if (_mo.classList.contains('open')) _oknoUlozDuch(_mo);
+  _mo.classList.remove('open');
   // Při zavření bulk sell modalu (bez uložení) — obnov bulk bar
   if(id === 'moBulkSell' && bulkMode) { updateBulkBar(); }
 }
