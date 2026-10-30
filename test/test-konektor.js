@@ -171,13 +171,15 @@ function pozadavek(cesta, telo, metoda = 'POST') {
   const seznam = (await rpc('tools/list')).result.tools;
   shoda('nástroje', seznam.map(t => t.name).sort(),
     ['pika_nahled', 'pika_prodeje', 'pika_smlouva', 'pika_srovnat', 'pk_api', 'pk_nahled',
-     'pk_srovnat', 'sklad_listing', 'sklad_polozky', 'sklad_prodeje', 'sklad_souhrn',
-     'sklad_zakaznici']);
+     'pk_srovnat', 'sklad_kontrola', 'sklad_listing', 'sklad_polozky', 'sklad_prodeje',
+     'sklad_souhrn', 'sklad_zakaznici']);
   /* Jediný nástroj, který sklad mění. Ať je to znát z popisu — v chatu
      je to poslední místo, kde si to Claude může přečíst, než to udělá. */
   ok('u jediného zapisujícího nástroje je to v popisu vidět',
     /ZAPISUJE/.test(seznam.find(t => t.name === 'sklad_listing').description),
     (seznam.find(t => t.name === 'sklad_listing') || {}).description);
+  ok('i u výsledku kontroly je zápis v popisu vidět',
+    /ZAPISUJE/.test((seznam.find(t => t.name === 'sklad_kontrola') || {}).description || ''));
   ok('každý nástroj má popis', seznam.every(t => t.description && t.description.length > 30));
   ok('každý nástroj má schéma', seznam.every(t => t.inputSchema && t.inputSchema.type === 'object'));
   ok('u zákazníků je varování na osobní údaje',

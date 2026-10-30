@@ -257,10 +257,12 @@ function mistaProdeje(data) {
   return [].concat(g.platforms || [], g.eshopy || [], g.local || []);
 }
 
-async function zapisPozadavek(env, token, zmeny) {
+/* `obsah` je to, co má aplikace provést: `{ zmeny }` u fajfek
+   (sklad_listing), `{ kontrola }` u výsledku kontroly listingů. */
+async function zapisPozadavek(env, token, obsah) {
   const jmeno = POZADAVEK_PREFIX + Date.now().toString(36)
     + '_' + Math.random().toString(36).slice(2, 8);
-  const telo = { fields: zabal({ kdy: new Date().toISOString(), zmeny }).mapValue.fields };
+  const telo = { fields: zabal(Object.assign({ kdy: new Date().toISOString() }, obsah)).mapValue.fields };
   const r = await fetch(FS_BASE + '/users/' + env.SKLAD_UID + '/sklad/' + jmeno, {
     method: 'PATCH',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -337,7 +339,7 @@ async function skladListing(env, volby) {
       poznamka: 'Žádná ze změn nedává smysl — podrobnosti v `nelze`.' };
   }
   const dokument = await zapisPozadavek(env, token,
-    zmeny.map(z => ({ id: z.id, platforma: z.platforma, zaskrtnout: z.zaskrtnout })));
+    { zmeny: zmeny.map(z => ({ id: z.id, platforma: z.platforma, zaskrtnout: z.zaskrtnout })) });
   return {
     stav: 'zadano',
     dokument,
@@ -346,6 +348,143 @@ async function skladListing(env, volby) {
     poznamka: 'Požadavek je uložený. **Provede ho aplikace**, ne konektor — do skladu '
       + 'zapisuje jedině ona. Když ji má majitel otevřenou, je to do vteřiny; jinak při '
       + 'jejím dalším spuštění. Konektor sám sklad nezměnil.',
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   VÝSLEDEK KONTROLY LISTINGŮ
+
+   Kontrolu e-shopu dělá Claude v chatu podle skillu (Hypeboost, Section,
+   Tuzex…) a report ukládá do Artifactu. Aplikace se o ní dřív nedozvěděla
+   — co chybí a co se má smazat, bylo vidět jen v reportu. Tímhle se
+   výsledek pošle i do skladu: aplikace ho ukáže v okně Kontroly listingů
+   a u položek (v index.html KONTROLY LISTINGŮ).
+
+   Zapisuje se stejnou cestou jako fajfky — lísteček `pozadavek_…`, který
+   provede aplikace. Do skladu konektor nezapisuje.
+
+   Skill zná kusy podle **SKU (nebo názvu) a velikosti**, ne podle id ve
+   skladu — Hypeboost SKU v seznamu neukazuje a páruje se názvem.
+   Kus se proto dohledá tady, stejným srovnáním velikostí a názvů jako
+   u komisí (`pikaVelikost`, `pikaNazevKlic`). U „chybí" stačí jeden kus
+   ze skupiny: listuje se jeden pár na model a velikost, a fajfka
+   zaškrtnutá u jednoho kusu se v aplikaci srovná celé skupině. U „smazat"
+   se bere prodaný kus — přednostně ten, co ještě čeká, pak naposled
+   prodaný. Co se nedohledá, se vrátí v `nelze` (typicky „Ověřit" —
+   listing, který ve skladu nikdy nebyl).
+══════════════════════════════════════════════════════════════════════ */
+const KONTROLA_NEJVIC = 500;
+
+function kontrolaVelikost(v) {
+  return pikaVelikost(String(v == null ? '' : v)
+    .replace(/\s*1\/3/, '.33').replace(/\s*2\/3/, '.67').replace(',', '.'));
+}
+function kontrolaKlice(it) {
+  const vel = kontrolaVelikost(it.size);
+  const k = [];
+  if (it.sku) k.push('sku:' + pikaText(it.sku) + '|' + vel);
+  if (it.name) k.push('nazev:' + pikaNazevKlic(it.name) + '|' + vel);
+  return k;
+}
+function kontrolaNajdi(polozky, z, druh) {
+  if (typeof z === 'string') z = { id: z };
+  if (!z || typeof z !== 'object') return { duvod: 'neplatný záznam' };
+  const vhodny = druh === 'chybi'
+    ? it => stavPolozky(it) === 'stock' && PIKA_MISTA_PRYC.indexOf(it.location) === -1
+    : it => ['waiting', 'paid'].indexOf(stavPolozky(it)) !== -1;
+  const neNa = druh === 'chybi' ? 'kus není na skladě' : 'kus není prodaný (není v Čeká ani v Prodáno)';
+  if (z.id) {
+    const it = polozky.find(x => x && x.id === z.id);
+    if (!it) return { duvod: 'položka s tímhle id ve skladu není' };
+    if (it.type === 'bulk' || !vhodny(it)) return { duvod: neNa };
+    return { it };
+  }
+  const vel = kontrolaVelikost(z.velikost);
+  const klice = [];
+  if (z.sku) klice.push('sku:' + pikaText(z.sku) + '|' + vel);
+  if (z.nazev) klice.push('nazev:' + pikaNazevKlic(z.nazev) + '|' + vel);
+  if (!klice.length) return { duvod: 'chybí id, SKU i název' };
+  // Nejdřív podle SKU, teprve pak podle názvu — název se u e-shopů liší
+  for (const k of klice) {
+    const kand = polozky.filter(it => it && it.type !== 'bulk' && vhodny(it)
+      && kontrolaKlice(it).indexOf(k) !== -1);
+    if (!kand.length) continue;
+    if (druh === 'chybi') return { it: kand[0] };
+    const den = it => String(it.payoutDate || it.saleDate || '');
+    kand.sort((a, b) => (stavPolozky(a) === 'waiting' ? 0 : 1) - (stavPolozky(b) === 'waiting' ? 0 : 1)
+      || den(b).localeCompare(den(a)));
+    return { it: kand[0] };
+  }
+  return { duvod: druh === 'chybi'
+    ? 'na skladě takový kus (SKU nebo název + velikost) není'
+    : 'prodaný kus s tímhle SKU nebo názvem a velikostí ve skladu není' };
+}
+
+async function skladKontrola(env, a) {
+  a = a || {};
+  const misto = typeof a.misto === 'string' ? a.misto.trim() : '';
+  if (!misto) return { stav: 'nic', poznamka: 'Chybí `misto` — název místa prodeje, jak ho má majitel v nastavení.' };
+  const chybiZ = Array.isArray(a.chybi) ? a.chybi : [];
+  const smazatZ = Array.isArray(a.smazat) ? a.smazat : [];
+  if (chybiZ.length > KONTROLA_NEJVIC || smazatZ.length > KONTROLA_NEJVIC) {
+    return { stav: 'moc_polozek', poznamka: 'Najednou nejvýš ' + KONTROLA_NEJVIC + ' položek v každém seznamu.' };
+  }
+  const token = await prihlas(env);
+  const { data, archivy } = await nactiSklad(token, env.SKLAD_UID);
+  const polozky = slozPolozky(data, archivy);
+  const mista = mistaProdeje(data);
+  if (!mista.length) {
+    return { stav: 'nezname_mista', poznamka: 'V cloudu není nastavení míst prodeje '
+      + '(`platGroups`), takže nejde ověřit, ke kterému místu kontrola patří. Otevři '
+      + 'aplikaci, ať se nastavení uloží, a zkus to znovu.' };
+  }
+  if (mista.indexOf(misto) === -1) {
+    return { stav: 'nezname_misto', poznamka: 'Takové místo prodeje v nastavení není: ' + misto,
+      mista_v_nastaveni: mista };
+  }
+
+  const nelze = [], pozor = [];
+  const prevod = (seznam, druh) => {
+    const ids = [];
+    for (const z of seznam) {
+      const n = kontrolaNajdi(polozky, z, druh);
+      if (!n.it) { nelze.push({ seznam: druh, zaznam: z, duvod: n.duvod }); continue; }
+      if (ids.indexOf(n.it.id) !== -1) continue;
+      ids.push(n.it.id);
+      if (druh === 'chybi' && (n.it.platforms || []).indexOf(misto) !== -1) {
+        pozor.push({ id: n.it.id, nazev: n.it.name || null,
+          duvod: 'má ve skladu fajfku u ' + misto + ', ale podle kontroly tam nevisí — odškrtni ji přes sklad_listing' });
+      }
+    }
+    return ids;
+  };
+  const chybi = prevod(chybiZ, 'chybi');
+  const smazat = prevod(smazatZ, 'smazat');
+
+  let report = typeof a.report === 'string' ? a.report.trim() : '';
+  if (report && (!/^https:\/\//i.test(report) || report.length > 500)) {
+    pozor.push({ duvod: 'odkaz na report se neuložil — musí začínat https:// a mít nejvýš 500 znaků' });
+    report = '';
+  }
+  const d = a.datum ? new Date(a.datum) : new Date();
+  const datum = isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+  const poznamka = typeof a.poznamka === 'string' ? a.poznamka.slice(0, 500) : '';
+
+  /* Ukládá se i čistá kontrola bez nálezů — „Hypeboost 30. 10.: vše
+     sedí" je stejně cenná informace jako seznam chyb. */
+  const dokument = await zapisPozadavek(env, token,
+    { kontrola: { misto, datum, report, chybi, smazat, poznamka } });
+  return {
+    stav: 'zadano',
+    dokument,
+    misto,
+    chybi: chybi.length,
+    smazat: smazat.length,
+    nelze: nelze.length ? nelze : undefined,
+    pozor: pozor.length ? pozor : undefined,
+    poznamka: 'Výsledek kontroly je uložený. **Převezme ho aplikace**, ne konektor — když ji '
+      + 'má majitel otevřenou, je to do vteřiny; jinak při jejím dalším spuštění. Uvidí ho '
+      + 'v okně Kontroly listingů a u položek.',
   };
 }
 
@@ -631,6 +770,47 @@ const NASTROJE = [
     },
   },
   {
+    name: 'sklad_kontrola',
+    description: 'Uloží do skladu výsledek kontroly listingů na jednom místě prodeje — '
+      + 'co tam chybí a co se prodalo a pořád tam visí. Volej VŽDY na konci kontroly '
+      + 'e-shopu (Hypeboost, Section, Tuzex…), i když je všechno v pořádku. Majitel pak '
+      + 'výsledek vidí v aplikaci (okno Kontroly listingů a značky u položek) a odtud '
+      + 'otevře report. ZAPISUJE, ale ne hned: konektor uloží požadavek a převezme ho '
+      + 'aplikace. Kusy stačí poslat tak, jak jsou v reportu (SKU nebo název + velikost), '
+      + 'konektor je ve skladu dohledá; id ze sklad_polozky jde taky. Fajfky tím '
+      + 'nemění — na ty je sklad_listing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        misto: { type: 'string', description: 'Přesný název místa prodeje z nastavení, '
+          + 'např. "Hypeboost".' },
+        report: { type: 'string', description: 'Odkaz na report (artifact), https://… '
+          + 'Volitelné, ale bez něj z aplikace report neotevřeš.' },
+        datum: { type: 'string', description: 'Kdy kontrola proběhla (RRRR-MM-DD). '
+          + 'Výchozí teď.' },
+        chybi: {
+          type: 'array',
+          description: 'Kusy skladem, které na místě nevisí (v reportu Přidat). '
+            + 'Stačí jeden záznam na model a velikost.',
+          items: { type: 'object', properties: {
+            id: { type: 'string' }, sku: { type: 'string' },
+            nazev: { type: 'string' }, velikost: { type: 'string' } } },
+        },
+        smazat: {
+          type: 'array',
+          description: 'Prodané kusy, které tam pořád visí (v reportu Smazat). '
+            + 'Listingy, které ve skladu nikdy nebyly (Ověřit), sem nepatří.',
+          items: { type: 'object', properties: {
+            id: { type: 'string' }, sku: { type: 'string' },
+            nazev: { type: 'string' }, velikost: { type: 'string' } } },
+        },
+        poznamka: { type: 'string', description: 'Krátké shrnutí, které má být vidět '
+          + 'v aplikaci — třeba payouty („nejlevnější u 12 z 30"). Nejvýš 500 znaků.' },
+      },
+      required: ['misto'],
+    },
+  },
+  {
     name: 'pika_prodeje',
     description: 'Co se prodalo na komisním prodeji Pikastore a ve skladu je ten kus pořád '
       + 'veden na skladě. Vrátí rovnou hodnoty, které se mají v položce vyplnit při přesunu '
@@ -686,6 +866,7 @@ async function spustNastroj(jmeno, args, env) {
     return pikaSmlouva(cesty);
   }
   if (jmeno === 'sklad_listing') return skladListing(env, { zmeny: args.zmeny });
+  if (jmeno === 'sklad_kontrola') return skladKontrola(env, args);
   if (jmeno === 'pika_nahled') return pikaNahled(env);
   if (jmeno === 'pika_prodeje') return pikaProdeje(env);
   if (jmeno === 'pk_nahled') return pkNahled(env);

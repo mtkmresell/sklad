@@ -96,7 +96,9 @@ body.uctetni #profileSwitch,
 body.uctetni #btnAdd,
 body.uctetni #btnBulkMode,
 body.uctetni #btnCalc,
-body.uctetni #btnMissingList,
+body.uctetni #btnKontroly,
+body.uctetni .kl-znacka,
+body.uctetni .kl-box,
 body.uctetni #btnCustomerMode,
 body.uctetni #btnStockAnalytics,
 body.uctetni #btnPayoutCal,
@@ -650,6 +652,56 @@ select:hover{border-color:var(--accent);}
 .vykup-opt, .vykup-novy { padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--border); }
 .vykup-novy { color:var(--accent); font-weight:600; border-bottom:none; }
 .vykup-opt:hover, .vykup-novy:hover { background:var(--surface3); }
+
+/* ── Kontroly listingů (viz KONTROLY LISTINGŮ) ───────────────────────── */
+.kl-znacka { display:inline-block; font-family:'DM Mono',monospace; font-size:9px; line-height:1.5;
+  padding:0 6px; border-radius:4px; margin-right:6px; vertical-align:1px; cursor:pointer; white-space:nowrap; font-weight:500; }
+.kl-chybi { color:var(--chybi); border:1px solid rgba(255,140,26,0.45); background:rgba(255,140,26,0.08); }
+.kl-smazat { color:var(--danger); border:1px solid rgba(255,68,68,0.45); background:rgba(255,68,68,0.08); }
+.kl-ok { color:var(--accent); border:1px solid rgba(200,255,0,0.3); background:rgba(200,255,0,0.06); }
+.kl-pocet { position:absolute; top:-5px; right:-5px; min-width:16px; height:16px; padding:0 4px; box-sizing:border-box;
+  border-radius:8px; background:var(--chybi); color:#000; font-family:'DM Mono',monospace; font-size:9px; font-weight:700;
+  line-height:16px; text-align:center; pointer-events:none; }
+.kl-box { border:1px solid rgba(255,140,26,0.35); background:rgba(255,140,26,0.05); border-radius:var(--radius-sm);
+  padding:8px 10px; margin-bottom:12px; }
+.kl-box-titul { font-size:9px; font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:0.6px;
+  color:var(--chybi); margin-bottom:4px; }
+.kl-radek { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:5px 0;
+  border-top:1px solid rgba(255,255,255,0.05); font-size:12px; }
+.kl-box-titul + .kl-radek { border-top:none; }
+.kl-akce { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.kl-kdy { color:var(--muted); font-family:'DM Mono',monospace; font-size:10px; }
+.kl-blok { display:block; margin-top:2px; }
+.kl-odkaz { color:var(--accent); font-size:11px; text-decoration:none; white-space:nowrap; flex-shrink:0; }
+.kl-odkaz:hover { text-decoration:underline; }
+.kl-hotovo, .kl-tl { background:none; border:1px solid var(--border); color:var(--muted); border-radius:5px;
+  font-family:inherit; font-size:11px; padding:3px 9px; cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all 0.15s; }
+.kl-hotovo { border-color:rgba(200,255,0,0.35); color:var(--accent); }
+.kl-hotovo:hover { background:var(--accent); color:#000; }
+.kl-tl:hover { border-color:var(--accent); color:var(--text); }
+.kl-modal { max-width:640px; }
+.kl-uvod { font-size:12px; color:var(--muted); margin:-6px 0 14px; }
+.kl-prazdno { font-size:13px; color:var(--muted2); padding:28px 6px; text-align:center; }
+.kl-misto { border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:8px; overflow:hidden; }
+.kl-hlava { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; flex-wrap:wrap; }
+.kl-hlava:hover { background:var(--surface2); }
+.kl-sipka { color:var(--muted2); font-size:10px; transition:transform 0.15s; }
+.kl-misto.rozbaleno .kl-sipka { transform:rotate(90deg); color:var(--accent); }
+.kl-jmeno { font-weight:700; font-size:14px; }
+.kl-stara { color:var(--chybi); }
+.kl-pocty { display:flex; gap:6px; margin-left:auto; }
+.kl-pocet-chip { font-family:'DM Mono',monospace; font-size:10px; padding:1px 7px; border-radius:4px; white-space:nowrap; }
+.kl-telo { padding:4px 12px 12px; border-top:1px solid var(--border); animation:rowIn 0.18s ease both; }
+.kl-poznamka { font-size:12px; color:var(--text); background:var(--surface2); border-radius:6px; padding:7px 9px; margin:8px 0 4px; white-space:pre-wrap; }
+.kl-sekce { font-size:9px; font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:0.6px;
+  color:var(--muted); margin:12px 0 4px; }
+.kl-kus { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
+.kl-kus-t { flex:1; min-width:0; }
+.kl-kus-n { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.kl-vyrizeno { margin-top:10px; }
+.kl-bez { font-size:11px; color:var(--muted2); margin-top:12px; line-height:1.5; }
+.kl-bez span { color:var(--muted); }
+@media(max-width:600px){ .kl-pocty { margin-left:0; width:100%; } }
 
 /* ── Psaní v nabídce (viz PSANÍ V DROPDOWNU) ─────────────────────────── */
 .cs-opt.cs-skryto { display:none; }
@@ -1592,7 +1644,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <div id="userBadge" class="user-badge" onclick="handleUserBadgeClick()" style="display:none;"><span class="fb-status fb-offline" id="fbStatusDot"></span><span id="fbUserLabel">Offline</span></div>
     <button class="icon-btn" id="btnBulkMode" style="font-size:12px;letter-spacing:-0.3px;" onclick="toggleBulkMode()">Vybrat</button>
     <button class="icon-btn" onclick="toggleCalc()" id="btnCalc" style="width:36px;padding:0;" data-tip="Kalkulačka marže"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 4h2M10 4h2M4 8h2M10 8h2M4 12h2M10 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
-    <button class="icon-btn" onclick="openMissingListings()" id="btnMissingList" style="width:36px;padding:0;" data-tip="Chybějící listingy"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="13" cy="11" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M13 10v1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13.2" r="0.4" fill="currentColor"/></svg></button>
+    <button class="icon-btn" onclick="openKontroly()" id="btnKontroly" style="width:36px;padding:0;position:relative;" data-tip="Kontroly listingů"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="13" cy="11" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M13 10v1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13.2" r="0.4" fill="currentColor"/></svg><span class="kl-pocet" id="kontrolyPocet" style="display:none"></span></button>
     <button class="icon-btn" id="btnMobileSimple" onclick="toggleMobileSimple()" data-tip="Jednoduché zobrazení" style="width:36px;padding:0;font-size:14px;">☰</button>
     <button class="icon-btn" id="btnCustomerMode" onclick="toggleCustomerMode()" data-tip="Zákaznický režim" style="width:36px;padding:0;display:none;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
     <button class="icon-btn" id="btnGlobalSearch" style="width:36px;padding:0;" onclick="openGlobalSearch()" data-tip="Hledat napříč sekcemi (Ctrl+F)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 10l3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
@@ -2188,6 +2240,8 @@ function syncSettings() {
     { key: 'sklad_seller_v1', field: 'seller', shape: 'json', keep: true },
     // Co se u položek označuje jako chybějící (CO CHYBÍ U POLOŽKY)
     { key: SK_CO_CHYBI, field: 'coChybi', shape: 'json', keep: true },
+    // Výsledky kontrol listingů z Clauda (KONTROLY LISTINGŮ)
+    { key: SK_KONTROLY, field: 'kontroly', shape: 'json', keep: true },
   ];
   return _syncSettings;
 }
@@ -5212,13 +5266,17 @@ function _pozadavekZmeny(v) {
 
 function _provedPozadavky(snap) {
   if (jeUctetni()) return;                 // účetní listingy neřídí
-  var kSmazani = [], zmeneno = 0, odmitnuto = 0;
+  var kSmazani = [], zmeneno = 0, odmitnuto = 0, kontroly = [];
   snap.forEach(function (d) {
     if (String(d.id).indexOf(POZADAVEK_PREFIX) !== 0) return;
     kSmazani.push(d.id);
     var v = d.data() || {};
     var kdy = v.kdy ? new Date(v.kdy).getTime() : 0;
     if (kdy && Date.now() - kdy > POZADAVEK_STARY_MS) return;   // jen se smaže
+    /* Výsledek kontroly se převezme až po fajfkách. Skill nejdřív opraví
+       fajfky a pak pošle výsledek; kdyby se kontrola vzala dřív, kus
+       s fajfkou, kterou skill právě odškrtává, by vypadal jako vyřízený. */
+    if (v.kontrola) { kontroly.push(v); return; }
     _pozadavekZmeny(v).forEach(function (z) {
       var it = items.find(function (x) { return x.id === z.id; });
       // Kus, se kterým majitel mezitím pohnul, se nechá být
@@ -5228,6 +5286,22 @@ function _provedPozadavky(snap) {
     });
   });
   if (!kSmazani.length) return;
+  var prijate = [];
+  kontroly.forEach(function (v) {
+    var z = _kontrolaPrijmi(_kontrolaZListecku(v));
+    if (z) prijate.push(z);
+  });
+  if (prijate.length) {
+    renderItems();
+    if (window._klPrekresli) window._klPrekresli();
+    showToast('Kontrola listingů: ' + prijate.map(function (z) {
+      var st = kontrolaStav(z.misto);
+      return z.misto + (st.chybi.length || st.smazat.length
+        ? ' (' + [st.chybi.length ? st.chybi.length + ' chybí' : '', st.smazat.length ? st.smazat.length + ' smazat' : '']
+            .filter(Boolean).join(', ') + ')'
+        : ' (vše sedí)');
+    }).join(', ') + '.');
+  }
   if (zmeneno) showToast('Z konektoru: ' + zmeneno + '× upraven listing.');
   else if (odmitnuto) showToast('Požadavek z konektoru neprošel (' + odmitnuto + '×).', 'err');
   /* Smaže se i ten, který se neprovedl — jinak by se o něj aplikace
@@ -5238,6 +5312,339 @@ function _provedPozadavky(snap) {
     try { fns.deleteDoc(fns.doc(window._fbDb, 'users', uid, 'sklad', id)).catch(function () {}); }
     catch (e) {}
   });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   KONTROLY LISTINGŮ
+
+   Kontrolu e-shopů dělá majitel v Claudovi (skilly „… kontrola": Claude
+   projde e-shop, opraví fajfky a udělá report do Artifactu). Aplikace se
+   o výsledku dřív nedozvěděla a co chybí nebo co se má smazat, bylo
+   vidět jen v reportu. Nástroj „Chybějící listingy" (počítal to jen
+   z fajfek) majitel nikdy nepoužil a tohle ho nahradilo (30. 10. 2026).
+
+   Na konci kontroly pošle skill výsledek konektoru (`sklad_kontrola`),
+   konektor kusy dohledá ve skladu a položí lísteček. Aplikace ho tady
+   převezme do synchronizovaného nastavení `kontroly`:
+
+     { [místo]: { datum, report, chybi: [id], smazat: [id],
+                  sFajfkou: [id], hotovo: [id], poznamka, prijato } }
+
+   Novější kontrola téhož místa tu předchozí nahradí celou.
+
+   Co ještě platí, se nepočítá při převzetí, ale **pokaždé znovu**
+   (`_kontrolaOtevrena`): „chybí" zmizí, jakmile kus dostane u místa
+   fajfku, odejde ze skladu nebo se odklikne Hotovo; „smazat" po Smazáno
+   nebo když se kus vrátí na sklad. Jen kus, který měl fajfku už v chvíli
+   kontroly a podle ní tam přitom nevisí (`sFajfkou`), se fajfkou
+   nevyřídí — vyřídil by se sám od sebe hned.
+
+   Z lístečku se bere jen dohodnutý tvar (`_kontrolaZListecku`) a jen
+   místo prodeje, které majitel má (`jeMistoProdeje`). Do odkazu na
+   report jde jen http(s) — míří do `href`. Účetní výsledky nevidí ani
+   neodklikává (`UCETNI_AKCE` je nezná, značky a box jsou schované).
+
+   Hlídá to `test-kontroly.js`.
+══════════════════════════════════════════════════════════════════════ */
+var SK_KONTROLY = 'sklad_kontroly_v1';
+var KONTROLA_NEJVIC = 500;
+var KONTROLA_STARA_DNI = 14;   // od kolika dní se datum kontroly obarví
+
+var _kParse = { raw: null, val: {} };
+function getKontroly() {
+  var raw = null;
+  try { raw = localStorage.getItem(SK_KONTROLY); } catch (e) {}
+  if (raw === _kParse.raw) return _kParse.val;
+  var v = {};
+  try { v = JSON.parse(raw || '{}') || {}; } catch (e) { v = {}; }
+  if (typeof v !== 'object' || Array.isArray(v)) v = {};
+  _kParse = { raw: raw, val: v, idx: null };
+  return v;
+}
+function _ulozKontroly(vse) {
+  _ulozLokal(SK_KONTROLY, JSON.stringify(vse));
+  _ioCloudSync();
+}
+
+// Co se z lístečku smí vzít a v jakém tvaru — dokument přijde po síti
+function _kontrolaZListecku(v) {
+  var k = v && v.kontrola;
+  if (!k || typeof k !== 'object' || Array.isArray(k)) return null;
+  if (!jeMistoProdeje(k.misto)) return null;
+  var ids = function (a) {
+    var out = [];
+    (Array.isArray(a) ? a : []).forEach(function (id) {
+      if (typeof id === 'string' && id && id.length <= 80 && out.indexOf(id) === -1
+        && out.length < KONTROLA_NEJVIC) out.push(id);
+    });
+    return out;
+  };
+  var report = (typeof k.report === 'string' && /^https?:\/\//i.test(k.report) && k.report.length <= 500)
+    ? k.report : '';
+  var d = new Date(typeof k.datum === 'string' ? k.datum : (v.kdy || ''));
+  return {
+    misto: k.misto,
+    datum: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
+    report: report,
+    chybi: ids(k.chybi),
+    smazat: ids(k.smazat),
+    poznamka: typeof k.poznamka === 'string' ? k.poznamka.slice(0, 500) : ''
+  };
+}
+
+function _kontrolaPrijmi(k) {
+  if (!k) return null;
+  var vse = getKontroly();
+  var stara = vse[k.misto];
+  // Starší kontrola (zatoulaný lísteček) novější nepřepíše
+  if (stara && stara.datum && new Date(stara.datum).getTime() > new Date(k.datum).getTime()) return null;
+  var sFajfkou = k.chybi.filter(function (id) {
+    var it = items.find(function (x) { return x.id === id; });
+    return it && (it.platforms || []).indexOf(k.misto) !== -1;
+  });
+  var nove = {};
+  Object.keys(vse).forEach(function (m) { nove[m] = vse[m]; });
+  nove[k.misto] = { misto: k.misto, datum: k.datum, report: k.report, chybi: k.chybi, smazat: k.smazat,
+    sFajfkou: sFajfkou, hotovo: [], poznamka: k.poznamka, prijato: new Date().toISOString() };
+  _ulozKontroly(nove);
+  return nove[k.misto];
+}
+
+// Platí ještě tenhle nález? Počítá se pokaždé znovu podle stavu kusu.
+function _kontrolaOtevrena(it, misto, druh, z) {
+  if (!it || it.type === 'bulk' || !z) return false;
+  if ((z.hotovo || []).indexOf(it.id) !== -1) return false;
+  var st = it.saleState || 'stock';
+  if (druh === 'chybi') {
+    if (st !== 'stock') return false;
+    var maFajfku = (it.platforms || []).indexOf(misto) !== -1;
+    return !(maFajfku && (z.sFajfkou || []).indexOf(it.id) === -1);
+  }
+  return st === 'waiting' || st === 'paid';
+}
+
+function _kontrolyIndex() {
+  var vse = getKontroly();
+  if (_kParse.idx) return _kParse.idx;
+  var map = {};
+  Object.keys(vse).forEach(function (m) {
+    var z = vse[m];
+    if (!z || typeof z !== 'object') return;
+    ['chybi', 'smazat'].forEach(function (druh) {
+      (Array.isArray(z[druh]) ? z[druh] : []).forEach(function (id) {
+        (map[id] = map[id] || []).push({ misto: m, druh: druh, z: z });
+      });
+    });
+  });
+  _kParse.idx = map;
+  return map;
+}
+
+// Platné nálezy u jednoho kusu
+function kontrolyUPolozky(it) {
+  if (!it || jeUctetni()) return [];
+  return (_kontrolyIndex()[it.id] || []).filter(function (e) {
+    return _kontrolaOtevrena(it, e.misto, e.druh, e.z);
+  });
+}
+
+// Platné nálezy jednoho místa
+function kontrolaStav(misto) {
+  var z = getKontroly()[misto];
+  var out = { z: z || null, chybi: [], smazat: [], vyrizeno: 0 };
+  if (!z) return out;
+  ['chybi', 'smazat'].forEach(function (druh) {
+    (z[druh] || []).forEach(function (id) {
+      var it = items.find(function (x) { return x.id === id; });
+      if (_kontrolaOtevrena(it, misto, druh, z)) out[druh].push(it); else out.vyrizeno++;
+    });
+  });
+  return out;
+}
+
+function _klDatum(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.getDate() + '. ' + (d.getMonth() + 1) + '.'
+    + (d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : '');
+}
+function _klStari(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return 0;
+  var a = new Date(); a.setHours(0, 0, 0, 0);
+  var b = new Date(d); b.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((a - b) / 86400000));
+}
+function _klMista(n) { return n + (n >= 2 && n <= 4 ? ' místa' : ' míst'); }
+
+// Značky u kusu v seznamu: ＋ chybí listing, ✕ prodané a pořád visí
+function kontrolaZnackyHtml(it) {
+  var e = kontrolyUPolozky(it);
+  if (!e.length) return '';
+  var out = '';
+  ['chybi', 'smazat'].forEach(function (druh) {
+    var m = e.filter(function (x) { return x.druh === druh; });
+    if (!m.length) return;
+    var tip = (druh === 'chybi' ? 'Podle kontroly tu chybí listing: ' : 'Prodané a pořád visí — smaž listing: ')
+      + m.map(function (x) { return x.misto + ' (kontrola ' + _klDatum(x.z.datum) + ')'; }).join(', ');
+    out += '<span class="kl-znacka kl-' + druh + '" data-action="kontroly" data-misto="' + escHtml(m[0].misto)
+      + '" data-tip="' + escHtml(tip) + '">' + (druh === 'chybi' ? '+' : '✕') + ' '
+      + escHtml(m.length === 1 ? m[0].misto : _klMista(m.length)) + '</span>';
+  });
+  return out;
+}
+
+// V detailu: co kontrola u kusu našla, s odkazem na report a odkliknutím
+function kontrolaDetailHtml(it) {
+  var e = kontrolyUPolozky(it);
+  if (!e.length) return '';
+  var h = '<div class="kl-box"><div class="kl-box-titul">Kontrola listingů</div>';
+  e.forEach(function (x) {
+    var m = '<b>' + escHtml(x.misto) + '</b>';
+    var text = x.druh === 'chybi' ? 'Chybí listing na ' + m : 'Prodáno, ale na ' + m + ' pořád visí — smaž listing';
+    text += ' <span class="kl-kdy">kontrola ' + _klDatum(x.z.datum) + '</span>';
+    if (x.druh === 'chybi' && (x.z.sFajfkou || []).indexOf(it.id) !== -1) {
+      text += '<span class="kl-kdy kl-blok">Fajfku má, ale podle kontroly tam nevisí.</span>';
+    }
+    var odkaz = x.z.report ? '<a class="kl-odkaz" href="' + escHtml(x.z.report)
+      + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Report ↗</a>' : '';
+    h += '<div class="kl-radek"><span>' + text + '</span><span class="kl-akce">' + odkaz
+      + '<button class="kl-hotovo" data-action="kontrolaodbav" data-id="' + escHtml(it.id) + '" data-misto="'
+      + escHtml(x.misto) + '">' + (x.druh === 'chybi' ? 'Hotovo' : 'Smazáno') + '</button></span></div>';
+  });
+  return h + '</div>';
+}
+
+// Odkliknutí jednoho nálezu — kus tím z kontroly zmizí
+function kontrolaOdbav(misto, id) {
+  if (jeUctetni()) return;
+  var vse = getKontroly();
+  var z = vse[misto];
+  if (!z) return;
+  var nove = {};
+  Object.keys(vse).forEach(function (m) { nove[m] = vse[m]; });
+  nove[misto] = Object.assign({}, z, { hotovo: (z.hotovo || []).concat((z.hotovo || []).indexOf(id) === -1 ? [id] : []) });
+  _ulozKontroly(nove);
+  renderItems();
+  if (window._klPrekresli) window._klPrekresli();
+  var det = document.getElementById('moDetail');
+  if (det && det.classList.contains('open') && currentDetailId === id) openDetail(id);
+}
+
+function kontrolyPocetOtevrenych() {
+  var vse = getKontroly(), n = 0;
+  Object.keys(vse).forEach(function (m) { var st = kontrolaStav(m); n += st.chybi.length + st.smazat.length; });
+  return n;
+}
+function kontrolyTlacitko() {
+  var el = document.getElementById('kontrolyPocet');
+  if (!el) return;
+  var n = jeUctetni() ? 0 : kontrolyPocetOtevrenych();
+  el.textContent = n > 99 ? '99+' : String(n);
+  el.style.display = n ? '' : 'none';
+}
+
+/* Okno Kontroly listingů: místa s poslední kontrolou, co z ní ještě
+   platí, odkaz na report a rozkliknutí na kusy s Hotovo / Smazáno. */
+function openKontroly(rozbalit) {
+  if (jeUctetni()) return;
+  var btn = document.getElementById('btnKontroly');
+  var existing = document.getElementById('kontrolyOv');
+  if (existing && existing.classList.contains('open') && !rozbalit) {
+    existing.remove(); window._klPrekresli = null;
+    if (btn) btn.classList.remove('active');
+    return;
+  }
+  if (existing) existing.remove();
+  if (btn) btn.classList.add('active');
+  var otevrene = rozbalit || null;
+
+  var ov = document.createElement('div');
+  ov.id = 'kontrolyOv';
+  ov.className = 'mo open';
+  ov.style.zIndex = '1100';
+  function zavri() {
+    ov.remove(); window._klPrekresli = null;
+    if (btn) btn.classList.remove('active');
+    document.removeEventListener('keydown', esc);
+  }
+  function esc(e) { if (e.key === 'Escape') zavri(); }
+  document.addEventListener('keydown', esc);
+  ov.addEventListener('click', function (e) {
+    if (e.target === ov) { zavri(); return; }
+    var t = e.target.closest('[data-kl]');
+    if (!t || t.tagName === 'A') return;
+    var co = t.getAttribute('data-kl');
+    if (co === 'zavrit') { zavri(); return; }
+    if (co === 'misto') { otevrene = otevrene === t.dataset.misto ? null : t.dataset.misto; prekresli(); return; }
+    if (co === 'hotovo') { kontrolaOdbav(t.dataset.misto, t.dataset.id); return; }
+    if (co === 'detail') { zavri(); openDetail(t.dataset.id); return; }
+  });
+
+  function radekKusu(it, misto, druh) {
+    var meta = [it.size ? convertSize(it.size, it.name) : '', it.sku || ''].filter(Boolean).join(' · ');
+    var z = getKontroly()[misto] || {};
+    var pozn = druh === 'chybi' && (z.sFajfkou || []).indexOf(it.id) !== -1
+      ? '<div class="kl-kdy">Fajfku má, ale podle kontroly tam nevisí.</div>' : '';
+    return '<div class="kl-kus"><div class="kl-kus-t"><div class="kl-kus-n">' + escHtml(it.name || '—') + '</div>'
+      + (meta ? '<div class="kl-kdy">' + escHtml(meta) + '</div>' : '') + pozn + '</div>'
+      + '<button class="kl-tl" data-kl="detail" data-id="' + escHtml(it.id) + '">Detail</button>'
+      + '<button class="kl-hotovo" data-kl="hotovo" data-id="' + escHtml(it.id) + '" data-misto="' + escHtml(misto) + '">'
+      + (druh === 'chybi' ? 'Hotovo' : 'Smazáno') + '</button></div>';
+  }
+
+  function prekresli() {
+    var vse = getKontroly();
+    var mista = Object.keys(vse).filter(function (m) { return vse[m] && vse[m].datum; })
+      .sort(function (a, b) { return String(vse[b].datum).localeCompare(String(vse[a].datum)); });
+    var h = '<div class="modal kl-modal">'
+      + '<div class="mh"><div class="mt2">Kontroly listingů</div><button class="xb" data-kl="zavrit">✕</button></div>'
+      + '<div class="kl-uvod">Výsledky kontrol e-shopů z Clauda. Po každé kontrole se sem uloží samy — co chybí, co se má smazat a odkaz na report.</div>';
+    if (!mista.length) {
+      h += '<div class="kl-prazdno">Zatím sem nedorazila žádná kontrola. Pusť v Claudovi kontrolu e-shopu; '
+        + 'až skončí, výsledek se uloží sem (konektor musí být nasazený s nástrojem sklad_kontrola).</div>';
+    }
+    mista.forEach(function (m) {
+      var z = vse[m], st = kontrolaStav(m), dni = _klStari(z.datum);
+      var rozb = otevrene === m;
+      var pocty = (st.chybi.length ? '<span class="kl-pocet-chip kl-chybi">+ ' + st.chybi.length + ' chybí</span>' : '')
+        + (st.smazat.length ? '<span class="kl-pocet-chip kl-smazat">✕ ' + st.smazat.length + ' smazat</span>' : '')
+        + (!st.chybi.length && !st.smazat.length ? '<span class="kl-pocet-chip kl-ok">✓ sedí</span>' : '');
+      h += '<div class="kl-misto' + (rozb ? ' rozbaleno' : '') + '">'
+        + '<div class="kl-hlava" data-kl="misto" data-misto="' + escHtml(m) + '">'
+        + '<span class="kl-sipka">▸</span><span class="kl-jmeno">' + escHtml(m) + '</span>'
+        + '<span class="kl-kdy' + (dni >= KONTROLA_STARA_DNI ? ' kl-stara' : '') + '">' + _klDatum(z.datum)
+        + (dni === 0 ? ' · dnes' : dni === 1 ? ' · včera' : ' · před ' + dnyText(dni)) + '</span>'
+        + '<span class="kl-pocty">' + pocty + '</span>'
+        + (z.report ? '<a class="kl-odkaz" href="' + escHtml(z.report) + '" target="_blank" rel="noopener">Report ↗</a>' : '')
+        + '</div>';
+      if (rozb) {
+        h += '<div class="kl-telo">';
+        if (z.poznamka) h += '<div class="kl-poznamka">' + escHtml(z.poznamka) + '</div>';
+        if (st.chybi.length) {
+          h += '<div class="kl-sekce">Chybí na ' + escHtml(m) + '</div>'
+            + st.chybi.map(function (it) { return radekKusu(it, m, 'chybi'); }).join('');
+        }
+        if (st.smazat.length) {
+          h += '<div class="kl-sekce">Prodané, smazat z ' + escHtml(m) + '</div>'
+            + st.smazat.map(function (it) { return radekKusu(it, m, 'smazat'); }).join('');
+        }
+        if (!st.chybi.length && !st.smazat.length) h += '<div class="kl-kdy">Nic k vyřízení.</div>';
+        if (st.vyrizeno) h += '<div class="kl-kdy kl-vyrizeno">Vyřízeno od kontroly: ' + st.vyrizeno + '</div>';
+        h += '</div>';
+      }
+      h += '</div>';
+    });
+    var bez = vsechnaMistaProdeje().filter(function (m) { return mista.indexOf(m) === -1; });
+    if (mista.length && bez.length) {
+      h += '<div class="kl-bez"><span>Bez kontroly:</span> ' + bez.map(escHtml).join(', ') + '</div>';
+    }
+    h += '</div>';
+    ov.innerHTML = h;
+  }
+  window._klPrekresli = prekresli;
+  prekresli();
+  document.body.appendChild(ov);
 }
 
 function setView(mode) {
@@ -5286,6 +5693,7 @@ function waitStateBadge(it) {
 }
 
 function renderItems(){
+  kontrolyTlacitko();
   if(tab==='wishlist'){renderWishlist();return;}
   // Čísla v nabídce „Co chybí" se mění s každou úpravou, proto pokaždé
   buildChybiFilter();
@@ -5419,7 +5827,7 @@ function tableHTML(list) {
       ${bulkMode?`<td class="bulk-cb-td vyber-sl${roh?' chybi-td':''}" data-action="bulktoggle" data-id="${it.id}">${roh}<input type="checkbox" ${bulkSelected.has(it.id)?'checked':''} class="bulk-cb-input"></td>`:''}
       <td${!bulkMode&&roh?' class="chybi-td"':''}>${bulkMode?'':roh}<span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></td>
       <td style="padding:4px 6px;">${tImgHtml}</td>
-      <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${tNameHtml}${profBadge(it)?' '+profBadge(it):''}</td>
+      <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${kontrolaZnackyHtml(it)}${tNameHtml}${profBadge(it)?' '+profBadge(it):''}</td>
       <td style="text-align:center">${tSkuHtml}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center;cursor:pointer;" data-action="sizeunit">${convertSize(it.size, it.name) || `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center">${COND_L[it.condition]||it.condition||'—'}</td>
@@ -5596,7 +6004,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
         if(bulkMode) out += '<td class="vyber-sl'+(chRoh?' chybi-td':'')+'" style="width:32px;">'+chRoh+'</td>';
         out += '<td class="'+(!bulkMode&&chRoh?'chybi-td':'')+'">'+(bulkMode?'':chRoh)+'<span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
         out += '<td style="padding:4px 6px;">'+chImgHtml+'</td>';
-        out += '<td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+chNameHtml+'</td>';
+        out += '<td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+kontrolaZnackyHtml(ch)+chNameHtml+'</td>';
         out += '<td style="text-align:center;">'+chSkuHtml+'</td>';
         out += '<td style="font-family:monospace;font-size:11px;text-align:center;">'+convertSize(ch.size, ch.name)+'</td>';
         out += '<td style="font-family:monospace;font-size:11px;text-align:center;">'+(COND_L[ch.condition]||ch.condition||'—')+'</td>';
@@ -5674,7 +6082,7 @@ function cardHTML(it){
   const roh = customerMode ? '' : chybiRoh(it);
   return `<div class="item-card ${it.saleState==='waiting'?'s-waiting':it.saleState==='paid'?'s-paid':''}${roh?' ma-chybi':''}" data-id="${it.id}">
     ${roh}${imgHtml}
-    <div class="card-top"><div class="item-name">${nameHtml}</div><span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></div>
+    <div class="card-top"><div class="item-name">${customerMode?'':kontrolaZnackyHtml(it)}${nameHtml}</div><span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></div>
     ${metas.length?`<div class="card-meta">${metas.map(m=>m.type==='sku'?`<span class="mt" style="cursor:pointer" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${m.val}">${m.val}</span>`:`<span class="mt">${m.val}</span>`).join('')}</div>`:''}
     ${platHtml}${priceHtml}
     <div class="sale-row"><div class="sd ${st[0]}"></div><div class="st">${st[1]}</div>${it.saleState==='waiting'?`<span style="margin-left:6px;">${waitStateBadge(it)}</span>`:''}${!customerMode&&it.stockIntent&&it.saleState==='stock'?'<span style="margin-left:6px;">'+intentBadge(it.stockIntent)+'</span>':''}${!customerMode&&profBadge(it)?'<span style="margin-left:6px;">'+profBadge(it)+'</span>':''}</div>
@@ -9231,142 +9639,11 @@ function openDetail(id) {
     }
   }
   // Co u kusu chybí, stojí nahoře — kvůli tomu se sem teď člověk dívá (CO CHYBÍ U POLOŽKY)
-  document.getElementById('detailContent').innerHTML = chybiDetailHtml(it) + sectionsHtml + potentialHtml + btnsHtml;
+  document.getElementById('detailContent').innerHTML = chybiDetailHtml(it) + kontrolaDetailHtml(it) + sectionsHtml + potentialHtml + btnsHtml;
   currentDetailId = id;
   document.getElementById('moDetail').classList.add('open');
   var _moDetailInner = document.querySelector('#moDetail .modal');
   if(_moDetailInner) _moDetailInner.scrollTop = 0;
-}
-
-function openMissingListings() {
-  var btn = document.getElementById('btnMissingList');
-  // Toggle — pokud je panel otevřený, zavři ho
-  var existing = document.getElementById('missingListingsOv');
-  if (existing) {
-    existing.remove();
-    if (btn) btn.classList.remove('active');
-    return;
-  }
-
-  var grps = getPlatGroups();
-  var allPlats = [...(grps.eshopy||[])];
-  if (!allPlats.length) { showToast('Nemáš nastavené žádné eshopy / komisní prodej.'); return; }
-
-  if (btn) btn.classList.add('active');
-
-  var ov = document.createElement('div');
-  ov.id = 'missingListingsOv';
-  ov.className = 'mo open';
-  ov.style.zIndex = '1100';
-
-  function closeMl() {
-    ov.remove();
-    if (btn) btn.classList.remove('active');
-    document.removeEventListener('keydown', _escMl);
-  }
-  function _escMl(e) { if (e.key === 'Escape') closeMl(); }
-  document.addEventListener('keydown', _escMl);
-  ov.addEventListener('click', function(e){ if (e.target === ov) closeMl(); });
-
-  var mlSelCats = new Set(); // currently selected category filter
-
-  function render(selPlat) {
-    var stockItems = items.filter(function(it){
-      return (it.saleState === 'stock' || !it.saleState) && !it.bulkId && it.type !== 'bulk' && profMatch(it);
-    });
-    // Filtruj dle povolených kategorií platformy (prázdné = vše)
-    if (selPlat) {
-      var allowedCats = (grps.platCategories && grps.platCategories[selPlat]) || [];
-      if (allowedCats.length > 0) {
-        stockItems = stockItems.filter(function(it){ return allowedCats.includes(it.category || 'jine'); });
-      }
-    }
-    var missing = selPlat ? stockItems.filter(function(it){
-      var plats = (it.platforms || []).map(function(p){ return p.toLowerCase(); });
-      return !plats.includes(selPlat.toLowerCase());
-    }) : [];
-
-    // Collect available categories from missing items
-    var availCats = [...new Set(missing.map(function(it){ return it.category || 'jine'; }))].sort(function(a,b){ return (getCatLabel(a)||a).localeCompare(getCatLabel(b)||b,'cs'); });
-
-    // Apply category filter
-    var filtered = mlSelCats.size > 0 ? missing.filter(function(it){ return mlSelCats.has(it.category||'jine'); }) : missing;
-
-    // Seskup dle SKU/názvu, seber unikátní velikosti → "SKU 38, 38.5, 42"
-    var groups = new Map();
-    filtered.forEach(function(it){
-      var base = (it.sku || it.name || '').trim();
-      if (!base) return;
-      var size = (it.size || '').trim();
-      if (!groups.has(base)) groups.set(base, new Set());
-      if (size) groups.get(base).add(size);
-    });
-    var lines = [];
-    groups.forEach(function(sizes, base){
-      if (sizes.size > 0) lines.push(base + ' ' + Array.from(sizes).join(', '));
-      else lines.push(base);
-    });
-
-    // Build category chips HTML
-    var catChipsHtml = '';
-    if (selPlat && availCats.length > 1) {
-      catChipsHtml = '<div style="margin-bottom:16px;">'
-        + '<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:0.7px;margin-bottom:8px;">Filtr kategorií</div>'
-        + '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
-        + availCats.map(function(cat){
-            var active = mlSelCats.has(cat);
-            return '<button class="ml-cat-chip'+(active?' active':'')+'" data-cat="'+cat+'" style="font-size:12px;padding:4px 10px;border-radius:20px;border:1px solid '+(active?'var(--accent)':'var(--border)')+';background:'+(active?'var(--accent)':'var(--surface2)')+';color:'+(active?'#000':'var(--text)')+';cursor:pointer;font-family:\'DM Sans\',sans-serif;white-space:nowrap;">'+getCatLabel(cat)+'</button>';
-          }).join('')
-        + '</div></div>';
-    }
-
-    ov.innerHTML = '<div class="modal" style="max-width:680px;width:90%;min-height:520px;display:flex;flex-direction:column;overflow:visible;">'
-      + '<div class="mh"><div class="mt2">Chybějící listingy</div><button class="xb ml-xb" onclick="document.getElementById(\'missingListingsOv\').remove();var b=document.getElementById(\'btnMissingList\');if(b)b.classList.remove(\'active\');">✕</button></div>'
-      + '<div style="font-size:13px;color:var(--muted);margin-bottom:20px;">Položky ze skladu, které nemáš nalistované na vybraném eshopu. Formát: SKU (nebo název) + velikost. Stejné SKU/velikost se zobrazí jen jednou.</div>'
-      + '<div style="margin-bottom:20px;position:relative;z-index:10;">'
-      + '<label style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:0.7px;display:block;margin-bottom:8px;">Komisní eshop</label>'
-      + '<select id="mlPlatSel" style="width:100%;">'
-      + '<option value="" style="display:none;"></option>'
-      + allPlats.map(function(p){ return '<option value="'+p+'"'+(p===selPlat?' selected':'')+'>'+p+'</option>'; }).join('')
-      + '</select></div>'
-      + catChipsHtml
-      + (selPlat ? (
-          '<div style="margin-bottom:12px;font-size:13px;">'
-          + (lines.length
-              ? '<span style="color:var(--text);font-weight:600;">'+lines.length+' položek</span> <span style="color:var(--muted);">nemá listing na</span> <span style="color:var(--accent);font-weight:600;">'+selPlat+'</span>'+(mlSelCats.size>0?' <span style="color:var(--muted);">(filtr: '+[...mlSelCats].map(getCatLabel).join(', ')+')</span>':'')
-              : '<span style="color:var(--accent);font-weight:600;">✓ Všechny položky jsou nalistované!</span>')
-          + '</div>'
-          + (lines.length
-              ? '<textarea id="mlOutput" readonly style="width:100%;height:280px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:\'DM Mono\',monospace;font-size:13px;padding:14px;resize:none;outline:none;line-height:1.9;display:block;">'+lines.join('\n')+'</textarea>'
-              + '<button onclick="navigator.clipboard.writeText(document.getElementById(\'mlOutput\').value).then(function(){showToast(\'Zkopírováno '+lines.length+' položek.\');});" style="margin-top:12px;width:100%;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:\'DM Sans\',sans-serif;font-weight:700;font-size:14px;padding:12px;cursor:pointer;">Kopírovat vše ('+lines.length+')</button>'
-              : '')
-        ) : '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:13px;">Vyber eshop a uvidíš chybějící listingy.</div>')
-      + '</div>';
-
-    var selEl = ov.querySelector('#mlPlatSel');
-    if (selEl) {
-      initCustomSelect(selEl);
-      var csWrap = selEl.closest('.cs-wrap');
-      if (csWrap) {
-        var firstOpt = csWrap.querySelector('.cs-opt[data-idx="0"]');
-        if (firstOpt) firstOpt.style.display = 'none';
-        if (!selPlat) { var lbl = csWrap.querySelector('.cs-label'); if (lbl) lbl.textContent = 'Vybrat'; }
-      }
-      selEl.addEventListener('change', function(){ mlSelCats.clear(); render(this.value); });
-    }
-
-    // Bind category chip clicks
-    ov.querySelectorAll('.ml-cat-chip').forEach(function(chip){
-      chip.addEventListener('click', function(){
-        var cat = this.dataset.cat;
-        if (mlSelCats.has(cat)) mlSelCats.delete(cat); else mlSelCats.add(cat);
-        render(selPlat);
-      });
-    });
-  }
-
-  render('');
-  document.body.appendChild(ov);
 }
 
 let eurRate = parseFloat(localStorage.getItem('eurRate')) || 25.0;
@@ -11377,6 +11654,8 @@ document.addEventListener('click', function(e) {
   if (action === 'opensettings') { openSettings(); return; }
   if (action === 'opensizeTables') { cm('moSettings'); openSizeTables(); return; }
   if (action === 'openplatmgr') { openPlatMgr(); return; }
+  if (action === 'kontroly') { openKontroly(btn.dataset.misto); return; }
+  if (action === 'kontrolaodbav') { kontrolaOdbav(btn.dataset.misto, id); return; }
   if (action === 'opencsvmodal') { openCsvModal(); return; }
   if (action === 'openaddmodal') { openAddModal(); return; }
   if (action === 'togglebulkmode') { toggleBulkMode(); return; }
@@ -18946,7 +19225,7 @@ function renderSoldView(){
             var _chRohS=chybiRoh(ch);
             html+='<tr class="bulk-child-row'+(_chRohS?' ma-chybi':'')+'" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
             html+='<td class="'+(_chRohS?'chybi-td':'')+'" style="padding:3px 8px;">'+_chRohS+'<span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
-            html+='<td style="padding:3px 8px;color:var(--muted2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+ch.name+'</td>';
+            html+='<td style="padding:3px 8px;color:var(--muted2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+kontrolaZnackyHtml(ch)+ch.name+'</td>';
             html+='<td style="padding:3px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(ch.sku||'—')+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+convertSize(ch.size,ch.name)+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+czk(buyKcC)+'</td>';
@@ -18974,7 +19253,7 @@ function renderSoldView(){
       var _rohS=chybiRoh(it);
       html+='<tr class="'+(_rohS?'ma-chybi':'')+'" style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" data-action="detail" data-id="'+it.id+'" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">';
       html+='<td class="'+(_rohS?'chybi-td':'')+'" style="padding:6px 8px;">'+_rohS+'<span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span></td>';
-      html+='<td style="padding:6px 8px;font-size:13px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(it.stockxUrl?'<a href="'+buildStockxUrlWithSize(it.stockxUrl,it.name,it.size)+'" target="_blank" class="stockx-link" onclick="event.stopPropagation()">'+it.name+'</a>':it.name)+(profBadge(it)?' '+profBadge(it):'')+'</td>';
+      html+='<td style="padding:6px 8px;font-size:13px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+kontrolaZnackyHtml(it)+(it.stockxUrl?'<a href="'+buildStockxUrlWithSize(it.stockxUrl,it.name,it.size)+'" target="_blank" class="stockx-link" onclick="event.stopPropagation()">'+it.name+'</a>':it.name)+(profBadge(it)?' '+profBadge(it):'')+'</td>';
       html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(it.sku||'—')+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);cursor:pointer;" data-action="sizeunit">'+convertSize(it.size,it.name)+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);">'+bs+'</td>';

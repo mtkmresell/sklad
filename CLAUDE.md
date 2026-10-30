@@ -421,6 +421,45 @@ Dvě věci se nesmí rozbít:
 Velikosti se schválně neporovnávají, na Instagramu se neuvádí.
 `test-instagram.js` hlídá hlavně tu druhou půlku — co se spárovat **nesmí**.
 
+### Kontroly listingů (`KONTROLY LISTINGŮ`)
+
+Kontrolu e-shopů dělá majitel v Claudovi skilly („Hypeboost kontrola"
+a další): Claude projde e-shop, opraví fajfky přes `sklad_listing`
+a udělá report do Artifactu se stálou adresou. Aplikace o výsledku dřív
+nevěděla. Teď ho na konci kontroly pošle skill konektoru
+(`sklad_kontrola`), konektor kusy dohledá ve skladu a položí lísteček
+`pozadavek_…` s polem `kontrola`; aplikace ho převezme do
+synchronizovaného nastavení `kontroly` (jedno místo = poslední kontrola).
+Ukazuje se v okně **Kontroly listingů** (tlačítko v hlavičce s počtem
+nevyřízených) a jako značka u kusu: „+ místo" chybí listing, „✕ místo"
+prodané a pořád visí. Detail má box s odkazem na report a Hotovo /
+Smazáno. Nahradilo to nástroj Chybějící listingy (počítal jen z fajfek),
+který majitel nikdy nepoužil (30. 10. 2026).
+
+Čtyři věci se nesmí rozbít:
+
+- **Skill zná kusy podle SKU / názvu a velikosti, ne podle id.**
+  Hypeboost SKU v seznamu neukazuje. Dohledává konektor
+  (`kontrolaNajdi`) stejným srovnáním jako komise (`pikaVelikost`,
+  `pikaNazevKlic`) a navíc srovná „42,5" a „41 1/3". U „chybí" stačí
+  jeden kus ze skupiny — fajfka se v aplikaci srovná celé skupině.
+- **Co platí, se počítá pokaždé znovu** (`_kontrolaOtevrena`), ne při
+  převzetí: „chybí" vyřídí fajfka u místa, odchod ze skladu nebo Hotovo;
+  „smazat" Smazáno nebo návrat na sklad. Kus, který měl fajfku **už při
+  kontrole** a přitom tam podle ní nevisí (`sFajfkou`), fajfka nevyřídí
+  — jinak by nález zmizel hned po převzetí.
+- **Kontrola se převezme až po fajfkách z téhož snímku.** Skill nejdřív
+  fajfky odškrtne, pak pošle výsledek; obráceně by kus s odškrtávanou
+  fajfkou spadl do `sFajfkou`. Starší kontrola novější nepřepíše.
+- **Z lístečku se bere jen dohodnutý tvar** (`_kontrolaZListecku`): místo
+  musí být v nastavení, id jen texty, odkaz jen http(s) (jde do `href`).
+  Účetní kontroly nevidí ani neodklikává (`kontroly`, `kontrolaodbav`
+  nejsou v `UCETNI_AKCE`).
+
+Krok „zavolej `sklad_kontrola`" musí být **v každém kontrolním skillu**;
+skilly žijí v Claudovi u majitele, ne v repozitáři. Znění kroku je
+v `konektor/README.md`. Hlídá to `test-kontroly.js`.
+
 ### Výkup od partnera (`VÝKUP OD PARTNERA`)
 
 Kus koupený od jiného prodejce (pole „Od koho" u nákupu) se napojí na
@@ -775,6 +814,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | přechod z okna do okna | `PŘECHOD MEZI OKNY` |
 | Vybrat (sloupec zaškrtávátek) | `VÝBĚR BEZ PŘESTAVBY TABULKY` |
 | animace hledání | `HLEDÁNÍ — ANIMACE` |
+| kontroly listingů (okno, značky) | `KONTROLY LISTINGŮ` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -851,7 +891,7 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 | co | kde | stav |
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (13. 10.) — v repozitáři je oprava mailů „SKLAD × Pikastore: 3 věcí se nepovedlo" (`replaced_by_submission_piece`, pomlčka ve velikosti), mailů „SKLAD × Purekickz: 2 věci se nepovedlo" (chybějící velikost u modelu, `pkNeznaVelikost`) a pondělní obhlídky (držené kusy, „Purekickz nevezme"). Nasazený worker je aspoň ze 13. 9. (umí odklad čerstvých kusů), ale jestli má i opravu míst prodeje z 1. 10., se nepoznalo: stará verze odmítá Tuzex hláškou „takovou platformu sklad nezná" (`f59f81d`), nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. Nasazením dorazí obojí. **Dokud se nenasadí, maily chodí dál.** |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (13. 10.) — v repozitáři je oprava mailů „SKLAD × Pikastore: 3 věcí se nepovedlo" (`replaced_by_submission_piece`, pomlčka ve velikosti), mailů „SKLAD × Purekickz: 2 věci se nepovedlo" (chybějící velikost u modelu, `pkNeznaVelikost`) a pondělní obhlídky (držené kusy, „Purekickz nevezme"). Nasazený worker je aspoň ze 13. 9. (umí odklad čerstvých kusů), ale jestli má i opravu míst prodeje z 1. 10., se nepoznalo: stará verze odmítá Tuzex hláškou „takovou platformu sklad nezná" (`f59f81d`), nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. Nasazením dorazí obojí. **Dokud se nenasadí, maily chodí dál.** Od 30. 10. v repozitáři i nástroj `sklad_kontrola` (výsledky kontrol listingů do aplikace) a prodeje z Purekickz v `k_preneseni` — bez nasazení nepřijdou. |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
@@ -1381,7 +1421,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 67 souborů
+node test/run.js              # kontrola syntaxe + všech 68 souborů
 node test/run.js archive      # jen vybrané
 ```
 

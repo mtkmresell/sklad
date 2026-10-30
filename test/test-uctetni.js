@@ -104,7 +104,7 @@ const POLOZKY = [
   check('přidávání je pryč', !(await vidi('#btnAdd')));
   check('hromadný výběr je pryč', !(await vidi('#btnBulkMode')));
   check('kalkulačka marže je pryč', !(await vidi('#btnCalc')));
-  check('chybějící listingy jsou pryč', !(await vidi('#btnMissingList')));
+  check('kontroly listingů jsou pryč', !(await vidi('#btnKontroly')));
   check('hledání napříč sekcemi zůstává', await vidi('#btnGlobalSearch'));
   check('nastavení zůstává', await vidi('#btnSettings'));
 

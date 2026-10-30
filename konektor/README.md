@@ -605,7 +605,8 @@ Až doména v Resendu projde ověřením, `MAIL_KOMU` může být jakákoli adre
 | `sklad_polozky` | řádky skladu s filtry (stav, profil, kategorie, platforma, hledání) |
 | `sklad_prodeje` | prodané, volitelně za jeden rok |
 | `sklad_zakaznici` | zákazníci a partneři z CRM |
-| `sklad_listing` | zaškrtne nebo odškrtne listing u kusů na skladě (jediný, který mění data) |
+| `sklad_listing` | zaškrtne nebo odškrtne listing u kusů na skladě |
+| `sklad_kontrola` | uloží výsledek kontroly listingů jednoho e-shopu — aplikace ho ukáže |
 | `pika_nahled` | rozdíl mezi skladem a komisním prodejem |
 | `pika_srovnat` | plán vystavení a stažení; s `provest: true` ho i provede |
 | `pika_prodeje` | co se u komisionáře prodalo a sklad to ještě neví |
@@ -669,6 +670,45 @@ jinde a fajfka by dosedla na stav, na který se ten požadavek nevztahoval.
 **Při změně je potřeba znovu publikovat `firestore.rules`** v konzoli
 Firebase — ta se nenasazuje sama. Bez nových pravidel vrátí Firestore 403
 a konektor to rovnou tak i řekne.
+
+### Výsledek kontroly listingů
+
+Kontrolu e-shopu dělá Claude podle skillu („Hypeboost kontrola" a další)
+a report ukládá do Artifactu. `sklad_kontrola` pošle výsledek i do skladu:
+aplikace ho ukáže v okně **Kontroly listingů** (tlačítko v hlavičce, kde
+dřív byly Chybějící listingy) a jako značku u každého kusu, kterému listing
+chybí („+ Hypeboost"), nebo který se prodal a pořád visí („✕ Hypeboost").
+V detailu kusu je odkaz na report a Hotovo / Smazáno.
+
+```
+sklad_kontrola  misto: "Hypeboost", report: "https://claude.ai/artifact/…",
+                chybi:  [{ sku: "HQ4307-600", nazev: "…", velikost: "46" }],
+                smazat: [{ sku: "DD1391-100", velikost: "42" }],
+                poznamka: "Payouty: nejlevnější u 12 z 30"
+```
+
+Skill zná kusy podle **SKU nebo názvu a velikosti**, ne podle id ve skladu,
+takže je konektor dohledá sám — stejným srovnáním velikostí („42,5" = „42.5",
+„41 1/3" = „41.33", „EU 42" = „42") a názvů (pořadí slov, „Air", „x") jako
+u komisí. U „chybí" stačí jeden kus ze skupiny; u „smazat" se vezme prodaný
+kus, přednostně ten, co ještě čeká. Co se nedohledá (listing, který ve skladu
+nikdy nebyl), vrátí se v `nelze`. Kus, který má ve skladu fajfku, a přitom
+podle kontroly nevisí, se vrátí v `pozor` — fajfku má skill odškrtnout přes
+`sklad_listing`.
+
+Jde to stejnou cestou jako fajfky — lísteček `pozadavek_…`, který převezme
+aplikace. Ukládá se i čistá kontrola bez nálezů, ať je v aplikaci vidět, kdy
+se který e-shop naposled kontroloval. Novější kontrola téhož místa nahradí
+předchozí.
+
+**Do skillu patří krok na konci kontroly**, jinak se Claude o nástroji
+nedozví:
+
+> Po publikaci reportu zavolej `sklad_kontrola`: `misto` = název místa
+> prodeje ze SKLAD., `report` = odkaz na artifact, `datum` = DATE,
+> `chybi` = položky z Přidat jako `{sku, nazev, velikost}`, `smazat` =
+> položky ze Smazat jako `{sku, nazev, velikost}` (Ověřit tam nepatří),
+> `poznamka` = jednou větou payouty. Volej to i při čisté kontrole.
 
 ## Bezpečnost
 
