@@ -69,6 +69,26 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   jako dřív — **nové tlačítko pod Nástroje se musí do `test-prechod.js`,
   sekce 5, přidat**. Hlídá to
   `test-prechod.js`.
+- **Vybrat nepřestavuje tabulku** (`VÝBĚR BEZ PŘESTAVBY TABULKY`).
+  Dřív `toggleBulkMode()` volal `renderItems()`: celá tabulka se stavěla
+  znovu i se všemi fotkami a přepnuté tlačítko se ukázalo až po tom —
+  majitel to popsal jako „sekaně z ničeho nic s nepříjemným delayem"
+  (30. 10. 2026). Teď se tlačítko a lišta přepnou hned a sloupec se
+  zaškrtávátky se **až v dalším snímku** vloží do existujících řádků
+  (`_vyberSloupec`), zaškrtávátka postupně naskočí. Výsledek musí být
+  **přesně** to, co by postavil `tableHTML()` — včetně oranžového rohu,
+  který se stěhuje do první buňky. Buňky sloupce nesou třídu `vyber-sl`;
+  kdo mění sloupec výběru v `tableHTML()`, musí změnit i `_vyberSloupec`.
+  Postupný nájezd řídí CSS podle pořadí řádku, **do stylu prvků se
+  nepíše** — Chromium po smazání inline stylu nechal `style=""` a tabulka
+  se pak lišila. Kde tabulka není (karty, Prodáno, analytika), nic se
+  nemění; neznámý řádek vrátí `false` a postaví se jako dřív. Shift-výběr
+  rozsahu přepíná zaškrtávátka na místě. Hlídá to `test-vyber.js`.
+- **Hledat ve všech sekcích má vjezd a odjezd** (`HLEDÁNÍ — ANIMACE`).
+  Panel sjede shora, pozadí se roztmí; při zavření se obojí stáhne
+  a teprve pak okno zmizí. Zavírající se okno **nechytá kliky** a nové
+  otevření ho rovnou odklidí — jinak by se znovu otevřelo to doznívající.
+  Řádky výsledků se schválně neanimují: překreslují se při každém písmenu.
 - **Měna se přepíná jedním klikem** (`MĚNA SE PŘEPÍNÁ KLIKEM`
   v `initCustomSelect()`). Nabídka s právě dvěma možnostmi CZK a EUR
   se nerozbaluje — klik na tlačítko přepne na tu druhou (majitel jinou
@@ -746,6 +766,9 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | výkup od partnera (Od koho → CRM) | `VÝKUP OD PARTNERA` |
 | co u položky chybí (oranžový roh) | `CO CHYBÍ U POLOŽKY` |
 | výdejní místo zákazníka (odkaz) | `VÝDEJNÍ MÍSTO U ZÁKAZNÍKA` |
+| přechod z okna do okna | `PŘECHOD MEZI OKNY` |
+| Vybrat (sloupec zaškrtávátek) | `VÝBĚR BEZ PŘESTAVBY TABULKY` |
+| animace hledání | `HLEDÁNÍ — ANIMACE` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1352,7 +1375,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 66 souborů
+node test/run.js              # kontrola syntaxe + všech 67 souborů
 node test/run.js archive      # jen vybrané
 ```
 

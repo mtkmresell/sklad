@@ -1196,6 +1196,61 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
   animation: bulkOut 0.2s ease forwards;
 }
 
+/* 6b. Hledat ve všech sekcích — panel sjede shora, pozadí se roztmí
+   (HLEDÁNÍ — ANIMACE) */
+@keyframes gsPozadi { from { background:rgba(0,0,0,0); backdrop-filter:blur(0); } to { background:rgba(0,0,0,0.88); backdrop-filter:blur(3px); } }
+@keyframes gsPanel {
+  from { opacity:0; transform:translateY(-18px) scale(0.97); }
+  to   { opacity:1; transform:none; }
+}
+@keyframes gsPanelPryc { to { opacity:0; transform:translateY(-12px) scale(0.98); } }
+@keyframes gsPozadiPryc { to { background:rgba(0,0,0,0); backdrop-filter:blur(0); } }
+.gs-ov { animation: gsPozadi 0.18s ease both; }
+.gs-ov .gs-panel { animation: gsPanel 0.24s cubic-bezier(0.34,1.25,0.64,1) both; transform-origin: top center; }
+.gs-ov.gs-odchod { animation: gsPozadiPryc 0.16s ease forwards; pointer-events:none; }
+.gs-ov.gs-odchod .gs-panel { animation: gsPanelPryc 0.14s ease-in forwards; }
+@media(prefers-reduced-motion:reduce){ .gs-ov, .gs-ov .gs-panel { animation:none !important; } }
+
+/* 7a. Vybrat — sloupec se zaškrtávátky naskočí, tlačítko cvakne
+   (VÝBĚR BEZ PŘESTAVBY TABULKY) */
+@keyframes vyberVjezd {
+  0%   { opacity:0; transform:scale(0.3); }
+  60%  { opacity:1; transform:scale(1.18); }
+  100% { opacity:1; transform:scale(1); }
+}
+@keyframes vyberOdjezd { to { opacity:0; transform:scale(0.3); } }
+.vyber-vjezd > input { animation: vyberVjezd 0.28s cubic-bezier(0.34,1.4,0.64,1) both; animation-delay:288ms; }
+.items-table tbody tr:nth-child(1) > .vyber-vjezd > input { animation-delay:0ms; }
+.items-table tbody tr:nth-child(2) > .vyber-vjezd > input { animation-delay:12ms; }
+.items-table tbody tr:nth-child(3) > .vyber-vjezd > input { animation-delay:24ms; }
+.items-table tbody tr:nth-child(4) > .vyber-vjezd > input { animation-delay:36ms; }
+.items-table tbody tr:nth-child(5) > .vyber-vjezd > input { animation-delay:48ms; }
+.items-table tbody tr:nth-child(6) > .vyber-vjezd > input { animation-delay:60ms; }
+.items-table tbody tr:nth-child(7) > .vyber-vjezd > input { animation-delay:72ms; }
+.items-table tbody tr:nth-child(8) > .vyber-vjezd > input { animation-delay:84ms; }
+.items-table tbody tr:nth-child(9) > .vyber-vjezd > input { animation-delay:96ms; }
+.items-table tbody tr:nth-child(10) > .vyber-vjezd > input { animation-delay:108ms; }
+.items-table tbody tr:nth-child(11) > .vyber-vjezd > input { animation-delay:120ms; }
+.items-table tbody tr:nth-child(12) > .vyber-vjezd > input { animation-delay:132ms; }
+.items-table tbody tr:nth-child(13) > .vyber-vjezd > input { animation-delay:144ms; }
+.items-table tbody tr:nth-child(14) > .vyber-vjezd > input { animation-delay:156ms; }
+.items-table tbody tr:nth-child(15) > .vyber-vjezd > input { animation-delay:168ms; }
+.items-table tbody tr:nth-child(16) > .vyber-vjezd > input { animation-delay:180ms; }
+.items-table tbody tr:nth-child(17) > .vyber-vjezd > input { animation-delay:192ms; }
+.items-table tbody tr:nth-child(18) > .vyber-vjezd > input { animation-delay:204ms; }
+.items-table tbody tr:nth-child(19) > .vyber-vjezd > input { animation-delay:216ms; }
+.items-table tbody tr:nth-child(20) > .vyber-vjezd > input { animation-delay:228ms; }
+.items-table tbody tr:nth-child(21) > .vyber-vjezd > input { animation-delay:240ms; }
+.items-table tbody tr:nth-child(22) > .vyber-vjezd > input { animation-delay:252ms; }
+.items-table tbody tr:nth-child(23) > .vyber-vjezd > input { animation-delay:264ms; }
+.items-table tbody tr:nth-child(24) > .vyber-vjezd > input { animation-delay:276ms; }
+.items-table tbody tr:nth-child(25) > .vyber-vjezd > input { animation-delay:288ms; }
+.vyber-odjezd > input, .vyber-odjezd > .chybi-roh { animation: vyberOdjezd 0.13s ease-in forwards; }
+@keyframes vyberCvak { 0% { transform:scale(1); } 40% { transform:scale(0.92); } 100% { transform:scale(1); } }
+#btnBulkMode { transition: color 0.15s, border-color 0.15s, background 0.15s; }
+#btnBulkMode.vyber-cvak { animation: vyberCvak 0.22s cubic-bezier(0.34,1.4,0.64,1); }
+@media(prefers-reduced-motion:reduce){ #btnBulkMode.vyber-cvak { animation:none; } }
+
 /* 7b. Bulk skupina — složka řádky */
 .bulk-group-row { cursor:pointer; user-select:none; }
 .bulk-group-row td { background:#0d1f0d !important; border-bottom:1px solid var(--border); }
@@ -5361,7 +5416,7 @@ function tableHTML(list) {
     // Oranžový roh jde do první buňky, ať je v rohu řádku i s výběrem (CO CHYBÍ U POLOŽKY)
     const roh = chybiRoh(it);
     return `<tr class="${rClass}${roh?' ma-chybi':''}" style="cursor:pointer;" data-action="detail" data-id="${it.id}">
-      ${bulkMode?`<td class="bulk-cb-td${roh?' chybi-td':''}" data-action="bulktoggle" data-id="${it.id}">${roh}<input type="checkbox" ${bulkSelected.has(it.id)?'checked':''} class="bulk-cb-input"></td>`:''}
+      ${bulkMode?`<td class="bulk-cb-td vyber-sl${roh?' chybi-td':''}" data-action="bulktoggle" data-id="${it.id}">${roh}<input type="checkbox" ${bulkSelected.has(it.id)?'checked':''} class="bulk-cb-input"></td>`:''}
       <td${!bulkMode&&roh?' class="chybi-td"':''}>${bulkMode?'':roh}<span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></td>
       <td style="padding:4px 6px;">${tImgHtml}</td>
       <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${tNameHtml}${profBadge(it)?' '+profBadge(it):''}</td>
@@ -5437,7 +5492,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
 
   return `<table class="items-table">
     <thead><tr>
-      ${bulkMode?'<th style="width:32px;padding:4px 6px;"></th>':''}
+      ${bulkMode?'<th class="vyber-sl" style="width:32px;padding:4px 6px;"></th>':''}
       <th style="width:80px">Typ</th>
       <th style="width:44px"></th>
       <th>Název</th>
@@ -5492,7 +5547,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
     var _bulkLabel = '<span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:2px 5px;font-family:monospace;margin-right:6px;">BULK</span>'+rec.name+' <span style="font-size:10px;color:var(--muted);font-family:monospace;">('+children.length+' ks)</span>'+_editIcon;
     // Bulk hlavní řádek
     out += '<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+(_bRoh?' ma-chybi':'')+'" onclick="toggleBulkExpand(\''+rec.id+'\')" onmouseover="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'1\';_eb.style.pointerEvents=\'auto\';}" onmouseout="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'0\';_eb.style.pointerEvents=\'none\';}">';
-    if(bulkMode) out += '<td class="'+(_bRoh?'chybi-td':'')+'" style="width:32px;">'+_bRoh+'</td>';
+    if(bulkMode) out += '<td class="vyber-sl'+(_bRoh?' chybi-td':'')+'" style="width:32px;">'+_bRoh+'</td>';
     out += '<td colspan="3" class="td-name'+(!bulkMode&&_bRoh?' chybi-td':'')+'" style="font-weight:700;">'+(bulkMode?'':_bRoh)+_bulkLabel+'</td>';
     out += '<td></td>';
     out += '<td></td>';
@@ -5538,7 +5593,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
         var chPc = chProfit>0?'color:var(--accent)':chProfit<0?'color:var(--danger)':'color:var(--muted)';
         var chRoh = chybiRoh(ch);
         out += '<tr class="bulk-child-row'+(chRoh?' ma-chybi':'')+'" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
-        if(bulkMode) out += '<td class="'+(chRoh?'chybi-td':'')+'" style="width:32px;">'+chRoh+'</td>';
+        if(bulkMode) out += '<td class="vyber-sl'+(chRoh?' chybi-td':'')+'" style="width:32px;">'+chRoh+'</td>';
         out += '<td class="'+(!bulkMode&&chRoh?'chybi-td':'')+'">'+(bulkMode?'':chRoh)+'<span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
         out += '<td style="padding:4px 6px;">'+chImgHtml+'</td>';
         out += '<td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+chNameHtml+'</td>';
@@ -10498,13 +10553,16 @@ function openPayoutCalendar() {
 
 function openGlobalSearch() {
   var existing = document.getElementById('_globalSearchOverlay');
+  // Zavírající se okno (doznívá animace) se nepočítá — otevře se nové
+  if (existing && existing.classList.contains('gs-odchod')) { existing.remove(); existing = null; }
   if (existing) { existing.querySelector('#_gsInput').focus(); return; }
   var CAT_N={sneakers:'Sneakers',obleceni:'Oblečení',pokemon:'Pokémon',lego:'LEGO',hotwheels:'Hot Wheels',alternate:'Alternate',sberatelske:'Sběratelské',jine:'Jiné'};
   var TAB_N={stock:'Na skladě',waiting:'Čeká',paid:'Prodáno'};
   var ov = document.createElement('div');
   ov.id = '_globalSearchOverlay';
+  ov.className = 'gs-ov';
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding-top:80px;';
-  ov.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);width:90%;max-width:580px;max-height:70vh;display:flex;flex-direction:column;overflow:hidden;">'
+  ov.innerHTML='<div class="gs-panel" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);width:90%;max-width:580px;max-height:70vh;display:flex;flex-direction:column;overflow:hidden;">'
     +'<div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">'
     +'<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;color:var(--muted)"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 10l3.5 3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>'
     +'<input id="_gsInput" type="text" placeholder="Hledat ve všech sekcích…" autocomplete="off" style="flex:1;background:none;border:none;outline:none;color:var(--text);font-family:\'DM Sans\',sans-serif;font-size:15px;">'
@@ -10515,7 +10573,16 @@ function openGlobalSearch() {
   document.body.appendChild(ov);
   var inp = ov.querySelector('#_gsInput');
   var results = ov.querySelector('#_gsResults');
-  function _gsClose() { ov.remove(); document.removeEventListener('keydown', _gsEsc); }
+  /* HLEDÁNÍ — ANIMACE: okno se při zavření stáhne zpátky nahoru a pak
+     teprve zmizí. Zavírá se hned (posluchač Escape pryč, kliky ho
+     propouští), takže se na doznívání nic nečeká. */
+  function _gsClose() {
+    document.removeEventListener('keydown', _gsEsc);
+    if (ov.classList.contains('gs-odchod')) return;
+    if (matchMedia('(prefers-reduced-motion:reduce)').matches) { ov.remove(); return; }
+    ov.classList.add('gs-odchod');
+    setTimeout(function(){ ov.remove(); }, 170);
+  }
   function _gsEsc(e) { if(e.key==='Escape') _gsClose(); }
   ov.addEventListener('click', function(e){ if(e.target===ov) _gsClose(); });
   document.addEventListener('keydown', _gsEsc);
@@ -11785,9 +11852,103 @@ function toggleBulkMode(){
       btn.style.borderColor = '';
       btn.style.background = '';
     }
+    btn.classList.remove('vyber-cvak'); void btn.offsetWidth; btn.classList.add('vyber-cvak');
   }
   updateBulkBar();
-  renderItems();
+  // VÝBĚR BEZ PŘESTAVBY TABULKY — viz _vyberSloupec(). Tlačítko a lišta se
+  // vykreslí hned; sloupec až v dalším snímku, ať na tabulku nečekají.
+  var chci = bulkMode;
+  requestAnimationFrame(function(){ setTimeout(function(){
+    if (bulkMode !== chci) return;   // mezitím přepnuto zpátky
+    if (!_vyberSloupec(chci)) renderItems();
+  }, 0); });
+}
+
+/* VÝBĚR BEZ PŘESTAVBY TABULKY
+   Vybrat dřív stavělo celou tabulku znovu (renderItems), i se všemi
+   fotkami, a teprve po tom se ukázalo i přepnuté tlačítko — při stovkách
+   kusů to bylo znát jako sekavé zpoždění (majitel 30. 10. 2026). Sloupec
+   se zaškrtávátky se proto do už vykreslených řádků jen vloží (nebo z nich
+   vyjme) a naskočí animací. Výsledek musí být stejný, jako by tabulku
+   postavil tableHTML(); hlídá to test-vyber.js. Sloupec se vkládá až po
+   vykreslení přepnutého tlačítka — rozvržení stovek řádků trvá a tlačítko
+   na něj čekat nemá. Když tabulka vypadá jinak,
+   než se čeká (karty, Prodáno, analytika), vrátí false a zavolá se
+   renderItems() jako dřív — jen až po vykreslení tlačítka. */
+var _vyberOdjezd = null;
+function _vyberSloupec(zapnout) {
+  var grid = document.getElementById('itemsGrid');
+  if (tab === 'sold' || tab === 'wishlist' || !grid) return true;   // výběr tu sloupec nemá
+  if (tab === 'stock' && (viewMode !== 'table' || stockViewMode === 'analytics')) return true;
+  var tbl = grid.querySelector(':scope > table.items-table');
+  if (!tbl) return !grid.children.length;   // prázdný seznam nemá co měnit
+  var radky = Array.prototype.slice.call(tbl.querySelectorAll('tr'));
+  var maSloupec = !!tbl.querySelector('.vyber-sl');
+  if (_vyberOdjezd) { clearTimeout(_vyberOdjezd); _vyberOdjezd = null; }
+  var tichy = matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  if (zapnout) {
+    if (maSloupec) {
+      // Sloupec už tu je — postavil ho renderItems(), nebo ho rychlé
+      // dvojí kliknutí nestihlo vyjmout; pak se jen vrátí z odjezdu
+      tbl.querySelectorAll('.vyber-odjezd').forEach(function(b) { b.classList.remove('vyber-odjezd'); });
+      return true;
+    }
+    // Nejdřív ověřit, že každý řádek známe — jinak nic neměnit
+    var druhy = radky.map(function(tr) {
+      if (tr.parentNode.tagName === 'THEAD') return 'hlava';
+      if (tr.classList.contains('bulk-group-row')) return 'balik';
+      if (tr.classList.contains('bulk-child-row')) return 'kus-baliku';
+      if (tr.dataset.action === 'detail' && tr.dataset.id) return 'kus';
+      return null;
+    });
+    if (druhy.indexOf(null) !== -1) return false;
+    radky.forEach(function(tr, i) {
+      var prvni = tr.firstElementChild;
+      if (druhy[i] === 'hlava') {
+        var th = document.createElement('th');
+        th.className = 'vyber-sl'; th.setAttribute('style', 'width:32px;padding:4px 6px;');
+        tr.insertBefore(th, prvni); return;
+      }
+      var td = document.createElement('td');
+      var roh = prvni && prvni.querySelector(':scope > .chybi-roh');
+      if (druhy[i] === 'kus') {
+        td.className = 'bulk-cb-td vyber-sl';
+        td.setAttribute('data-action', 'bulktoggle'); td.setAttribute('data-id', tr.dataset.id);
+        td.innerHTML = '<input type="checkbox" class="bulk-cb-input">';
+      } else {
+        td.className = 'vyber-sl'; td.setAttribute('style', 'width:32px;');
+      }
+      if (roh) { td.classList.add('chybi-td'); td.insertBefore(roh, td.firstChild); prvni.classList.remove('chybi-td'); }
+      if (prvni && prvni.getAttribute('class') === '') prvni.removeAttribute('class');
+      // Postupný nájezd řídí CSS podle pořadí řádku — do stylu prvků se nepíše,
+      // ať tabulka zůstane přesně taková, jakou ji píše tableHTML()
+      if (!tichy && druhy[i] === 'kus') td.classList.add('vyber-vjezd');
+      tr.insertBefore(td, prvni);
+    });
+    if (!tichy) setTimeout(function() {
+      tbl.querySelectorAll('.vyber-vjezd').forEach(function(t) { t.classList.remove('vyber-vjezd'); });
+    }, 700);
+    return true;
+  }
+
+  if (!maSloupec) return true;
+  function vyjmi() {
+    _vyberOdjezd = null;
+    if (bulkMode) return;
+    tbl.querySelectorAll('tr').forEach(function(tr) {
+      var b = tr.firstElementChild;
+      if (!b || !b.classList.contains('vyber-sl')) return;
+      var dalsi = b.nextElementSibling;
+      var roh = b.querySelector(':scope > .chybi-roh');
+      if (roh && dalsi) { dalsi.insertBefore(roh, dalsi.firstChild); dalsi.classList.add('chybi-td'); }
+      b.remove();
+    });
+  }
+  if (tichy) { vyjmi(); return true; }
+  tbl.querySelectorAll('.vyber-sl').forEach(function(b) { b.classList.add('vyber-odjezd'); });
+  _vyberOdjezd = setTimeout(vyjmi, 140);
+  return true;
 }
 function updateBulkBar(){
   const bar = document.getElementById('bulkBar');
@@ -11902,7 +12063,10 @@ function bulkToggle(id, shiftKey){
       }
       lastBulkClickId = id;
       updateBulkBar();
-      renderItems();
+      // Jen zaškrtávátka na místě — přestavba celé tabulky je znát (viz VÝBĚR BEZ PŘESTAVBY TABULKY)
+      document.querySelectorAll('.bulk-cb-td[data-id]').forEach(function(td){
+        var c = td.querySelector('input'); if (c) c.checked = bulkSelected.has(td.dataset.id);
+      });
       return;
     }
   }
@@ -11927,7 +12091,7 @@ function bulkClear(){
   lastBulkClickId = null;
   bulkMode = false;
   const btn = document.getElementById('btnBulkMode');
-  if(btn) { btn.textContent = 'Vybrat'; btn.style.color=''; btn.style.borderColor=''; }
+  if(btn) { btn.textContent = 'Vybrat'; btn.style.color=''; btn.style.borderColor=''; btn.style.background=''; }
   updateBulkBar();
   renderItems();
 }
