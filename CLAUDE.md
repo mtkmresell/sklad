@@ -886,12 +886,12 @@ o ně stojí, jen na ně nebyl čas. Až se některé dotáhne, smaž ho odsud.
 
 Tři věci v tomhle projektu **se nenasazují samy** a kód v repozitáři o nich
 nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru.
-**Ptej se na ně**, místo abys předpokládal, že běží. Stav k 12. 10. 2026:
+**Ptej se na ně**, místo abys předpokládal, že běží. Stav k 31. 10. 2026:
 
 | co | kde | stav |
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (13. 10.) — v repozitáři je oprava mailů „SKLAD × Pikastore: 3 věcí se nepovedlo" (`replaced_by_submission_piece`, pomlčka ve velikosti), mailů „SKLAD × Purekickz: 2 věci se nepovedlo" (chybějící velikost u modelu, `pkNeznaVelikost`) a pondělní obhlídky (držené kusy, „Purekickz nevezme"). Nasazený worker je aspoň ze 13. 9. (umí odklad čerstvých kusů), ale jestli má i opravu míst prodeje z 1. 10., se nepoznalo: stará verze odmítá Tuzex hláškou „takovou platformu sklad nezná" (`f59f81d`), nová říká „takové místo prodeje v nastavení není" a přikládá `mista_v_nastaveni`. Nasazením dorazí obojí. **Dokud se nenasadí, maily chodí dál.** Od 30. 10. v repozitáři i nástroj `sklad_kontrola` (výsledky kontrol listingů do aplikace) a prodeje z Purekickz v `k_preneseni` — bez nasazení nepřijdou. |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **nasazeno 31. 10.** (verze `dc8e92a`) — ověřeno: v chatu přibyl nástroj `sklad_kontrola`, který starší verze nemá, a `pika_prodeje` vrací vystavené kusy z Pikastore i Purekickz. Tím dorazily i opravy mailů o potížích (`replaced_by_submission_piece`, pomlčka ve velikosti, `pkNeznaVelikost`) a pondělní obhlídka s „Purekickz nevezme". Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
