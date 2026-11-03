@@ -19,6 +19,7 @@ konektor/      MCP server pro Cloudflare — sklad v běžném chatu + denní up
                e-mailem (nenasazuje se sem, vkládá se ručně do Cloudflare)
 firestore.rules  znění pravidel Firestore (do provozu se vkládá ručně v konzoli)
 LICENSE        všechna práva vyhrazena — kód je vidět, ale není volný
+wrangler.jsonc  nasazení webu na Cloudflare (bez buildu); co na web nejde, je v .assetsignore
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
@@ -927,6 +928,14 @@ aplikace jako minule. Až bude adresa známá, musí se změnit
 `ODKAZ_APLIKACE` v konektoru (odkaz v mailech) a adresa nahoře v tomhle
 souboru; nasazení se pak ověřuje přes Cloudflare, ne přes workflow
 GitHub Pages. Dokud se nepřesune, **připomínej to**.
+
+Cloudflare to dnes zakládá jako **Worker se statickými soubory**, ne jako
+Pages — proto `wrangler.jsonc` (bez buildu, `assets.directory` = kořen)
+a `.assetsignore`. Ven jde **jen `index.html` a `fonty/`**; konektor,
+testy, zálohy, nástroje a dokumentace se nevydávají ani za přihlášením.
+Ověřeno přes `wrangler dev`: `/konektor/worker.js`, `/CLAUDE.md`,
+`/test/…` dávají 404. **Nová složka, kterou aplikace načítá, se musí
+z `.assetsignore` vynechat**, jinak na webu chybí.
 
 ### Názvy příspěvků na Instagramu
 

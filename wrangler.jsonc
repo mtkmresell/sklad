@@ -1,0 +1,8 @@
+// Nasazení webu na Cloudflare (Workers se statickými soubory).
+// Žádný build: Cloudflare vezme soubory z kořene repozitáře tak, jak jsou.
+// Co se nevydává (konektor, testy, zálohy, dokumentace), je v .assetsignore.
+{
+  "name": "sklad",
+  "compatibility_date": "2025-09-01",
+  "assets": { "directory": "." }
+}

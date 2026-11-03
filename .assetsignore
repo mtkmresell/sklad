@@ -1,0 +1,17 @@
+# Na web jde jen aplikace: index.html a fonty/. Všechno ostatní je
+# vývoj a dokumentace a ven nepatří — ani za přihlášením.
+.git
+.github
+.claude
+node_modules
+konektor
+nastroje
+test
+zaloha
+*.md
+LICENSE
+firestore.rules
+wrangler.jsonc
+.assetsignore
+.gitignore
+.nojekyll
