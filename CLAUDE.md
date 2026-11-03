@@ -18,6 +18,7 @@ nastroje/      čtečka dat z cloudu pro příkazovou řádku (nenasazuje se)
 konektor/      MCP server pro Cloudflare — sklad v běžném chatu + denní upozornění
                e-mailem (nenasazuje se sem, vkládá se ručně do Cloudflare)
 firestore.rules  znění pravidel Firestore (do provozu se vkládá ručně v konzoli)
+LICENSE        všechna práva vyhrazena — kód je vidět, ale není volný
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
@@ -908,6 +909,24 @@ míst prodeje (stačí otevřít aplikaci).
 
 Příkaz na ověření pravidel je v `nastroje/PRAVIDLA.md`, krok 5 —
 přihlásí se účtem čtečky a zkusí zápis, který nemá projít.
+
+### Přesun webu za přihlášení (Cloudflare Pages + Access)
+
+Majitel nechce, aby si kód kdokoli stáhl (3. 11. 2026). Teď je repozitář
+veřejný a GitHub Pages vydá `index.html` i `konektor/worker.js` komukoli.
+**Přepnout repozitář na soukromý majitel zkusil a aplikace přestala jít
+otevřít** — Pages ze soukromého repozitáře chce placený GitHub Pro. Proto
+domluveno: web na **Cloudflare Pages** (umí soukromý repozitář zdarma)
+a před ním **Cloudflare Access**, který kód nevydá, dokud se člověk
+neprokáže povoleným e-mailem (majitel + účetní). Licence „všechna práva
+vyhrazena“ (`LICENSE`) je hotová.
+
+Pořadí je důležité: **nejdřív nová adresa a ověřit, že na ní aplikace
+jede, teprve pak repozitář soukromý** — jinak zůstane majitel bez
+aplikace jako minule. Až bude adresa známá, musí se změnit
+`ODKAZ_APLIKACE` v konektoru (odkaz v mailech) a adresa nahoře v tomhle
+souboru; nasazení se pak ověřuje přes Cloudflare, ne přes workflow
+GitHub Pages. Dokud se nepřesune, **připomínej to**.
 
 ### Názvy příspěvků na Instagramu
 

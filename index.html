@@ -5685,7 +5685,7 @@ function waitStateBadge(it) {
   var cls = entry[0]; var label = entry[1];
   if (ws === 'sent' && it.trackingUrl) {
     var _dpdOnclick = (it.trackingCarrier === 'DPD' && it.trackingNum)
-    ? ' onclick="navigator.clipboard.writeText(\'' + it.trackingNum + '\');showToast(\'' + it.trackingNum + ' zkopírováno\');"'
+    ? ' onclick="zkopiruj(\'' + it.trackingNum + '\',function(){showToast(\'' + it.trackingNum + ' zkopírováno\');});"'
     : '';
   return '<a href="' + it.trackingUrl + '" target="_blank" class="ws-badge ' + cls + ' wsb-link" data-tip="' + (it.trackingCarrier||'') + ' ' + (it.trackingNum||'') + (it.trackingCarrier==='DPD'?' (číslo se zkopíruje)':'') + '"' + _dpdOnclick + '>' + label + '</a>';
   }
@@ -5840,7 +5840,7 @@ function tableHTML(list) {
       ${tab==='sold'?`<td class="td-num td-sell" style="text-align:center">${it.sellPrice?(it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)):'—'}</td>`:''}
       ${tab==='sold'?`<td class="td-num" style="${pc};text-align:center;font-size:12px;">${ps}</td>`:''}
       ${tab==='sold'?`<td style="text-align:center;font-family:monospace;font-size:11px;${it.roi>0?'color:var(--accent)':it.roi<0?'color:var(--danger)':'color:var(--muted)'}">${it.roi!=null?((it.roi>=0?'+':'')+it.roi+'%'):'—'}</td>`:''}
-      ${tab==='stock'?(function(){var _loc=it.location||'Doma';var _lc=_loc==='Na cestě'?'var(--warning)':_loc==='Vráceno'?'#ff4444':_loc==='Bude vráceno'?'#ff4444':_loc==='Zrušeno'?'#ff4444':_loc!=='Doma'?'var(--accent2)':'var(--muted)';var _dpdClick2=it.trackingCarrier==='DPD'&&it.trackingNum?' onclick="event.stopPropagation();navigator.clipboard.writeText(\''+it.trackingNum+'\');showToast(\''+it.trackingNum+' zkopírováno\');"':' onclick="event.stopPropagation()"';
+      ${tab==='stock'?(function(){var _loc=it.location||'Doma';var _lc=_loc==='Na cestě'?'var(--warning)':_loc==='Vráceno'?'#ff4444':_loc==='Bude vráceno'?'#ff4444':_loc==='Zrušeno'?'#ff4444':_loc!=='Doma'?'var(--accent2)':'var(--muted)';var _dpdClick2=it.trackingCarrier==='DPD'&&it.trackingNum?' onclick="event.stopPropagation();zkopiruj(\''+it.trackingNum+'\',function(){showToast(\''+it.trackingNum+' zkopírováno\');});"':' onclick="event.stopPropagation()"';
 var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.trackingUrl?'<a href="'+it.trackingUrl+'" target="_blank"'+_dpdClick2+' class="trk-loc-link" style="color:'+_lc+';text-decoration:none;">'+_loc+'</a>':_loc;return '<td style="font-size:12px;text-align:center;color:'+_lc+'">'+_locTxt+'</td>'})():''}
       ${tab==='stock'?daysCell(it):''}
       ${tab==='stock'?((()=>{
@@ -9303,6 +9303,18 @@ function fallbackCopy(text, cb) {
   try { document.execCommand('copy'); cb(); } catch(e) { showToast('Nelze zkopírovat automaticky. SKU: ' + text, 'err'); }
   document.body.removeChild(ta);
 }
+/* Zkopíruje text a pak zavolá hotovo. Když prohlížeč schránku odmítne
+   (nepovolené oprávnění, stará aplikace, nezabezpečená stránka), jde to
+   přes fallbackCopy — holé writeText bez catch dřív v takové chvíli
+   jen vyhodilo nezachycenou chybu a nezkopírovalo se nic. */
+function zkopiruj(text, hotovo) {
+  hotovo = hotovo || function(){};
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(hotovo).catch(function(){ fallbackCopy(text, hotovo); });
+  } else {
+    fallbackCopy(text, hotovo);
+  }
+}
 
 /* ── NÁZEV SOUBORU S NÁKUPNÍM DOKLADEM ───────────────────────────────
    Doklady a faktury k nákupu leží v OneDrive a jmenují se
@@ -9403,7 +9415,7 @@ function openDetail(id) {
   if (isWaiting && it.trackingNum) {
     var tLabel = (it.trackingCarrier ? it.trackingCarrier + ' · ' : '') + it.trackingNum;
     var _isDpdW = it.trackingCarrier === 'DPD' && it.trackingNum;
-    var _dpdAttrW = _isDpdW ? ' onclick="event.preventDefault();navigator.clipboard.writeText(\''+it.trackingNum+'\').then(function(){showToast(\''+it.trackingNum+' zkopírováno\');});window.open(\''+it.trackingUrl+'\',\'_blank\');"' : '';
+    var _dpdAttrW = _isDpdW ? ' onclick="event.preventDefault();zkopiruj(\''+it.trackingNum+'\',function(){showToast(\''+it.trackingNum+' zkopírováno\');});window.open(\''+it.trackingUrl+'\',\'_blank\');"' : '';
     trackingHtml = it.trackingUrl
       ? '<a href="'+it.trackingUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;cursor:pointer;"'+_dpdAttrW+'>'+tLabel+'</a>'
       : '<span style="font-family:monospace;font-size:12px;">'+tLabel+'</span>';
@@ -9494,7 +9506,7 @@ function openDetail(id) {
       ...(it.trackingNum ? (function(){
         var _tl = (it.trackingCarrier?it.trackingCarrier+' · ':'')+it.trackingNum;
         var _isDpd = it.trackingCarrier==='DPD' && it.trackingNum;
-        var _dpdA = _isDpd ? ' onclick="event.preventDefault();navigator.clipboard.writeText(\''+it.trackingNum+'\').then(function(){showToast(\''+it.trackingNum+' zkopírováno\');});window.open(\''+it.trackingUrl+'\',\'_blank\');"' : '';
+        var _dpdA = _isDpd ? ' onclick="event.preventDefault();zkopiruj(\''+it.trackingNum+'\',function(){showToast(\''+it.trackingNum+' zkopírováno\');});window.open(\''+it.trackingUrl+'\',\'_blank\');"' : '';
         var _html = it.trackingUrl
           ? '<a href="'+it.trackingUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;cursor:pointer;"'+_dpdA+'>'+_tl+'</a>'
           : '<span style="font-family:monospace;font-size:12px;">'+_tl+'</span>';
@@ -21121,7 +21133,7 @@ rebuildBrandTables();
 <div class="mo" id="moDetail">
 <div class="modal" style="max-width:560px;">
   <div class="mh" style="margin-bottom:20px;">
-    <div class="mt2" id="detailTitle" title="Klikni pro kopírování názvu" style="cursor:pointer;" onclick="(function(el){var t=el.textContent;if(!t||t==='Detail položky')return;navigator.clipboard.writeText(t).then(function(){showToast('Název zkopírován');});})(this)">Detail položky</div>
+    <div class="mt2" id="detailTitle" title="Klikni pro kopírování názvu" style="cursor:pointer;" onclick="(function(el){var t=el.textContent;if(!t||t==='Detail položky')return;zkopiruj(t,function(){showToast('Název zkopírován');});})(this)">Detail položky</div>
   </div>
   <div id="detailContent"></div>
 </div>
