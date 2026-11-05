@@ -107,9 +107,11 @@ a uprav tabulku *Čeká na ruční krok majitele* v `CLAUDE.md`. Netvrď,
   nejdřív ho slouč a testy pusť znovu.
 - Zpráva commitu česky, krátký nadpis o tom, co se změnilo pro člověka
   („Zakázaná kategorie zašedne, místo aby čtvereček zmizel"), v těle proč.
-- Nasazení na GitHub Pages ověř přes GitHub API (workflow „pages build
-  and deployment", id `256573624`), ne curlem — `mtkmresell.github.io`
-  odsud není dostupná.
+- Web se nasazuje sám z `main` na Cloudflare (Worker `sklad`,
+  https://sklad.mtkm-resell.workers.dev/) a dokud je repozitář veřejný,
+  i na GitHub Pages (ověř přes GitHub API, workflow „pages build and
+  deployment", id `256573624`). Ani jedna adresa odsud není dostupná,
+  curlem neověřuj.
 
 ## 8. Shrnutí pro majitele
 

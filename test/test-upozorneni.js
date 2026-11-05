@@ -606,11 +606,11 @@ function prodanoPred(ted, dnu) {
   ok('žádná měna', !/\b(CZK|EUR|Kč)\b/.test(telo), telo);
   // Běžné upozornění nemá co vysvětlovat — pod čarou zbývá jen odkaz
   ok('pod čarou je jen odkaz',
-    /— — —\nhttps:\/\/mtkmresell\.github\.io\/sklad\/$/.test(text.trimEnd()), text.slice(-200));
+    /— — —\nhttps:\/\/sklad\.mtkm-resell\.workers\.dev\/$/.test(text.trimEnd()), text.slice(-200));
   ok('a nic o tom, kdo to poslal', !/Poslal konektor/.test(text), text.slice(-200));
   ok('CRM se ani nečte', !dotazy.some(u => u.includes('/crm/')), JSON.stringify(dotazy));
   ok('žádné jméno zákazníka', !/Petr Novák/.test(text));
-  ok('odkaz na aplikaci tam je', /mtkmresell\.github\.io/.test(text));
+  ok('odkaz na aplikaci tam je', /sklad\.mtkm-resell\.workers\.dev/.test(text));
 
   /* ══════════════════════════════════════════════════════════════ */
   sekce('8) Náhled a zkušební mail v prohlížeči');

@@ -1,11 +1,15 @@
 # SKLAD
 
 Evidence skladu pro reselling (tenisky, Pokémon karty, LEGO). Jeden uživatel, čeština,
-mobil i desktop. Provoz: `index.html` v kořeni, GitHub Pages z větve `main`,
-https://mtkmresell.github.io/sklad/
+mobil i desktop. Provoz: `index.html` v kořeni, **Cloudflare Worker `sklad`** (statické
+soubory, nasazuje se sám z větve `main`) za Cloudflare Access:
+https://sklad.mtkm-resell.workers.dev/ (od 5. 11. 2026)
 
-**`mtkmresell.github.io` není z vývojového prostředí dostupná** — nasazení se ověřuje
-jen přes GitHub API (workflow „pages build and deployment", id `256573624`), ne curlem.
+Stará adresa https://mtkmresell.github.io/sklad/ (GitHub Pages) běží, dokud majitel
+nepřepne repozitář na soukromý — pak zhasne. **Ani jedna adresa není z vývojového
+prostředí dostupná** (síťová politika; nová je navíc za přihlášením). Nasazení na
+Cloudflare vidí majitel v *Workers & Pages → sklad → Deployments*; GitHub Pages se
+ověřuje přes GitHub API (workflow „pages build and deployment", id `256573624`).
 
 ## Tvar projektu
 
@@ -911,31 +915,35 @@ míst prodeje (stačí otevřít aplikaci).
 Příkaz na ověření pravidel je v `nastroje/PRAVIDLA.md`, krok 5 —
 přihlásí se účtem čtečky a zkusí zápis, který nemá projít.
 
-### Přesun webu za přihlášení (Cloudflare Pages + Access)
+### Přesun webu za přihlášení (Cloudflare + Access)
 
-Majitel nechce, aby si kód kdokoli stáhl (3. 11. 2026). Teď je repozitář
-veřejný a GitHub Pages vydá `index.html` i `konektor/worker.js` komukoli.
-**Přepnout repozitář na soukromý majitel zkusil a aplikace přestala jít
-otevřít** — Pages ze soukromého repozitáře chce placený GitHub Pro. Proto
-domluveno: web na **Cloudflare Pages** (umí soukromý repozitář zdarma)
-a před ním **Cloudflare Access**, který kód nevydá, dokud se člověk
-neprokáže povoleným e-mailem (majitel + účetní). Licence „všechna práva
-vyhrazena“ (`LICENSE`) je hotová.
+Majitel nechce, aby si kód kdokoli stáhl (3. 11. 2026). **Nová adresa jede
+od 5. 11.**: https://sklad.mtkm-resell.workers.dev/, Worker `sklad` se
+statickými soubory, nasazuje se sám z `main`, před ním Cloudflare Access
+(Scope „All traffic", pravidlo „Cloudflare account"). Majitel ověřil
+přihlášení, data i komisní prodej. Licence (`LICENSE`) je hotová.
+`ODKAZ_APLIKACE` v konektoru už míří na novou adresu.
 
-Pořadí je důležité: **nejdřív nová adresa a ověřit, že na ní aplikace
-jede, teprve pak repozitář soukromý** — jinak zůstane majitel bez
-aplikace jako minule. Až bude adresa známá, musí se změnit
-`ODKAZ_APLIKACE` v konektoru (odkaz v mailech) a adresa nahoře v tomhle
-souboru; nasazení se pak ověřuje přes Cloudflare, ne přes workflow
-GitHub Pages. Dokud se nepřesune, **připomínej to**.
+Ven jde **jen `index.html` a `fonty/`** (`wrangler.jsonc`,
+`.assetsignore`); konektor, testy, zálohy, nástroje a dokumentace se
+nevydávají ani za přihlášením — ověřeno přes `wrangler dev`. **Nová
+složka, kterou aplikace načítá, se musí z `.assetsignore` vynechat**,
+jinak na webu chybí.
 
-Cloudflare to dnes zakládá jako **Worker se statickými soubory**, ne jako
-Pages — proto `wrangler.jsonc` (bez buildu, `assets.directory` = kořen)
-a `.assetsignore`. Ven jde **jen `index.html` a `fonty/`**; konektor,
-testy, zálohy, nástroje a dokumentace se nevydávají ani za přihlášením.
-Ověřeno přes `wrangler dev`: `/konektor/worker.js`, `/CLAUDE.md`,
-`/test/…` dávají 404. **Nová složka, kterou aplikace načítá, se musí
-z `.assetsignore` vynechat**, jinak na webu chybí.
+`localStorage` patří adrese, takže na nové adrese se **znovu vkládá token
+komise a adresa konektoru** (nesynchronizují se) — na každém zařízení.
+Na staré adrese jdou vytáhnout v konzoli:
+`localStorage.getItem('sklad_komise_token_v1')`,
+`localStorage.getItem('sklad_konektor_url_v1')`.
+
+**Zbývá (připomínej):**
+- nasadit konektor (kvůli odkazu v mailech),
+- Firebase → Authentication → Authorized domains: přidat novou doménu,
+- přístup pro účetního: One-time PIN + pravidlo Allow → Emails,
+- **až pak** repozitář na soukromý — pořadí je důležité, minule se tím
+  majitel odstřihl od aplikace (Pages ze soukromého repozitáře chce
+  GitHub Pro). Pak taky smazat zmínky o GitHub Pages odsud a ze skillu
+  `zmena`.
 
 ### Názvy příspěvků na Instagramu
 
@@ -1483,8 +1491,8 @@ už jednou vypadala jako rozbitá práce, a přitom šlo o prostředí.
   nastaví sám, přímé spuštění souboru ne a spadne na
   `Cannot find module 'playwright'`. Správně:
   `NODE_PATH=/opt/node22/lib/node_modules node test/test-archive.js`.
-- **`mtkmresell.github.io` odsud není dostupná** — nasazení se ověřuje
-  jen přes GitHub API, ne curlem (viz začátek souboru).
+- **Web aplikace odsud není dostupný** — ani `mtkmresell.github.io`, ani
+  `sklad.mtkm-resell.workers.dev` (viz začátek souboru). Neověřuj curlem.
 
 ## Časté pasti
 

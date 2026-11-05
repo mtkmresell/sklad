@@ -3697,7 +3697,7 @@ function mesicniBlok(polozky, cas, dnes, crm) {
    změť značek.
 ══════════════════════════════════════════════════════════════════════ */
 
-const ODKAZ_APLIKACE = 'https://mtkmresell.github.io/sklad/';
+const ODKAZ_APLIKACE = 'https://sklad.mtkm-resell.workers.dev/';
 
 /* Kdo mail dostane, ví, odkud přišel — připomínat to je plýtvání místem.
    Patička proto zůstává prázdná a je v ní jen odkaz do aplikace. Výjimka
