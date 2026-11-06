@@ -469,6 +469,13 @@ který majitel nikdy nepoužil (30. 10. 2026).
   Do `href` jde jen http(s). Klik na odkaz (název i Report) **nerozbalí
   místo** — rozcestník v okně odkazy přeskakuje.
 - **Report je bez šipky** — jen slovo.
+- **Rozbalené místo vypadá jako report z kontroly** (majitel: „zastaralé
+  a neuhlazené"). Sekce Přidat / Smazat s počtem, hlavička sloupců SKU ·
+  Název · Vel., řádky v kartě s náhledem. **Název i SKU se kopírují
+  klikem** (blikne a ohlásí se) a sekce má Kopírovat SKU / Kopírovat
+  názvy — názvy jdou po řádcích jako `název⇥velikost⇥SKU`, ať se vloží
+  rovnou do tabulky. Kopírování jde přes `zkopiruj()`, ne holé
+  `writeText`.
 - **Křížek jen na dotykovém zařízení** (`hover:hover and pointer:fine`
   ho schová). Na počítači se zavírá Escapem nebo klikem mimo okno.
 - **Víc než `KONTROLA_STARA_DNI` (5) dní bez kontroly se zvýrazní**:

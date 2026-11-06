@@ -334,6 +334,30 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
     return { kusy, xss: !!window.__xss, img: !!ov.querySelector('.kl-kus img'), pozn: (ov.querySelector('.kl-poznamka') || {}).textContent };
   });
   shoda('rozkliknuté místo vypíše kusy', okno.kusy, ['Jordan 4 Black Cat', 'Mind 001 <img src=x onerror=window.__xss=1>', 'Dunk Low Panda']);
+  /* Majitel 6. 11. 2026: název i SKU se kopírují klikem, jako v reportu,
+     a celý seznam jedním tlačítkem. Schránka se v testu nahradí. */
+  const kop = await page.evaluate(() => {
+    const out = {};
+    const puvodni = window.zkopiruj;
+    window.zkopiruj = function (t, cb) { out.posledni = t; if (cb) cb(); };
+    const ov = document.getElementById('kontrolyOv');
+    const radek = [...ov.querySelectorAll('.kl-kus')].find(r => r.textContent.indexOf('Jordan 4 Black Cat') !== -1);
+    radek.querySelector('.kl-kus-n').click(); out.nazev = out.posledni;
+    const sku = radek.querySelector('.kl-sku'); sku.click(); out.sku = out.posledni; out.blesk = sku.classList.contains('kl-blesk');
+    out.rozbaleno = !!document.querySelector('#kontrolyOv .kl-misto.rozbaleno');
+    document.querySelector('#kontrolyOv [data-kl="kopirovat-vse"][data-co="sku"][data-druh="chybi"]').click(); out.vseSku = out.posledni;
+    document.querySelector('#kontrolyOv [data-kl="kopirovat-vse"][data-co="nazvy"][data-druh="smazat"]').click(); out.vseNazvy = out.posledni;
+    out.sloupce = [...ov.querySelectorAll('.kl-sloupce')][0].textContent;
+    window.zkopiruj = puvodni;
+    return out;
+  });
+  shoda('klik na název ho zkopíruje', kop.nazev, 'Jordan 4 Black Cat');
+  shoda('klik na SKU taky', kop.sku, 'FV5029-010');
+  ok('a zkopírované krátce blikne', kop.blesk);
+  ok('kopírování místo nezavře', kop.rozbaleno);
+  shoda('Kopírovat SKU dá všechny SKU sekce pod sebe', kop.vseSku, 'FV5029-010\nHQ4307-600');
+  ok('Kopírovat názvy dá název, velikost a SKU', /^Dunk Low Panda\t[^\t]*42[^\t]*\tDD1391-100$/.test(kop.vseNazvy), JSON.stringify(kop.vseNazvy));
+  ok('sekce má hlavičku sloupců', /SKU/.test(kop.sloupce) && /Název/.test(kop.sloupce), kop.sloupce);
   /* Jen okno — tabulka vkládá název kusu odjakživa bez escapování
      (názvy píše majitel sám), to je mimo tuhle část. */
   ok('název kusu je v okně jen text', !okno.img);

@@ -679,7 +679,7 @@ select:hover{border-color:var(--accent);}
 .kl-hotovo { border-color:rgba(200,255,0,0.35); color:var(--accent); }
 .kl-hotovo:hover { background:var(--accent); color:#000; }
 .kl-tl:hover { border-color:var(--accent); color:var(--text); }
-.kl-modal { max-width:640px; }
+.kl-modal { max-width:780px; }
 .kl-uvod { font-size:12px; color:var(--muted); margin:-6px 0 14px; }
 .kl-prazdno { font-size:13px; color:var(--muted2); padding:28px 6px; text-align:center; }
 .kl-misto { border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:8px; overflow:hidden; }
@@ -700,13 +700,46 @@ a.kl-jmeno:hover { color:var(--accent); text-decoration:underline; }
 @media (hover:hover) and (pointer:fine){ .kl-modal .xb { display:none; } }
 .kl-pocty { display:flex; gap:6px; margin-left:auto; }
 .kl-pocet-chip { font-family:'DM Mono',monospace; font-size:10px; padding:1px 7px; border-radius:4px; white-space:nowrap; }
-.kl-telo { padding:4px 12px 12px; border-top:1px solid var(--border); animation:rowIn 0.18s ease both; }
-.kl-poznamka { font-size:12px; color:var(--text); background:var(--surface2); border-radius:6px; padding:7px 9px; margin:8px 0 4px; white-space:pre-wrap; }
-.kl-sekce { font-size:9px; font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:0.6px;
-  color:var(--muted); margin:12px 0 4px; }
-.kl-kus { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
-.kl-kus-t { flex:1; min-width:0; }
-.kl-kus-n { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.kl-telo { padding:12px; border-top:1px solid var(--border); animation:rowIn 0.18s ease both; display:flex; flex-direction:column; gap:14px; }
+/* Rozbalené místo — po vzoru reportu z kontroly: sekce s počtem,
+   hlavička sloupců a karta řádků, SKU i název se kopírují klikem */
+.kl-poznamka { font-size:12px; color:var(--muted); background:var(--surface2); border:1px solid var(--border);
+  border-radius:8px; padding:9px 12px; white-space:pre-wrap; line-height:1.5; }
+.kl-sek-hlava { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.kl-sek-nadpis { font-size:13px; font-weight:700; }
+.kl-sek-pocet { font-family:'DM Mono',monospace; font-size:10px; font-weight:600; padding:2px 8px; border-radius:20px; }
+.kl-sek-pocet.kl-chybi, .kl-sek-pocet.kl-smazat { border:none; }
+.kl-hromadne { margin-left:auto; display:flex; gap:6px; flex-wrap:wrap; }
+.kl-hromadne button { font:inherit; font-size:11px; background:var(--surface2); color:var(--muted); border:1px solid var(--border);
+  border-radius:6px; padding:4px 9px; cursor:pointer; transition:border-color .12s,color .12s; }
+.kl-hromadne button:hover { border-color:var(--accent); color:var(--text); }
+.kl-sloupce, .kl-kus { display:grid; grid-template-columns:120px minmax(0,1fr) 56px 150px; align-items:center; column-gap:10px; }
+.kl-sloupce { padding:0 12px 5px; font-family:'DM Mono',monospace; font-size:9px; text-transform:uppercase; letter-spacing:0.6px; color:var(--muted2); }
+.kl-sloupce span:nth-child(3) { text-align:center; }
+.kl-karta { background:var(--surface2); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.kl-kus { padding:8px 12px; border-top:1px solid var(--border); }
+.kl-karta .kl-kus:first-child { border-top:none; }
+.kl-kus-jm { display:flex; align-items:center; gap:10px; min-width:0; }
+.kl-nahled { width:44px; height:32px; flex:none; object-fit:contain; border-radius:5px; background:#fff; }
+.kl-nahled.prazdny { background:var(--surface); border:1px solid var(--border); }
+.kl-kus-t { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
+.kl-kopir { background:none; border:none; font:inherit; color:var(--text); text-align:left; cursor:pointer; padding:2px 5px;
+  margin-left:-5px; border-radius:5px; max-width:100%; transition:background .12s,color .12s; -webkit-tap-highlight-color:transparent; }
+.kl-kopir:hover { background:rgba(200,255,0,0.1); }
+.kl-kopir.kl-blesk { background:var(--accent); color:#000; }
+.kl-kus-n { font-size:13px; overflow-wrap:anywhere; }
+.kl-sku { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); }
+.kl-vel { text-align:center; font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); }
+.kl-duvod { font-size:11px; color:var(--chybi); padding-left:0; }
+.kl-kus-akce { display:flex; gap:6px; justify-content:flex-end; }
+@media(max-width:600px){
+  .kl-sloupce { display:none; }
+  .kl-kus { grid-template-columns:minmax(0,1fr) auto; row-gap:4px; }
+  .kl-kus .kl-sku-b { grid-column:1; grid-row:2; }
+  .kl-kus .kl-vel { grid-column:2; grid-row:2; text-align:right; }
+  .kl-kus-jm { grid-column:1 / -1; grid-row:1; }
+  .kl-kus-akce { grid-column:1 / -1; grid-row:3; justify-content:flex-start; }
+}
 .kl-vyrizeno { margin-top:10px; }
 .kl-bez { font-size:11px; color:var(--muted2); margin-top:12px; line-height:1.5; }
 .kl-bez span { color:var(--muted); }
@@ -5610,18 +5643,58 @@ function openKontroly(rozbalit) {
     if (co === 'misto') { otevrene = otevrene === t.dataset.misto ? null : t.dataset.misto; prekresli(); return; }
     if (co === 'hotovo') { kontrolaOdbav(t.dataset.misto, t.dataset.id); return; }
     if (co === 'detail') { zavri(); openDetail(t.dataset.id); return; }
+    if (co === 'kopirovat') {
+      var text = t.getAttribute('data-text') || '';
+      zkopiruj(text, function () {
+        t.classList.add('kl-blesk');
+        setTimeout(function () { t.classList.remove('kl-blesk'); }, 320);
+        showToast('Zkopírováno: ' + text);
+      });
+      return;
+    }
+    if (co === 'kopirovat-vse') {
+      var st = kontrolaStav(t.dataset.misto);
+      var kusy = st[t.dataset.druh] || [];
+      // Názvy po řádcích s velikostí a SKU oddělenými tabulátorem — vloží se rovnou do tabulky
+      var radky = t.dataset.co === 'sku'
+        ? kusy.map(function (it) { return it.sku || ''; }).filter(Boolean)
+        : kusy.map(function (it) { return [it.name || '', it.size ? convertSize(it.size, it.name) : '', it.sku || ''].join('\t'); });
+      zkopiruj(radky.join('\n'), function () {
+        showToast('Zkopírováno: ' + (t.dataset.co === 'sku' ? 'SKU' : 'názvy') + ' (' + radky.length + ')');
+      });
+      return;
+    }
   });
 
+  // Tlačítko, které po kliknutí zkopíruje svůj text (název, SKU) — jako v reportu
+  function kopir(text, trida) {
+    return '<button class="kl-kopir ' + trida + '" data-kl="kopirovat" data-text="' + escHtml(text)
+      + '" title="Kliknutím zkopíruješ">' + escHtml(text) + '</button>';
+  }
   function radekKusu(it, misto, druh) {
-    var meta = [it.size ? convertSize(it.size, it.name) : '', it.sku || ''].filter(Boolean).join(' · ');
     var z = getKontroly()[misto] || {};
-    var pozn = druh === 'chybi' && (z.sFajfkou || []).indexOf(it.id) !== -1
-      ? '<div class="kl-kdy">Fajfku má, ale podle kontroly tam nevisí.</div>' : '';
-    return '<div class="kl-kus"><div class="kl-kus-t"><div class="kl-kus-n">' + escHtml(it.name || '—') + '</div>'
-      + (meta ? '<div class="kl-kdy">' + escHtml(meta) + '</div>' : '') + pozn + '</div>'
-      + '<button class="kl-tl" data-kl="detail" data-id="' + escHtml(it.id) + '">Detail</button>'
+    var vel = it.size ? convertSize(it.size, it.name) : '';
+    var duvod = druh === 'chybi' && (z.sFajfkou || []).indexOf(it.id) !== -1
+      ? '<span class="kl-duvod">Fajfku má, ale podle kontroly tam nevisí.</span>' : '';
+    var nahled = it.imgUrl
+      ? '<img class="kl-nahled" src="' + escHtml(it.imgUrl) + '" alt="" loading="lazy">'
+      : '<span class="kl-nahled prazdny"></span>';
+    return '<div class="kl-kus">'
+      + '<div class="kl-sku-b">' + (it.sku ? kopir(it.sku, 'kl-sku') : '<span class="kl-sku">—</span>') + '</div>'
+      + '<div class="kl-kus-jm">' + nahled + '<div class="kl-kus-t">' + kopir(it.name || '—', 'kl-kus-n') + duvod + '</div></div>'
+      + '<div class="kl-vel">' + escHtml(vel || '—') + '</div>'
+      + '<div class="kl-kus-akce"><button class="kl-tl" data-kl="detail" data-id="' + escHtml(it.id) + '">Detail</button>'
       + '<button class="kl-hotovo" data-kl="hotovo" data-id="' + escHtml(it.id) + '" data-misto="' + escHtml(misto) + '">'
-      + (druh === 'chybi' ? 'Hotovo' : 'Smazáno') + '</button></div>';
+      + (druh === 'chybi' ? 'Hotovo' : 'Smazáno') + '</button></div></div>';
+  }
+  // Sekce s nadpisem, počtem, hromadným kopírováním a kartou řádků
+  function sekceKusu(nadpis, trida, kusy, misto, druh) {
+    return '<div class="kl-sekce-blok"><div class="kl-sek-hlava"><span class="kl-sek-nadpis">' + escHtml(nadpis) + '</span>'
+      + '<span class="kl-sek-pocet ' + trida + '">' + kusy.length + '</span>'
+      + '<span class="kl-hromadne"><button data-kl="kopirovat-vse" data-co="sku" data-misto="' + escHtml(misto) + '" data-druh="' + druh + '">Kopírovat SKU</button>'
+      + '<button data-kl="kopirovat-vse" data-co="nazvy" data-misto="' + escHtml(misto) + '" data-druh="' + druh + '">Kopírovat názvy</button></span></div>'
+      + '<div class="kl-sloupce"><span>SKU</span><span>Název</span><span>Vel.</span><span></span></div>'
+      + '<div class="kl-karta">' + kusy.map(function (it) { return radekKusu(it, misto, druh); }).join('') + '</div></div>';
   }
 
   function prekresli() {
@@ -5657,14 +5730,8 @@ function openKontroly(rozbalit) {
       if (rozb) {
         h += '<div class="kl-telo">';
         if (z.poznamka) h += '<div class="kl-poznamka">' + escHtml(z.poznamka) + '</div>';
-        if (st.chybi.length) {
-          h += '<div class="kl-sekce">Chybí na ' + escHtml(m) + '</div>'
-            + st.chybi.map(function (it) { return radekKusu(it, m, 'chybi'); }).join('');
-        }
-        if (st.smazat.length) {
-          h += '<div class="kl-sekce">Prodané, smazat z ' + escHtml(m) + '</div>'
-            + st.smazat.map(function (it) { return radekKusu(it, m, 'smazat'); }).join('');
-        }
+        if (st.chybi.length) h += sekceKusu('Přidat na ' + m, 'kl-chybi', st.chybi, m, 'chybi');
+        if (st.smazat.length) h += sekceKusu('Smazat z ' + m, 'kl-smazat', st.smazat, m, 'smazat');
         if (!st.chybi.length && !st.smazat.length) h += '<div class="kl-kdy">Nic k vyřízení.</div>';
         if (st.vyrizeno) h += '<div class="kl-kdy kl-vyrizeno">Vyřízeno od kontroly: ' + st.vyrizeno + '</div>';
         h += '</div>';
