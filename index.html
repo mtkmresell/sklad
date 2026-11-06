@@ -688,7 +688,16 @@ select:hover{border-color:var(--accent);}
 .kl-sipka { color:var(--muted2); font-size:10px; transition:transform 0.15s; }
 .kl-misto.rozbaleno .kl-sipka { transform:rotate(90deg); color:var(--accent); }
 .kl-jmeno { font-weight:700; font-size:14px; }
-.kl-stara { color:var(--chybi); }
+.kl-stara { color:var(--chybi); font-weight:600; }
+/* Místo bez nové kontroly přes KONTROLA_STARA_DNI — ať je to vidět na první pohled */
+.kl-misto.kl-zastarala { border-color:rgba(255,140,26,0.55); box-shadow:inset 3px 0 0 var(--chybi); }
+.kl-upominka { font-family:'DM Mono',monospace; font-size:10px; color:#000; background:var(--chybi);
+  border-radius:4px; padding:1px 6px; white-space:nowrap; }
+a.kl-jmeno { color:var(--text); text-decoration:none; }
+a.kl-jmeno:hover { color:var(--accent); text-decoration:underline; }
+#btnKontroly.kl-pozor { border-color:rgba(255,140,26,0.7); color:var(--chybi); }
+/* Křížek jen na dotykových zařízeních — na počítači zavírá Escape a klik mimo okno */
+@media (hover:hover) and (pointer:fine){ .kl-modal .xb { display:none; } }
 .kl-pocty { display:flex; gap:6px; margin-left:auto; }
 .kl-pocet-chip { font-family:'DM Mono',monospace; font-size:10px; padding:1px 7px; border-radius:4px; white-space:nowrap; }
 .kl-telo { padding:4px 12px 12px; border-top:1px solid var(--border); animation:rowIn 0.18s ease both; }
@@ -5348,7 +5357,7 @@ function _provedPozadavky(snap) {
 ══════════════════════════════════════════════════════════════════════ */
 var SK_KONTROLY = 'sklad_kontroly_v1';
 var KONTROLA_NEJVIC = 500;
-var KONTROLA_STARA_DNI = 14;   // od kolika dní se datum kontroly obarví
+var KONTROLA_STARA_DNI = 5;    // víc dní bez nové kontroly = místo se zvýrazní (majitel, 6. 11. 2026)
 
 var _kParse = { raw: null, val: {} };
 function getKontroly() {
@@ -5386,6 +5395,7 @@ function _kontrolaZListecku(v) {
     misto: k.misto,
     datum: isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString(),
     report: report,
+    web: (typeof k.web === 'string' && /^https?:\/\//i.test(k.web) && k.web.length <= 500) ? k.web : '',
     chybi: ids(k.chybi),
     smazat: ids(k.smazat),
     poznamka: typeof k.poznamka === 'string' ? k.poznamka.slice(0, 500) : ''
@@ -5404,7 +5414,9 @@ function _kontrolaPrijmi(k) {
   });
   var nove = {};
   Object.keys(vse).forEach(function (m) { nove[m] = vse[m]; });
-  nove[k.misto] = { misto: k.misto, datum: k.datum, report: k.report, chybi: k.chybi, smazat: k.smazat,
+  // Odkaz na e-shop se drží i přes kontrolu, která ho nepřinesla (starší skill)
+  nove[k.misto] = { misto: k.misto, datum: k.datum, report: k.report, web: k.web || (stara && stara.web) || '',
+    chybi: k.chybi, smazat: k.smazat,
     sFajfkou: sFajfkou, hotovo: [], poznamka: k.poznamka, prijato: new Date().toISOString() };
   _ulozKontroly(nove);
   return nove[k.misto];
@@ -5507,7 +5519,7 @@ function kontrolaDetailHtml(it) {
       text += '<span class="kl-kdy kl-blok">Fajfku má, ale podle kontroly tam nevisí.</span>';
     }
     var odkaz = x.z.report ? '<a class="kl-odkaz" href="' + escHtml(x.z.report)
-      + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Report ↗</a>' : '';
+      + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Report</a>' : '';
     h += '<div class="kl-radek"><span>' + text + '</span><span class="kl-akce">' + odkaz
       + '<button class="kl-hotovo" data-action="kontrolaodbav" data-id="' + escHtml(it.id) + '" data-misto="'
       + escHtml(x.misto) + '">' + (x.druh === 'chybi' ? 'Hotovo' : 'Smazáno') + '</button></span></div>';
@@ -5542,6 +5554,23 @@ function kontrolyTlacitko() {
   var n = jeUctetni() ? 0 : kontrolyPocetOtevrenych();
   el.textContent = n > 99 ? '99+' : String(n);
   el.style.display = n ? '' : 'none';
+  var btn = document.getElementById('btnKontroly');
+  if (!btn) return;
+  var stare = jeUctetni() ? [] : kontrolyZastarale();
+  btn.classList.toggle('kl-pozor', stare.length > 0);
+  btn.setAttribute('data-tip', stare.length
+    ? 'Kontroly listingů — přes ' + dnyText(KONTROLA_STARA_DNI) + ' bez kontroly: ' + stare.join(', ')
+    : 'Kontroly listingů');
+}
+
+/* Místa, jejichž poslední kontrola je starší než KONTROLA_STARA_DNI.
+   Jen ta, která už někdy kontrolu měla — místo, kde se nekontroluje
+   vůbec, by jinak svítilo napořád a varování by se přestalo číst. */
+function kontrolyZastarale() {
+  var vse = getKontroly();
+  return Object.keys(vse).filter(function (m) {
+    return vse[m] && vse[m].datum && jeMistoProdeje(m) && _klStari(vse[m].datum) > KONTROLA_STARA_DNI;
+  });
 }
 
 /* Okno Kontroly listingů: místa s poslední kontrolou, co z ní ještě
@@ -5572,8 +5601,10 @@ function openKontroly(rozbalit) {
   document.addEventListener('keydown', esc);
   ov.addEventListener('click', function (e) {
     if (e.target === ov) { zavri(); return; }
+    // Odkaz (report, e-shop) se otevře a nerozbalí přitom místo
+    if (e.target.closest('a')) return;
     var t = e.target.closest('[data-kl]');
-    if (!t || t.tagName === 'A') return;
+    if (!t) return;
     var co = t.getAttribute('data-kl');
     if (co === 'zavrit') { zavri(); return; }
     if (co === 'misto') { otevrene = otevrene === t.dataset.misto ? null : t.dataset.misto; prekresli(); return; }
@@ -5607,16 +5638,21 @@ function openKontroly(rozbalit) {
     mista.forEach(function (m) {
       var z = vse[m], st = kontrolaStav(m), dni = _klStari(z.datum);
       var rozb = otevrene === m;
+      var stara = dni > KONTROLA_STARA_DNI;
       var pocty = (st.chybi.length ? '<span class="kl-pocet-chip kl-chybi">+ ' + st.chybi.length + ' chybí</span>' : '')
         + (st.smazat.length ? '<span class="kl-pocet-chip kl-smazat">✕ ' + st.smazat.length + ' smazat</span>' : '')
         + (!st.chybi.length && !st.smazat.length ? '<span class="kl-pocet-chip kl-ok">✓ sedí</span>' : '');
-      h += '<div class="kl-misto' + (rozb ? ' rozbaleno' : '') + '">'
+      var jmeno = z.web
+        ? '<a class="kl-jmeno" href="' + escHtml(z.web) + '" target="_blank" rel="noopener" title="Otevřít ' + escHtml(m) + '">' + escHtml(m) + '</a>'
+        : '<span class="kl-jmeno">' + escHtml(m) + '</span>';
+      h += '<div class="kl-misto' + (rozb ? ' rozbaleno' : '') + (stara ? ' kl-zastarala' : '') + '">'
         + '<div class="kl-hlava" data-kl="misto" data-misto="' + escHtml(m) + '">'
-        + '<span class="kl-sipka">▸</span><span class="kl-jmeno">' + escHtml(m) + '</span>'
-        + '<span class="kl-kdy' + (dni >= KONTROLA_STARA_DNI ? ' kl-stara' : '') + '">' + _klDatum(z.datum)
+        + '<span class="kl-sipka">▸</span>' + jmeno
+        + '<span class="kl-kdy' + (stara ? ' kl-stara' : '') + '">' + _klDatum(z.datum)
         + (dni === 0 ? ' · dnes' : dni === 1 ? ' · včera' : ' · před ' + dnyText(dni)) + '</span>'
+        + (stara ? '<span class="kl-upominka">Zkontrolovat znovu</span>' : '')
         + '<span class="kl-pocty">' + pocty + '</span>'
-        + (z.report ? '<a class="kl-odkaz" href="' + escHtml(z.report) + '" target="_blank" rel="noopener">Report ↗</a>' : '')
+        + (z.report ? '<a class="kl-odkaz" href="' + escHtml(z.report) + '" target="_blank" rel="noopener">Report</a>' : '')
         + '</div>';
       if (rozb) {
         h += '<div class="kl-telo">';

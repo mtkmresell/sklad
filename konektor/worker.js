@@ -466,6 +466,12 @@ async function skladKontrola(env, a) {
     pozor.push({ duvod: 'odkaz na report se neuložil — musí začínat https:// a mít nejvýš 500 znaků' });
     report = '';
   }
+  // Odkaz na samotný e-shop (profil prodejce) — v aplikaci je pod ním název místa
+  let web = typeof a.web === 'string' ? a.web.trim() : '';
+  if (web && (!/^https:\/\//i.test(web) || web.length > 500)) {
+    pozor.push({ duvod: 'odkaz na e-shop se neuložil — musí začínat https:// a mít nejvýš 500 znaků' });
+    web = '';
+  }
   const d = a.datum ? new Date(a.datum) : new Date();
   const datum = isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
   const poznamka = typeof a.poznamka === 'string' ? a.poznamka.slice(0, 500) : '';
@@ -473,7 +479,7 @@ async function skladKontrola(env, a) {
   /* Ukládá se i čistá kontrola bez nálezů — „Hypeboost 30. 10.: vše
      sedí" je stejně cenná informace jako seznam chyb. */
   const dokument = await zapisPozadavek(env, token,
-    { kontrola: { misto, datum, report, chybi, smazat, poznamka } });
+    { kontrola: { misto, datum, report, web, chybi, smazat, poznamka } });
   return {
     stav: 'zadano',
     dokument,
@@ -786,6 +792,9 @@ const NASTROJE = [
           + 'např. "Hypeboost".' },
         report: { type: 'string', description: 'Odkaz na report (artifact), https://… '
           + 'Volitelné, ale bez něj z aplikace report neotevřeš.' },
+        web: { type: 'string', description: 'Odkaz na kontrolovaný e-shop nebo profil '
+          + 'prodejce, https://… (ten, který skill při kontrole otevírá). V aplikaci se '
+          + 'pod ním proklikne název místa.' },
         datum: { type: 'string', description: 'Kdy kontrola proběhla (RRRR-MM-DD). '
           + 'Výchozí teď.' },
         chybi: {

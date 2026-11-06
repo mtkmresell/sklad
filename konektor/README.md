@@ -682,6 +682,7 @@ V detailu kusu je odkaz na report a Hotovo / Smazáno.
 
 ```
 sklad_kontrola  misto: "Hypeboost", report: "https://claude.ai/artifact/…",
+                web: "https://hypeboost.com/…",
                 chybi:  [{ sku: "HQ4307-600", nazev: "…", velikost: "46" }],
                 smazat: [{ sku: "DD1391-100", velikost: "42" }],
                 poznamka: "Payouty: nejlevnější u 12 z 30"
@@ -705,7 +706,8 @@ předchozí.
 nedozví:
 
 > Po publikaci reportu zavolej `sklad_kontrola`: `misto` = název místa
-> prodeje ze SKLAD., `report` = odkaz na artifact, `datum` = DATE,
+> prodeje ze SKLAD., `report` = odkaz na artifact, `web` = odkaz na
+> kontrolovaný e-shop nebo profil (ten, který kontrola otevírá), `datum` = DATE,
 > `chybi` = položky z Přidat jako `{sku, nazev, velikost}`, `smazat` =
 > položky ze Smazat jako `{sku, nazev, velikost}` (Ověřit tam nepatří),
 > `poznamka` = jednou větou payouty. Volej to i při čisté kontrole.

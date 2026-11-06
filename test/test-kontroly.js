@@ -171,6 +171,11 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   v = await nastroj({ misto: 'Hypeboost', report: 'javascript:alert(1)' });
   shoda('jiný odkaz než https se neuloží', v.listek.kontrola.report, '');
   ok('a řekne se to', (v.data.pozor || []).some(p => /https/.test(p.duvod)), JSON.stringify(v.data.pozor));
+  v = await nastroj({ misto: 'Hypeboost', web: 'https://hypeboost.com/cs/my-sales' });
+  shoda('odkaz na e-shop se uloží', v.listek.kontrola.web, 'https://hypeboost.com/cs/my-sales');
+  v = await nastroj({ misto: 'Hypeboost', web: 'javascript:alert(1)' });
+  shoda('a jiný než https ne', v.listek.kontrola.web, '');
+  ok('i to se řekne', (v.data.pozor || []).some(p => /e-shop/.test(p.duvod)), JSON.stringify(v.data.pozor));
   const mnoho = []; for (let i = 0; i < 501; i++) mnoho.push('s1');
   v = await nastroj({ misto: 'Hypeboost', chybi: mnoho });
   ok('hromada naráz se zarazí', v.data && v.data.stav === 'moc_polozek' && zapsano.length === 0, v.text.slice(0, 160));
@@ -294,6 +299,7 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   shoda('jen texty, bez duplicit', filtr[1].chybi, ['a']);
   shoda('rozbitý seznam je prázdný', filtr[1].smazat, []);
   shoda('javascript: se do odkazu nedostane', filtr[1].report, '');
+  shoda('ani do odkazu na e-shop', await page.evaluate(() => _kontrolaZListecku({ kontrola: { misto: 'Hypeboost', web: 'javascript:alert(1)' } }).web), '');
   ok('poznámka se usekne', filtr[1].poznamka.length === 500);
   ok('nic navíc', !('navic' in filtr[1]));
   ok('nesmyslné datum se nahradí platným', !isNaN(new Date(filtr[1].datum).getTime()));
@@ -346,6 +352,79 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
     const ov = document.getElementById('kontrolyOv'); return { je: !!ov, rozb: ov && (ov.querySelector('.kl-misto.rozbaleno .kl-jmeno') || {}).textContent }; });
   ok('klik na značku otevře okno rovnou u toho místa', okno.je && okno.rozb === 'Hypeboost', JSON.stringify(okno));
   await page.evaluate(() => document.getElementById('kontrolyOv').remove());
+
+  sekce('12b) Odkaz na e-shop, Report bez šipky, stará kontrola');
+  /* Majitel 6. 11. 2026: název místa vede na e-shop (odkaz posílá skill),
+     u Reportu žádná šipka, na počítači bez křížku a kontrola starší než
+     pět dní má být vidět i bez otevírání okna. */
+  await proved([kontrola({ misto: 'Hypeboost', datum: ted(), report: 'https://claude.ai/artifact/x',
+    web: 'https://hypeboost.com/cs/my-sales', chybi: ['a'] })]);
+  await proved([kontrola({ misto: 'Section', datum: new Date(Date.now() - 5 * DEN).toISOString() })]);
+  okno = await page.evaluate(() => {
+    openKontroly();
+    const ov = document.getElementById('kontrolyOv');
+    // Odkazy se v testu neotevírají, jen se zjistí, co by udělaly
+    ov.addEventListener('click', e => { if (e.target.closest('a')) e.preventDefault(); }, true);
+    const misto = n => [...ov.querySelectorAll('.kl-misto')].find(m => m.querySelector('.kl-jmeno').textContent === n);
+    const hb = misto('Hypeboost'), sec = misto('Section');
+    const jm = hb.querySelector('.kl-jmeno');
+    jm.click();
+    const out = { tag: jm.tagName, href: jm.getAttribute('href'), cil: jm.getAttribute('target'),
+      rozbaleno: !!document.querySelector('#kontrolyOv .kl-misto.rozbaleno'),
+      report: hb.querySelector('.kl-odkaz').textContent, secTag: sec.querySelector('.kl-jmeno').tagName,
+      secStara: sec.classList.contains('kl-zastarala'), hbStara: hb.classList.contains('kl-zastarala'),
+      pozor: document.getElementById('btnKontroly').classList.contains('kl-pozor'),
+      krizek: getComputedStyle(ov.querySelector('.kl-modal .xb')).display };
+    document.querySelector('#kontrolyOv .kl-odkaz').click();
+    out.poReportu = !!document.querySelector('#kontrolyOv .kl-misto.rozbaleno');
+    return out;
+  });
+  ok('název místa je odkaz na e-shop v nové záložce', okno.tag === 'A' && okno.href === 'https://hypeboost.com/cs/my-sales' && okno.cil === '_blank', JSON.stringify(okno));
+  ok('klik na název místo nerozbalí', !okno.rozbaleno);
+  ok('ani klik na Report', !okno.poReportu);
+  shoda('Report je bez šipky', okno.report, 'Report');
+  shoda('místo bez odkazu na e-shop je jen text', okno.secTag, 'SPAN');
+  ok('přesně pět dní ještě nevadí', !okno.secStara && !okno.pozor, JSON.stringify(okno));
+  shoda('na počítači není křížek', okno.krizek, 'none');
+  await page.evaluate(() => document.getElementById('kontrolyOv').remove());
+
+  // Starší kontrola novější nepřepíše (sekce 10), takže pětidenní nejdřív pryč
+  await page.evaluate(() => { const v = JSON.parse(localStorage.getItem('sklad_kontroly_v1')); delete v.Section;
+    localStorage.setItem('sklad_kontroly_v1', JSON.stringify(v)); });
+  await proved([kontrola({ misto: 'Section', datum: new Date(Date.now() - 6 * DEN).toISOString() })]);
+  okno = await page.evaluate(() => {
+    renderItems(); openKontroly();
+    const ov = document.getElementById('kontrolyOv');
+    const misto = n => [...ov.querySelectorAll('.kl-misto')].find(m => m.querySelector('.kl-jmeno').textContent === n);
+    const btn = document.getElementById('btnKontroly');
+    const out = { sec: misto('Section').classList.contains('kl-zastarala'), upominka: !!misto('Section').querySelector('.kl-upominka'),
+      hb: misto('Hypeboost').classList.contains('kl-zastarala'), pozor: btn.classList.contains('kl-pozor'), tip: btn.getAttribute('data-tip') };
+    ov.remove();
+    return out;
+  });
+  ok('šest dní bez kontroly se zvýrazní', okno.sec && okno.upominka, JSON.stringify(okno));
+  ok('čerstvá kontrola ne', !okno.hb);
+  ok('a tlačítko v hlavičce upozorní i se jménem místa', okno.pozor && /Section/.test(okno.tip) && !/Hypeboost/.test(okno.tip), okno.tip);
+  ok('místo, které se nikdy nekontrolovalo, nevaruje', !/StockX/.test(okno.tip), okno.tip);
+
+  await proved([kontrola({ misto: 'Hypeboost', datum: ted(), report: 'https://claude.ai/artifact/2ntTLB67p7f64Aj13JL5vg', chybi: ['a'] })]);
+  shoda('kontrola bez odkazu si ten předchozí nechá',
+    await page.evaluate(() => JSON.parse(localStorage.getItem('sklad_kontroly_v1')).Hypeboost.web), 'https://hypeboost.com/cs/my-sales');
+
+  // Na telefonu se okno zavírá křížkem — klávesnici ani myš tam nemá
+  const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const mpage = await mctx.newPage();
+  await mpage.route('**/firebasejs/**', route => route.abort());
+  await mctx.addInitScript((m) => {
+    localStorage.setItem('sklad_plat_groups_v1', JSON.stringify(m));
+    localStorage.setItem('sklad_v3', '[]');
+    localStorage.setItem('sklad_kontroly_v1', JSON.stringify({ Hypeboost: { misto: 'Hypeboost', datum: new Date().toISOString(), chybi: [], smazat: [], hotovo: [] } }));
+  }, MISTA);
+  await mpage.goto('file://' + path.resolve(__dirname, '..', 'index.html'), { waitUntil: 'domcontentloaded' });
+  await mpage.waitForFunction(() => typeof openKontroly === 'function', { timeout: 20000 });
+  shoda('na mobilu křížek zůstává', await mpage.evaluate(() => { openKontroly();
+    return getComputedStyle(document.querySelector('#kontrolyOv .kl-modal .xb')).display; }) !== 'none', true);
+  await mctx.close();
 
   sekce('13) Detail kusu');
   let det = await page.evaluate(() => { openDetail('a'); const b = document.querySelector('#detailContent .kl-box');

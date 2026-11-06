@@ -462,6 +462,21 @@ který majitel nikdy nepoužil (30. 10. 2026).
   Účetní kontroly nevidí ani neodklikává (`kontroly`, `kontrolaodbav`
   nejsou v `UCETNI_AKCE`).
 
+Úpravy majitele (6. 11. 2026), nevracej je:
+
+- **Název místa je odkaz na e-shop** (`web`). Odkaz zná jen skill, takže
+  ho posílá v `sklad_kontrola`; kontrola bez něj si nechá ten předchozí.
+  Do `href` jde jen http(s). Klik na odkaz (název i Report) **nerozbalí
+  místo** — rozcestník v okně odkazy přeskakuje.
+- **Report je bez šipky** — jen slovo.
+- **Křížek jen na dotykovém zařízení** (`hover:hover and pointer:fine`
+  ho schová). Na počítači se zavírá Escapem nebo klikem mimo okno.
+- **Víc než `KONTROLA_STARA_DNI` (5) dní bez kontroly se zvýrazní**:
+  místo v okně dostane oranžový okraj a štítek „Zkontrolovat znovu",
+  tlačítko v hlavičce oranžově zbarví a v bublině vyjmenuje místa
+  (`kontrolyZastarale`). Jen místa, která už kontrolu měla — co se
+  nekontroluje vůbec, by svítilo napořád a varování by se přestalo číst.
+
 Krok „zavolej `sklad_kontrola`" musí být **v každém kontrolním skillu**;
 skilly žijí v Claudovi u majitele, ne v repozitáři. Znění kroku je
 v `konektor/README.md`. Hlídá to `test-kontroly.js`.
@@ -897,7 +912,7 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 | co | kde | stav |
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **nasazeno 31. 10.** (verze `dc8e92a`) — ověřeno: v chatu přibyl nástroj `sklad_kontrola`, který starší verze nemá, a `pika_prodeje` vrací vystavené kusy z Pikastore i Purekickz. Tím dorazily i opravy mailů o potížích (`replaced_by_submission_piece`, pomlčka ve velikosti, `pkNeznaVelikost`) a pondělní obhlídka s „Purekickz nevezme". Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (6. 11.) — v repozitáři je nový odkaz „Otevřít sklad" na `sklad.mtkm-resell.workers.dev` a pole `web` u `sklad_kontrola` (odkaz na e-shop pod názvem místa v Kontrolách listingů; skilly ho musí posílat). Předtím **nasazeno 31. 10.** (verze `dc8e92a`) — ověřeno: v chatu přibyl nástroj `sklad_kontrola`, který starší verze nemá, a `pika_prodeje` vrací vystavené kusy z Pikastore i Purekickz. Tím dorazily i opravy mailů o potížích (`replaced_by_submission_piece`, pomlčka ve velikosti, `pkNeznaVelikost`) a pondělní obhlídka s „Purekickz nevezme". Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
@@ -937,7 +952,7 @@ Na staré adrese jdou vytáhnout v konzoli:
 `localStorage.getItem('sklad_konektor_url_v1')`.
 
 **Zbývá (připomínej):**
-- nasadit konektor (kvůli odkazu v mailech),
+- nasadit konektor (kvůli odkazu v mailech a poli `web` u kontrol),
 - Firebase → Authentication → Authorized domains: přidat novou doménu,
 - přístup pro účetního: One-time PIN + pravidlo Allow → Emails,
 - **až pak** repozitář na soukromý — pořadí je důležité, minule se tím
