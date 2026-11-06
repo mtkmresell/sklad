@@ -176,6 +176,10 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   v = await nastroj({ misto: 'Hypeboost', web: 'javascript:alert(1)' });
   shoda('a jiný než https ne', v.listek.kontrola.web, '');
   ok('i to se řekne', (v.data.pozor || []).some(p => /e-shop/.test(p.duvod)), JSON.stringify(v.data.pozor));
+  v = await nastroj({ misto: 'Hypeboost', nejde: [{ sku: 'HQ4307-600', velikost: '46', duvod: 'Není v jejich katalogu' },
+    { sku: 'NEEXISTUJE-1', velikost: '40', duvod: 'x' }] });
+  shoda('kus, který nejde nalistovat, se dohledá i s důvodem', v.listek.kontrola.nejde, [{ id: 's1', duvod: 'Není v jejich katalogu' }]);
+  ok('a co se nedohledá, je v nelze', (v.data.nelze || []).some(n => n.seznam === 'nejde'), JSON.stringify(v.data.nelze));
   const mnoho = []; for (let i = 0; i < 501; i++) mnoho.push('s1');
   v = await nastroj({ misto: 'Hypeboost', chybi: mnoho });
   ok('hromada naráz se zarazí', v.data && v.data.stav === 'moc_polozek' && zapsano.length === 0, v.text.slice(0, 160));
@@ -345,8 +349,7 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
     radek.querySelector('.kl-kus-n').click(); out.nazev = out.posledni;
     const sku = radek.querySelector('.kl-sku'); sku.click(); out.sku = out.posledni; out.blesk = sku.classList.contains('kl-blesk');
     out.rozbaleno = !!document.querySelector('#kontrolyOv .kl-misto.rozbaleno');
-    document.querySelector('#kontrolyOv [data-kl="kopirovat-vse"][data-co="sku"][data-druh="chybi"]').click(); out.vseSku = out.posledni;
-    document.querySelector('#kontrolyOv [data-kl="kopirovat-vse"][data-co="nazvy"][data-druh="smazat"]').click(); out.vseNazvy = out.posledni;
+    out.hromadne = ov.querySelectorAll('[data-kl="kopirovat-vse"]').length;
     out.sloupce = [...ov.querySelectorAll('.kl-sloupce')][0].textContent;
     window.zkopiruj = puvodni;
     return out;
@@ -355,8 +358,7 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   shoda('klik na SKU taky', kop.sku, 'FV5029-010');
   ok('a zkopírované krátce blikne', kop.blesk);
   ok('kopírování místo nezavře', kop.rozbaleno);
-  shoda('Kopírovat SKU dá všechny SKU sekce pod sebe', kop.vseSku, 'FV5029-010\nHQ4307-600');
-  ok('Kopírovat názvy dá název, velikost a SKU', /^Dunk Low Panda\t[^\t]*42[^\t]*\tDD1391-100$/.test(kop.vseNazvy), JSON.stringify(kop.vseNazvy));
+  shoda('u Přidat a Smazat hromadné kopírování není', kop.hromadne, 0);
   ok('sekce má hlavičku sloupců', /SKU/.test(kop.sloupce) && /Název/.test(kop.sloupce), kop.sloupce);
   /* Jen okno — tabulka vkládá název kusu odjakživa bez escapování
      (názvy píše majitel sám), to je mimo tuhle část. */
@@ -376,6 +378,46 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
     const ov = document.getElementById('kontrolyOv'); return { je: !!ov, rozb: ov && (ov.querySelector('.kl-misto.rozbaleno .kl-jmeno') || {}).textContent }; });
   ok('klik na značku otevře okno rovnou u toho místa', okno.je && okno.rozb === 'Hypeboost', JSON.stringify(okno));
   await page.evaluate(() => document.getElementById('kontrolyOv').remove());
+
+  sekce('12a) Kusy, které nalistovat nejde');
+  /* Majitel 6. 11. 2026: hromadné kopírování SKU a názvů jen u nich —
+     ty, co jdou, se vyřizují po jednom. */
+  shoda('z lístečku se bere jen id a důvod', await page.evaluate(() => _kontrolaZListecku({ kontrola: { misto: 'Hypeboost',
+    nejde: [{ id: 'a', duvod: 'Není v katalogu', navic: 1 }, { id: 'a', duvod: 'dvakrát' }, 'nesmysl', { id: 5 }] } }).nejde),
+    [{ id: 'a', duvod: 'Není v katalogu' }]);
+  await proved([kontrola({ misto: 'Hypeboost', datum: ted(), chybi: ['b'], nejde: [{ id: 'a', duvod: 'Není v jejich katalogu' }, { id: 'c', duvod: 'prodaný' }] })]);
+  const nj = await page.evaluate(() => {
+    renderItems();
+    const out = { pocet: document.getElementById('kontrolyPocet').textContent };
+    switchTab('stock'); renderItems();
+    out.znackaA = !!document.querySelector('#itemsGrid tr[data-id="a"] .kl-znacka');
+    openKontroly('Hypeboost');
+    const ov = document.getElementById('kontrolyOv');
+    const sekce = [...ov.querySelectorAll('.kl-sekce-blok')];
+    const s = sekce.find(x => /Nejde nalistovat/.test(x.textContent));
+    out.je = !!s;
+    out.kusy = s ? [...s.querySelectorAll('.kl-kus-n')].map(e => e.textContent) : [];
+    out.duvod = s ? (s.querySelector('.kl-duvod-nejde') || {}).textContent : '';
+    out.tlacitka = s ? s.querySelectorAll('[data-kl="kopirovat-vse"]').length : 0;
+    out.jinde = sekce.filter(x => x !== s).reduce((n, x) => n + x.querySelectorAll('[data-kl="kopirovat-vse"]').length, 0);
+    out.cip = (ov.querySelector('.kl-pocet-chip.kl-nejde') || {}).textContent;
+    const puvodni = window.zkopiruj;
+    window.zkopiruj = function (t, cb) { out.posledni = t; if (cb) cb(); };
+    s.querySelector('[data-co="sku"]').click(); out.vseSku = out.posledni;
+    s.querySelector('[data-co="nazvy"]').click(); out.vseNazvy = out.posledni;
+    window.zkopiruj = puvodni;
+    ov.remove();
+    return out;
+  });
+  ok('sekce Nejde nalistovat je vidět', nj.je, JSON.stringify(nj));
+  shoda('jen kus skladem — prodaný tam není', nj.kusy, ['Jordan 4 Black Cat']);
+  shoda('s důvodem od skillu', nj.duvod, 'Není v jejich katalogu');
+  shoda('hromadné kopírování je jen tady', [nj.tlacitka, nj.jinde], [2, 0]);
+  shoda('Kopírovat SKU', nj.vseSku, 'FV5029-010');
+  ok('Kopírovat názvy dá název, velikost a SKU', /^Jordan 4 Black Cat\t[^\t]*44[^\t]*\tFV5029-010$/.test(nj.vseNazvy || ''), JSON.stringify(nj.vseNazvy));
+  ok('v hlavě místa je počet', /1 nejde/.test(nj.cip || ''), nj.cip);
+  shoda('do počtu u tlačítka se nepočítá', nj.pocet, '1');
+  ok('a značku u kusu nedostane', !nj.znackaA);
 
   sekce('12b) Odkaz na e-shop, Report bez šipky, stará kontrola');
   /* Majitel 6. 11. 2026: název místa vede na e-shop (odkaz posílá skill),

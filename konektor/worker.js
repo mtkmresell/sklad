@@ -426,7 +426,8 @@ async function skladKontrola(env, a) {
   if (!misto) return { stav: 'nic', poznamka: 'Chybí `misto` — název místa prodeje, jak ho má majitel v nastavení.' };
   const chybiZ = Array.isArray(a.chybi) ? a.chybi : [];
   const smazatZ = Array.isArray(a.smazat) ? a.smazat : [];
-  if (chybiZ.length > KONTROLA_NEJVIC || smazatZ.length > KONTROLA_NEJVIC) {
+  const nejdeZ = Array.isArray(a.nejde) ? a.nejde : [];
+  if (chybiZ.length > KONTROLA_NEJVIC || smazatZ.length > KONTROLA_NEJVIC || nejdeZ.length > KONTROLA_NEJVIC) {
     return { stav: 'moc_polozek', poznamka: 'Najednou nejvýš ' + KONTROLA_NEJVIC + ' položek v každém seznamu.' };
   }
   const token = await prihlas(env);
@@ -460,6 +461,17 @@ async function skladKontrola(env, a) {
   };
   const chybi = prevod(chybiZ, 'chybi');
   const smazat = prevod(smazatZ, 'smazat');
+  /* Kusy skladem, které na místě vystavit nejde (model v katalogu chybí,
+     místo ho nebere…). Hledají se jako „chybí", ale nesou důvod a fajfka
+     se u nich nehlídá — majitel je jen potřebuje vidět a zkopírovat. */
+  const nejde = [];
+  for (const z of nejdeZ) {
+    const n = kontrolaNajdi(polozky, z, 'chybi');
+    if (!n.it) { nelze.push({ seznam: 'nejde', zaznam: z, duvod: n.duvod }); continue; }
+    if (nejde.some(x => x.id === n.it.id)) continue;
+    const duvod = z && typeof z.duvod === 'string' ? z.duvod.trim().slice(0, 200) : '';
+    nejde.push({ id: n.it.id, duvod });
+  }
 
   let report = typeof a.report === 'string' ? a.report.trim() : '';
   if (report && (!/^https:\/\//i.test(report) || report.length > 500)) {
@@ -479,13 +491,14 @@ async function skladKontrola(env, a) {
   /* Ukládá se i čistá kontrola bez nálezů — „Hypeboost 30. 10.: vše
      sedí" je stejně cenná informace jako seznam chyb. */
   const dokument = await zapisPozadavek(env, token,
-    { kontrola: { misto, datum, report, web, chybi, smazat, poznamka } });
+    { kontrola: { misto, datum, report, web, chybi, smazat, nejde, poznamka } });
   return {
     stav: 'zadano',
     dokument,
     misto,
     chybi: chybi.length,
     smazat: smazat.length,
+    nejde: nejde.length,
     nelze: nelze.length ? nelze : undefined,
     pozor: pozor.length ? pozor : undefined,
     poznamka: 'Výsledek kontroly je uložený. **Převezme ho aplikace**, ne konektor — když ji '
@@ -812,6 +825,15 @@ const NASTROJE = [
           items: { type: 'object', properties: {
             id: { type: 'string' }, sku: { type: 'string' },
             nazev: { type: 'string' }, velikost: { type: 'string' } } },
+        },
+        nejde: {
+          type: 'array',
+          description: 'Kusy skladem, které na tomhle místě nalistovat nejdou (model '
+            + 'není v jejich katalogu, chybí velikost, místo ho nebere…), s krátkým důvodem.',
+          items: { type: 'object', properties: {
+            id: { type: 'string' }, sku: { type: 'string' },
+            nazev: { type: 'string' }, velikost: { type: 'string' },
+            duvod: { type: 'string' } } },
         },
         poznamka: { type: 'string', description: 'Krátké shrnutí, které má být vidět '
           + 'v aplikaci — třeba payouty („nejlevnější u 12 z 30"). Nejvýš 500 znaků.' },

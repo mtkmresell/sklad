@@ -710,6 +710,8 @@ nedozví:
 > kontrolovaný e-shop nebo profil (ten, který kontrola otevírá), `datum` = DATE,
 > `chybi` = položky z Přidat jako `{sku, nazev, velikost}`, `smazat` =
 > položky ze Smazat jako `{sku, nazev, velikost}` (Ověřit tam nepatří),
+> `nejde` = kusy skladem, které tam nalistovat nejdou, jako
+> `{sku, nazev, velikost, duvod}`,
 > `poznamka` = jednou větou payouty. Volej to i při čisté kontrole.
 
 ## Bezpečnost

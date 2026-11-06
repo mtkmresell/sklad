@@ -731,6 +731,9 @@ a.kl-jmeno:hover { color:var(--accent); text-decoration:underline; }
 .kl-sku { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); }
 .kl-vel { text-align:center; font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); }
 .kl-duvod { font-size:11px; color:var(--chybi); padding-left:0; }
+.kl-duvod-nejde { color:var(--muted); }
+.kl-nejde { color:var(--muted); border:1px solid var(--border); background:rgba(255,255,255,0.04); }
+.kl-sek-pocet.kl-nejde { border:none; }
 .kl-kus-akce { display:flex; gap:6px; justify-content:flex-end; }
 @media(max-width:600px){
   .kl-sloupce { display:none; }
@@ -5431,6 +5434,13 @@ function _kontrolaZListecku(v) {
     web: (typeof k.web === 'string' && /^https?:\/\//i.test(k.web) && k.web.length <= 500) ? k.web : '',
     chybi: ids(k.chybi),
     smazat: ids(k.smazat),
+    // Kusy, které na místě nalistovat nejde — id a krátký důvod
+    nejde: (Array.isArray(k.nejde) ? k.nejde : []).filter(function (x, i, a) {
+      return x && typeof x.id === 'string' && x.id && x.id.length <= 80
+        && a.findIndex(function (y) { return y && y.id === x.id; }) === i;
+    }).slice(0, KONTROLA_NEJVIC).map(function (x) {
+      return { id: x.id, duvod: typeof x.duvod === 'string' ? x.duvod.slice(0, 200) : '' };
+    }),
     poznamka: typeof k.poznamka === 'string' ? k.poznamka.slice(0, 500) : ''
   };
 }
@@ -5449,7 +5459,7 @@ function _kontrolaPrijmi(k) {
   Object.keys(vse).forEach(function (m) { nove[m] = vse[m]; });
   // Odkaz na e-shop se drží i přes kontrolu, která ho nepřinesla (starší skill)
   nove[k.misto] = { misto: k.misto, datum: k.datum, report: k.report, web: k.web || (stara && stara.web) || '',
-    chybi: k.chybi, smazat: k.smazat,
+    chybi: k.chybi, smazat: k.smazat, nejde: k.nejde || [],
     sFajfkou: sFajfkou, hotovo: [], poznamka: k.poznamka, prijato: new Date().toISOString() };
   _ulozKontroly(nove);
   return nove[k.misto];
@@ -5496,8 +5506,17 @@ function kontrolyUPolozky(it) {
 // Platné nálezy jednoho místa
 function kontrolaStav(misto) {
   var z = getKontroly()[misto];
-  var out = { z: z || null, chybi: [], smazat: [], vyrizeno: 0 };
+  var out = { z: z || null, chybi: [], smazat: [], nejde: [], vyrizeno: 0 };
   if (!z) return out;
+  /* Kusy, které nalistovat nejde, se jen ukazují: do počtu u tlačítka
+     ani do značek nejdou (vyřídit je majitel v aplikaci nemůže). Platí,
+     dokud je kus skladem a neodklikl se. */
+  (Array.isArray(z.nejde) ? z.nejde : []).forEach(function (x) {
+    var it = items.find(function (i) { return i.id === x.id; });
+    if (it && it.type !== 'bulk' && (it.saleState || 'stock') === 'stock' && (z.hotovo || []).indexOf(it.id) === -1) {
+      out.nejde.push({ it: it, duvod: x.duvod || '' });
+    }
+  });
   ['chybi', 'smazat'].forEach(function (druh) {
     (z[druh] || []).forEach(function (id) {
       var it = items.find(function (x) { return x.id === id; });
@@ -5654,7 +5673,7 @@ function openKontroly(rozbalit) {
     }
     if (co === 'kopirovat-vse') {
       var st = kontrolaStav(t.dataset.misto);
-      var kusy = st[t.dataset.druh] || [];
+      var kusy = (st[t.dataset.druh] || []).map(function (k) { return k.it || k; });
       // Názvy po řádcích s velikostí a SKU oddělenými tabulátorem — vloží se rovnou do tabulky
       var radky = t.dataset.co === 'sku'
         ? kusy.map(function (it) { return it.sku || ''; }).filter(Boolean)
@@ -5671,11 +5690,12 @@ function openKontroly(rozbalit) {
     return '<button class="kl-kopir ' + trida + '" data-kl="kopirovat" data-text="' + escHtml(text)
       + '" title="Kliknutím zkopíruješ">' + escHtml(text) + '</button>';
   }
-  function radekKusu(it, misto, druh) {
+  function radekKusu(it, misto, druh, proc) {
     var z = getKontroly()[misto] || {};
     var vel = it.size ? convertSize(it.size, it.name) : '';
     var duvod = druh === 'chybi' && (z.sFajfkou || []).indexOf(it.id) !== -1
-      ? '<span class="kl-duvod">Fajfku má, ale podle kontroly tam nevisí.</span>' : '';
+      ? '<span class="kl-duvod">Fajfku má, ale podle kontroly tam nevisí.</span>'
+      : proc ? '<span class="kl-duvod kl-duvod-nejde">' + escHtml(proc) + '</span>' : '';
     var nahled = it.imgUrl
       ? '<img class="kl-nahled" src="' + escHtml(it.imgUrl) + '" alt="" loading="lazy">'
       : '<span class="kl-nahled prazdny"></span>';
@@ -5685,16 +5705,22 @@ function openKontroly(rozbalit) {
       + '<div class="kl-vel">' + escHtml(vel || '—') + '</div>'
       + '<div class="kl-kus-akce"><button class="kl-tl" data-kl="detail" data-id="' + escHtml(it.id) + '">Detail</button>'
       + '<button class="kl-hotovo" data-kl="hotovo" data-id="' + escHtml(it.id) + '" data-misto="' + escHtml(misto) + '">'
-      + (druh === 'chybi' ? 'Hotovo' : 'Smazáno') + '</button></div></div>';
+      + (druh === 'smazat' ? 'Smazáno' : 'Hotovo') + '</button></div></div>';
   }
-  // Sekce s nadpisem, počtem, hromadným kopírováním a kartou řádků
+  /* Sekce s nadpisem, počtem a kartou řádků. Hromadné kopírování tu
+     majitel nechce (6. 11. 2026) — kusy k přidání a smazání vyřizuje
+     po jednom; patří jen ke kusům, které nalistovat nejdou. */
   function sekceKusu(nadpis, trida, kusy, misto, druh) {
     return '<div class="kl-sekce-blok"><div class="kl-sek-hlava"><span class="kl-sek-nadpis">' + escHtml(nadpis) + '</span>'
       + '<span class="kl-sek-pocet ' + trida + '">' + kusy.length + '</span>'
-      + '<span class="kl-hromadne"><button data-kl="kopirovat-vse" data-co="sku" data-misto="' + escHtml(misto) + '" data-druh="' + druh + '">Kopírovat SKU</button>'
-      + '<button data-kl="kopirovat-vse" data-co="nazvy" data-misto="' + escHtml(misto) + '" data-druh="' + druh + '">Kopírovat názvy</button></span></div>'
+      + (druh === 'nejde'
+        ? '<span class="kl-hromadne"><button data-kl="kopirovat-vse" data-co="sku" data-misto="' + escHtml(misto) + '" data-druh="nejde">Kopírovat SKU</button>'
+          + '<button data-kl="kopirovat-vse" data-co="nazvy" data-misto="' + escHtml(misto) + '" data-druh="nejde">Kopírovat názvy</button></span>'
+        : '') + '</div>'
       + '<div class="kl-sloupce"><span>SKU</span><span>Název</span><span>Vel.</span><span></span></div>'
-      + '<div class="kl-karta">' + kusy.map(function (it) { return radekKusu(it, misto, druh); }).join('') + '</div></div>';
+      + '<div class="kl-karta">' + kusy.map(function (k) {
+        return druh === 'nejde' ? radekKusu(k.it, misto, druh, k.duvod) : radekKusu(k, misto, druh);
+      }).join('') + '</div></div>';
   }
 
   function prekresli() {
@@ -5714,7 +5740,8 @@ function openKontroly(rozbalit) {
       var stara = dni > KONTROLA_STARA_DNI;
       var pocty = (st.chybi.length ? '<span class="kl-pocet-chip kl-chybi">+ ' + st.chybi.length + ' chybí</span>' : '')
         + (st.smazat.length ? '<span class="kl-pocet-chip kl-smazat">✕ ' + st.smazat.length + ' smazat</span>' : '')
-        + (!st.chybi.length && !st.smazat.length ? '<span class="kl-pocet-chip kl-ok">✓ sedí</span>' : '');
+        + (st.nejde.length ? '<span class="kl-pocet-chip kl-nejde">' + st.nejde.length + ' nejde</span>' : '')
+        + (!st.chybi.length && !st.smazat.length && !st.nejde.length ? '<span class="kl-pocet-chip kl-ok">✓ sedí</span>' : '');
       var jmeno = z.web
         ? '<a class="kl-jmeno" href="' + escHtml(z.web) + '" target="_blank" rel="noopener" title="Otevřít ' + escHtml(m) + '">' + escHtml(m) + '</a>'
         : '<span class="kl-jmeno">' + escHtml(m) + '</span>';
@@ -5732,7 +5759,8 @@ function openKontroly(rozbalit) {
         if (z.poznamka) h += '<div class="kl-poznamka">' + escHtml(z.poznamka) + '</div>';
         if (st.chybi.length) h += sekceKusu('Přidat na ' + m, 'kl-chybi', st.chybi, m, 'chybi');
         if (st.smazat.length) h += sekceKusu('Smazat z ' + m, 'kl-smazat', st.smazat, m, 'smazat');
-        if (!st.chybi.length && !st.smazat.length) h += '<div class="kl-kdy">Nic k vyřízení.</div>';
+        if (st.nejde.length) h += sekceKusu('Nejde nalistovat na ' + m, 'kl-nejde', st.nejde, m, 'nejde');
+        if (!st.chybi.length && !st.smazat.length && !st.nejde.length) h += '<div class="kl-kdy">Nic k vyřízení.</div>';
         if (st.vyrizeno) h += '<div class="kl-kdy kl-vyrizeno">Vyřízeno od kontroly: ' + st.vyrizeno + '</div>';
         h += '</div>';
       }

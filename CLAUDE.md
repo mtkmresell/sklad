@@ -472,10 +472,16 @@ který majitel nikdy nepoužil (30. 10. 2026).
 - **Rozbalené místo vypadá jako report z kontroly** (majitel: „zastaralé
   a neuhlazené"). Sekce Přidat / Smazat s počtem, hlavička sloupců SKU ·
   Název · Vel., řádky v kartě s náhledem. **Název i SKU se kopírují
-  klikem** (blikne a ohlásí se) a sekce má Kopírovat SKU / Kopírovat
-  názvy — názvy jdou po řádcích jako `název⇥velikost⇥SKU`, ať se vloží
-  rovnou do tabulky. Kopírování jde přes `zkopiruj()`, ne holé
-  `writeText`.
+  klikem** (blikne a ohlásí se). Kopírování jde přes `zkopiruj()`, ne
+  holé `writeText`. **Hromadné kopírování u Přidat a Smazat být nemá**
+  — majitel ho chce jen u kusů, které nalistovat nejdou.
+- **Nejde nalistovat** (`nejde` v `sklad_kontrola`, `{id, duvod}`
+  v kontrole): kusy skladem, které místo nevezme (chybí v katalogu,
+  velikost…). Vlastní sekce s důvodem a s Kopírovat SKU / Kopírovat
+  názvy (`název⇥velikost⇥SKU` po řádcích — majitel to posílá e-shopu).
+  **Do počtu u tlačítka ani do značek u kusů nejdou** — v aplikaci se
+  s nimi nedá nic udělat a svítily by napořád. Platí, dokud je kus
+  skladem a neodklikl se Hotovo.
 - **Křížek jen na dotykovém zařízení** (`hover:hover and pointer:fine`
   ho schová). Na počítači se zavírá Escapem nebo klikem mimo okno.
 - **Víc než `KONTROLA_STARA_DNI` (5) dní bez kontroly se zvýrazní**:
@@ -919,7 +925,7 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 | co | kde | stav |
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (6. 11.) — v repozitáři je nový odkaz „Otevřít sklad" na `sklad.mtkm-resell.workers.dev` a pole `web` u `sklad_kontrola` (odkaz na e-shop pod názvem místa v Kontrolách listingů; skilly ho musí posílat). Předtím **nasazeno 31. 10.** (verze `dc8e92a`) — ověřeno: v chatu přibyl nástroj `sklad_kontrola`, který starší verze nemá, a `pika_prodeje` vrací vystavené kusy z Pikastore i Purekickz. Tím dorazily i opravy mailů o potížích (`replaced_by_submission_piece`, pomlčka ve velikosti, `pkNeznaVelikost`) a pondělní obhlídka s „Purekickz nevezme". Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (6. 11.) — v repozitáři je nový odkaz „Otevřít sklad" na `sklad.mtkm-resell.workers.dev` a pole `web` a `nejde` u `sklad_kontrola` (odkaz na e-shop pod názvem místa v Kontrolách listingů; skilly ho musí posílat). Předtím **nasazeno 31. 10.** (verze `dc8e92a`) — ověřeno: v chatu přibyl nástroj `sklad_kontrola`, který starší verze nemá, a `pika_prodeje` vrací vystavené kusy z Pikastore i Purekickz. Tím dorazily i opravy mailů o potížích (`replaced_by_submission_piece`, pomlčka ve velikosti, `pkNeznaVelikost`) a pondělní obhlídka s „Purekickz nevezme". Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
