@@ -711,12 +711,22 @@ Tři věci se nesmí rozbít:
 - **Datum se nehlídá.** Dřív muselo sedět i datum nákupu, jenže
   objednávka dorazí po kusech a data se liší — spojení pak tiše
   neproběhlo.
-- **Rozšiřuje se jen změna odkazu**, ne hodnota při každém uložení.
-  Dřív kus bez odkazu, upravený kvůli ceně, **smazal odkaz celé
-  objednávce**. Ruční smazání odkazu se rozšíří, to změna je.
+- **Prázdný odkaz se rozšíří jen jako změna.** Dřív kus bez odkazu,
+  upravený kvůli ceně, **smazal odkaz celé objednávce**. Ruční smazání
+  odkazu se rozšíří, to změna je. **Vyplněný odkaz se ale doplní
+  ostatním kusům bez odkazu při každém uložení** a kus bez odkazu si ho
+  při uložení převezme (jen jednoznačný) — odkazy vložené dřív, než
+  spojování existovalo, by se jinak nespojily nikdy (majitel to hlásil
+  u KS20260007: odkaz u jednoho kusu ze tří). Bez změny se jiný
+  vyplněný odkaz nepřepisuje.
 - **Prázdné číslo nikdy nespojuje** a rozšíření proběhne **před
   `sv()`** — dřív se dělalo až po uložení, takže se ostatním kusům
   odkaz uložil až s nějakou další změnou.
+
+**U kupní smlouvy se Číslo objednávky ve formuláři schovává**
+(`dokladTypPole`) a pod Typem dokladu je **Číslo smlouvy** — kus
+k nákupu váže ono (majitel, 9. 11. 2026). Hodnota schovaného pole se
+nemaže.
 
 Při úpravě kusu s už **zaplacenou FP** se do nabídky FP číslo přidá
 zpátky (nabídka ukazuje jen otevřené) — jinak by ho uložení smazalo

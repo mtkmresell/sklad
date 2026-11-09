@@ -30,6 +30,16 @@ const SEED = [
   kus('f3', { dokladTyp: 'ks', dokladCislo: 'FP-2026-11' }),        // stejné číslo, ale kupní smlouva
   kus('n1', { dokladTyp: 'ks', dokladCislo: '' }),
   kus('n2', { dokladTyp: 'ks', dokladCislo: '' }),
+  // Ostrá data (KS20260007): odkaz u jednoho kusu ze tří, vložený dřív,
+  // než spojování existovalo
+  kus('r1', { buyWhere: 'Facebook', from: 'Jan', dokladTyp: 'ks', dokladCislo: 'KS20260009', invoiceUrl: 'https://onedrive.live.com/ks9' }),
+  kus('r2', { buyWhere: 'Facebook', from: 'Jan', dokladTyp: 'ks', dokladCislo: 'KS20260009' }),
+  kus('r3', { buyWhere: 'Facebook', from: 'Jan', dokladTyp: 'ks', dokladCislo: 'KS20260009' }),
+  kus('s1', { dokladTyp: 'ks', dokladCislo: 'KS20260010', invoiceUrl: 'https://onedrive.live.com/ks10' }),
+  kus('s2', { dokladTyp: 'ks', dokladCislo: 'KS20260010' }),
+  kus('t1', { dokladTyp: 'ks', dokladCislo: 'KS20260011', invoiceUrl: 'https://x/A' }),
+  kus('t2', { dokladTyp: 'ks', dokladCislo: 'KS20260011', invoiceUrl: 'https://x/B' }),
+  kus('t3', { dokladTyp: 'ks', dokladCislo: 'KS20260011' }),
 ];
 
 (async () => {
@@ -82,7 +92,8 @@ const SEED = [
   await uprav('b1', null);
   o = await odkazy();
   check('ostatním odkaz zůstal', o.a1 === URL1 && o.a2 === URL1 && o.a3 === URL1, JSON.stringify(o));
-  await page.evaluate(() => { const i = items.find(x => x.id === 'b1'); i.orderNum = 'JINA-123'; });
+  check('upravený kus bez odkazu si ho od objednávky převzal', o.b1 === URL1, JSON.stringify(o));
+  await page.evaluate(() => { const i = items.find(x => x.id === 'b1'); i.orderNum = 'JINA-123'; i.invoiceUrl = ''; });
 
   section('3) Smazání odkazu se taky rozšíří');
   await uprav('a2', '');
@@ -126,6 +137,52 @@ const SEED = [
   });
   o = await odkazy();
   check('starší kusy objednávky odkaz dostaly', o.a1 === 'https://drive.google.com/nova' && o.a3 === 'https://drive.google.com/nova', JSON.stringify(o));
+
+  section('8) Odkaz vložený dřív se doplní při dalším uložení');
+  await uprav('r1', null);
+  o = await odkazy();
+  check('uložení kusu s odkazem (beze změny) ho doplní ostatním kusům smlouvy',
+    o.r2 === 'https://onedrive.live.com/ks9' && o.r3 === 'https://onedrive.live.com/ks9', JSON.stringify(o));
+  await uprav('s2', null);
+  o = await odkazy();
+  check('kus bez odkazu si ho při uložení převezme od ostatních', o.s2 === 'https://onedrive.live.com/ks10', JSON.stringify(o));
+  u = await ulozeno();
+  check('převzatý odkaz je uložený', u.s2 === 'https://onedrive.live.com/ks10');
+  await uprav('t1', null);
+  o = await odkazy();
+  check('jiný vyplněný odkaz se bez změny nepřepíše', o.t2 === 'https://x/B', JSON.stringify(o));
+  check('prázdný se doplní', o.t3 === 'https://x/A', JSON.stringify(o));
+  await page.evaluate(() => { items.find(x => x.id === 't3').invoiceUrl = ''; });
+  await uprav('t3', null);
+  o = await odkazy();
+  check('dva různé odkazy u ostatních — nic se nepřevezme', o.t3 === '', JSON.stringify(o));
+
+  section('9) Formulář: u kupní smlouvy není číslo objednávky');
+  const pole = () => page.evaluate(() => {
+    const vid = (id) => { const e = document.getElementById(id); return !!e && getComputedStyle(e).display !== 'none'; };
+    return { obj: vid('fOrderWrap'), ks: vid('fDokladCisloWrap'), fp: vid('fFpCisloWrap'),
+      stitek: document.querySelector('#fDokladCisloWrap label').textContent.trim(),
+      poradi: !!(document.getElementById('fDokladTyp').compareDocumentPosition(document.getElementById('fDokladCisloWrap')) & Node.DOCUMENT_POSITION_FOLLOWING) };
+  });
+  await page.evaluate(async () => { openAddModal(); await new Promise(r => setTimeout(r, 100)); });
+  let p = await pole();
+  check('nová položka: číslo objednávky vidět, smlouva ne', p.obj && !p.ks && !p.fp, JSON.stringify(p));
+  await page.evaluate(() => { const s = document.getElementById('fDokladTyp'); s.value = 'ks'; onDokladTypChange(); });
+  p = await pole();
+  check('Kupní smlouva: číslo objednávky zmizí, je tu Číslo smlouvy', !p.obj && p.ks && p.stitek === 'Číslo smlouvy', JSON.stringify(p));
+  check('číslo smlouvy je pod typem dokladu', p.poradi);
+  await page.evaluate(() => { const s = document.getElementById('fDokladTyp'); s.value = 'id'; onDokladTypChange(); });
+  p = await pole();
+  check('zpátky na doklad ID: číslo objednávky se vrátí', p.obj && !p.ks, JSON.stringify(p));
+  await page.evaluate(() => cm('moAdd'));
+  await page.evaluate(async () => { openEdit('k1'); await new Promise(r => setTimeout(r, 100)); });
+  p = await pole();
+  check('úprava kusu s kupní smlouvou: číslo objednávky schované', !p.obj && p.ks, JSON.stringify(p));
+  await page.evaluate(() => cm('moAdd'));
+  await page.evaluate(async () => { openEdit('a1'); await new Promise(r => setTimeout(r, 100)); });
+  p = await pole();
+  check('úprava běžného kusu: číslo objednávky vidět', p.obj && !p.ks, JSON.stringify(p));
+  await page.evaluate(() => cm('moAdd'));
 
   check('žádné JS chyby', errs.length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();
