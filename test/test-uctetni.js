@@ -495,6 +495,29 @@ const POLOZKY = [
   check('odkaz na fakturu klikatelný zůstává', faktura === true);
 
   // ══════════════════════════════════════════════════════════════
+  // Kalkulačka marže — tlačítko je schované, ale klik na nákupní cenu
+  // ji otevíral dál (majitel, 9. 11. 2026)
+  section('16b) Kalkulačka marže se účetnímu neotevře');
+  await page.evaluate(() => { switchTab('stock'); if (typeof setView === 'function') setView('table'); renderItems(); });
+  await page.waitForTimeout(300);
+  const cena = page.locator('#itemsGrid [data-id="s1"] .td-buy').first();
+  const maCenu = await cena.count();
+  check('v tabulce je nákupní cena kusu', maCenu > 0);
+  if (maCenu) { await cena.click(); await page.waitForTimeout(300); }
+  const kalk = await page.evaluate(() => {
+    const k = document.getElementById('moCalc');
+    const r = { klikem: k && k.style.display !== 'none', trida: document.body.classList.contains('calc-open') };
+    toggleCalc(true);
+    r.funkci = k && k.style.display !== 'none';
+    r.detail = document.getElementById('moDetail').classList.contains('open');
+    cm('moDetail');
+    return r;
+  });
+  check('klik na nákupní cenu kalkulačku neotevře', kalk.klikem === false && kalk.trida === false, JSON.stringify(kalk));
+  check('ani přímé zavolání toggleCalc', kalk.funkci === false, JSON.stringify(kalk));
+  check('klik na cenu otevře detail jako jinde', kalk.detail === true, JSON.stringify(kalk));
+
+  // ══════════════════════════════════════════════════════════════
   // Bez obnovení stránky — přesně jak to udělá člověk, který si pohled
   // účetního vyzkouší a pak se přihlásí zpátky jako majitel.
   section('17) Odhlášení režim vypne');

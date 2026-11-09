@@ -295,9 +295,14 @@ rozcestník a `togglePlatItem` si píše do `localStorage` sám, mimo `sv()`.
   „Čeká". Účetnímu zůstává, hledat doklad podle čísla objednávky
   potřebuje.
 
+**Kalkulačka marže účetnímu není** (majitel, 9. 11. 2026). Tlačítko
+měl schované v CSS, ale klik na nákupní cenu ji otevíral dál — přesně
+ta past výš. Brána je v `toggleCalc()` a klik na cenu u účetního
+otevře detail jako u jiné buňky.
+
 `test-uctetni.js` kliká na všechno, na co v pohledu účetního jde
 kliknout, a kouká, jestli se `items` nebo úložiště změnily — sekce 9
-až 13.
+až 13; kalkulačku hlídá sekce 16b.
 
 ### Požadavky z konektoru (`POŽADAVKY Z KONEKTORU`)
 

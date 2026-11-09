@@ -11947,7 +11947,8 @@ document.addEventListener('click', function(e) {
      u čekajícího a prodaného je cena hotová a klik dál otvírá detail,
      dokud kalkulačka zavřená není. */
   var _calcEl = document.getElementById('moCalc');
-  var _buyCell = _calcEl && e.target.closest('.td-buy, .pv-buy');
+  // Účetnímu je nákupní cena obyčejná buňka — klik otevře detail
+  var _buyCell = !jeUctetni() && _calcEl && e.target.closest('.td-buy, .pv-buy');
   if (_buyCell) {
     var _calcOtevrena = _calcEl.style.display !== 'none';
     var _cIdEl = _buyCell.closest('[data-id]');
@@ -17395,6 +17396,10 @@ function toggleCalc(bezFokusu) {
   var el = document.getElementById('moCalc');
   if (!el) return;
   var isOpen = el.style.display !== 'none';
+  /* Účetní kalkulačku nepotřebuje (majitel, 9. 11. 2026). Tlačítko má
+     schované v CSS, ale klik na nákupní cenu ji otevíral dál — schovat
+     tlačítko není totéž co zakázat akci (POHLED ÚČETNÍHO). Zavřít jde. */
+  if (!isOpen && jeUctetni()) return;
   el.style.display = isOpen ? 'none' : 'block';
   // Zvýrazni klikatelné nákupní ceny v seznamu (viz CSS .calc-open)
   document.body.classList.toggle('calc-open', !isOpen);
