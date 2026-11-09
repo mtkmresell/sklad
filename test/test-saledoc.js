@@ -70,6 +70,36 @@ const SEED = [
   });
   check('rok se bere z data payoutu a řada je po letech', jinyRok === '2025-001', jinyRok);
 
+  // Řada podle data dokladu, ne podle pořadí klikání (majitel, 9. 11. 2026)
+  const rada = await page.evaluate(() => {
+    const zaloha = items;
+    const k = (id, payoutDate, saleDocNum) => ({ id, name: id, saleState: 'paid', soldWhere: 'Vinted',
+      saleDate: payoutDate, payoutDate, sellPrice: 1000, saleDocNum });
+    items = [k('nov', '2026-11-09'), k('srp', '2026-08-08'), k('zar', '2026-09-15'), k('osm', '2026-08-01', '2026-001')];
+    const r = {};
+    r.nov = saleDocNumber(items[0]);                       // vystavený první, ale nejnovější
+    r.srp = saleDocNumber(items[1]);                       // starší vystavený až potom
+    r.novPo = items[0].saleDocNum;
+    r.zar = saleDocNumber(items[2]);
+    r.vsechny = items.map(i => i.id + '=' + i.saleDocNum).sort().join(' ');
+    // změna data payoutu po uložení řadu přeskládá
+    items.find(i => i.id === 'nov').payoutDate = '2026-07-01';
+    sv();
+    r.poZmene = items.map(i => i.id + '=' + i.saleDocNum).sort().join(' ');
+    // přečíslování starých dokladů po načtení
+    items = [k('a', '2026-11-04', '2026-019'), k('b', '2026-08-08', '2026-020'), k('c', '2026-09-01', '2026-003')];
+    r.dorovnano = dokladyDorovnej();
+    r.stare = items.map(i => i.id + '=' + i.saleDocNum).sort().join(' ');
+    r.znovu = dokladyDorovnej();
+    items = zaloha;
+    return r;
+  });
+  check('starší prodej vystavený později dostane nižší číslo', rada.srp === '2026-002' && rada.novPo === '2026-003', JSON.stringify(rada));
+  check('doklad mezi nimi se zařadí doprostřed', rada.vsechny === 'nov=2026-004 osm=2026-001 srp=2026-002 zar=2026-003', rada.vsechny);
+  check('změna data vyplacení řadu po uložení přeskládá', rada.poZmene === 'nov=2026-001 osm=2026-002 srp=2026-003 zar=2026-004', rada.poZmene);
+  check('dřív vystavené doklady se srovnají podle data', rada.stare === 'a=2026-003 b=2026-001 c=2026-002' && rada.dorovnano === 3, JSON.stringify(rada));
+  check('srovnaná řada se podruhé nemění', rada.znovu === 0, String(rada.znovu));
+
   // ══════════════════════════════════════════════════════════════
   section('2) Obsah dokladu');
   let h = await doklad('p1');

@@ -654,6 +654,17 @@ Datum na dokladu je **datum vyplacení**, ne datum prodeje — v daňové
 evidenci se příjem počítá dnem, kdy peníze dorazily. Popisek je proto
 jen „Datum". Dokud payout nedorazil, použije se datum prodeje.
 
+**Čísla dokladů jdou podle data dokladu** (`ŘADA PODLE DATA DOKLADU`,
+`precislujDoklady`): v rámci roku má nejstarší doklad (datum vyplacení,
+bez něj datum prodeje) nejmenší číslo. Dřív se bralo „nejvyšší + 1"
+při prvním kliknutí na Doklad, takže pořadí kopírovalo pořadí klikání
+(majitel, 9. 11. 2026). Řada se srovná **při každém `sv()`** a po prvním
+snímku z cloudu (`dokladyDorovnej`) — doklad vystavený dodatečně ke
+staršímu prodeji se zařadí na své místo a pozdější se posunou. Je bez
+děr a deterministická, takže se dvě zařízení nepřou. Číslo dostane kus
+**až vystavením** (Co chybí na nevystavený dál upozorňuje). V řadě jsou
+všechny kusy, které číslo mají — i osobní, kterým se doklad vystavil.
+
 Strany jsou **Dodavatel a Odběratel**, ne Prodávající a Kupující — tak
 to má účetní na všem ostatním, co mu chodí. Místo prodeje na dokladu
 není: odběratel je vypsaný nahoře.
@@ -886,7 +897,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | postranní tlačítka myši | `POSTRANNÍ TLAČÍTKA MYŠI` |
 | rolování na mobilu | `NA MOBILU ROLUJE CELÁ STRÁNKA` |
 | cashflow z payoutů | `CASHFLOW Z PAYOUTŮ` |
-| prodejní doklad | `PRODEJNÍ DOKLAD` |
+| prodejní doklad | `PRODEJNÍ DOKLAD`, `ŘADA PODLE DATA DOKLADU` |
 | název souboru s nákupním dokladem | `NÁZEV SOUBORU S NÁKUPNÍM DOKLADEM` |
 | kurzy měn (nástroj v nastavení) | `KURZY MĚN` |
 | přenos prodejů z komise | `KOMISNÍ PRODEJ` |

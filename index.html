@@ -3107,6 +3107,8 @@ function sv(){
   // bez tohohle by se lokálně nastavil příznak neuložených změn a aplikace
   // by se při dalším startu ptala, která verze má vyhrát.
   if (jeUctetni()) return;
+  // Čísla prodejních dokladů jdou podle data (ŘADA PODLE DATA DOKLADU)
+  try { precislujDoklady(); } catch(e) { console.warn('číslování dokladů:', e); }
   _itemsVersion++;
   window._lastFilterBuildKey = null; // invalidate filter cache
   /* Pořadí je záměrné: nejdřív položky, teprve pak razítko a příznak.
@@ -10676,25 +10678,69 @@ document.addEventListener('input', function(e) {
   if (e.target && e.target.closest && e.target.closest('#moAdd')) _chybiFormObnov();
 }, true);
 
-/* Číslo dokladu ve tvaru ROK-NNN; jednou přidělené se už nemění.
+/* Číslo dokladu ve tvaru ROK-NNN — ŘADA PODLE DATA DOKLADU.
 
-   Účetní ho přidělit nesmí. Zapsat ho nemá kam (sv() mu neuloží nic),
+   Čísla v roce jdou podle data dokladu (datum vyplacení, bez něj datum
+   prodeje — totéž datum, které stojí na dokladu): nejstarší má nejmenší
+   číslo. Dřív se bralo „nejvyšší + 1" v okamžiku prvního kliknutí na
+   Doklad, takže pořadí kopírovalo pořadí klikání: doklad k payoutu
+   z 9. 11. dostal 2026-019 a pak doklad k payoutu z 8. 8. dostal 2026-020
+   (majitel, 9. 11. 2026). Teď se po každém uložení řada srovná
+   (precislujDoklady, volá ji sv()) — doklad vystavený dodatečně ke
+   staršímu prodeji se zařadí na své místo a pozdější se posunou.
+   Řada je bez děr a bez dvojic. Číslo se dál přiděluje až vystavením
+   dokladu (Co chybí na nevystavený upozorňuje).
+
+   Účetní číslo přidělit nesmí. Zapsat ho nemá kam (sv() mu neuloží nic),
    takže by číslo zmizelo se zavřením záložky a majitel by témuž prodeji
    přidělil jindy jiné. Dva doklady na jeden prodej s různými čísly jsou
    horší než doklad žádný — proto se vrátí prázdno a volající to řekne. */
+function _dokladDatum(it) { return String(it.payoutDate || it.saleDate || ''); }
+function precislujDoklady() {
+  if (jeUctetni()) return 0;
+  var roky = {};
+  (items || []).forEach(function(it) {
+    if (!it || !it.saleDocNum) return;
+    var m = /^(\d{4})-(\d+)$/.exec(it.saleDocNum);
+    var d = _dokladDatum(it);
+    var rok = /^\d{4}/.test(d) ? d.slice(0, 4) : (m ? m[1] : String(_dnesISO()).slice(0, 4));
+    (roky[rok] = roky[rok] || []).push({ it: it, d: d, s: String(it.saleDate || ''), n: m ? parseInt(m[2], 10) : 1e9 });
+  });
+  var zmeneno = 0;
+  Object.keys(roky).forEach(function(rok) {
+    roky[rok].sort(function(a, b) {
+      if (a.d !== b.d) return a.d < b.d ? -1 : 1;
+      if (a.s !== b.s) return a.s < b.s ? -1 : 1;
+      if (a.n !== b.n) return a.n - b.n;          // stejný den: dřív vystavený dřív
+      return String(a.it.id) < String(b.it.id) ? -1 : 1;
+    }).forEach(function(z, k) {
+      var c = rok + '-' + String(k + 1).padStart(3, '0');
+      if (z.it.saleDocNum !== c) { z.it.saleDocNum = c; zmeneno++; }
+    });
+  });
+  return zmeneno;
+}
 function saleDocNumber(it) {
   if (!it) return '';
   if (it.saleDocNum) return it.saleDocNum;
   if (jeUctetni()) return '';
-  var rok = String(it.payoutDate || it.saleDate || _dnesISO()).slice(0, 4);
-  var nejvyssi = 0;
-  (items || []).forEach(function(x) {
-    var m = /^(\d{4})-(\d+)$/.exec(x.saleDocNum || '');
-    if (m && m[1] === rok) nejvyssi = Math.max(nejvyssi, parseInt(m[2], 10));
-  });
-  it.saleDocNum = rok + '-' + String(nejvyssi + 1).padStart(3, '0');
+  // Dočasná značka; skutečné číslo dá zařazení do řady podle data
+  it.saleDocNum = 'novy';
+  precislujDoklady();
   sv();
   return it.saleDocNum;
+}
+
+/* Po prvním snímku z cloudu se řada srovná i u dokladů vystavených dřív,
+   než se číslovalo podle data — jinak by se staré pořadí opravilo až
+   s nějakou další změnou. Srovnání je deterministické, takže dvě
+   zařízení dojdou ke stejným číslům a nepřou se. */
+function dokladyDorovnej() {
+  if (jeUctetni()) return 0;
+  if (window._fbUser && !_fbCloudReady) return 0;
+  var n = precislujDoklady();
+  if (n) { sv(); try { renderItems(); } catch(e) {} }
+  return n;
 }
 
 function _dokladRadek(popis, hodnota) {
@@ -18568,6 +18614,7 @@ function _spustSkladPosluchace() {
       try { _provedPozadavky(snap); } catch(e) { console.warn('požadavky z konektoru:', e); }
       // Ze stejného důvodu až tady: výkupy, které čekaly na CRM (VÝKUP OD PARTNERA)
       try { vykupDopojCekajici(); } catch(e) { console.warn('výkupy čekající na CRM:', e); }
+      try { dokladyDorovnej(); } catch(e) { console.warn('číslování dokladů:', e); }
     }, function(err) {
       console.error('onSnapshot chyba:', err);
       var dot = document.getElementById('fbStatusDot');
