@@ -8266,6 +8266,62 @@ function rozsirNakupniDoklad(zdroj, predtim) {
   return { n: n, prevzato: !zmena && !!url && !(predtim || '') };
 }
 
+/* SPOLEČNÝ OBRÁZEK POLOŽKY
+   Majitel naskladní víc kusů téhož modelu v různých velikostech a odkaz
+   na obrázek vkládal do každého zvlášť (9. 11. 2026). K sobě patří kusy
+   se stejným názvem; když mají SKU oba, musí sedět i SKU. Bez SKU stačí
+   název. Velikost písmen a mezery okolo se nerozlišují.
+
+   Sdílí se jen **odkaz** (http/https), nic jiného z položky. Nahraná
+   fotka (data URI) se nekopíruje a kus s ní se nepřepisuje — každá kopie
+   by v úložišti prohlížeče zabrala stejné místo znovu a to má na iPhonu
+   strop kolem 5 MB (UKLÁDÁNÍ DO PROHLÍŽEČE). Kus, jehož fotka ještě
+   nedorazila z cloudu (hasPhoto), se taky nepřepisuje.
+
+   Nový odkaz se rozšíří všem (kromě nahraných fotek). Při uložení beze
+   změny se jen doplní prázdné a kus bez obrázku si jednoznačný odkaz
+   převezme. Smazání obrázku se nerozšiřuje — chybějící obrázek je menší
+   škoda než obrázky smazané celé skupině jedním kliknutím. */
+function _obrOdkaz(v) { return /^https?:\/\//i.test(String(v || '').trim()); }
+function _obrVlastni(it) { return !!it.hasPhoto || /^data:/.test(it.imgUrl || ''); }
+function stejnaPolozka(a, b) {
+  if (!a || !b || a === b) return false;
+  var n = _nakupKlic(a.name);
+  if (!n || n !== _nakupKlic(b.name)) return false;
+  var sa = _nakupKlic(a.sku), sb = _nakupKlic(b.sku);
+  return !(sa && sb && sa !== sb);
+}
+// Vrátí { n: kolika dalším kusům se obrázek změnil, prevzato: kus si ho vzal od ostatních }
+function rozsirObrazek(zdroj, predtim) {
+  var nic = { n: 0, prevzato: false };
+  if (!zdroj || _obrVlastni(zdroj)) return nic;
+  var url = zdroj.imgUrl || '';
+  if (url && !_obrOdkaz(url)) return nic;
+  var zmena = url !== (predtim || '');
+  if (!url && zmena) return nic;           // smazání se nerozšiřuje
+  var sourozenci = items.filter(function (it) {
+    return !(it === zdroj || (zdroj.id && it.id === zdroj.id)) && !_obrVlastni(it) && stejnaPolozka(zdroj, it);
+  });
+  var prevzato = false;
+  if (!url) {
+    var odkazy = [];
+    sourozenci.forEach(function (it) { if (_obrOdkaz(it.imgUrl) && odkazy.indexOf(it.imgUrl) < 0) odkazy.push(it.imgUrl); });
+    if (odkazy.length !== 1) return nic;
+    zdroj.imgUrl = url = odkazy[0];
+    prevzato = true;
+  }
+  var n = 0;
+  sourozenci.forEach(function (it) {
+    var jeho = it.imgUrl || '';
+    if (jeho === url) return;
+    if (!zmena && jeho) return;            // bez změny jen doplňuje prázdné
+    it.imgUrl = url;
+    n++;
+  });
+  return { n: n, prevzato: prevzato };
+}
+function _pocetPolozek(n) { return n + (n === 1 ? ' další položky' : ' dalších položek'); }
+
 async function saveItem(){
   /* Pojistka na samotném zápisu, ne jen na tlačítku. Do rozcestníku
      kliků se dopisují nové akce a inline onclick sem může vést mimo něj;
@@ -8359,6 +8415,7 @@ async function saveItem(){
       // Podoba před úpravou — podle ní se pak uklidí neplatné klíče v našeptávači
       var _cachePrev = { id: items[i].id, name: items[i].name, sku: items[i].sku };
       var _dokladPred = items[i].invoiceUrl || '';
+      var _obrPred = items[i].imgUrl || '';
       var _oldLinkedCustomerId = items[i].linkedCustomerId || '';
       // Merge
       // Odeber undefined hodnoty z d aby nepřepisovaly existující data
@@ -8520,13 +8577,15 @@ async function saveItem(){
   // U nové položky je zdrojem kus, který opravdu leží v items (_novy), ne d
   var _dokladZdroj = editId ? items.find(function (x) { return x.id === editId; }) : _novy;
   var _doklad = _dokladZdroj ? rozsirNakupniDoklad(_dokladZdroj, editId ? (_dokladPred || '') : '') : { n: 0 };
+  // Obrázek dostanou i kusy se stejným názvem a SKU (SPOLEČNÝ OBRÁZEK POLOŽKY)
+  var _obr = rozsirObrazek(_dokladZdroj, editId ? (_obrPred || '') : '');
   sv();buildLocationFilter();renderStats();renderItems();cm('moAdd');
-  if (_doklad.prevzato) {
-    showToast('Odkaz na doklad převzat od ostatních položek ze stejného nákupu.');
-  } else if (_doklad.n > 0) {
-    showToast('Odkaz na doklad ' + (_dokladZdroj.invoiceUrl ? 'doplněn' : 'odstraněn') + ' i u ' + _doklad.n
-      + (_doklad.n === 1 ? ' další položky' : ' dalších položek') + ' ze stejného nákupu.');
-  }
+  // Hlášky se přidají k závěrečné „Položka upravena", jinak by je hned přepsala
+  var _poznamky = [];
+  if (_doklad.prevzato) _poznamky.push('odkaz na doklad převzat ze stejného nákupu');
+  else if (_doklad.n > 0) _poznamky.push('odkaz na doklad ' + (_dokladZdroj.invoiceUrl ? 'doplněn' : 'odstraněn') + ' i u ' + _pocetPolozek(_doklad.n));
+  if (_obr.prevzato) _poznamky.push('obrázek převzat od stejné položky');
+  else if (_obr.n > 0) _poznamky.push('obrázek doplněn i u ' + _pocetPolozek(_obr.n));
   // Ulož do historického cache každou položku — ať se název, SKU a obrázek
   // našeptají i u věcí, které se nikdy neprodaly a už byly ze skladu smazané.
   // Uložení je bráno jako pravda, takže se tím opraví i dřív zapamatovaný omyl.
@@ -8536,7 +8595,8 @@ async function saveItem(){
       stockxUrl: d.stockxUrl || '', imgUrl: d.imgUrl,
     }, _cachePrev || null);
   }
-  showToast(editId ? 'Položka upravena' : (qty>1 ? qty+'× položka přidána' : 'Položka přidána'));
+  showToast((editId ? 'Položka upravena' : (qty>1 ? qty+'× položka přidána' : 'Položka přidána'))
+    + (_poznamky.length ? ' — ' + _poznamky.join(', ') + '.' : ''));
 }
 
 /* PŘECHOD MEZI OKNY
@@ -9465,10 +9525,13 @@ function saveImgUrl() {
   }
   if (!urlInput) { preview.dataset.pending = ''; cm('moImg'); return; }
   resolveImgUrl(urlInput, function(finalUrl){
+    var predtim = items[idx].imgUrl || '';
     items[idx].imgUrl = finalUrl;
     preview.dataset.pending = '';
+    var obr = rozsirObrazek(items[idx], predtim);
     sv(); renderItems();
     cm('moImg');
+    if (obr.n > 0) showToast('Obrázek doplněn i u ' + _pocetPolozek(obr.n) + ' se stejným názvem.');
   });
 }
 

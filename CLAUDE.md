@@ -732,6 +732,29 @@ Při úpravě kusu s už **zaplacenou FP** se do nabídky FP číslo přidá
 zpátky (nabídka ukazuje jen otevřené) — jinak by ho uložení smazalo
 a kus by z dokladu vypadl. Hlídá to `test-doklad.js`.
 
+### Společný obrázek položky (`SPOLEČNÝ OBRÁZEK POLOŽKY`)
+
+Majitel naskladňuje víc kusů téhož modelu v různých velikostech a odkaz
+na obrázek vkládal do každého zvlášť (9. 11. 2026). Odkaz vložený
+k jednomu kusu (formulářem Upravit i oknem obrázku) teď dostanou kusy se
+**stejným názvem a SKU**; když SKU jednomu chybí, stačí název. Rozhoduje
+`stejnaPolozka()`, rozšiřuje `rozsirObrazek()`. Sdílí se **jen obrázek**.
+
+Tři věci se nesmí rozbít:
+
+- **Jen odkaz, nikdy nahraná fotka.** Data URI by se v úložišti
+  prohlížeče násobilo (strop na iPhonu kolem 5 MB) a kus s vlastní
+  fotkou — i takovou, která ještě nedorazila z cloudu (`hasPhoto`) — se
+  odkazem nepřepisuje.
+- **Smazání obrázku se nerozšiřuje.** Chybějící obrázek je menší škoda
+  než obrázky smazané celé skupině jedním kliknutím.
+- Jako u dokladu: **bez změny se jen doplňuje prázdné** a kus bez
+  obrázku si převezme jednoznačný odkaz; jiný vyplněný se nepřepíše.
+
+Hlášky o rozšíření (obrázek i doklad) jsou **součástí závěrečné hlášky**
+uložení — samostatná by ji hned přepsala „Položka upravena".
+Hlídá to `test-obrazek.js`.
+
 ### Název souboru s nákupním dokladem
 
 Nákupní doklady a faktury leží v OneDrive a jmenují se
@@ -885,6 +908,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | animace hledání | `HLEDÁNÍ — ANIMACE` |
 | kontroly listingů (okno, značky) | `KONTROLY LISTINGŮ` |
 | odkaz na doklad pro celý nákup | `SPOLEČNÝ NÁKUPNÍ DOKLAD` |
+| obrázek pro stejné kusy | `SPOLEČNÝ OBRÁZEK POLOŽKY` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1521,7 +1545,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 69 souborů
+node test/run.js              # kontrola syntaxe + všech 70 souborů
 node test/run.js archive      # jen vybrané
 ```
 
