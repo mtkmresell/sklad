@@ -839,6 +839,15 @@ dál otvírá detail; nákup odtud převezme jen už otevřená kalkulačka.
 Kalkulačka není `.mo`, takže ji globální Escape zavírá zvlášť.
 Hlídá to `test-kalkulacka.js`.
 
+**Šipky v detailu jdou po řádcích na obrazovce** (`LISTOVÁNÍ DETAILEM
+PODLE OBRAZOVKY`, `navigateDetail`). Dřív bralo pořadí `getFiltered()`,
+jenže Prodáno kreslí `renderSoldView` po měsících vyplacení a
+`getFiltered` tam řadí podle data nákupu — šipka skákala z kusu
+vyplaceného 9. 11. na kus z 29. 5. (majitel, 9. 11. 2026). Pořadí se
+proto čte z vykreslených řádků (`data-action="detail"`), schované se
+přeskakují; kde řádky nejsou, platí `getFiltered` jako dřív. Hlídá to
+`test-detailnav.js`.
+
 **Dny se skloňují** (`dnyText`): 1 den, 2–4 dny, 5+ dní. „4 dní" je znát
 na první pohled.
 
@@ -917,6 +926,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | přechod z okna do okna | `PŘECHOD MEZI OKNY` |
 | Vybrat (sloupec zaškrtávátek) | `VÝBĚR BEZ PŘESTAVBY TABULKY` |
 | animace hledání | `HLEDÁNÍ — ANIMACE` |
+| šipky v detailu položky | `LISTOVÁNÍ DETAILEM PODLE OBRAZOVKY` |
 | kontroly listingů (okno, značky) | `KONTROLY LISTINGŮ` |
 | odkaz na doklad pro celý nákup | `SPOLEČNÝ NÁKUPNÍ DOKLAD` |
 | obrázek pro stejné kusy | `SPOLEČNÝ OBRÁZEK POLOŽKY` |
@@ -1556,7 +1566,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 70 souborů
+node test/run.js              # kontrola syntaxe + všech 71 souborů
 node test/run.js archive      # jen vybrané
 ```
 

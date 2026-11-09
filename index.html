@@ -9621,15 +9621,38 @@ function nazevSouboruDokladu(it) {
 
 var currentDetailId = null;
 
+/* LISTOVÁNÍ DETAILEM PODLE OBRAZOVKY
+   Šipky jdou po řádcích tak, jak jsou vidět v seznamu. Dřív se pořadí
+   bralo z getFiltered(), jenže Prodáno se kreslí vlastní funkcí
+   (renderSoldView) po měsících vyplacení a getFiltered tam řadí podle
+   data nákupu — z trička vyplaceného 9. 11. šipka skočila na kus
+   vyplacený 29. 5. místo na sousední řádek (majitel, 9. 11. 2026).
+   Vykreslený seznam je jediný, který člověk vidí, takže se ptá jeho;
+   schované řádky (zavřený balík) se přeskakují, pokud v nich zrovna
+   nestojí otevřený detail. Kde řádky nejsou (analytika), platí
+   getFiltered jako dřív. */
+function _detailPoradiNaObrazovce() {
+  var grid = document.getElementById('itemsGrid');
+  if (!grid) return [];
+  var ids = [], videt = [];
+  grid.querySelectorAll('[data-action="detail"][data-id]').forEach(function(el) {
+    var id = el.getAttribute('data-id');
+    if (!id || ids.indexOf(id) >= 0) return;
+    ids.push(id);
+    if (el.getClientRects().length) videt.push(id);
+  });
+  return videt.indexOf(currentDetailId) >= 0 ? videt : ids;
+}
 function navigateDetail(dir) {
-  var list = getFiltered();
-  if (!list.length || !currentDetailId) return;
-  var idx = list.findIndex(function(it){ return it.id === currentDetailId; });
-  if (idx === -1) return;
+  if (!currentDetailId) return;
+  var ids = _detailPoradiNaObrazovce();
+  if (ids.indexOf(currentDetailId) < 0) ids = getFiltered().map(function(it){ return it.id; });
+  var idx = ids.indexOf(currentDetailId);
+  if (!ids.length || idx === -1) return;
   var nextIdx = idx + dir;
-  if (nextIdx < 0) nextIdx = list.length - 1;
-  if (nextIdx >= list.length) nextIdx = 0;
-  openDetail(list[nextIdx].id);
+  if (nextIdx < 0) nextIdx = ids.length - 1;
+  if (nextIdx >= ids.length) nextIdx = 0;
+  openDetail(ids[nextIdx]);
 }
 
 function openDetail(id) {
