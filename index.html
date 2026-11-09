@@ -8073,7 +8073,16 @@ function openEdit(id){
     var _fps=document.getElementById('fFpCislo');
     if(_dt){_dt.value=it.dokladTyp||'id';if(_dt._csSync)_dt._csSync();}
     if(_fpw) _fpw.style.display=(it.dokladTyp==='fp')?'':'none';
-    if(_fps && it.dokladTyp==='fp') { if(it.fpCislo) { _fps.innerHTML='<option value="'+it.fpCislo+'">'+it.fpCislo+'</option>'; _fps.value=it.fpCislo; } loadOpenFakturyPrijate().then(function(){ if(it.fpCislo && _fps) _fps.value=it.fpCislo; }); }
+    if(_fps && it.dokladTyp==='fp') { if(it.fpCislo) { _fps.innerHTML='<option value="'+it.fpCislo+'">'+it.fpCislo+'</option>'; _fps.value=it.fpCislo; } loadOpenFakturyPrijate().then(function(){
+      if(!it.fpCislo || !_fps) return;
+      /* Nabídka ukazuje jen nezaplacené FP. Kus, jehož FP už je zaplacená
+         (nebo se nenačetla), by jinak při uložení číslo FP ztratil — a s ním
+         i spojení s ostatními kusy téže faktury (SPOLEČNÝ NÁKUPNÍ DOKLAD). */
+      if(![].some.call(_fps.options,function(o){return o.value===it.fpCislo;})){
+        var _o=document.createElement('option'); _o.value=it.fpCislo; _o.textContent=it.fpCislo; _fps.appendChild(_o);
+      }
+      _fps.value=it.fpCislo;
+    }); }
     var _dcw=document.getElementById('fDokladCisloWrap'); if(_dcw) _dcw.style.display=(it.dokladTyp==='ks')?'':'none';
     var _dc=document.getElementById('fDokladCislo'); if(_dc) _dc.value=it.dokladCislo||'';
   })();
@@ -8189,6 +8198,49 @@ function openEdit(id){
     });
   }, 30);
 }
+/* SPOLEČNÝ NÁKUPNÍ DOKLAD
+   Kusy z jednoho nákupu mají jeden doklad. Majitel vloží odkaz na
+   fakturu (nebo kupní smlouvu) k jednomu kusu a má ho mít i u ostatních
+   (9. 11. 2026). K sobě patří kusy, které mají:
+     - stejné místo nákupu A stejné číslo objednávky, nebo
+     - u výkupu stejné číslo faktury přijaté (FP) nebo kupní smlouvy (KS).
+   Prázdné pole nikdy nespojuje — kusy bez čísla objednávky z téhož
+   obchodu spolu nemají nic společného. Datum se schválně nehlídá:
+   objednávka dorazí po kusech a datum nákupu se pak u kusů liší.
+
+   Rozšiřuje se jen **změna** odkazu, ne hodnota při každém uložení. Kus
+   bez odkazu, který se upraví kvůli ceně, by jinak smazal odkaz všem
+   ostatním z objednávky. Smazání odkazu ručně se rozšíří — to je změna. */
+function _nakupKlic(v) { return String(v == null ? '' : v).trim().toLowerCase(); }
+function stejnyNakup(a, b) {
+  if (!a || !b || a === b) return false;
+  var o = _nakupKlic(a.orderNum), w = _nakupKlic(a.buyWhere);
+  if (o && w && o === _nakupKlic(b.orderNum) && w === _nakupKlic(b.buyWhere)) return true;
+  if (a.dokladTyp === 'fp' && b.dokladTyp === 'fp') {
+    var f = _nakupKlic(a.fpCislo);
+    if (f && f === _nakupKlic(b.fpCislo)) return true;
+  }
+  if (a.dokladTyp === 'ks' && b.dokladTyp === 'ks') {
+    var k = _nakupKlic(a.dokladCislo);
+    if (k && k === _nakupKlic(b.dokladCislo)) return true;
+  }
+  return false;
+}
+// Vrátí, kolika dalším kusům se odkaz změnil
+function rozsirNakupniDoklad(zdroj, predtim) {
+  var url = zdroj.invoiceUrl || '';
+  if (url === (predtim || '')) return 0;
+  var n = 0;
+  items.forEach(function (it) {
+    if (it === zdroj || (zdroj.id && it.id === zdroj.id)) return;
+    if (!stejnyNakup(zdroj, it)) return;
+    if ((it.invoiceUrl || '') === url) return;
+    it.invoiceUrl = url;
+    n++;
+  });
+  return n;
+}
+
 async function saveItem(){
   /* Pojistka na samotném zápisu, ne jen na tlačítku. Do rozcestníku
      kliků se dopisují nové akce a inline onclick sem může vést mimo něj;
@@ -8281,6 +8333,7 @@ async function saveItem(){
     if(i!==-1){
       // Podoba před úpravou — podle ní se pak uklidí neplatné klíče v našeptávači
       var _cachePrev = { id: items[i].id, name: items[i].name, sku: items[i].sku };
+      var _dokladPred = items[i].invoiceUrl || '';
       var _oldLinkedCustomerId = items[i].linkedCustomerId || '';
       // Merge
       // Odeber undefined hodnoty z d aby nepřepisovaly existující data
@@ -8437,26 +8490,14 @@ async function saveItem(){
     });
     if (_propagated > 0) showToast('Cílová cena nastavena u ' + _propagated + ' dalších stejných položek.');
   }
+  // Odkaz na nákupní doklad dostanou i kusy ze stejné objednávky / dokladu
+  // (SPOLEČNÝ NÁKUPNÍ DOKLAD). Před sv(), ať se uloží spolu s položkou.
+  var _dokladZdroj = editId ? items.find(function (x) { return x.id === editId; }) : d;
+  var _dokladN = _dokladZdroj ? rozsirNakupniDoklad(_dokladZdroj, editId ? (_dokladPred || '') : '') : 0;
   sv();buildLocationFilter();renderStats();renderItems();cm('moAdd');
-  // Propagace faktury na položky se stejným nákupem (datum + místo + číslo obj.)
-  if (editId && d.buyDate && d.buyWhere && d.orderNum) {
-    var _eBuyDate  = d.buyDate.trim();
-    var _eBuyWhere = d.buyWhere.trim().toLowerCase();
-    var _eOrderNum = d.orderNum.trim().toLowerCase();
-    var _invPropagated = 0;
-    items.forEach(function(it) {
-      if (it.id === editId) return;
-      if ((it.buyDate  || '').trim()              !== _eBuyDate)  return;
-      if ((it.buyWhere || '').trim().toLowerCase() !== _eBuyWhere) return;
-      if ((it.orderNum || '').trim().toLowerCase() !== _eOrderNum) return;
-      if ((it.invoiceUrl || '') === (d.invoiceUrl || '')) return;
-      it.invoiceUrl = d.invoiceUrl;
-      _invPropagated++;
-    });
-    if (_invPropagated > 0) {
-      var _invMsg = d.invoiceUrl ? 'doplněn' : 'odstraněn';
-      showToast('Odkaz na fakturu ' + _invMsg + ' u ' + _invPropagated + ' dalších položek ze stejného nákupu.');
-    }
+  if (_dokladN > 0) {
+    showToast('Odkaz na doklad ' + (_dokladZdroj.invoiceUrl ? 'doplněn' : 'odstraněn') + ' i u ' + _dokladN
+      + (_dokladN === 1 ? ' další položky' : ' dalších položek') + ' ze stejného nákupu.');
   }
   // Ulož do historického cache každou položku — ať se název, SKU a obrázek
   // našeptají i u věcí, které se nikdy neprodaly a už byly ze skladu smazané.

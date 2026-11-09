@@ -697,6 +697,31 @@ prodeje IBAN, jinak číslo účtu, a když ten správný chybí, ten druhý.
 je musí přenést s sebou**, jinak by z dokladu zmizely bez vysvětlení.
 Hlídá to `test-saledoc.js` a `test-payout.js`.
 
+### Společný nákupní doklad (`SPOLEČNÝ NÁKUPNÍ DOKLAD`)
+
+Odkaz na nákupní doklad (`invoiceUrl`) vložený k jednomu kusu dostanou
+i ostatní kusy **téhož nákupu** (majitel, 9. 11. 2026). K sobě patří kusy
+se **stejným místem nákupu a číslem objednávky**, nebo u výkupu se
+**stejným číslem FP** (`fpCislo`) **či kupní smlouvy** (`dokladCislo`) —
+vždy jen stejného druhu dokladu. Velikost písmen a mezery okolo se
+nerozlišují. Rozhoduje `stejnyNakup()`, rozšiřuje `rozsirNakupniDoklad()`.
+
+Tři věci se nesmí rozbít:
+
+- **Datum se nehlídá.** Dřív muselo sedět i datum nákupu, jenže
+  objednávka dorazí po kusech a data se liší — spojení pak tiše
+  neproběhlo.
+- **Rozšiřuje se jen změna odkazu**, ne hodnota při každém uložení.
+  Dřív kus bez odkazu, upravený kvůli ceně, **smazal odkaz celé
+  objednávce**. Ruční smazání odkazu se rozšíří, to změna je.
+- **Prázdné číslo nikdy nespojuje** a rozšíření proběhne **před
+  `sv()`** — dřív se dělalo až po uložení, takže se ostatním kusům
+  odkaz uložil až s nějakou další změnou.
+
+Při úpravě kusu s už **zaplacenou FP** se do nabídky FP číslo přidá
+zpátky (nabídka ukazuje jen otevřené) — jinak by ho uložení smazalo
+a kus by z dokladu vypadl. Hlídá to `test-doklad.js`.
+
 ### Název souboru s nákupním dokladem
 
 Nákupní doklady a faktury leží v OneDrive a jmenují se
@@ -849,6 +874,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | Vybrat (sloupec zaškrtávátek) | `VÝBĚR BEZ PŘESTAVBY TABULKY` |
 | animace hledání | `HLEDÁNÍ — ANIMACE` |
 | kontroly listingů (okno, značky) | `KONTROLY LISTINGŮ` |
+| odkaz na doklad pro celý nákup | `SPOLEČNÝ NÁKUPNÍ DOKLAD` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1485,7 +1511,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 68 souborů
+node test/run.js              # kontrola syntaxe + všech 69 souborů
 node test/run.js archive      # jen vybrané
 ```
 
