@@ -279,10 +279,14 @@ rozcestník a `togglePlatItem` si píše do `localStorage` sám, mimo `sv()`.
 
 - **Doklad účetnímu zůstat musí** — vystavit ho je přesně jeho práce.
   Ostatní tlačítka v detailu nesou `uc-skryt`, tohle ne.
-- **Číslo dokladu si účetní přidělit nesmí** (`saleDocNumber`). Uložit
-  ho nemá kam, takže by zmizelo se zavřením záložky a majitel by témuž
-  prodeji přidělil jindy jiné. Dva doklady na jeden prodej s různými
-  čísly jsou horší než doklad žádný.
+- **Číslo dokladu si účetní jen spočítá, nikdy nevymyslí**
+  (`saleDocNumber` → `_cislaDokladu`). Uložit ho nemá kam. Řada je
+  deterministická (ŘADA PODLE DATA DOKLADU) a obsahuje každý vyplacený
+  podnikatelský prodej s „Prodejním dokladem", takže účetnímu vyjde
+  totéž číslo jako majiteli — a majitel kvůli tomu nemusí na Doklad
+  klikat první (9. 11. 2026). Kus mimo řadu (čeká na payout, osobní)
+  číslo nedostane: dva doklady na jeden prodej s různými čísly jsou
+  horší než doklad žádný.
 - **Majitelův sklad se účetnímu do prohlížeče neukládá**
   (`_applyCloudData`, `_applyItemCacheDoc`). Kdo zavře záložku, se
   neodhlásí — a po zrušení přístupu se mu data zobrazovala dál
@@ -591,9 +595,12 @@ Co znamená „chybí", majitel určil výslovně (9. 10. 2026) a nevracej to:
   by se rozsvítilo přes sto starých osobních prodejů. **Cílová cena**
   se hlídá u obou profilů, jen u kusů na skladě.
 - **Prodejní doklad až po vyplacení** (jen Prodáno). Co se vystavuje,
-  určuje místo prodeje (`TYP DOKLADU U MÍSTA PRODEJE`): „Prodejní
-  doklad" je hotový, když má prodej `saleDocNum`, „Faktura (odkaz)"
-  když má `saleInvoiceUrl`, „Nic" se nehlídá.
+  určuje místo prodeje (`TYP DOKLADU U MÍSTA PRODEJE`): „Faktura
+  (odkaz)" chybí, dokud prodej nemá `saleInvoiceUrl`; „Prodejní doklad"
+  z aplikace **nechybí nikdy** — vyplacený prodej je v číselné řadě sám
+  (ŘADA PODLE DATA DOKLADU); „Nic" se nehlídá.
+- **Cílová cena v pohledu účetního není** (`jenMajitel`,
+  `_chybiPravidla`) — ani v nabídce, ani v rohu (9. 11. 2026).
 
 Tři věci se nesmí rozbít:
 
@@ -666,9 +673,12 @@ při prvním kliknutí na Doklad, takže pořadí kopírovalo pořadí klikání
 (majitel, 9. 11. 2026). Řada se srovná **při každém `sv()`** a po prvním
 snímku z cloudu (`dokladyDorovnej`) — doklad vystavený dodatečně ke
 staršímu prodeji se zařadí na své místo a pozdější se posunou. Je bez
-děr a deterministická, takže se dvě zařízení nepřou. Číslo dostane kus
-**až vystavením** (Co chybí na nevystavený dál upozorňuje). V řadě jsou
-všechny kusy, které číslo mají — i osobní, kterým se doklad vystavil.
+děr a deterministická, takže se dvě zařízení nepřou. **V řadě je každý
+vyplacený podnikatelský prodej s typem „Prodejní doklad"** (`_dokladVRade`)
+— vystavovat ho nemusí nikdo; doklady potřebuje hlavně účetní a majitel
+na ně skoro neklikne (9. 11. 2026). K tomu všechno, co už číslo má
+(i osobní kusy, kterým se kdysi vystavil, a čekající prodej otevřený
+majitelem). Účetní si čísla počítá bez zápisu (`_cislaDokladu`).
 
 Strany jsou **Dodavatel a Odběratel**, ne Prodávající a Kupující — tak
 to má účetní na všem ostatním, co mu chodí. Místo prodeje na dokladu

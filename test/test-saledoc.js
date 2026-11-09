@@ -94,7 +94,7 @@ const SEED = [
     items = zaloha;
     return r;
   });
-  check('starší prodej vystavený později dostane nižší číslo', rada.srp === '2026-002' && rada.novPo === '2026-003', JSON.stringify(rada));
+  check('vyplacené prodeje jsou v řadě samy, starší má nižší číslo', rada.srp === '2026-002' && rada.nov === '2026-004' && rada.novPo === '2026-004', JSON.stringify(rada));
   check('doklad mezi nimi se zařadí doprostřed', rada.vsechny === 'nov=2026-004 osm=2026-001 srp=2026-002 zar=2026-003', rada.vsechny);
   check('změna data vyplacení řadu po uložení přeskládá', rada.poZmene === 'nov=2026-001 osm=2026-002 srp=2026-003 zar=2026-004', rada.poZmene);
   check('dřív vystavené doklady se srovnají podle data', rada.stare === 'a=2026-003 b=2026-001 c=2026-002' && rada.dorovnano === 3, JSON.stringify(rada));

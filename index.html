@@ -10467,19 +10467,22 @@ var CO_CHYBI_PRAVIDLA = [
     pole:  function() { return 'fInvoiceUrl'; } },
   { id: 'prodej', nazev: 'Prodejní doklad',
     // Kus z balíku se prodal s balíkem — doklad patří k němu, ne ke kusu
+    /* Prodejní doklad z aplikace chybět nemůže — vyplacený prodej je
+       v řadě sám (ŘADA PODLE DATA DOKLADU) a doklad se otevře tlačítkem.
+       Hlídá se jen faktura vystavená jinde, ke které patří odkaz. */
     plati: function(it, g) {
-      return it.saleState === 'paid' && !it.bulkId
-        && (lzeVystavitDoklad(it, g) || chceOdkazNaFakturu(it, g));
+      return it.saleState === 'paid' && !it.bulkId && chceOdkazNaFakturu(it, g);
     },
     chybi: function(it, g) {
-      return lzeVystavitDoklad(it, g) ? !it.saleDocNum : _chybiPrazdne(it.saleInvoiceUrl);
+      return lzeVystavitDoklad(it, g) ? false : _chybiPrazdne(it.saleInvoiceUrl);
     },
     popis: function(it, g) {
       return lzeVystavitDoklad(it, g) ? 'Prodejní doklad — ještě nebyl vystavený'
         : 'Faktura vydaná — odkaz na ni';
     },
     pole:  function(it, g) { return lzeVystavitDoklad(it, g) ? '' : 'fSaleInvoiceUrl'; } },
-  { id: 'cilovka', nazev: 'Cílová cena',
+  // Účetního cílová cena nezajímá — v jeho pohledu pravidlo není vůbec
+  { id: 'cilovka', nazev: 'Cílová cena', jenMajitel: true,
     plati: function(it) {
       return _chybiNaSklade(it) && it.location !== 'Vráceno' && it.location !== 'Zrušeno';
     },
@@ -10487,6 +10490,12 @@ var CO_CHYBI_PRAVIDLA = [
     popis: function() { return 'Cílová cena'; },
     pole:  function() { return 'fTargetPrice'; } },
 ];
+
+// Pravidla, která platí pro toho, kdo se dívá (účetní nemá cílovku)
+function _chybiPravidla() {
+  var u = jeUctetni();
+  return CO_CHYBI_PRAVIDLA.filter(function(p) { return !(u && p.jenMajitel); });
+}
 
 // Nastavení: zapnuto + která pravidla. Co v uloženém chybí, je zapnuté.
 function getCoChybi() {
@@ -10515,7 +10524,7 @@ function coChybi(it, vse) {
   if (!vse && !nast.zapnuto) return [];
   var g = _chybiSkupiny();
   var out = [];
-  CO_CHYBI_PRAVIDLA.forEach(function(p) {
+  _chybiPravidla().forEach(function(p) {
     if (!vse && !nast.pravidla[p.id]) return;
     if (!p.plati(it, g) || !p.chybi(it, g)) return;
     out.push({ id: p.id, nazev: p.nazev, popis: p.popis(it, g), pole: p.pole(it, g) });
@@ -10587,7 +10596,7 @@ function buildChybiFilter() {
   };
   var h = radek('chybi-hlavni', nast.zapnuto, 'chybiZapni(this.checked)', 'Označovat, co chybí');
   h += '<div class="chybi-oddel"></div>';
-  CO_CHYBI_PRAVIDLA.forEach(function(p) {
+  _chybiPravidla().forEach(function(p) {
     h += radek('chybi-pravidlo', nast.pravidla[p.id], 'chybiPravidlo(\'' + p.id + '\',this.checked)',
       escHtml(p.nazev), pocty[p.id] || 0);
   });
@@ -10711,25 +10720,42 @@ document.addEventListener('input', function(e) {
    (majitel, 9. 11. 2026). Teď se po každém uložení řada srovná
    (precislujDoklady, volá ji sv()) — doklad vystavený dodatečně ke
    staršímu prodeji se zařadí na své místo a pozdější se posunou.
-   Řada je bez děr a bez dvojic. Číslo se dál přiděluje až vystavením
-   dokladu (Co chybí na nevystavený upozorňuje).
+   Řada je bez děr a bez dvojic.
 
-   Účetní číslo přidělit nesmí. Zapsat ho nemá kam (sv() mu neuloží nic),
-   takže by číslo zmizelo se zavřením záložky a majitel by témuž prodeji
-   přidělil jindy jiné. Dva doklady na jeden prodej s různými čísly jsou
-   horší než doklad žádný — proto se vrátí prázdno a volající to řekne. */
-function _dokladDatum(it) { return String(it.payoutDate || it.saleDate || ''); }
-function precislujDoklady() {
-  if (jeUctetni()) return 0;
+   V řadě je každý vyplacený podnikatelský prodej, u kterého místo
+   prodeje vystavuje „Prodejní doklad" (_dokladVRade), a k tomu všechno,
+   co už číslo má. Na Doklad nemusí nikdo kliknout jako první — dřív
+   číslo dávalo až první kliknutí majitele, jenže doklady potřebuje
+   hlavně účetní a majitel na ně skoro neklikne (9. 11. 2026).
+
+   Účetní do cloudu zapsat nemůže, takže si číslo jen SPOČÍTÁ
+   (_cislaDokladu) — ze stejných dat stejným postupem, takže mu vyjde
+   totéž, co má (nebo po nejbližším otevření aplikace bude mít) majitel
+   uložené. Kus, který do řady nepatří (čeká na payout, osobní), mu
+   číslo nedostane: to by si vymyslel a majitel by témuž prodeji dal
+   jiné. */
+function _dokladDatum(it) {
+  var d = String(it.payoutDate || it.saleDate || '');
+  var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(d.trim());
+  return m ? m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0') : d;
+}
+function _dokladVRade(it, g) {
+  if (!it) return false;
+  if (it.saleDocNum) return true;
+  return it.saleState === 'paid' && !it.bulkId && it.type !== 'bulk' && lzeVystavitDoklad(it, g);
+}
+// { id: 'ROK-NNN' } pro celou řadu — nic nezapisuje
+function _cislaDokladu() {
+  var g = getPlatGroups();
   var roky = {};
   (items || []).forEach(function(it) {
-    if (!it || !it.saleDocNum) return;
-    var m = /^(\d{4})-(\d+)$/.exec(it.saleDocNum);
+    if (!_dokladVRade(it, g)) return;
+    var m = /^(\d{4})-(\d+)$/.exec(it.saleDocNum || '');
     var d = _dokladDatum(it);
     var rok = /^\d{4}/.test(d) ? d.slice(0, 4) : (m ? m[1] : String(_dnesISO()).slice(0, 4));
     (roky[rok] = roky[rok] || []).push({ it: it, d: d, s: String(it.saleDate || ''), n: m ? parseInt(m[2], 10) : 1e9 });
   });
-  var zmeneno = 0;
+  var out = {};
   Object.keys(roky).forEach(function(rok) {
     roky[rok].sort(function(a, b) {
       if (a.d !== b.d) return a.d < b.d ? -1 : 1;
@@ -10737,16 +10763,23 @@ function precislujDoklady() {
       if (a.n !== b.n) return a.n - b.n;          // stejný den: dřív vystavený dřív
       return String(a.it.id) < String(b.it.id) ? -1 : 1;
     }).forEach(function(z, k) {
-      var c = rok + '-' + String(k + 1).padStart(3, '0');
-      if (z.it.saleDocNum !== c) { z.it.saleDocNum = c; zmeneno++; }
+      out[z.it.id] = rok + '-' + String(k + 1).padStart(3, '0');
     });
+  });
+  return out;
+}
+function precislujDoklady() {
+  if (jeUctetni()) return 0;
+  var c = _cislaDokladu(), zmeneno = 0;
+  (items || []).forEach(function(it) {
+    if (it && c[it.id] && it.saleDocNum !== c[it.id]) { it.saleDocNum = c[it.id]; zmeneno++; }
   });
   return zmeneno;
 }
 function saleDocNumber(it) {
   if (!it) return '';
+  if (jeUctetni()) return _cislaDokladu()[it.id] || '';
   if (it.saleDocNum) return it.saleDocNum;
-  if (jeUctetni()) return '';
   // Dočasná značka; skutečné číslo dá zařazení do řady podle data
   it.saleDocNum = 'novy';
   precislujDoklady();
@@ -10779,8 +10812,12 @@ function openSaleDocument(id) {
   }
   var p = getSeller();
   var cislo = saleDocNumber(it);
-  // Nevystavený doklad účetní nedostane — viz saleDocNumber()
-  if (!cislo) { showToast('Doklad zatím nemá číslo — musí ho vystavit majitel.', 'err'); return; }
+  // Mimo řadu si účetní číslo nevymýšlí — viz saleDocNumber()
+  if (!cislo) {
+    showToast(it.saleState !== 'paid' ? 'Doklad se vystaví až po vyplacení.'
+      : 'K tomuhle prodeji se prodejní doklad nevystavuje.', 'err');
+    return;
+  }
   var kupujici = it.linkedCustomerId ? (customers.find(function(c){ return c.id === it.linkedCustomerId; }) || null) : null;
   /* Částka jen v té měně, ve které prodej opravdu proběhl. Přepočet na Kč
      na doklad nepatří — kupující platil eura a účetní si je na konci

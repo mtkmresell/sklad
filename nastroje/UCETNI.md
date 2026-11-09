@@ -12,9 +12,9 @@ projdi nejdřív ten návod — postup je stejný a pravidla se doplňují.
 | | |
 |---|---|
 | **vidí** | Na skladě, Prodáno, hledání napříč sekcemi, odhlášení, vysvětlivky |
-| **nevidí** | Čeká, Zákazníci, Wishlist, analytiku, kalkulačku marží, chybějící listingy, osobní položky, přepínač profilů |
+| **nevidí** | Čeká, Zákazníci, Wishlist, analytiku, kalkulačku marží, cílové ceny v Co chybí, chybějící listingy, osobní položky, přepínač profilů |
 | **nemůže** | přidat, upravit ani smazat položku; prokliknout se na StockX ani na sledování zásilky |
-| **smí** | otevřít a vytisknout **prodejní doklad** u prodejů, kde je vystavený — je to jeho práce |
+| **smí** | otevřít a vytisknout **prodejní doklad** u každého vyplaceného prodeje, kde místo prodeje vystavuje doklad — bez toho, aby ho majitel otevřel první; je to jeho práce |
 
 Nahoře mu svítí oranžový pruh **Pohled účetního** s tlačítkem na
 vysvětlivky, ať je pořád jasné, kde je.

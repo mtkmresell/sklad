@@ -101,7 +101,8 @@ const SEED = [
   check('kupní smlouva jen s číslem pořád chybí (vždy odkaz)', stejne(await chybi('s3'), ['nakup']), JSON.stringify(await chybi('s3')));
   check('osobní kus bez cílovky: cílovka', stejne(await chybi('s5'), ['cilovka']), JSON.stringify(await chybi('s5')));
   check('Čeká bez nákupního dokladu: nákup', stejne(await chybi('w2'), ['nakup']), JSON.stringify(await chybi('w2')));
-  check('Prodáno přes Vinted bez dokladu: prodejní doklad', stejne(await chybi('p1'), ['prodej']), JSON.stringify(await chybi('p1')));
+  // Doklad z aplikace je v řadě sám, jakmile je prodej vyplacený (ŘADA PODLE DATA DOKLADU)
+  check('Prodáno přes Vinted: doklad z aplikace nechybí nikdy', (await chybi('p1')).length === 0, JSON.stringify(await chybi('p1')));
   check('Prodáno přes Pikastore bez faktury: prodejní doklad', stejne(await chybi('p3'), ['prodej']), JSON.stringify(await chybi('p3')));
 
   section('2) Co se rozsvítit nesmí');
@@ -132,7 +133,7 @@ const SEED = [
   r = await rohy('waiting');
   check('Čeká: roh u w2 a u zavřeného balíku', r.includes('w2') && !r.includes('w1') && r.some(x => /BULK/.test(x)), JSON.stringify(r));
   r = await rohy('sold');
-  check('Prodáno: roh přesně u p1 a p3', stejne(r, ['p1', 'p3']), JSON.stringify(r));
+  check('Prodáno: roh přesně u p3', stejne(r, ['p3']), JSON.stringify(r));
 
   const karty = await page.evaluate(async () => {
     switchTab('stock'); setView('grid'); renderItems();
@@ -186,7 +187,7 @@ const SEED = [
   r = await radky('stock');
   check('Na skladě zůstanou jen kusy s rohem', stejne(r, ['s1', 's3', 's5']), JSON.stringify(r));
   r = await radky('sold');
-  check('v Prodáno taky', stejne(r, ['p1', 'p3']), JSON.stringify(r));
+  check('v Prodáno taky', stejne(r, ['p3']), JSON.stringify(r));
   const balikyCeka = await page.evaluate(async () => {
     switchTab('waiting'); renderItems();
     await new Promise(r => setTimeout(r, 200));
@@ -223,7 +224,7 @@ const SEED = [
   check('dva řádky s tlačítkem Doplnit', d && d.length === 2 && d.every(x => x.tlacitko === 'Doplnit'), JSON.stringify(d));
   check('Doplnit míří na odkaz i cílovku', d && stejne(d.map(x => x.pole), ['fInvoiceUrl', 'fTargetPrice']), JSON.stringify(d));
   d = await detail('p1');
-  check('prodejní doklad se vystaví tlačítkem, ne v úpravě', d && d.length === 1 && d[0].tlacitko === 'Vystavit', JSON.stringify(d));
+  check('prodej s dokladem z aplikace nic nehlásí', d === null, JSON.stringify(d));
   d = await detail('p3');
   check('u faktury vydané Doplnit na odkaz', d && d.length === 1 && d[0].pole === 'fSaleInvoiceUrl', JSON.stringify(d));
   d = await detail('s2');

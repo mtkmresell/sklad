@@ -367,14 +367,25 @@ const POLOZKY = [
   await page.evaluate(() => cm('moDetail'));
 
   const doklad = await page.evaluate(() => {
-    // p2 má číslo uložené od majitele, w1 ne
+    /* Účetní si číslo spočítá z řady podle data (ŘADA PODLE DATA DOKLADU) —
+       stejně jako majitel, takže mu vyjde totéž. p2 je jediný doklad roku
+       2026, takže 001, ať měl uložené cokoli. Vyplacený prodej bez čísla
+       dostane své místo v řadě taky; čekající (w1) ne. */
     const s = saleDocNumber(items.find(i => i.id === 'p2'));
+    const novy = { id: 'pNovy', name: 'Bez kliknutí majitele', saleState: 'paid', soldWhere: 'Vinted',
+      saleDate: '2026-07-01', payoutDate: '2026-07-02', sellPrice: 1000, tags: [] };
+    items.push(novy);
+    const n = saleDocNumber(novy);
+    const nZapsane = novy.saleDocNum || null;
+    items = items.filter(i => i.id !== 'pNovy');
     const bez = items.find(i => i.id === 'w1');
     const b = saleDocNumber(bez);
-    return { ulozene: s, vymyslene: b, zapsane: bez.saleDocNum || null };
+    return { ulozene: s, novy: n, nZapsane: nZapsane, vymyslene: b, zapsane: bez.saleDocNum || null };
   });
-  check('uložené číslo se přečte', doklad.ulozene === '2026-007', String(doklad.ulozene));
-  check('nevystavené se nevymyslí', doklad.vymyslene === '', String(doklad.vymyslene));
+  check('číslo se spočítá z řady podle data', doklad.ulozene === '2026-001', String(doklad.ulozene));
+  check('vyplacený prodej dostane číslo i bez kliknutí majitele', doklad.novy === '2026-002', JSON.stringify(doklad));
+  check('a nic se do položky nezapíše', doklad.nZapsane === null, JSON.stringify(doklad));
+  check('čekající prodej číslo nedostane', doklad.vymyslene === '', String(doklad.vymyslene));
   check('a do položky se nic nezapsalo', doklad.zapsane === null, String(doklad.zapsane));
 
   /* A doklad se účetnímu opravdu vystaví — samotné tlačítko nestačí,
@@ -395,7 +406,7 @@ const POLOZKY = [
   } else {
     await oknoDokladu.waitForTimeout(400);
     const t = (await oknoDokladu.evaluate(() => document.body.textContent) || '').replace(/\s+/g, ' ');
-    check('doklad nese uložené číslo', /2026-007/.test(t), t.slice(0, 80));
+    check('doklad nese číslo z řady', /2026-001/.test(t), t.slice(0, 80));
     check('a je to Dodavatel/Odběratel', /Dodavatel/.test(t) && /Odběratel/.test(t), t.slice(0, 80));
     // Datum na dokladu je den vyplacení (3. 6.), ne den prodeje (1. 6.)
     check('datum je den vyplacení, ne prodeje', /03\.06\.2026/.test(t) && !/01\.06\.2026/.test(t), t.slice(0, 120));
@@ -497,6 +508,17 @@ const POLOZKY = [
   // ══════════════════════════════════════════════════════════════
   // Kalkulačka marže — tlačítko je schované, ale klik na nákupní cenu
   // ji otevíral dál (majitel, 9. 11. 2026)
+  section('16a) Co chybí: účetní nevidí cílovou cenu');
+  const chybi = await page.evaluate(() => {
+    const kus = items.find(i => i.id === 's1');
+    const puvodni = kus.targetPrice; kus.targetPrice = 0;
+    const r = { pravidla: _chybiPravidla().map(p => p.id), u: coChybi(kus, true).map(x => x.id) };
+    kus.targetPrice = puvodni;
+    return r;
+  });
+  check('v nabídce Co chybí není cílová cena', !chybi.pravidla.includes('cilovka') && chybi.pravidla.includes('nakup'), JSON.stringify(chybi));
+  check('kus bez cílovky se kvůli ní neoznačí', !chybi.u.includes('cilovka'), JSON.stringify(chybi));
+
   section('16b) Kalkulačka marže se účetnímu neotevře');
   await page.evaluate(() => { switchTab('stock'); if (typeof setView === 'function') setView('table'); renderItems(); });
   await page.waitForTimeout(300);
