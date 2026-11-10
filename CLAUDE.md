@@ -1112,9 +1112,9 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 
 | co | kde | stav |
 |---|---|---|
-| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **čeká na publikování** (10. 11.) — nový blok `zpravy` pro zprávy účetního. Dokud v konzoli není, okno Zprávy hlásí, že chybí pravidla, a nic se neuloží. Předtím hotovo (lísteček `pozadavek_*` ověřený z příkazové řádky) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (6. 11., znovu 10. 11.: mail o zprávách od účetního a jejich blok v ranní obhlídce) — v repozitáři je nový odkaz „Otevřít sklad" na `sklad.mtkm-resell.workers.dev` a pole `web` a `nejde` u `sklad_kontrola` (odkaz na e-shop pod názvem místa v Kontrolách listingů; skilly ho musí posílat). Předtím **nasazeno 31. 10.** (verze `dc8e92a`) — ověřeno: v chatu přibyl nástroj `sklad_kontrola`, který starší verze nemá, a `pika_prodeje` vrací vystavené kusy z Pikastore i Purekickz. Tím dorazily i opravy mailů o potížích (`replaced_by_submission_piece`, pomlčka ve velikosti, `pkNeznaVelikost`) a pondělní obhlídka s „Purekickz nevezme". Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
-| třetí cron trigger `*/5 * * * *` | Cloudflare → Worker → Settings → Triggers | **čeká** (10. 11.) — mail o nové zprávě od účetního. Bez něj chodí zprávy jen v ranní obhlídce. Potřebuje i nasazený konektor a nová pravidla |
+| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** — blok `zpravy` publikovaný 10. 11. (majitel); předtím ověřený lísteček `pozadavek_*` z příkazové řádky |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **nasazeno 10. 11.** (verze se zprávami od účetního — `ZPRÁVY OD ÚČETNÍHO`, odkaz na `sklad.mtkm-resell.workers.dev`, pole `web` a `nejde` u `sklad_kontrola`). Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
+| třetí cron trigger `*/5 * * * *` | Cloudflare → Worker konektoru → Settings → Triggers → Cron Triggers → Add | **čeká** (10. 11., postup majiteli vysvětlen) — mail o nové zprávě od účetního. Bez něj chodí zprávy jen v ranní obhlídce. Ověří se zkušebním hlášením: mail do 5–10 minut (neotevírat ho mezitím v aplikaci) |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
@@ -1154,7 +1154,6 @@ Na staré adrese jdou vytáhnout v konzoli:
 `localStorage.getItem('sklad_konektor_url_v1')`.
 
 **Zbývá (připomínej):**
-- nasadit konektor (kvůli odkazu v mailech a poli `web` u kontrol),
 - Firebase → Authentication → Authorized domains: přidat novou doménu,
 - přístup pro účetního: One-time PIN + pravidlo Allow → Emails,
 - **až pak** repozitář na soukromý — pořadí je důležité, minule se tím
