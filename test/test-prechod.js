@@ -63,11 +63,11 @@ function section(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(
   // (Kurzy měn, Komisní prodej, Údaje pro doklad…) — první druh se hlídal
   // sám, druhý se dřív jen objevil bez přechodu.
   const pocet = await page.evaluate(() => document.querySelectorAll('#moSettings .tool-grid .btn-sec').length);
-  check('v Nástrojích je jedenáct tlačítek', pocet === 11, String(pocet));
+  check('v Nástrojích je dvanáct tlačítek', pocet === 12, String(pocet));
   for (let i = 0; i < pocet; i++) {
     await page.evaluate(() => {
       document.querySelectorAll('.mo.open, .okno-duch').forEach(m => { m.classList.remove('open'); if (m.classList.contains('okno-duch')) m.remove(); });
-      ['retailersMgrOv', 'kurzyOverlay', 'komiseOverlay', 'itemCacheMgr', 'igMgrOverlay', 'sellerOv'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); });
+      ['retailersMgrOv', 'kurzyOverlay', 'komiseOverlay', 'itemCacheMgr', 'igMgrOverlay', 'sellerOv', 'ucetOv'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); });
       document.querySelectorAll('body > div[style*="position:fixed"], body > div[style*="position: fixed"], #itemCacheMgr').forEach(e => e.remove());
       openSettings();
     });

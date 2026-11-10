@@ -723,6 +723,27 @@ prodeje IBAN, jinak číslo účtu, a když ten správný chybí, ten druhý.
 je musí přenést s sebou**, jinak by z dokladu zmizely bez vysvětlení.
 Hlídá to `test-saledoc.js` a `test-payout.js`.
 
+### Účetnictví (`ÚČETNICTVÍ`)
+
+Okno s výběrem měsíce, kde má účetní pohromadě, co za měsíc potřebuje
+(majitel, 10. 11. 2026). Účetní ho otevírá tlačítkem **Účetnictví**
+v oranžové liště, majitel v *Nastavení → Nástroje*. Jen čte.
+
+- **Doklady za měsíc** (`openDokladyMesic`): všechny prodejní doklady
+  měsíce v jednom okně, každý na své stránce (`page-break-after`) —
+  Tisk → Uložit jako PDF dá jeden soubor. Obsah skládá `_dokladTelo`,
+  **tatáž funkce jako jeden doklad** (`openSaleDocument`); dvě kopie by
+  se rozešly. Měsíc = měsíc data na dokladu, čísla z `_cislaDokladu`.
+- **Přehled za měsíc** (`stahniPrehledMesice`, `ucPrehledRadky`): CSV
+  pro Excel (středník, desetinná čárka, BOM). Prodeje podle data
+  vyplacení, nákupy podle data nákupu, **jen podnikání**. Částka v měně
+  obchodu, **uložený** kurz ke dni (nikdy dnešní), příznak ČNB, Kč,
+  číslo dokladu (u nákupu FP / KS / objednávka) a odkaz na doklad.
+  Balík je jeden prodej, jeho kusy jsou nákupy každý zvlášť.
+
+Okno se zavírá Escapem i klikem mimo. Hlídá to `test-ucetnictvi.js`
+a v pohledu účetního `test-uctetni.js`, sekce 16c.
+
 ### Společný nákupní doklad (`SPOLEČNÝ NÁKUPNÍ DOKLAD`)
 
 Odkaz na nákupní doklad (`invoiceUrl`) vložený k jednomu kusu dostanou
@@ -945,6 +966,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | kontroly listingů (okno, značky) | `KONTROLY LISTINGŮ` |
 | odkaz na doklad pro celý nákup | `SPOLEČNÝ NÁKUPNÍ DOKLAD` |
 | obrázek pro stejné kusy | `SPOLEČNÝ OBRÁZEK POLOŽKY` |
+| okno pro účetního (měsíc) | `ÚČETNICTVÍ` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1555,11 +1577,6 @@ neodečítá. **Jeden kus doma se nesmí přenést dvakrát** — když se tent�
 model a velikost prodá u obou komisí naráz, druhý prodej si vezme další
 kus ze skupiny, nebo žádný (`vynechat`). Hlídá to `test-pikastore.js`.
 
-**Doklady za měsíc v jednom souboru.** Typ dokladu u místa prodeje už
-existuje (`TYP DOKLADU U MÍSTA PRODEJE`), takže to, co tohle blokovalo, je
-vyřešené. Zbývá samotný export: sloučit doklady za měsíc do jednoho
-souboru, každý na své stránce, ať se účetnímu nestahují po kusech.
-
 **Upozornění e-mailem — kód hotový, čeká na zapojení.** Je v konektoru
 (`UPOZORNĚNÍ E-MAILEM`), ale běžet začne, až majitel v Cloudflare doplní
 `RESEND_API_KEY` a `MAIL_KOMU` a přidá dva cron triggery. Postup je
@@ -1581,7 +1598,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 71 souborů
+node test/run.js              # kontrola syntaxe + všech 72 souborů
 node test/run.js archive      # jen vybrané
 ```
 

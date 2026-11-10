@@ -519,6 +519,25 @@ const POLOZKY = [
   check('v nabídce Co chybí není cílová cena', !chybi.pravidla.includes('cilovka') && chybi.pravidla.includes('nakup'), JSON.stringify(chybi));
   check('kus bez cílovky se kvůli ní neoznačí', !chybi.u.includes('cilovka'), JSON.stringify(chybi));
 
+  section('16c) Účetnictví — doklady za měsíc');
+  const uc = await page.evaluate(() => {
+    const pred = JSON.stringify(items);
+    const tl = Array.from(document.querySelectorAll('#uctetniLista button')).map(b => b.textContent.trim());
+    _ucObdobi = { rok: 2026, mesic: 6 };
+    openUcetnictvi();
+    const text = (document.getElementById('ucetOv') || {}).textContent || '';
+    const otevreno = []; const puv = window.open;
+    window.open = function() { const o = { h: '' }; otevreno.push(o); return { document: { write: function(x) { o.h += x; }, close: function() {} } }; };
+    openDokladyMesic(2026, 6);
+    window.open = puv;
+    zavriUcetnictvi();
+    return { tl, text: text.replace(/\s+/g, ' '), okno: otevreno.length ? otevreno[0].h : '', beze: pred === JSON.stringify(items) };
+  });
+  check('v liště je tlačítko Účetnictví', uc.tl.includes('Účetnictví'), JSON.stringify(uc.tl));
+  check('okno ukáže doklad z června', /1 doklad · 2026-001/.test(uc.text), uc.text.slice(0, 160));
+  check('doklady za měsíc se účetnímu otevřou', uc.okno.includes('2026-001') && uc.okno.includes('class="dk"'));
+  check('a nic se nezapsalo', uc.beze === true);
+
   section('16b) Kalkulačka marže se účetnímu neotevře');
   await page.evaluate(() => { switchTab('stock'); if (typeof setView === 'function') setView('table'); renderItems(); });
   await page.waitForTimeout(300);

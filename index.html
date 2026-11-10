@@ -106,6 +106,19 @@ body.uctetni .bulk-bar,
 /* „Analytika" v Prodáno se skládá až za běhu a nemá vlastní id */
 body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 
+/* ── ÚČETNICTVÍ (okno) ── */
+.uc-modal { max-width:640px; width:100%; max-height:88vh; overflow:auto; }
+.uc-obdobi { display:flex; gap:8px; margin-bottom:14px; }
+.uc-obdobi > * { flex:1 1 0; min-width:0; width:auto !important; }
+.uc-obdobi .cs-btn { width:100%; }
+.uc-radek .btn-sec { flex:0 0 auto; width:auto; padding:7px 14px; }
+.uc-sekce { border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px; background:var(--surface2); }
+.uc-nadpis { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.uc-radek { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:13px; }
+.uc-pozn { font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5; }
+.ul-btn.ul-hlavni { margin-left:auto; border-color:var(--accent2); color:var(--accent2); }
+.ul-btn.ul-hlavni + .ul-btn { margin-left:0; }
+
 /* Úpravy položek — účetní se jen dívá.
    `.uc-skryt` nesou tlačítka, která se skládají za běhu (detail položky,
    ukládání fotky). Skrývání je jen vzhled; co se opravdu nesmí, hlídá
@@ -3283,6 +3296,7 @@ function _vykresliUctetniListu() {
   lista.id = 'uctetniLista';
   lista.innerHTML = '<span class="ul-znak">Pohled účetního</span>'
     + '<span class="ul-text">Vidíš sklad a prodeje. Data se odsud nedají měnit.</span>'
+    + '<button class="ul-btn ul-hlavni" onclick="openUcetnictvi()">Účetnictví</button>'
     + '<button class="ul-btn" onclick="otevriUctetniManual()">Co tu najdu?</button>';
   var hlavicka = document.querySelector('header');
   if (hlavicka && hlavicka.parentNode) hlavicka.parentNode.insertBefore(lista, hlavicka.nextSibling);
@@ -3304,7 +3318,9 @@ function otevriUctetniManual() {
     + '<h4>Co tu není</h4>'
     + '<p>Zákazníci, analytika, wishlist a osobní sbírka. Do těch dat pohled účetního nevidí.</p>'
     + '<h4>Doklady</h4>'
-    + '<p>U prodejů, ke kterým se doklad vystavuje, je v detailu položky tlačítko <b>Doklad</b>. Datum na něm je den, kdy dorazily peníze. Prodeje, které doklad ještě nemají přidělené číslo, vystaví majitel — tobě se pak objeví samy.</p>'
+    + '<p>U prodejů, ke kterým se doklad vystavuje, je v detailu položky tlačítko <b>Doklad</b>. Datum na něm je den, kdy dorazily peníze, a čísla jdou v roce podle data. Doklad má každý vyplacený prodej sám, nikdo ho nemusí vystavovat.</p>'
+    + '<h4>Účetnictví</h4>'
+    + '<p>Tlačítko <b>Účetnictví</b> v oranžovém pruhu: vybereš měsíc a máš pohromadě všechny prodejní doklady toho měsíce (jeden soubor, každý doklad na své stránce).</p>'
     + '<h4>Změny</h4>'
     + '<p>Odsud se nedá nic upravit ani smazat. Když něco nesedí, dej vědět majiteli skladu — opraví to na své straně a tobě se to objeví samo.</p>'
     + '</div>';
@@ -10810,7 +10826,6 @@ function openSaleDocument(id) {
   if (it.saleState !== 'paid' && it.saleState !== 'waiting') {
     showToast('Doklad jde vystavit až k prodané položce.', 'err'); return;
   }
-  var p = getSeller();
   var cislo = saleDocNumber(it);
   // Mimo řadu si účetní číslo nevymýšlí — viz saleDocNumber()
   if (!cislo) {
@@ -10818,6 +10833,54 @@ function openSaleDocument(id) {
       : 'K tomuhle prodeji se prodejní doklad nevystavuje.', 'err');
     return;
   }
+  var h = '<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">';
+  h += '<title>Prodejní doklad ' + escHtml(cislo) + '</title>';
+  h += '<style>' + _dokladStyl() + '</style></head><body>';
+  h += _dokladTelo(it, cislo);
+  // Tisk až úplně dole vpravo — nahoře překážel v tom, co je na dokladu podstatné
+  h += '<div class="noprint"><button onclick="window.print()">Vytisknout nebo uložit jako PDF</button></div>';
+  h += '</body></html>';
+
+  var w = window.open('', '_blank');
+  if (!w) { showToast('Prohlížeč zablokoval nové okno.', 'err'); return; }
+  w.document.write(h);
+  w.document.close();
+}
+
+// Styl dokladu — sdílí ho jeden doklad i doklady za měsíc (ÚČETNICTVÍ)
+function _dokladStyl() {
+  var h = '';
+  h += 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#111;background:#fff;margin:0;padding:36px 40px;font-size:13px;line-height:1.6;}';
+  h += '.hl{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;border-bottom:3px solid #111;padding-bottom:14px;margin-bottom:22px;}';
+  h += 'h1{font-size:20px;font-weight:800;margin:0 0 2px;letter-spacing:-0.02em;}';
+  h += '.cislo{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#555;}';
+  h += '.strany{display:flex;gap:36px;margin-bottom:24px;flex-wrap:wrap;}';
+  h += '.strana{flex:1;min-width:200px;}';
+  h += '.nadpis{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:#888;margin-bottom:5px;font-weight:700;}';
+  h += '.jmeno{font-weight:700;font-size:14px;}';
+  h += 'table{width:100%;border-collapse:collapse;margin-bottom:20px;}';
+  h += 'th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#888;padding:0 0 6px;border-bottom:1px solid #ddd;}';
+  h += 'td{padding:7px 0;border-bottom:1px solid #f0f0f0;vertical-align:top;}';
+  h += 'td.k{color:#666;width:38%;}';
+  h += '.celkem{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid #111;padding-top:12px;margin-top:4px;}';
+  h += '.celkem .c{font-size:22px;font-weight:800;}';
+  h += '.prepocet{text-align:right;margin-top:6px;font-size:11px;color:#888;line-height:1.6;}';
+  h += '.prepocet a{color:#888;}';
+  h += '.pozn{margin-top:28px;padding-top:14px;border-top:1px solid #eee;font-size:11px;color:#777;}';
+  h += '.podpisy{display:flex;gap:60px;margin-top:44px;}';
+  h += '.podpis{flex:1;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#888;}';
+  h += '@media print{body{padding:16px;} .noprint{display:none;}}';
+  h += '.noprint{margin-top:36px;display:flex;justify-content:flex-end;}';
+  h += '.noprint button{font:inherit;font-size:12px;padding:8px 16px;border:1px solid #111;background:#111;color:#fff;border-radius:6px;cursor:pointer;}';
+  return h;
+}
+
+/* Obsah jednoho dokladu bez obalu stránky. Jeden doklad i doklady za
+   měsíc (každý na své stránce) skládá tatáž funkce — dvě kopie by se
+   rozešly a účetní by v souboru za měsíc dostal jiný doklad, než jaký
+   vidí po jednom. */
+function _dokladTelo(it, cislo) {
+  var p = getSeller();
   var kupujici = it.linkedCustomerId ? (customers.find(function(c){ return c.id === it.linkedCustomerId; }) || null) : null;
   /* Částka jen v té měně, ve které prodej opravdu proběhl. Přepočet na Kč
      na doklad nepatří — kupující platil eura a účetní si je na konci
@@ -10862,32 +10925,7 @@ function openSaleDocument(id) {
     }
   }
 
-  var h = '<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">';
-  h += '<title>Prodejní doklad ' + escHtml(cislo) + '</title>';
-  h += '<style>';
-  h += 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#111;background:#fff;margin:0;padding:36px 40px;font-size:13px;line-height:1.6;}';
-  h += '.hl{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;border-bottom:3px solid #111;padding-bottom:14px;margin-bottom:22px;}';
-  h += 'h1{font-size:20px;font-weight:800;margin:0 0 2px;letter-spacing:-0.02em;}';
-  h += '.cislo{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#555;}';
-  h += '.strany{display:flex;gap:36px;margin-bottom:24px;flex-wrap:wrap;}';
-  h += '.strana{flex:1;min-width:200px;}';
-  h += '.nadpis{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:#888;margin-bottom:5px;font-weight:700;}';
-  h += '.jmeno{font-weight:700;font-size:14px;}';
-  h += 'table{width:100%;border-collapse:collapse;margin-bottom:20px;}';
-  h += 'th{text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#888;padding:0 0 6px;border-bottom:1px solid #ddd;}';
-  h += 'td{padding:7px 0;border-bottom:1px solid #f0f0f0;vertical-align:top;}';
-  h += 'td.k{color:#666;width:38%;}';
-  h += '.celkem{display:flex;justify-content:space-between;align-items:baseline;border-top:2px solid #111;padding-top:12px;margin-top:4px;}';
-  h += '.celkem .c{font-size:22px;font-weight:800;}';
-  h += '.prepocet{text-align:right;margin-top:6px;font-size:11px;color:#888;line-height:1.6;}';
-  h += '.prepocet a{color:#888;}';
-  h += '.pozn{margin-top:28px;padding-top:14px;border-top:1px solid #eee;font-size:11px;color:#777;}';
-  h += '.podpisy{display:flex;gap:60px;margin-top:44px;}';
-  h += '.podpis{flex:1;border-top:1px solid #999;padding-top:6px;font-size:10px;color:#888;}';
-  h += '@media print{body{padding:16px;} .noprint{display:none;}}';
-  h += '.noprint{margin-top:36px;display:flex;justify-content:flex-end;}';
-  h += '.noprint button{font:inherit;font-size:12px;padding:8px 16px;border:1px solid #111;background:#111;color:#fff;border-radius:6px;cursor:pointer;}';
-  h += '</style></head><body>';
+  var h = '';
 
   h += '<div class="hl"><div><h1>Prodejní doklad</h1><div class="cislo">č. ' + escHtml(cislo) + '</div></div>';
   h += '<div style="text-align:right;"><div class="nadpis">Datum</div><div style="font-weight:700;">' + escHtml(datum) + '</div></div></div>';
@@ -10955,14 +10993,7 @@ function openSaleDocument(id) {
   if (p.signatures) {
     h += '<div class="podpisy"><div class="podpis">Podpis prodávajícího</div><div class="podpis">Podpis kupujícího</div></div>';
   }
-  // Tisk až úplně dole vpravo — nahoře překážel v tom, co je na dokladu podstatné
-  h += '<div class="noprint"><button onclick="window.print()">Vytisknout nebo uložit jako PDF</button></div>';
-  h += '</body></html>';
-
-  var w = window.open('', '_blank');
-  if (!w) { showToast('Prohlížeč zablokoval nové okno.', 'err'); return; }
-  w.document.write(h);
-  w.document.close();
+  return h;
 }
 
 // Okno s údaji prodávajícího
@@ -11007,6 +11038,215 @@ function saveSellerFromForm() {
   var ov = document.getElementById('sellerOv');
   if (ov) ov.remove();
   showToast('Údaje pro doklad uloženy.');
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   ÚČETNICTVÍ
+
+   Okno pro účetního (a majitele) s jedním výběrem měsíce: všechno, co
+   účetní za měsíc potřebuje, na jednom místě, bez proklikávání položek
+   po jedné (majitel, 10. 11. 2026). Účetní do dat nezapisuje, takže
+   tady se jen čte a skládá.
+
+   - Doklady za měsíc: všechny prodejní doklady měsíce v jednom okně,
+     každý na své stránce — Tisk → Uložit jako PDF dá jeden soubor.
+     Obsah skládá _dokladTelo, tatáž funkce jako jeden doklad.
+     Měsíc dokladu = měsíc data na dokladu (vyplacení, jinak prodej),
+     čísla z _cislaDokladu — u účetního i majitele vyjdou stejně.
+   - Přehled za měsíc: prodeje a nákupy jako CSV pro Excel (středník,
+     desetinná čárka, BOM) — účetní ho převezme do svého programu.
+══════════════════════════════════════════════════════════════════════ */
+var MESICE_UC = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
+var _ucObdobi = null;   // { rok: 2026, mesic: 1..12 }
+
+function _ucVychoziObdobi() {
+  // Účetní zpracovává měsíc, který skončil
+  var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);
+  return { rok: d.getFullYear(), mesic: d.getMonth() + 1 };
+}
+function _ucKlic(rok, mesic) { return rok + '-' + String(mesic).padStart(2, '0'); }
+// Normalizované datum (RRRR-MM-DD) z ISO i z „dd.mm.rrrr"
+function _ucDatum(v) {
+  var d = String(v || '').trim();
+  var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(d);
+  return m ? m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0') : d.slice(0, 10);
+}
+function _ucVMesici(datum, rok, mesic) { return _ucDatum(datum).slice(0, 7) === _ucKlic(rok, mesic); }
+
+// Prodejní doklady měsíce seřazené podle čísla: [{ it, cislo }]
+function ucDokladyMesice(rok, mesic) {
+  var c = _cislaDokladu();
+  return (items || []).filter(function(it) {
+    return c[it.id] && _ucVMesici(_dokladDatum(it), rok, mesic);
+  }).map(function(it) { return { it: it, cislo: c[it.id] }; })
+    .sort(function(a, b) { return a.cislo < b.cislo ? -1 : a.cislo > b.cislo ? 1 : 0; });
+}
+
+function openDokladyMesic(rok, mesic) {
+  var seznam = ucDokladyMesice(rok, mesic);
+  if (!seznam.length) { showToast('V tomhle měsíci žádný prodejní doklad není.', 'err'); return; }
+  var nazev = 'Prodejní doklady ' + _ucKlic(rok, mesic);
+  var h = '<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">';
+  h += '<title>' + escHtml(nazev) + '</title>';
+  h += '<style>' + _dokladStyl()
+    + '.dk{page-break-after:always;break-after:page;padding-bottom:28px;margin-bottom:28px;border-bottom:1px dashed #ccc;}'
+    + '.dk:last-of-type{page-break-after:auto;break-after:auto;border-bottom:none;}'
+    + '.souhrn{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:26px;padding:12px 16px;background:#f5f5f5;border-radius:8px;font-size:12px;}'
+    + '.souhrn button{font:inherit;font-size:12px;padding:8px 16px;border:1px solid #111;background:#111;color:#fff;border-radius:6px;cursor:pointer;}'
+    + '@media print{.dk{border-bottom:none;margin:0;padding:0;}}'
+    + '</style></head><body>';
+  h += '<div class="souhrn noprint" style="margin-top:0;"><div><b>' + escHtml(nazev) + '</b> · '
+    + seznam.length + ' ' + (seznam.length === 1 ? 'doklad' : seznam.length < 5 ? 'doklady' : 'dokladů')
+    + ' (' + escHtml(seznam[0].cislo) + (seznam.length > 1 ? ' – ' + escHtml(seznam[seznam.length - 1].cislo) : '') + ')'
+    + '</div><button onclick="window.print()">Vytisknout nebo uložit jako PDF</button></div>';
+  seznam.forEach(function(z) { h += '<section class="dk">' + _dokladTelo(z.it, z.cislo) + '</section>'; });
+  h += '</body></html>';
+  var w = window.open('', '_blank');
+  if (!w) { showToast('Prohlížeč zablokoval nové okno.', 'err'); return; }
+  w.document.write(h);
+  w.document.close();
+}
+
+/* Přehled za měsíc pro účetní program (CSV pro Excel). Prodej patří do
+   měsíce podle data dokladu (vyplacení), nákup podle data nákupu — tak
+   to počítá daňová evidence. Jen podnikání; osobní kusy do účetnictví
+   nepatří. Balík je jeden prodej (řádek balíku), jeho kusy jsou nákupy
+   každý zvlášť. Kurz je ten uložený ke dni, nikdy dnešní. */
+function _ucCislo(n, des) {
+  if (n == null || n === '' || isNaN(n)) return '';
+  return Number(n).toLocaleString('cs', { minimumFractionDigits: des || 0, maximumFractionDigits: des == null ? 2 : des, useGrouping: false });
+}
+function _ucNakupDoklad(it) {
+  if (it.dokladTyp === 'fp' && it.fpCislo) return 'FP ' + it.fpCislo;
+  if (it.dokladTyp === 'ks' && it.dokladCislo) return 'KS ' + it.dokladCislo;
+  return it.orderNum ? 'obj. ' + it.orderNum : '';
+}
+function ucProdejeMesice(rok, mesic) {
+  return (items || []).filter(function(it) {
+    return it.saleState === 'paid' && !isPersonal(it) && !it.bulkId
+      && _ucVMesici(_dokladDatum(it), rok, mesic);
+  }).sort(function(a, b) { return _dokladDatum(a) < _dokladDatum(b) ? -1 : 1; });
+}
+function ucNakupyMesice(rok, mesic) {
+  return (items || []).filter(function(it) {
+    return it.type !== 'bulk' && !isPersonal(it) && _ucVMesici(it.buyDate, rok, mesic);
+  }).sort(function(a, b) { return _ucDatum(a.buyDate) < _ucDatum(b.buyDate) ? -1 : 1; });
+}
+function ucPrehledRadky(rok, mesic) {
+  var c = _cislaDokladu();
+  var radky = [['Typ', 'Datum', 'Doklad', 'Položka', 'SKU', 'Velikost', 'Místo', 'Protistrana',
+    'Částka', 'Měna', 'Kurz', 'Kurz ČNB', 'Částka Kč', 'Odkaz na doklad']];
+  ucProdejeMesice(rok, mesic).forEach(function(it) {
+    var eur = it.sellCurrency === 'EUR';
+    var kurz = eur ? (it.payoutRateEur || it.profitRateEur || 0) : 0;
+    var castka = eur ? (getSellOrig(it) || 0) : (it.sellPrice || 0);
+    radky.push(['Prodej', fmtDate(_dokladDatum(it)), c[it.id] || '', it.name || '', it.sku || '', it.size || '',
+      it.soldWhere || '', '', _ucCislo(castka), eur ? 'EUR' : 'CZK',
+      eur ? _ucCislo(kurz, 3) : '', eur ? (it.payoutRateCnb ? 'ano' : 'ne') : '',
+      _ucCislo(eur ? Math.round(castka * kurz * 100) / 100 : castka), it.saleInvoiceUrl || '']);
+  });
+  ucNakupyMesice(rok, mesic).forEach(function(it) {
+    var eur = it.buyCurrency === 'EUR';
+    var kurz = eur ? (it.buyRateEur || 0) : 0;
+    var castka = (it.buyPrice || 0) * (it.qty || 1);
+    radky.push(['Nákup', fmtDate(_ucDatum(it.buyDate)), _ucNakupDoklad(it), it.name || '', it.sku || '', it.size || '',
+      it.buyWhere || '', it.from || '', _ucCislo(castka), eur ? 'EUR' : 'CZK',
+      eur ? _ucCislo(kurz, 3) : '', '', _ucCislo(eur ? Math.round(castka * kurz * 100) / 100 : castka), it.invoiceUrl || '']);
+  });
+  return radky;
+}
+function ucPrehledCsv(rok, mesic) {
+  // Středník a desetinná čárka — tak to český Excel otevře rovnou do sloupců
+  return '﻿' + ucPrehledRadky(rok, mesic).map(function(r) {
+    return r.map(function(v) {
+      v = String(v == null ? '' : v);
+      return /[";\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    }).join(';');
+  }).join('\r\n') + '\r\n';
+}
+function stahniPrehledMesice(rok, mesic) {
+  var text = ucPrehledCsv(rok, mesic);
+  var blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'ucetnictvi_' + _ucKlic(rok, mesic) + '.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  showToast('Přehled za ' + MESICE_UC[mesic - 1] + ' ' + rok + ' stažen.');
+}
+
+// ── Okno ──────────────────────────────────────────────────────────────
+function openUcetnictvi() {
+  if (!_ucObdobi) _ucObdobi = _ucVychoziObdobi();
+  var ov = document.getElementById('ucetOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'ucetOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.addEventListener('click', function(e) { if (e.target === ov) zavriUcetnictvi(); });
+    document.body.appendChild(ov);
+  }
+  _ucVykresli();
+}
+function zavriUcetnictvi() { var ov = document.getElementById('ucetOv'); if (ov) ov.remove(); }
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('ucetOv')) zavriUcetnictvi();
+});
+function ucZmenObdobi(rok, mesic) {
+  _ucObdobi = { rok: parseInt(rok, 10), mesic: parseInt(mesic, 10) };
+  _ucVykresli();
+}
+// Roky, ve kterých se něco dělo — prodeje i nákupy
+function _ucRoky() {
+  var r = {};
+  r[new Date().getFullYear()] = 1;
+  (items || []).forEach(function(it) {
+    [it.payoutDate, it.saleDate, it.buyDate].forEach(function(d) {
+      var x = _ucDatum(d).slice(0, 4); if (/^\d{4}$/.test(x)) r[x] = 1;
+    });
+  });
+  return Object.keys(r).map(Number).sort(function(a, b) { return b - a; });
+}
+function _ucSekce(nadpis, obsah) {
+  return '<div class="uc-sekce"><div class="uc-nadpis">' + nadpis + '</div>' + obsah + '</div>';
+}
+
+function _ucVykresli() {
+  var ov = document.getElementById('ucetOv');
+  if (!ov) return;
+  var o = _ucObdobi, rok = o.rok, mesic = o.mesic;
+  var h = '<div class="modal uc-modal">';
+  h += '<div class="mh"><div class="mt2">Účetnictví</div>'
+    + '<button class="xb" onclick="zavriUcetnictvi()">✕</button></div>';
+  h += '<div class="uc-obdobi">'
+    + '<select id="ucMesic" onchange="ucZmenObdobi(document.getElementById(\'ucRok\').value,this.value)">'
+    + MESICE_UC.map(function(n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === mesic ? ' selected' : '') + '>' + n + '</option>'; }).join('')
+    + '</select>'
+    + '<select id="ucRok" onchange="ucZmenObdobi(this.value,document.getElementById(\'ucMesic\').value)">'
+    + _ucRoky().map(function(r) { return '<option value="' + r + '"' + (r === rok ? ' selected' : '') + '>' + r + '</option>'; }).join('')
+    + '</select></div>';
+
+  // 1) Prodejní doklady za měsíc
+  var dk = ucDokladyMesice(rok, mesic);
+  var t1 = dk.length
+    ? '<div class="uc-radek"><span>' + dk.length + ' ' + (dk.length === 1 ? 'doklad' : dk.length < 5 ? 'doklady' : 'dokladů')
+      + ' · ' + escHtml(dk[0].cislo) + (dk.length > 1 ? ' – ' + escHtml(dk[dk.length - 1].cislo) : '') + '</span>'
+      + '<button class="btn-sec" onclick="openDokladyMesic(' + rok + ',' + mesic + ')">Otevřít všechny doklady</button></div>'
+      + '<div class="uc-pozn">Každý doklad na své stránce. V okně dokladů Tisk → Uložit jako PDF dá jeden soubor za celý měsíc.</div>'
+    : '<div class="uc-pozn">V tomhle měsíci žádný prodejní doklad není.</div>';
+  h += _ucSekce('Prodejní doklady', t1);
+
+  // 2) Přehled pro účetní program
+  var np = ucProdejeMesice(rok, mesic).length, nn = ucNakupyMesice(rok, mesic).length;
+  h += _ucSekce('Přehled za měsíc',
+    '<div class="uc-radek"><span>' + np + ' ' + (np === 1 ? 'prodej' : np > 1 && np < 5 ? 'prodeje' : 'prodejů')
+    + ' · ' + nn + ' ' + (nn === 1 ? 'nákup' : nn > 1 && nn < 5 ? 'nákupy' : 'nákupů') + '</span>'
+    + ((np || nn) ? '<button class="btn-sec" onclick="stahniPrehledMesice(' + rok + ',' + mesic + ')">Stáhnout pro Excel</button>' : '')
+    + '</div><div class="uc-pozn">Prodeje podle data vyplacení, nákupy podle data nákupu. Částka v měně obchodu, kurz uložený ke dni a částka v Kč; u nákupu číslo FP, kupní smlouvy nebo objednávky.</div>');
+
+  h += '</div>';
+  ov.innerHTML = h;
+  ['ucMesic', 'ucRok'].forEach(function(id) { var s = document.getElementById(id); if (s) initCustomSelect(s); });
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -21624,6 +21864,7 @@ rebuildBrandTables();
       <button class="btn-sec" onclick="cm('moSettings');openItemCacheMgr()">Databáze našeptávače</button>
       <button class="btn-sec" onclick="cm('moSettings');openIgMgr()">Posty na Instagramu</button>
       <button class="btn-sec" onclick="cm('moSettings');openSellerSettings()">Údaje pro doklad</button>
+      <button class="btn-sec" onclick="cm('moSettings');openUcetnictvi()">Účetnictví</button>
     </div>
   </div>
 
