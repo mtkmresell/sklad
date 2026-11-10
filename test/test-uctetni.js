@@ -538,6 +538,43 @@ const POLOZKY = [
   check('doklady za měsíc se účetnímu otevřou', uc.okno.includes('2026-001') && uc.okno.includes('class="dk"'));
   check('a nic se nezapsalo', uc.beze === true);
 
+  section('16d) Zaúčtováno — značky jen ve vlastní složce účetního');
+  const zauc = await page.evaluate(async () => {
+    const majitelPred = JSON.stringify(Object.keys(window.__store).filter(k => !k.includes(window._fbUser.uid)).map(k => [k, window.__store[k]]));
+    const itemsPred = JSON.stringify(items);
+    _ucObdobi = { rok: 2026, mesic: 6 };
+    openUcetnictvi();
+    await new Promise(r => setTimeout(r, 200));
+    const r = { sekce: /Zaúčtováno/.test(document.getElementById('ucetOv').textContent) };
+    const box = document.querySelector('#ucetOv .uc-zauc input');
+    r.box = !!box;
+    if (box) { box.checked = true; box.dispatchEvent(new Event('change')); }
+    await new Promise(r => setTimeout(r, 100));
+    const cesta = 'users/' + window._fbUser.uid + '/sklad/zauctovano';
+    r.ulozeno = window.__store[cesta] ? Object.keys(window.__store[cesta].polozky) : null;
+    r.stav = ucZaucStav(items.find(i => i.id === 'p2'), 'p');
+    r.text = document.getElementById('ucetOv').textContent.replace(/\s+/g, ' ');
+    r.majitelBeze = majitelPred === JSON.stringify(Object.keys(window.__store).filter(k => !k.includes(window._fbUser.uid)).map(k => [k, window.__store[k]]));
+    r.itemsBeze = itemsPred === JSON.stringify(items);
+    r.local = Object.keys(localStorage).filter(k => /zauc/i.test(k) || (localStorage.getItem(k) || '').includes('p:p2'));
+    // majitel zaúčtovaný prodej změní
+    const p2 = items.find(i => i.id === 'p2'); const puv = p2.sellPrice; p2.sellPrice = 9999;
+    r.poZmene = ucZaucStav(p2, 'p'); p2.sellPrice = puv;
+    // po zavření a znovuotevření se značky načtou z jeho složky
+    zavriUcetnictvi(); _ucZauc = null;
+    openUcetnictvi(); await new Promise(r => setTimeout(r, 200));
+    r.znovu = ucZaucStav(p2, 'p');
+    zavriUcetnictvi();
+    return r;
+  });
+  check('účetní vidí sekci Zaúčtováno', zauc.sekce && zauc.box, JSON.stringify(zauc));
+  check('značka se uloží do jeho složky', JSON.stringify(zauc.ulozeno) === '["p:p2"]', JSON.stringify(zauc.ulozeno));
+  check('a platí', zauc.stav === 'ok' && /Prodeje 1 z 1/.test(zauc.text), zauc.stav + ' ' + zauc.text.slice(0, 200));
+  check('sklad majitele zůstal netknutý', zauc.majitelBeze && zauc.itemsBeze);
+  check('do prohlížeče se nic neuložilo', zauc.local.length === 0, JSON.stringify(zauc.local));
+  check('změněný obchod přestane být zaúčtovaný', zauc.poZmene === 'zmena', zauc.poZmene);
+  check('po znovuotevření se značky načtou', zauc.znovu === 'ok', zauc.znovu);
+
   section('16b) Kalkulačka marže se účetnímu neotevře');
   await page.evaluate(() => { switchTab('stock'); if (typeof setView === 'function') setView('table'); renderItems(); });
   await page.waitForTimeout(300);

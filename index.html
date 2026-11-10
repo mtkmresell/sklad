@@ -126,6 +126,13 @@ body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 .uc-chybi-t { color:var(--accent2); font-size:11px; flex:0 0 auto; }
 .uc-ok { color:var(--accent); font-size:11px; font-family:'DM Mono',monospace; }
 .uc-polozka .faktura-link { flex:0 0 auto; font-size:11px; color:var(--accent); }
+.uc-zauc { cursor:pointer; }
+.uc-zauc input { width:auto; margin:0; flex:0 0 auto; accent-color:var(--accent); }
+.uc-castka { font-family:'DM Mono',monospace; font-size:11px; flex:0 0 auto; }
+.uc-podnadpis { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin:8px 0 4px; }
+.uc-link { background:none; border:none; padding:0; color:var(--accent); font:inherit; font-size:11px; cursor:pointer; }
+.uc-prepinac { font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px; cursor:pointer; }
+.uc-prepinac input { width:auto; margin:0; }
 .ul-btn.ul-hlavni { margin-left:auto; border-color:var(--accent2); color:var(--accent2); }
 .ul-btn.ul-hlavni + .ul-btn { margin-left:0; }
 
@@ -3294,6 +3301,7 @@ function vypniUctetniRezim() {
   if (!_uctetniRezim) return;
   _uctetniRezim = false;
   _uctetniMajitel = null;
+  _ucZauc = null; _ucZaucUid = null;   // značky zaúčtováno patří účtu účetního
   document.body.classList.remove('uctetni');
   var lista = document.getElementById('uctetniLista');
   if (lista && lista.parentNode) lista.parentNode.removeChild(lista);
@@ -3330,7 +3338,8 @@ function otevriUctetniManual() {
     + '<h4>Doklady</h4>'
     + '<p>U prodejů, ke kterým se doklad vystavuje, je v detailu položky tlačítko <b>Doklad</b>. Datum na něm je den, kdy dorazily peníze, a čísla jdou v roce podle data. Doklad má každý vyplacený prodej sám, nikdo ho nemusí vystavovat.</p>'
     + '<h4>Účetnictví</h4>'
-    + '<p>Tlačítko <b>Účetnictví</b> v oranžovém pruhu: vybereš měsíc a máš pohromadě všechny prodejní doklady toho měsíce (jeden soubor, každý doklad na své stránce).</p>'
+    + '<p>Tlačítko <b>Účetnictví</b> v oranžovém pruhu: vybereš měsíc a máš pohromadě všechny prodejní doklady toho měsíce (jeden soubor, každý doklad na své stránce), přehled prodejů a nákupů ke stažení pro Excel, nákupní doklady s odkazy, kontrolu číselné řady a eurové prodeje bez kurzu ČNB.</p>'
+    + '<p>V sekci <b>Zaúčtováno</b> si odškrtáváš, co už máš zpracované. Značky vidíš jen ty; když majitel zaúčtovaný obchod později změní, ukáže se u něj „změněno".</p>' 
     + '<h4>Změny</h4>'
     + '<p>Odsud se nedá nic upravit ani smazat. Když něco nesedí, dej vědět majiteli skladu — opraví to na své straně a tobě se to objeví samo.</p>'
     + '</div>';
@@ -11067,6 +11076,7 @@ function saveSellerFromForm() {
      desetinná čárka, BOM) — účetní ho převezme do svého programu.
    - Nákupní doklady měsíce (jeden řádek na nákup), číselná řada roku
      a eurové prodeje bez kurzu ČNB.
+   - Zaúčtováno (jen účetní): odškrtávání v jeho vlastní složce, viz níž.
 ══════════════════════════════════════════════════════════════════════ */
 var MESICE_UC = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
 var _ucObdobi = null;   // { rok: 2026, mesic: 1..12 }
@@ -11236,6 +11246,117 @@ function ucKurzyBezCnb(rok, mesic) {
   });
 }
 
+/* ZAÚČTOVÁNO — jen účetní.
+   Účetní si u prodeje i nákupu odškrtne, co už zpracoval, a příště vidí,
+   co přibylo. Do skladu majitele zapisovat nesmí, takže značky leží v jeho
+   VLASTNÍ složce (users/{uid účetního}/sklad/zauctovano) — tam smí
+   i podle dnešních pravidel Firestore a do dat majitele se nedostanou.
+   Do localStorage se nic neukládá: majitelova data se účetnímu do
+   prohlížeče neukládají vůbec (POHLED ÚČETNÍHO).
+
+   Ke značce se pamatuje otisk (datum, měna, částka). Když majitel
+   zaúčtovaný obchod potom změní, značka neplatí a ukáže se „změněno" —
+   jinak by účetní měl v knihách jiné číslo, než je v aplikaci, a nevěděl
+   by o tom. */
+var _ucZauc = null, _ucZaucUid = null;
+function _ucZaucRef() {
+  var f = window._fbFns, u = window._fbUser;
+  if (!f || !u || !u.uid || !window._fbDb) return null;
+  return f.doc(window._fbDb, 'users', u.uid, 'sklad', 'zauctovano');
+}
+function _ucOtisk(it, typ) {
+  return typ === 'p'
+    ? [_dokladDatum(it), it.sellCurrency || 'CZK', it.sellCurrency === 'EUR' ? getSellOrig(it) : it.sellPrice].join('|')
+    : [_ucDatum(it.buyDate), it.buyCurrency || 'CZK', it.buyPrice, it.qty || 1].join('|');
+}
+// '' nezaúčtováno, 'ok' zaúčtováno, 'zmena' zaúčtováno, ale od té doby změněno
+function ucZaucStav(it, typ) {
+  var z = _ucZauc && _ucZauc[typ + ':' + it.id];
+  if (!z) return '';
+  return z.o === _ucOtisk(it, typ) ? 'ok' : 'zmena';
+}
+function _ucZaucNacti(hotovo) {
+  var u = window._fbUser && window._fbUser.uid;
+  if (_ucZauc && _ucZaucUid === u) { hotovo(); return; }
+  _ucZaucUid = u; _ucZauc = {};
+  var ref = _ucZaucRef();
+  if (!ref) { hotovo(); return; }
+  window._fbFns.getDoc(ref).then(function(s) {
+    var d = s && s.exists() ? s.data() : null;
+    _ucZauc = d && d.polozky && typeof d.polozky === 'object' ? d.polozky : {};
+    hotovo();
+  }).catch(function() { hotovo(); });
+}
+function _ucZaucUloz() {
+  var ref = _ucZaucRef();
+  if (!ref) return;
+  window._fbFns.setDoc(ref, { polozky: _ucZauc, savedAt: new Date().toISOString() })
+    .catch(function() { showToast('Značku zaúčtováno se nepodařilo uložit — zkus to znovu.', 'err'); });
+}
+// klice: ['p:id', 'n:id', …] — skupina nákupu se odškrtává celá
+function ucZauctuj(klice, ano) {
+  if (!jeUctetni() || !_ucZauc) return;
+  (Array.isArray(klice) ? klice : [klice]).forEach(function(k) {
+    var typ = k.slice(0, 1), id = k.slice(2);
+    var it = (items || []).find(function(x) { return x.id === id; });
+    if (ano && it) _ucZauc[k] = { t: Date.now(), o: _ucOtisk(it, typ) };
+    else delete _ucZauc[k];
+  });
+  _ucZaucUloz();
+  _ucVykresli();
+}
+function ucZauctujVse(typ, ano) {
+  var o = _ucObdobi, klice = [];
+  if (typ === 'p') ucProdejeMesice(o.rok, o.mesic).forEach(function(it) { klice.push('p:' + it.id); });
+  else ucNakupyMesice(o.rok, o.mesic).forEach(function(it) { klice.push('n:' + it.id); });
+  ucZauctuj(klice, ano);
+}
+var _ucJenNezauc = false;
+function _ucZaucSekce(rok, mesic) {
+  if (!_ucZauc) return '<div class="uc-pozn">Načítám…</div>';
+  var radek = function(klice, datum, nazev, castka, stav) {
+    var k = JSON.stringify(klice).replace(/"/g, '&quot;');
+    return '<label class="uc-polozka uc-zauc' + (stav === 'zmena' ? ' uc-chybi' : '') + '">'
+      + '<input type="checkbox"' + (stav === 'ok' ? ' checked' : '') + ' onchange="ucZauctuj(' + k + ',this.checked)">'
+      + '<span class="uc-datum">' + escHtml(datum) + '</span>'
+      + '<span class="uc-nazev">' + nazev + '</span>'
+      + (stav === 'zmena' ? '<span class="uc-chybi-t">změněno</span>' : '<span class="uc-castka">' + escHtml(castka) + '</span>')
+      + '</label>';
+  };
+  var castka = function(n, eur) { return eur ? _ucCislo(n) + ' €' : czk(n || 0); };
+  var h = '';
+  var pr = ucProdejeMesice(rok, mesic), nk = ucNakupniDoklady(rok, mesic);
+  var hotP = pr.filter(function(it) { return ucZaucStav(it, 'p') === 'ok'; }).length;
+  var hotN = nk.filter(function(g) { return g.kusy.every(function(it) { return ucZaucStav(it, 'n') === 'ok'; }); }).length;
+  h += '<div class="uc-radek" style="margin-bottom:8px;"><span>Prodeje ' + hotP + ' z ' + pr.length + ' · nákupy ' + hotN + ' z ' + nk.length + '</span>'
+    + '<label class="uc-prepinac"><input type="checkbox"' + (_ucJenNezauc ? ' checked' : '') + ' onchange="_ucJenNezauc=this.checked;_ucVykresli()"> jen nezaúčtované</label></div>';
+  var blok = function(nadpis, typ, rows) {
+    var b = '<div class="uc-podnadpis"><span>' + nadpis + '</span>'
+      + (rows.length ? '<span><button class="uc-link" onclick="ucZauctujVse(\'' + typ + '\',true)">označit vše</button> · '
+        + '<button class="uc-link" onclick="ucZauctujVse(\'' + typ + '\',false)">zrušit</button></span>' : '') + '</div>';
+    var vid = rows.filter(function(r) { return !_ucJenNezauc || r.stav !== 'ok'; });
+    b += vid.length ? '<div class="uc-seznam">' + vid.map(function(r) { return r.html; }).join('') + '</div>'
+      : '<div class="uc-pozn">' + (rows.length ? 'Všechno zaúčtované.' : 'Nic.') + '</div>';
+    return b;
+  };
+  h += blok('Prodeje', 'p', pr.map(function(it) {
+    var eur = it.sellCurrency === 'EUR', st = ucZaucStav(it, 'p');
+    return { stav: st, html: radek(['p:' + it.id], fmtDate(_dokladDatum(it)), escHtml(it.name || '—'),
+      castka(eur ? getSellOrig(it) : it.sellPrice, eur), st) };
+  }));
+  h += blok('Nákupy', 'n', nk.map(function(g) {
+    var it = g.kusy[0];
+    var stavy = g.kusy.map(function(k) { return ucZaucStav(k, 'n'); });
+    var st = stavy.indexOf('zmena') >= 0 ? 'zmena' : stavy.every(function(x) { return x === 'ok'; }) ? 'ok' : '';
+    var suma = g.kusy.reduce(function(a, k) { return a + (k.buyPrice || 0) * (k.qty || 1); }, 0);
+    return { stav: st, html: radek(g.kusy.map(function(k) { return 'n:' + k.id; }), fmtDate(_ucDatum(it.buyDate)),
+      escHtml(it.name || '—') + (g.kusy.length > 1 ? ' <span class="uc-pocet">+' + (g.kusy.length - 1) + '</span>' : ''),
+      castka(suma, it.buyCurrency === 'EUR'), st) };
+  }));
+  h += '<div class="uc-pozn">Značky vidíš jen ty a ukládají se k tvému účtu. Když majitel zaúčtovaný obchod později změní, ukáže se „změněno".</div>';
+  return h;
+}
+
 // ── Okno ──────────────────────────────────────────────────────────────
 function openUcetnictvi() {
   if (!_ucObdobi) _ucObdobi = _ucVychoziObdobi();
@@ -11248,6 +11369,7 @@ function openUcetnictvi() {
     document.body.appendChild(ov);
   }
   _ucVykresli();
+  if (jeUctetni()) _ucZaucNacti(_ucVykresli);
 }
 function zavriUcetnictvi() { var ov = document.getElementById('ucetOv'); if (ov) ov.remove(); }
 document.addEventListener('keydown', function(e) {
@@ -11361,6 +11483,9 @@ function _ucVykresli() {
       : 'Kurz uložený u prodeje pochází z kurzovního API, ne z ČNB. Kurzy měn ho přepočítají podle ČNB ke dni vyplacení.') + '</div>';
   }
   h += _ucSekce('Kurzy ČNB', t6);
+
+  // 5) Zaúčtováno — jen účetní, značky jsou jeho
+  if (jeUctetni()) h += _ucSekce('Zaúčtováno', _ucZaucSekce(rok, mesic));
 
   h += '</div>';
   ov.innerHTML = h;

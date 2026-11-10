@@ -15,6 +15,7 @@ projdi nejdřív ten návod — postup je stejný a pravidla se doplňují.
 | **nevidí** | Čeká, Zákazníci, Wishlist, analytiku, kalkulačku marží, cílové ceny v Co chybí, chybějící listingy, osobní položky, přepínač profilů |
 | **nemůže** | přidat, upravit ani smazat položku; prokliknout se na StockX ani na sledování zásilky |
 | **smí** | otevřít a vytisknout **prodejní doklad** u každého vyplaceného prodeje, kde místo prodeje vystavuje doklad — bez toho, aby ho majitel otevřel první; je to jeho práce |
+| **Účetnictví** | okno s výběrem měsíce: všechny prodejní doklady v jednom souboru, přehled prodejů a nákupů pro Excel, nákupní doklady s odkazy, kontrola číselné řady, eurové prodeje bez kurzu ČNB a odškrtávání **zaúčtováno** (ukládá se do jeho vlastní složky, ne do skladu) |
 
 Nahoře mu svítí oranžový pruh **Pohled účetního** s tlačítkem na
 vysvětlivky, ať je pořád jasné, kde je.

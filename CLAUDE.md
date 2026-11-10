@@ -750,9 +750,18 @@ v oranžové liště, majitel v *Nastavení → Nástroje*. Jen čte.
 - **Kurzy ČNB** (`ucKurzyBezCnb`): eurové prodeje měsíce, jejichž
   uložený kurz není z ČNB. Majitel má tlačítko na Kurzy měn, účetní jen
   hlášku (zapsat nic nemůže). U nákupů se původ kurzu neukládá.
+- **Zaúčtováno** (`ucZauctuj`, jen účetní): odškrtávání prodejů
+  a nákupů měsíce. Značky leží **ve vlastní složce účetního**
+  (`users/{uid účetního}/sklad/zauctovano`) — tam smí zapisovat podle
+  stávajících pravidel, **do dat majitele ne**, a pravidla se kvůli tomu
+  neměnila. Do `localStorage` nic (majitelova data se účetnímu
+  neukládají), při vypnutí režimu se paměť maže. Ke značce se pamatuje
+  **otisk** (datum, měna, částka) — když majitel zaúčtovaný obchod
+  změní, ukáže se „změněno" místo fajfky. Kusy téhož nákupu se
+  odškrtávají spolu.
 
 Okno se zavírá Escapem i klikem mimo. Hlídá to `test-ucetnictvi.js`
-a v pohledu účetního `test-uctetni.js`, sekce 16c.
+a v pohledu účetního `test-uctetni.js`, sekce 16c a 16d.
 
 ### Společný nákupní doklad (`SPOLEČNÝ NÁKUPNÍ DOKLAD`)
 

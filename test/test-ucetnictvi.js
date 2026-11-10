@@ -123,6 +123,7 @@ const SEED = [
   check('odkaz na nákupní doklad je faktura-link', await page.evaluate(() => !!document.querySelector('#ucetOv a.faktura-link[href="https://onedrive/ks9"]')));
   check('řada: 5 dokladů a osobní kus', /2026: 5 dokladů · 2026-001 – 2026-005/.test(okno.text) && /2026-005\) — osobní prodej/.test(okno.text), okno.text.slice(0, 900));
   check('kurzy: v pořádku', /Eurové prodeje měsíce mají kurz ČNB/.test(okno.text));
+  check('majitel sekci Zaúčtováno nemá — je jen pro účetního', !/Zaúčtováno/.test(okno.text));
   check('výběr měsíce a roku má vlastní vzhled', okno.selecty === 2, String(okno.selecty));
   await page.evaluate(() => ucZmenObdobi(2026, 10));
   check('změna měsíce přepočítá', /1 doklad · 2026-004/.test(await page.evaluate(() => document.getElementById('ucetOv').textContent)));
