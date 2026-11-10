@@ -108,27 +108,47 @@ const SEED = [
   check('kurz z ČNB nic nehlásí', kurzy.s === 0, JSON.stringify(kurzy));
   check('eurový prodej bez ČNB se ohlásí', JSON.stringify(kurzy.bez) === '["r3"]', JSON.stringify(kurzy));
 
-  section('2) Okno');
+  section('2) Okno se záložkami');
   await page.evaluate(() => { _ucObdobi = { rok: 2026, mesic: 9 }; openUcetnictvi(); });
   await page.waitForTimeout(200);
+  const obsah = () => page.evaluate(() => { const o = document.querySelector('#ucetOv .uc-obsah'); return o ? o.textContent.replace(/\s+/g, ' ') : ''; });
+  const zal = (z) => page.evaluate((z) => { document.querySelector('#ucetOv .uc-zal[data-zal="' + z + '"]').click(); }, z);
   const okno = await page.evaluate(() => {
     const ov = document.getElementById('ucetOv');
-    return { je: !!ov, text: ov ? ov.textContent.replace(/\s+/g, ' ') : '',
-      selecty: ov ? ov.querySelectorAll('.cs-wrap').length : 0 };
+    return { je: !!ov, selecty: ov ? ov.querySelectorAll('.uc-obdobi .cs-wrap').length : 0,
+      zalozky: ov ? [...ov.querySelectorAll('.uc-zal')].map(z => z.textContent.replace(/\s+/g, ' ').trim()) : [],
+      akt: (ov.querySelector('.uc-zal.akt') || {}).dataset.zal };
   });
-  check('okno se otevře', okno.je);
-  check('ukazuje počet a rozsah dokladů', /3 doklady · 2026-001 – 2026-003/.test(okno.text), okno.text.slice(0, 200));
-  check('ukazuje počet prodejů a nákupů', /4 prodeje · 3 nákupy/.test(okno.text), okno.text.slice(0, 300));
-  check('nákupní doklady: dva řádky, jeden bez odkazu', /2 doklady · 1 bez odkazu/.test(okno.text), okno.text.slice(0, 600));
-  check('odkaz na nákupní doklad je faktura-link', await page.evaluate(() => !!document.querySelector('#ucetOv a.faktura-link[href="https://onedrive/ks9"]')));
-  check('řada: 5 dokladů a osobní kus', /2026: 5 dokladů · 2026-001 – 2026-005/.test(okno.text) && /2026-005\) — osobní prodej/.test(okno.text), okno.text.slice(0, 900));
-  check('kurzy: v pořádku', /Eurové prodeje měsíce mají kurz ČNB/.test(okno.text));
-  check('majitel sekci Zaúčtováno nemá — je jen pro účetního', !/Zaúčtováno/.test(okno.text));
+  check('okno se otevře na přehledu', okno.je && okno.akt === 'prehled', JSON.stringify(okno));
+  check('záložky s počty: prodeje 4, nákupy 1 chybí, kontrola 1', JSON.stringify(okno.zalozky) === '["Přehled","Prodeje4","Nákupy1 chybí","Kontrola1"]', JSON.stringify(okno.zalozky));
   check('výběr měsíce a roku má vlastní vzhled', okno.selecty === 2, String(okno.selecty));
-  await page.evaluate(() => ucZmenObdobi(2026, 10));
-  check('změna měsíce přepočítá', /1 doklad · 2026-004/.test(await page.evaluate(() => document.getElementById('ucetOv').textContent)));
+  let t = await obsah();
+  check('přehled: prodeje a rozsah dokladů', /Prodeje ?4 ?3 prodejní doklady · 2026-001 – 2026-003/.test(t), t.slice(0, 400));
+  check('přehled: nákup bez dokladu', /Nákupy ?2 ?1 nemá doklad/.test(t), t.slice(0, 400));
+  check('majitel dlaždici Zaúčtováno nemá — je jen pro účetního', !/Zaúčtováno/.test(t));
+  await zal('prodeje'); t = await obsah();
+  check('prodeje: tabulka se čtyřmi řádky', await page.evaluate(() => document.querySelectorAll('#ucetOv .uc-tab tbody tr').length) === 4, t.slice(0, 300));
+  check('prodeje: tlačítko Doklad u prodejů s dokladem', await page.evaluate(() => document.querySelectorAll('#ucetOv .uc-tab tbody .uc-mini').length) === 3);
+  check('majitel zaškrtávátka zaúčtováno nemá', await page.evaluate(() => !document.querySelector('#ucetOv .uc-tab input[type=checkbox]')));
+  await zal('nakupy'); t = await obsah();
+  check('nákupy: dva řádky, jeden bez dokladu', await page.evaluate(() => document.querySelectorAll('#ucetOv .uc-tab tbody tr').length) === 2 && /chybí/.test(t), t.slice(0, 400));
+  check('odkaz na nákupní doklad je faktura-link', await page.evaluate(() => !!document.querySelector('#ucetOv a.faktura-link[href="https://onedrive/ks9"]')));
+  await page.evaluate(() => { _ucNakupFiltr = 'chybi'; _ucVykresli(); });
+  check('filtr Chybí doklad nechá jeden řádek', await page.evaluate(() => document.querySelectorAll('#ucetOv .uc-tab tbody tr').length) === 1);
+  await zal('kontrola'); t = await obsah();
+  check('kontrola: řada a osobní kus', /2026-001 – 2026-005/.test(t) && /5 dokladů/.test(t) && /2026-005\)\. Osobní prodej/.test(t), t.slice(0, 500));
+  check('kontrola: kurzy v pořádku', /Eurové prodeje měsíce mají kurz ČNB/.test(t));
+  await page.evaluate(() => ucPosunMesic(1));
+  check('šipka posune na říjen', await page.evaluate(() => _ucObdobi.mesic === 10));
+  await zal('prehled');
+  check('říjen: 1 doklad 2026-004', /1 prodejní doklad · 2026-004/.test(await obsah()));
+  await page.evaluate(() => { ucPosunMesic(3); });
+  check('přes konec roku na leden', await page.evaluate(() => _ucObdobi.rok === 2027 && _ucObdobi.mesic === 1));
   await page.keyboard.press('Escape');
   check('Escape okno zavře', await page.evaluate(() => !document.getElementById('ucetOv')));
+  await page.evaluate(() => openUcetnictvi());
+  check('nové otevření začne přehledem', await page.evaluate(() => (document.querySelector('#ucetOv .uc-zal.akt') || {}).dataset.zal === 'prehled'));
+  await page.evaluate(() => zavriUcetnictvi());
 
   check('žádné JS chyby', errs.length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();

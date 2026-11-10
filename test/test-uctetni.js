@@ -534,7 +534,7 @@ const POLOZKY = [
     return { tl, text: text.replace(/\s+/g, ' '), okno: otevreno.length ? otevreno[0].h : '', beze: pred === JSON.stringify(items) };
   });
   check('v liště je tlačítko Účetnictví', uc.tl.includes('Účetnictví'), JSON.stringify(uc.tl));
-  check('okno ukáže doklad z června', /1 doklad · 2026-001/.test(uc.text), uc.text.slice(0, 160));
+  check('okno ukáže doklad z června', /1 prodejní doklad · 2026-001/.test(uc.text), uc.text.slice(0, 300));
   check('doklady za měsíc se účetnímu otevřou', uc.okno.includes('2026-001') && uc.okno.includes('class="dk"'));
   check('a nic se nezapsalo', uc.beze === true);
 
@@ -546,7 +546,8 @@ const POLOZKY = [
     openUcetnictvi();
     await new Promise(r => setTimeout(r, 200));
     const r = { sekce: /Zaúčtováno/.test(document.getElementById('ucetOv').textContent) };
-    const box = document.querySelector('#ucetOv .uc-zauc input');
+    ucZalozka('prodeje');
+    const box = document.querySelector('#ucetOv .uc-tab input[type=checkbox]');
     r.box = !!box;
     if (box) { box.checked = true; box.dispatchEvent(new Event('change')); }
     await new Promise(r => setTimeout(r, 100));
@@ -569,7 +570,7 @@ const POLOZKY = [
   });
   check('účetní vidí sekci Zaúčtováno', zauc.sekce && zauc.box, JSON.stringify(zauc));
   check('značka se uloží do jeho složky', JSON.stringify(zauc.ulozeno) === '["p:p2"]', JSON.stringify(zauc.ulozeno));
-  check('a platí', zauc.stav === 'ok' && /Prodeje 1 z 1/.test(zauc.text), zauc.stav + ' ' + zauc.text.slice(0, 200));
+  check('a platí', zauc.stav === 'ok' && /Prodeje1/.test(zauc.text.replace(/ /g, '')), zauc.stav + ' ' + zauc.text.slice(0, 300));
   check('sklad majitele zůstal netknutý', zauc.majitelBeze && zauc.itemsBeze);
   check('do prohlížeče se nic neuložilo', zauc.local.length === 0, JSON.stringify(zauc.local));
   check('změněný obchod přestane být zaúčtovaný', zauc.poZmene === 'zmena', zauc.poZmene);

@@ -729,6 +729,16 @@ Okno s výběrem měsíce, kde má účetní pohromadě, co za měsíc potřebuj
 (majitel, 10. 11. 2026). Účetní ho otevírá tlačítkem **Účetnictví**
 v oranžové liště, majitel v *Nastavení → Nástroje*. Jen čte.
 
+**Rozložení: velké okno se záložkami** (`_ucVykresli`) — Přehled
+(dlaždice s počty a dvě hlavní tlačítka), Prodeje, Nákupy, Kontrola;
+nahoře měsíc a rok se šipkami ‹ ›. Každá záložka má celou plochu
+a **jedno rolování**. První verze měla všechno pod sebou v úzkém okně
+se seznamy v malých rolovacích okénkách a majitel ji vrátil jako
+neuhlazenou a nepřehlednou — účetní to má mít „na první dobrou".
+Nevracej to. Zaúčtováno není samostatná sekce, ale **zaškrtávátko
+v řádku** tabulky Prodeje a Nákupy (a dlaždice v přehledu). Na
+telefonu jsou záložky nahoře a řádek tabulky je karta.
+
 - **Doklady za měsíc** (`openDokladyMesic`): všechny prodejní doklady
   měsíce v jednom okně, každý na své stránce (`page-break-after`) —
   Tisk → Uložit jako PDF dá jeden soubor. Obsah skládá `_dokladTelo`,
