@@ -116,6 +116,16 @@ body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 .uc-nadpis { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
 .uc-radek { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:13px; }
 .uc-pozn { font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5; }
+.uc-seznam { display:flex; flex-direction:column; gap:4px; max-height:240px; overflow:auto; }
+.uc-polozka { display:flex; align-items:center; gap:10px; font-size:12px; padding:6px 8px; border-radius:6px; background:var(--surface); }
+.uc-polozka.uc-chybi { box-shadow:inset 3px 0 0 var(--accent2); }
+.uc-datum { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); flex:0 0 74px; }
+.uc-nazev { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.uc-sub { display:block; font-size:10px; color:var(--muted); font-family:'DM Mono',monospace; }
+.uc-pocet { font-size:10px; color:var(--muted); }
+.uc-chybi-t { color:var(--accent2); font-size:11px; flex:0 0 auto; }
+.uc-ok { color:var(--accent); font-size:11px; font-family:'DM Mono',monospace; }
+.uc-polozka .faktura-link { flex:0 0 auto; font-size:11px; color:var(--accent); }
 .ul-btn.ul-hlavni { margin-left:auto; border-color:var(--accent2); color:var(--accent2); }
 .ul-btn.ul-hlavni + .ul-btn { margin-left:0; }
 
@@ -11055,6 +11065,8 @@ function saveSellerFromForm() {
      čísla z _cislaDokladu — u účetního i majitele vyjdou stejně.
    - Přehled za měsíc: prodeje a nákupy jako CSV pro Excel (středník,
      desetinná čárka, BOM) — účetní ho převezme do svého programu.
+   - Nákupní doklady měsíce (jeden řádek na nákup), číselná řada roku
+     a eurové prodeje bez kurzu ČNB.
 ══════════════════════════════════════════════════════════════════════ */
 var MESICE_UC = ['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
 var _ucObdobi = null;   // { rok: 2026, mesic: 1..12 }
@@ -11145,13 +11157,16 @@ function ucPrehledRadky(rok, mesic) {
       eur ? _ucCislo(kurz, 3) : '', eur ? (it.payoutRateCnb ? 'ano' : 'ne') : '',
       _ucCislo(eur ? Math.round(castka * kurz * 100) / 100 : castka), it.saleInvoiceUrl || '']);
   });
+  // Kus téže objednávky / smlouvy bez vlastního odkazu dostane odkaz nákupu
+  var odkazNakupu = {};
+  ucNakupniDoklady(rok, mesic).forEach(function(g) { g.kusy.forEach(function(k) { odkazNakupu[k.id] = g.odkaz; }); });
   ucNakupyMesice(rok, mesic).forEach(function(it) {
     var eur = it.buyCurrency === 'EUR';
     var kurz = eur ? (it.buyRateEur || 0) : 0;
     var castka = (it.buyPrice || 0) * (it.qty || 1);
     radky.push(['Nákup', fmtDate(_ucDatum(it.buyDate)), _ucNakupDoklad(it), it.name || '', it.sku || '', it.size || '',
       it.buyWhere || '', it.from || '', _ucCislo(castka), eur ? 'EUR' : 'CZK',
-      eur ? _ucCislo(kurz, 3) : '', '', _ucCislo(eur ? Math.round(castka * kurz * 100) / 100 : castka), it.invoiceUrl || '']);
+      eur ? _ucCislo(kurz, 3) : '', '', _ucCislo(eur ? Math.round(castka * kurz * 100) / 100 : castka), it.invoiceUrl || odkazNakupu[it.id] || '']);
   });
   return radky;
 }
@@ -11173,6 +11188,52 @@ function stahniPrehledMesice(rok, mesic) {
   document.body.appendChild(a); a.click();
   setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
   showToast('Přehled za ' + MESICE_UC[mesic - 1] + ' ' + rok + ' stažen.');
+}
+
+/* Nákupní doklady měsíce. Kusy téhož nákupu (stejnyNakup — objednávka,
+   FP, kupní smlouva) jsou jeden řádek, ať účetní nevidí jednu fakturu
+   pětkrát. Odkaz se ukazuje jako faktura-link: v pohledu účetního jsou
+   odkazy ven vypnuté, faktury ne. */
+function ucNakupniDoklady(rok, mesic) {
+  var skupiny = [];
+  ucNakupyMesice(rok, mesic).forEach(function(it) {
+    var s = null;
+    for (var i = 0; i < skupiny.length && !s; i++) {
+      if (skupiny[i].kusy.some(function(x) { return stejnyNakup(x, it); })) s = skupiny[i];
+    }
+    if (!s) { s = { kusy: [], odkaz: '' }; skupiny.push(s); }
+    s.kusy.push(it);
+    if (!s.odkaz && _obrOdkaz(it.invoiceUrl)) s.odkaz = it.invoiceUrl;
+  });
+  return skupiny;
+}
+
+/* Číselná řada prodejních dokladů v roce. Řada je bez děr z principu
+   (_cislaDokladu), takže tady jde hlavně o přehled: kolik, od–do a jestli
+   v ní není osobní kus — doklad k osobnímu prodeji do účetnictví nepatří. */
+function ucRadaRoku(rok) {
+  var c = _cislaDokladu();
+  var r = { pocet: 0, od: '', do: '', osobni: [] };
+  (items || []).forEach(function(it) {
+    var cislo = c[it.id];
+    if (!cislo || cislo.slice(0, 4) !== String(rok)) return;
+    r.pocet++;
+    if (!r.od || cislo < r.od) r.od = cislo;
+    if (!r.do || cislo > r.do) r.do = cislo;
+    if (isPersonal(it)) r.osobni.push(cislo);
+  });
+  r.osobni.sort();
+  return r;
+}
+
+/* Eurové obchody měsíce, jejichž uložený kurz nepochází z ČNB. Účetní
+   potřebuje kurz ČNB; přepočítat ho umí jen majitel (Kurzy měn) —
+   účetní nic zapsat nemůže. U nákupu se původ kurzu nezaznamenává, takže
+   se hlídají jen prodeje. */
+function ucKurzyBezCnb(rok, mesic) {
+  return ucProdejeMesice(rok, mesic).filter(function(it) {
+    return it.sellCurrency === 'EUR' && !it.payoutRateCnb;
+  });
 }
 
 // ── Okno ──────────────────────────────────────────────────────────────
@@ -11243,6 +11304,63 @@ function _ucVykresli() {
     + ' · ' + nn + ' ' + (nn === 1 ? 'nákup' : nn > 1 && nn < 5 ? 'nákupy' : 'nákupů') + '</span>'
     + ((np || nn) ? '<button class="btn-sec" onclick="stahniPrehledMesice(' + rok + ',' + mesic + ')">Stáhnout pro Excel</button>' : '')
     + '</div><div class="uc-pozn">Prodeje podle data vyplacení, nákupy podle data nákupu. Částka v měně obchodu, kurz uložený ke dni a částka v Kč; u nákupu číslo FP, kupní smlouvy nebo objednávky.</div>');
+
+  // 3) Nákupní doklady
+  var nd = ucNakupniDoklady(rok, mesic);
+  var bez = nd.filter(function(g) { return !g.odkaz; }).length;
+  var t3 = '';
+  if (!nd.length) t3 = '<div class="uc-pozn">V tomhle měsíci žádný nákup není.</div>';
+  else {
+    t3 += '<div class="uc-radek" style="margin-bottom:6px;"><span>' + nd.length + ' ' + (nd.length === 1 ? 'doklad' : nd.length < 5 ? 'doklady' : 'dokladů')
+      + (bez ? ' · <b style="color:var(--accent2);">' + bez + ' bez odkazu</b>' : ' · všechny s odkazem') + '</span></div>';
+    t3 += '<div class="uc-seznam">';
+    nd.forEach(function(g) {
+      var it = g.kusy[0];
+      var doklad = _ucNakupDoklad(it) || it.buyWhere || '';
+      t3 += '<div class="uc-polozka' + (g.odkaz ? '' : ' uc-chybi') + '">'
+        + '<span class="uc-datum">' + escHtml(fmtDate(_ucDatum(it.buyDate))) + '</span>'
+        + '<span class="uc-nazev">' + escHtml(it.name || '—') + (g.kusy.length > 1 ? ' <span class="uc-pocet">+' + (g.kusy.length - 1) + '</span>' : '')
+        + (doklad ? '<span class="uc-sub">' + escHtml(doklad) + '</span>' : '') + '</span>'
+        + (g.odkaz ? '<a class="faktura-link" href="' + escHtml(g.odkaz) + '" target="_blank" rel="noopener">Otevřít</a>'
+                   : '<span class="uc-chybi-t">chybí</span>')
+        + '</div>';
+    });
+    t3 += '</div>';
+  }
+  h += _ucSekce('Nákupní doklady', t3);
+
+  // 4) Číselná řada prodejních dokladů
+  var rada = ucRadaRoku(rok);
+  var t4 = rada.pocet
+    ? '<div class="uc-radek"><span>' + rok + ': ' + rada.pocet + ' ' + (rada.pocet === 1 ? 'doklad' : rada.pocet < 5 ? 'doklady' : 'dokladů')
+      + ' · ' + escHtml(rada.od) + (rada.pocet > 1 ? ' – ' + escHtml(rada.do) : '') + '</span><span class="uc-ok">bez děr</span></div>'
+      + (rada.osobni.length ? '<div class="uc-pozn" style="color:var(--accent2);">Doklad má i ' + rada.osobni.length
+        + (rada.osobni.length === 1 ? ' osobní prodej' : rada.osobni.length < 5 ? ' osobní prodeje' : ' osobních prodejů')
+        + ' (' + rada.osobni.map(escHtml).join(', ') + ') — osobní prodej do účetnictví nepatří.</div>' : '')
+      + '<div class="uc-pozn">Čísla jdou v roce podle data dokladu; nejstarší má nejmenší číslo.</div>'
+    : '<div class="uc-pozn">V roce ' + rok + ' žádný prodejní doklad není.</div>';
+  h += _ucSekce('Číselná řada dokladů', t4);
+
+  // 6) Kurzy ČNB
+  var kz = ucKurzyBezCnb(rok, mesic);
+  var t6;
+  if (!kz.length) t6 = '<div class="uc-radek"><span>Eurové prodeje měsíce mají kurz ČNB.</span><span class="uc-ok">v pořádku</span></div>';
+  else {
+    t6 = '<div class="uc-radek" style="margin-bottom:6px;"><span><b style="color:var(--accent2);">' + kz.length + '</b> '
+      + (kz.length === 1 ? 'eurový prodej nemá' : 'eurových prodejů nemá') + ' kurz z ČNB</span>'
+      + (jeUctetni() ? '' : '<button class="btn-sec" onclick="zavriUcetnictvi();openKurzyMen()">Přepočítat kurzy</button>') + '</div>';
+    t6 += '<div class="uc-seznam">';
+    kz.forEach(function(it) {
+      var kurz = it.payoutRateEur || it.profitRateEur;
+      t6 += '<div class="uc-polozka uc-chybi"><span class="uc-datum">' + escHtml(fmtDate(_dokladDatum(it))) + '</span>'
+        + '<span class="uc-nazev">' + escHtml(it.name || '—') + '</span>'
+        + '<span class="uc-chybi-t">' + (kurz ? escHtml(_ucCislo(kurz, 3)) + ' Kč/€' : 'bez kurzu') + '</span></div>';
+    });
+    t6 += '</div><div class="uc-pozn">' + (jeUctetni()
+      ? 'Kurz uložený u prodeje pochází z kurzovního API, ne z ČNB. Přepočítat ho může majitel (Nastavení → Kurzy měn).'
+      : 'Kurz uložený u prodeje pochází z kurzovního API, ne z ČNB. Kurzy měn ho přepočítají podle ČNB ke dni vyplacení.') + '</div>';
+  }
+  h += _ucSekce('Kurzy ČNB', t6);
 
   h += '</div>';
   ov.innerHTML = h;

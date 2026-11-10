@@ -739,7 +739,17 @@ v oranžové liště, majitel v *Nastavení → Nástroje*. Jen čte.
   vyplacení, nákupy podle data nákupu, **jen podnikání**. Částka v měně
   obchodu, **uložený** kurz ke dni (nikdy dnešní), příznak ČNB, Kč,
   číslo dokladu (u nákupu FP / KS / objednávka) a odkaz na doklad.
-  Balík je jeden prodej, jeho kusy jsou nákupy každý zvlášť.
+  Balík je jeden prodej, jeho kusy jsou nákupy každý zvlášť. Kus téže
+  objednávky / smlouvy bez vlastního odkazu dostane odkaz nákupu.
+- **Nákupní doklady** (`ucNakupniDoklady`): nákupy měsíce, **kusy
+  téhož nákupu jako jeden řádek** (`stejnyNakup`), s odkazem nebo
+  „chybí". Odkaz je `a.faktura-link` — v pohledu účetního jsou odkazy
+  ven vypnuté, faktury ne.
+- **Číselná řada** (`ucRadaRoku`): počet a rozsah čísel v roce
+  a **osobní kusy, které v řadě mají doklad** — do účetnictví nepatří.
+- **Kurzy ČNB** (`ucKurzyBezCnb`): eurové prodeje měsíce, jejichž
+  uložený kurz není z ČNB. Majitel má tlačítko na Kurzy měn, účetní jen
+  hlášku (zapsat nic nemůže). U nákupů se původ kurzu neukládá.
 
 Okno se zavírá Escapem i klikem mimo. Hlídá to `test-ucetnictvi.js`
 a v pohledu účetního `test-uctetni.js`, sekce 16c.
