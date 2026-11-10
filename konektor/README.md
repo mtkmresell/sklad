@@ -563,6 +563,26 @@ němu v létě o dvě hodiny napřed a v zimě o jednu. Worker si sám ohlídá,
 kterému z těch dvou časů zrovna vychází desátá dopoledne v Praze, a ten druhý
 zahodí. Díky tomu se nemusí nic přenastavovat dvakrát do roka.
 
+**Zprávy od účetního** (`ZPRÁVY OD ÚČETNÍHO`) mají vlastní, třetí hodiny:
+
+```
+*/5 * * * *
+```
+
+Co pět minut se podívá, jestli účetní v aplikaci nenapsal něco nového,
+a když ano, pošle krátký mail „nová zpráva od účetního" — s předmětem
+hlášení nebo názvem položky, **bez textu zprávy** (ten je v aplikaci).
+Nic jiného na tomhle cronu neběží: komise ani ranní obhlídka. Pošle se
+až po dvou minutách klidu, ať tři zprávy napsané po sobě nejsou tři
+maily, a vůbec ne, když už si to majitel v aplikaci přečetl. Bez téhle
+hodiny se o zprávách dozvíš jen z ranní obhlídky, kde jsou nevyřízená
+hlášení každý den, dokud je nepřepneš na Hotovo.
+
+Kam až mail odešel, si konektor zapisuje do `users/{uid}/zpravy/_mail`
+— **potřebuje k tomu nová pravidla Firestore** (`jeZnackaMailu`
+v `firestore.rules`). Se starými skončí každý běh v logu hláškou
+o odmítnutém zápisu (403).
+
 ### 4. Vyzkoušej to
 
 Vlož do prohlížeče adresu Workeru zakončenou `/test-mail`:

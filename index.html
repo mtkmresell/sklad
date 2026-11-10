@@ -181,8 +181,82 @@ body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 .uc-karta.pozor { border-color:rgba(255,107,53,0.5); }
 .uc-velke { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; margin:4px 0; }
 .uc-poznamka { font-size:12px; color:var(--muted); margin-top:14px; line-height:1.5; }
+/* ── ZPRÁVY A POZNÁMKY ──
+   Okno stojí na stejné kostře jako Účetnictví (.uc-okno, záložky vlevo),
+   ať účetní nemusí poznávat dvě různá rozvržení. */
+.zpr-pocet { background:var(--danger); color:#fff; }
+#btnZpravy.zpr-svitit { border-color:var(--danger); color:var(--text); }
+.ul-pocet { display:inline-block; margin-left:6px; min-width:16px; padding:0 5px; border-radius:8px; background:var(--danger);
+  color:#fff; font-family:'DM Mono',monospace; font-size:10px; line-height:16px; text-align:center; }
+.zpr-podtitul { font-size:13px; color:var(--muted); }
+.zpr-nove-btn { margin-left:auto; }
+.zpr-okno .uc-hlava .xb { margin-left:auto; }
+.zpr-okno .zpr-nove-btn + .xb { margin-left:6px; }
+.zpr-seznam { display:flex; flex-direction:column; gap:8px; }
+.zpr-radek { display:flex; gap:12px; align-items:flex-start; width:100%; text-align:left; background:var(--surface2);
+  border:1px solid var(--border); border-radius:11px; padding:13px 15px; cursor:pointer; font:inherit; color:inherit; }
+.zpr-radek:hover { border-color:var(--muted); }
+.zpr-radek.pozor { border-color:rgba(255,68,68,0.45); }
+.zpr-tecka { flex:0 0 8px; height:8px; border-radius:50%; margin-top:6px; background:transparent; }
+.zpr-radek.neprect .zpr-tecka, .zpr-radek.pozor .zpr-tecka { background:var(--danger); }
+.zpr-r-telo { display:flex; flex-direction:column; gap:4px; min-width:0; flex:1; }
+.zpr-r-hore { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.zpr-r-nadpis { font-weight:600; font-size:14px; }
+.zpr-radek.neprect .zpr-r-nadpis { color:var(--text); }
+.zpr-r-pol { font-size:12px; color:var(--muted); }
+.zpr-r-nahled { font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.zpr-r-nahled b { color:var(--text); font-weight:500; }
+.zpr-cas { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-left:auto; white-space:nowrap; }
+.zpr-druh { display:inline-block; font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.06em; text-transform:uppercase;
+  color:var(--muted); border:1px solid var(--border); border-radius:5px; padding:1px 7px; white-space:nowrap; }
+.zpr-stav { display:inline-block; font-size:11px; padding:2px 9px; border-radius:20px; white-space:nowrap; }
+.zpr-stav.s-nove { background:rgba(255,68,68,0.14); color:var(--danger); }
+.zpr-stav.s-rozprac { background:rgba(255,170,0,0.14); color:var(--warning,#ffaa00); }
+.zpr-stav.s-hotovo { background:rgba(200,255,0,0.08); color:var(--accent); }
+.zpr-stav.s-pripomenout { background:var(--surface); color:var(--muted); border:1px solid var(--border); }
+.zpr-zpet { margin-bottom:14px; }
+.zpr-meta { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:6px 0 16px; }
+.zpr-meta .zpr-cas { margin-left:0; }
+.zpr-stavy { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:12px 14px; margin-bottom:16px;
+  background:var(--surface2); border:1px solid var(--border); border-radius:11px; }
+.zpr-stavy-n { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin-right:6px; }
+.zpr-datum { display:flex; gap:6px; align-items:center; }
+.zpr-datum input { background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:7px 9px; font:inherit; font-size:13px; color-scheme:dark; }
+.zpr-datum .uc-btn { padding:7px 12px; }
+.zpr-zpravy { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
+.zpr-bub { max-width:78%; align-self:flex-start; background:var(--surface2); border:1px solid var(--border); border-radius:12px 12px 12px 4px; padding:10px 13px; }
+.zpr-bub.moje { align-self:flex-end; background:rgba(200,255,0,0.06); border-color:rgba(200,255,0,0.22); border-radius:12px 12px 4px 12px; }
+.zpr-bub-hl { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); margin-bottom:4px; }
+.zpr-bub-text { font-size:14px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+.zpr-zadne { color:var(--muted); font-size:13px; }
+.zpr-psani { display:flex; gap:10px; align-items:flex-end; }
+.zpr-psani textarea, .zpr-inp { flex:1; width:100%; box-sizing:border-box; background:var(--surface2); border:1px solid var(--border); color:var(--text);
+  border-radius:10px; padding:10px 12px; font:inherit; font-size:14px; resize:vertical; }
+.zpr-psani textarea:focus, .zpr-inp:focus { outline:none; border-color:var(--accent); }
+.zpr-form { max-width:640px; }
+.zpr-form-n { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin:14px 0 6px; }
+.zpr-form-pol { font-size:14px; }
+.zpr-det { border-top:1px solid var(--border); margin-top:14px; padding-top:12px; }
+.zpr-det-titul { font-size:9px; font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:0.6px; color:var(--muted); margin-bottom:8px; }
+.zpr-det-titul span { color:var(--text); }
+.zpr-zpravy.mala { gap:6px; margin-bottom:8px; }
+.zpr-zpravy.mala .zpr-bub { max-width:92%; padding:7px 10px; }
+.zpr-zpravy.mala .zpr-bub-text { font-size:13px; }
+.zpr-psani.mala textarea { font-size:13px; padding:8px 10px; }
+.zpr-psani.mala .btn-sec { flex:0 0 auto; }
+.zpr-det-hl { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+.zpr-det-odkaz { display:flex; align-items:center; gap:8px; text-align:left; background:var(--surface2); border:1px solid var(--border);
+  border-radius:9px; padding:8px 10px; color:var(--text); font:inherit; font-size:13px; cursor:pointer; }
+.zpr-det-odkaz .zpr-stav { margin-left:auto; }
+.zpr-det-nahlasit { margin-top:10px; background:none; border:1px dashed var(--border); color:var(--muted); border-radius:9px;
+  padding:8px 12px; font:inherit; font-size:12px; cursor:pointer; width:100%; }
+.zpr-det-nahlasit:hover { color:var(--accent2); border-color:var(--accent2); }
 @media (max-width:760px) {
-  #ucetOv { padding:0 !important; }
+  #ucetOv, #zprOv { padding:0 !important; }
+  .zpr-podtitul { display:none; }
+  .zpr-nove-btn { margin-left:0; margin-right:44px; padding:8px 12px; }
+  .zpr-bub { max-width:92%; }
+  .zpr-psani { flex-direction:column; align-items:stretch; }
   .uc-okno { height:100%; border-radius:0; border:none; }
   .uc-hlava { padding:12px 14px; gap:10px; }
   .uc-obdobi { margin-left:0; width:100%; }
@@ -1792,6 +1866,7 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
     <div id="userBadge" class="user-badge" onclick="handleUserBadgeClick()" style="display:none;"><span class="fb-status fb-offline" id="fbStatusDot"></span><span id="fbUserLabel">Offline</span></div>
     <button class="icon-btn" id="btnBulkMode" style="font-size:12px;letter-spacing:-0.3px;" onclick="toggleBulkMode()">Vybrat</button>
     <button class="icon-btn" onclick="toggleCalc()" id="btnCalc" style="width:36px;padding:0;" data-tip="Kalkulačka marže"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/><path d="M4 4h2M10 4h2M4 8h2M10 8h2M4 12h2M10 12h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+    <button class="icon-btn" onclick="openZpravy()" id="btnZpravy" style="width:36px;padding:0;position:relative;display:none;align-items:center;justify-content:center;" data-tip="Zprávy od účetního"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1.5" y="3" width="13" height="10" rx="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M2 4l6 4.6L14 4" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span class="kl-pocet zpr-pocet" id="zpravyPocet" style="display:none"></span></button>
     <button class="icon-btn" onclick="openKontroly()" id="btnKontroly" style="width:36px;padding:0;position:relative;" data-tip="Kontroly listingů"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="13" cy="11" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M13 10v1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13.2" r="0.4" fill="currentColor"/></svg><span class="kl-pocet" id="kontrolyPocet" style="display:none"></span></button>
     <button class="icon-btn" id="btnMobileSimple" onclick="toggleMobileSimple()" data-tip="Jednoduché zobrazení" style="width:36px;padding:0;font-size:14px;">☰</button>
     <button class="icon-btn" id="btnCustomerMode" onclick="toggleCustomerMode()" data-tip="Zákaznický režim" style="width:36px;padding:0;display:none;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
@@ -3388,6 +3463,7 @@ function _vykresliUctetniListu() {
   lista.innerHTML = '<span class="ul-znak">Pohled účetního</span>'
     + '<span class="ul-text">Vidíš sklad a prodeje. Data se odsud nedají měnit.</span>'
     + '<button class="ul-btn ul-hlavni" onclick="openUcetnictvi()">Účetnictví</button>'
+    + '<button class="ul-btn" onclick="openZpravy()">Zprávy<span class="ul-pocet" id="zpravyPocetU" style="display:none"></span></button>'
     + '<button class="ul-btn" onclick="otevriUctetniManual()">Co tu najdu?</button>';
   var hlavicka = document.querySelector('header');
   if (hlavicka && hlavicka.parentNode) hlavicka.parentNode.insertBefore(lista, hlavicka.nextSibling);
@@ -3413,8 +3489,11 @@ function otevriUctetniManual() {
     + '<h4>Účetnictví</h4>'
     + '<p>Tlačítko <b>Účetnictví</b> v oranžovém pruhu: vybereš měsíc a máš pohromadě všechny prodejní doklady toho měsíce (jeden soubor, každý doklad na své stránce), přehled prodejů a nákupů ke stažení pro Excel, nákupní doklady s odkazy, kontrolu číselné řady a eurové prodeje bez kurzu ČNB.</p>'
     + '<p>V sekci <b>Zaúčtováno</b> si odškrtáváš, co už máš zpracované. Značky vidíš jen ty; když majitel zaúčtovaný obchod později změní, ukáže se u něj „změněno".</p>' 
+    + '<h4>Zprávy</h4>'
+    + '<p>Tlačítko <b>Zprávy</b> v oranžovém pruhu: hlášení pro majitele — chyba v datech, chybějící doklad, dotaz nebo návrh, co přidat či změnit. Majitel ho uvidí v aplikaci a přijde mu mail. U každého hlášení vidíš, v jakém je stavu (Nové, Rozpracované, Hotovo), a můžete si v něm psát.</p>'
+    + '<p>K jedné položce píšeš z jejího detailu: pole <b>Poznámky</b> vidí majitel i ty, a tlačítko <b>Nahlásit problém s položkou</b> založí hlášení rovnou s odkazem na ni.</p>'
     + '<h4>Změny</h4>'
-    + '<p>Odsud se nedá nic upravit ani smazat. Když něco nesedí, dej vědět majiteli skladu — opraví to na své straně a tobě se to objeví samo.</p>'
+    + '<p>Odsud se nedá nic upravit ani smazat. Když něco nesedí, napiš to majiteli přes <b>Zprávy</b> — opraví to na své straně a tobě se to objeví samo.</p>'
     + '</div>';
   var el = document.getElementById('moUctetniManual');
   el.querySelector('.modal').innerHTML = h;
@@ -10047,9 +10126,10 @@ function openDetail(id) {
     }
   }
   // Co u kusu chybí, stojí nahoře — kvůli tomu se sem teď člověk dívá (CO CHYBÍ U POLOŽKY)
-  document.getElementById('detailContent').innerHTML = chybiDetailHtml(it) + kontrolaDetailHtml(it) + sectionsHtml + potentialHtml + btnsHtml;
+  document.getElementById('detailContent').innerHTML = chybiDetailHtml(it) + kontrolaDetailHtml(it) + sectionsHtml + potentialHtml + poznamkyDetailHtml(it) + btnsHtml;
   currentDetailId = id;
   document.getElementById('moDetail').classList.add('open');
+  try { zprPoOtevreniDetailu(id); } catch(e) {}   // poznámky k položce jsou tím přečtené (ZPRÁVY A POZNÁMKY)
   var _moDetailInner = document.querySelector('#moDetail .modal');
   if(_moDetailInner) _moDetailInner.scrollTop = 0;
 }
@@ -11623,6 +11703,491 @@ function _ucVykresli() {
   if (zalPred === _ucZalozka) { var n = ov.querySelector('.uc-obsah'); if (n) n.scrollTop = y; }
   ov.setAttribute('data-zal', _ucZalozka);
   ['ucMesic', 'ucRok'].forEach(function(id) { var e = document.getElementById(id); if (e) initCustomSelect(e); });
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   ZPRÁVY A POZNÁMKY
+
+   Účetní píše majiteli z aplikace: hlášení (chyba v datech, chybějící
+   doklad, dotaz, návrh na úpravu) a poznámky u položek. Majitel to má
+   v okně Zprávy s počtem u tlačítka v hlavičce a o nové zprávě mu do
+   pár minut přijde mail (konektor, ZPRÁVY OD ÚČETNÍHO). Majitel přepne
+   stav hlášení — Nové → Rozpracované → Hotovo, nebo Připomenout k datu —
+   a účetní ho vidí. Majitel to chtěl jako „profesionální reportový
+   systém" (10. 11. 2026).
+
+   Data jsou **mimo sklad**, v `users/{majitel}/zpravy`:
+     v_…      vlákno: hlášení (`typ: 'hlaseni'`) nebo poznámky u položky
+              (`typ: 'polozka'`, id `v_pol_<id položky>`)
+     m_…      jedna zpráva = jeden dokument. Pole se zprávami v dokumentu
+              vlákna by si dva lidé píšící naráz navzájem přepisovali.
+     _mail    kam až konektor poslal mail (zapisuje jen čtečka)
+
+   Proč zvlášť a ne v nastavení skladu: **do skladu zapisuje jedině
+   majitel** a účetní tam nesmí ani lísteček. Tady smí účetní podle
+   pravidel Firestore založit zprávu se svým podpisem (`od: 'ucetni'`),
+   vlákno ve stavu Nové a u vlákna si poznamenat, kdy ho četl (`cteniU`)
+   — nic víc. Stav mění jen majitel; brána je i tady v kódu.
+
+   „Připomenout" se nikde nepřepíná zpátky: stav se počítá
+   (`zprStav`) — od data připomenutí je hlášení zase Nové.
+
+   Hlídá to test-zpravy.js.
+══════════════════════════════════════════════════════════════════════ */
+var ZPR_DRUHY = { chyba: 'Chyba v datech', doklad: 'Chybí doklad', dotaz: 'Dotaz', navrh: 'Návrh na úpravu' };
+var ZPR_STAVY = { nove: 'Nové', rozprac: 'Rozpracované', hotovo: 'Hotovo', pripomenout: 'Připomenout' };
+var ZPR_MAX_TEXT = 4000;
+var _zpr = { vlakna: {}, zpravy: [], nacteno: false };
+var _zprUnsub = null;
+var _zprFiltr = 'otevrene';      // záložka v okně
+var _zprPohled = 'seznam';       // 'seznam' | 'vlakno' | 'nove'
+var _zprOtevrene = null;         // id otevřeného vlákna
+var _zprNove = null;             // rozepsané hlášení { druh, polozkaId, polozkaNazev }
+var _zprVyberData = false;       // ukázat výběr data u Připomenout
+
+function _zprKdo() { return jeUctetni() ? 'ucetni' : 'majitel'; }
+function _zprCteniPole() { return jeUctetni() ? 'cteniU' : 'cteniM'; }
+function _zprDnes(posun) {
+  var d = new Date(); d.setDate(d.getDate() + (posun || 0));
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+// Do jména dokumentu (a do onclick) smí jen písmena, číslice, _ a -
+function _zprBezpecne(s) { return String(s == null ? '' : s).replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 70); }
+function zprVlaknoPolozky(id) { return 'v_pol_' + _zprBezpecne(id); }
+function _zprNoveId(pred) { return pred + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); }
+
+/* Stav, jak ho vidí člověk. Připomenutí, jehož den nastal, je Nové. */
+function zprStav(v) {
+  if (!v || v.typ !== 'hlaseni') return null;
+  var s = ZPR_STAVY[v.stav] ? v.stav : 'nove';
+  if (s === 'pripomenout') return (v.pripomenout && v.pripomenout <= _zprDnes()) ? 'nove' : 'pripomenout';
+  return s;
+}
+function zprZpravyVlakna(id) {
+  return _zpr.zpravy.filter(function(m) { return m.vlakno === id; })
+    .sort(function(a, b) { return (a.t || 0) - (b.t || 0); });
+}
+function _zprPosledniCas(v) {
+  var z = zprZpravyVlakna(v.id);
+  return Math.max(v.vytvoreno || 0, v.stavZmenen || 0, z.length ? (z[z.length - 1].t || 0) : 0);
+}
+/* Nepřečtené = od druhé strany přišlo něco po mém posledním čtení.
+   Účetnímu se jako novinka počítá i změna stavu. */
+function zprNeprectene(v) {
+  if (!v) return false;
+  var ja = _zprKdo(), cteni = v[_zprCteniPole()] || 0;
+  var nove = zprZpravyVlakna(v.id).some(function(m) { return m.od !== ja && (m.t || 0) > cteni; });
+  if (!nove && ja === 'ucetni' && (v.stavZmenen || 0) > cteni) nove = true;
+  return nove;
+}
+/* Co svítí na tlačítku. Majiteli i hlášení ve stavu Nové, dokud ho
+   nepřepne — „mít to na očích", ne jen nepřečtené. */
+function zprPozornost(v) {
+  if (zprNeprectene(v)) return true;
+  return _zprKdo() === 'majitel' && zprStav(v) === 'nove';
+}
+function zprPocet() {
+  var n = 0;
+  for (var k in _zpr.vlakna) if (zprPozornost(_zpr.vlakna[k])) n++;
+  return n;
+}
+
+/* ── Posluchač ── */
+function _zprSpust() {
+  _zprZastav();
+  var fns = window._fbFns, uid = _datovyUid();
+  if (!fns || !window._fbDb || !uid) return;
+  try {
+    _zprUnsub = fns.onSnapshot(fns.collection(window._fbDb, 'users', uid, 'zpravy'), function(snap) {
+      var vl = {}, zp = [];
+      snap.forEach(function(d) {
+        var x = d.data() || {}; x.id = d.id;
+        if (/^v_/.test(d.id)) vl[d.id] = x;
+        else if (/^m_/.test(d.id) && x.vlakno) zp.push(x);
+      });
+      _zpr = { vlakna: vl, zpravy: zp, nacteno: true };
+      zprPrekresli();
+    }, function(err) {
+      console.warn('zprávy:', err);
+      _zpr.chyba = (err && err.code) || 'chyba';
+      zprPrekresli();
+    });
+  } catch(e) { console.warn('zprávy:', e); }
+  zprPrekresli();
+}
+function _zprZastav() {
+  if (_zprUnsub) { try { _zprUnsub(); } catch(e) {} _zprUnsub = null; }
+  _zpr = { vlakna: {}, zpravy: [], nacteno: false };
+  var ov = document.getElementById('zprOv'); if (ov) ov.remove();
+  zprPrekresli();
+}
+
+/* ── Zápis ── */
+function _zprZapis(id, data, merge) {
+  var fns = window._fbFns, uid = _datovyUid();
+  if (!fns || !window._fbDb || !uid) { showToast('Zprávy jdou jen přes cloud — přihlas se.', 'err'); return Promise.reject(new Error('bez cloudu')); }
+  return fns.setDoc(fns.doc(window._fbDb, 'users', uid, 'zpravy', id), data, merge ? { merge: true } : undefined)
+    .catch(function(e) {
+      console.warn('zápis zprávy:', e);
+      // permission-denied znamená skoro jistě nepublikovaná pravidla
+      showToast(e && e.code === 'permission-denied'
+        ? 'Zprávu cloud odmítl — v konzoli Firebase chybí nová pravidla (firestore.rules).'
+        : 'Zprávu se nepodařilo odeslat. Zkus to znovu.', 'err');
+      throw e;
+    });
+}
+function _zprZapisZpravu(vlaknoId, text) {
+  var t = Date.now();
+  var m = { vlakno: vlaknoId, od: _zprKdo(), text: String(text).slice(0, ZPR_MAX_TEXT), t: t };
+  var id = _zprNoveId('m_');
+  var v = _zpr.vlakna[vlaknoId];
+  if (v) {   // vlastní zpráva je přečtená — ať po odeslání nesvítí
+    var o = {}; o[_zprCteniPole()] = t; v[_zprCteniPole()] = t;
+    _zprZapis(vlaknoId, o, true).catch(function() {});
+  }
+  return _zprZapis(id, m);
+}
+function _zprPrecist(id) {
+  var v = _zpr.vlakna[id];
+  if (!v || !zprNeprectene(v)) return;
+  var o = {}; o[_zprCteniPole()] = Date.now();
+  v[_zprCteniPole()] = o[_zprCteniPole()];
+  _zprZapis(id, o, true).catch(function() {});
+  zprPrekresli();
+}
+
+/* Stav mění jen majitel. Pravidla Firestore účetního nepustí taky,
+   ale tlačítko, které nic neudělá, nepatří ani do jeho okna. */
+function zprNastavStav(id, stav) {
+  if (jeUctetni() || !ZPR_STAVY[stav]) return;
+  var v = _zpr.vlakna[id]; if (!v) return;
+  var o = { stav: stav, stavZmenen: Date.now(), cteniM: Date.now() };
+  if (stav === 'pripomenout') {
+    var el = document.getElementById('zprDatum');
+    var d = el ? el.value : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d <= _zprDnes()) { showToast('Vyber den v budoucnu.', 'err'); return; }
+    o.pripomenout = d;
+  } else o.pripomenout = null;
+  Object.assign(v, o);
+  _zprVyberData = false;
+  _zprZapis(id, o, true).then(function() {
+    showToast(stav === 'pripomenout' ? 'Připomenu ' + _zprDatumText(o.pripomenout) + '.' : 'Stav: ' + ZPR_STAVY[stav] + '.');
+  }).catch(function() {});
+  zprPrekresli();
+}
+
+/* Poznámka u položky (z detailu). Vlákno se zakládá s první poznámkou. */
+function zprPoznamka(itemId) {
+  var ta = document.getElementById('zprDetText');
+  var text = ta ? ta.value.trim() : '';
+  if (!text) { if (ta) ta.focus(); return; }
+  var it = items.find(function(i) { return i.id === itemId; });
+  var id = zprVlaknoPolozky(itemId);
+  var hotovo = function() { if (ta) ta.value = ''; showToast('Poznámka přidána.'); };
+  if (!_zpr.vlakna[id]) {
+    var v = { typ: 'polozka', polozkaId: String(itemId), polozkaNazev: _zprNazevPolozky(it), vytvoreno: Date.now() };
+    v[_zprCteniPole()] = Date.now();
+    _zprZapis(id, v, true).then(function() { return _zprZapisZpravu(id, text); }).then(hotovo).catch(function() {});
+  } else {
+    _zprZapisZpravu(id, text).then(hotovo).catch(function() {});
+  }
+}
+function _zprNazevPolozky(it) {
+  if (!it) return '';
+  return String(it.name || '').slice(0, 120) + (it.size ? ' · ' + String(it.size).slice(0, 20) : '');
+}
+
+/* ── Nové hlášení (jen účetní) ── */
+function zprNoveHlaseni(itemId) {
+  if (!jeUctetni()) return;
+  var it = itemId ? items.find(function(i) { return i.id === itemId; }) : null;
+  _zprNove = { druh: it ? 'chyba' : 'dotaz', polozkaId: it ? String(it.id) : null, polozkaNazev: it ? _zprNazevPolozky(it) : null };
+  var det = document.getElementById('moDetail');
+  if (det && det.classList.contains('open')) cm('moDetail');
+  openZpravy();
+  _zprPohled = 'nove';
+  _zprVykresli();
+  setTimeout(function() { var p = document.getElementById('zprNPredmet'); if (p) p.focus(); }, 30);
+}
+function zprNovyDruh(d) { if (_zprNove && ZPR_DRUHY[d]) { _zprNove.druh = d; _zprVykresli(); } }
+function zprOdesliHlaseni() {
+  if (!jeUctetni() || !_zprNove) return;
+  var p = document.getElementById('zprNPredmet'), tx = document.getElementById('zprNText');
+  var predmet = p ? p.value.trim() : '', text = tx ? tx.value.trim() : '';
+  if (!predmet) { showToast('Napiš předmět — podle něj se hlášení pozná v seznamu.', 'err'); if (p) p.focus(); return; }
+  if (!text) { showToast('Napiš, o co jde.', 'err'); if (tx) tx.focus(); return; }
+  var t = Date.now(), id = _zprNoveId('v_');
+  var v = { typ: 'hlaseni', druh: _zprNove.druh, predmet: predmet.slice(0, 140), stav: 'nove',
+    zalozil: 'ucetni', vytvoreno: t, cteniU: t };
+  if (_zprNove.polozkaId) { v.polozkaId = _zprNove.polozkaId; v.polozkaNazev = _zprNove.polozkaNazev || ''; }
+  _zprZapis(id, v).then(function() { return _zprZapisZpravu(id, text); }).then(function() {
+    showToast('Hlášení odesláno. Majitel ho uvidí v aplikaci a přijde mu mail.');
+  }).catch(function() {});
+  _zpr.vlakna[id] = Object.assign({ id: id }, v);   // ať se dá hned otevřít
+  _zprNove = null; _zprOtevrene = id; _zprPohled = 'vlakno'; _zprFiltr = 'otevrene';
+  _zprVykresli();
+}
+
+/* ── Okno ── */
+function openZpravy(vlaknoId) {
+  var ov = document.getElementById('zprOv');
+  if (!ov) {
+    _zprFiltr = 'otevrene'; _zprPohled = 'seznam'; _zprOtevrene = null; _zprVyberData = false;
+    ov = document.createElement('div');
+    ov.id = 'zprOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:center;justify-content:center;padding:24px;';
+    ov.addEventListener('click', function(e) { if (e.target === ov) zavriZpravy(); });
+    document.body.appendChild(ov);
+  }
+  if (vlaknoId && _zpr.vlakna[vlaknoId]) zprOtevri(vlaknoId);
+  else _zprVykresli();
+}
+function zavriZpravy() { var ov = document.getElementById('zprOv'); if (ov) ov.remove(); _zprNove = null; }
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('zprOv')) zavriZpravy();
+});
+function zprFiltr(f) { _zprFiltr = f; _zprPohled = 'seznam'; _zprOtevrene = null; _zprNove = null; _zprVykresli(); }
+function zprOtevri(id) {
+  var v = _zpr.vlakna[id]; if (!v) return;
+  _zprOtevrene = id; _zprPohled = 'vlakno'; _zprVyberData = false;
+  if (v.typ === 'polozka') _zprFiltr = 'polozky';
+  else { var s = zprStav(v); _zprFiltr = s === 'hotovo' ? 'hotove' : s === 'pripomenout' ? 'pripomenout' : 'otevrene'; }
+  _zprVykresli();
+  _zprPrecist(id);
+  var ob = document.querySelector('#zprOv .uc-obsah'); if (ob) ob.scrollTop = ob.scrollHeight;
+}
+function zprZpet() { _zprPohled = 'seznam'; _zprOtevrene = null; _zprNove = null; _zprVykresli(); }
+function zprVyberDatum() { _zprVyberData = !_zprVyberData; _zprVykresli(); }
+function zprOdpovez() {
+  var ta = document.getElementById('zprOdpoved');
+  var text = ta ? ta.value.trim() : '';
+  if (!text || !_zprOtevrene) { if (ta) ta.focus(); return; }
+  ta.value = '';
+  _zprZapisZpravu(_zprOtevrene, text).catch(function() { if (ta && !ta.value) ta.value = text; });
+}
+function zprOtevriPolozku(itemId) {
+  var it = items.find(function(i) { return String(i.id) === String(itemId); });
+  if (!it) { showToast('Položka už ve skladu není.', 'err'); return; }
+  if (jeUctetni() && (isPersonal(it) || it.saleState === 'waiting')) { showToast('Tahle položka v pohledu účetního není.', 'err'); return; }
+  zavriZpravy();
+  openDetail(it.id);
+}
+
+function _zprDatumText(d) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d || ''); if (!m) return '';
+  return (+m[3]) + '. ' + (+m[2]) + '. ' + m[1];
+}
+function _zprCas(t) {
+  if (!t) return '';
+  var d = new Date(t), dnes = new Date();
+  var hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  if (d.toDateString() === dnes.toDateString()) return 'dnes ' + hm;
+  return d.getDate() + '. ' + (d.getMonth() + 1) + '.' + (d.getFullYear() !== dnes.getFullYear() ? ' ' + d.getFullYear() : '') + ' ' + hm;
+}
+function _zprKdoText(od) {
+  if (od === _zprKdo()) return 'Ty';
+  return od === 'ucetni' ? 'Účetní' : 'Majitel';
+}
+function _zprStavChip(v) {
+  var s = zprStav(v); if (!s) return '';
+  var txt = ZPR_STAVY[s];
+  if (s === 'pripomenout') txt += ' ' + _zprDatumText(v.pripomenout);
+  else if (s === 'nove' && v.stav === 'pripomenout') txt = 'Připomenutí';
+  return '<span class="zpr-stav s-' + s + '">' + escHtml(txt) + '</span>';
+}
+function _zprVFiltru(v, f) {
+  if (f === 'polozky') return v.typ === 'polozka';
+  if (v.typ !== 'hlaseni') return false;
+  var s = zprStav(v);
+  if (f === 'otevrene') return s === 'nove' || s === 'rozprac';
+  if (f === 'pripomenout') return s === 'pripomenout';
+  return s === 'hotovo';
+}
+function _zprSeznam(f) {
+  var arr = [];
+  for (var k in _zpr.vlakna) if (_zprVFiltru(_zpr.vlakna[k], f)) arr.push(_zpr.vlakna[k]);
+  return arr.sort(function(a, b) {
+    var pa = zprPozornost(a) ? 1 : 0, pb = zprPozornost(b) ? 1 : 0;
+    return (pb - pa) || (_zprPosledniCas(b) - _zprPosledniCas(a));
+  });
+}
+
+/* Překreslení ztratí rozepsaný text — tak se uloží a vrátí. Snímek
+   s cizí zprávou může dorazit uprostřed psaní. */
+function _zprZachovej(koren, fn) {
+  var pole = {}, fokus = null, sel = null;
+  if (koren) koren.querySelectorAll('textarea[id], input[id]').forEach(function(el) { pole[el.id] = el.value; });
+  var a = document.activeElement;
+  if (a && a.id && pole.hasOwnProperty(a.id)) { fokus = a.id; try { sel = [a.selectionStart, a.selectionEnd]; } catch(e) {} }
+  fn();
+  for (var id in pole) { var el = document.getElementById(id); if (el && pole[id] && !el.value) el.value = pole[id]; }
+  if (fokus) { var f = document.getElementById(fokus); if (f) { f.focus(); try { if (sel) f.setSelectionRange(sel[0], sel[1]); } catch(e) {} } }
+}
+
+function _zprVykresli() {
+  var ov = document.getElementById('zprOv'); if (!ov) return;
+  _zprZachovej(ov, function() { ov.innerHTML = _zprOknoHtml(); });
+}
+function _zprOknoHtml() {
+  var uc = jeUctetni();
+  var zal = [['otevrene', 'Otevřené'], ['pripomenout', 'Připomenout'], ['hotove', 'Hotové'], ['polozky', 'Poznámky u položek']];
+  var nav = zal.map(function(z) {
+    var sez = _zprSeznam(z[0]), poz = sez.filter(zprPozornost).length;
+    return '<button class="uc-zal' + (_zprFiltr === z[0] ? ' akt' : '') + '" data-zal="' + z[0] + '" onclick="zprFiltr(\'' + z[0] + '\')">'
+      + '<span>' + z[1] + '</span><span class="uc-znak' + (poz ? ' pozor' : '') + '">' + (poz || sez.length) + '</span></button>';
+  }).join('');
+  var obsah;
+  if (!_zpr.nacteno && !_zpr.chyba) obsah = '<div class="uc-prazdne">Načítám zprávy z cloudu…</div>';
+  else if (_zpr.chyba && !_zpr.nacteno) obsah = '<div class="uc-prazdne">Zprávy se nedají načíst'
+    + (_zpr.chyba === 'permission-denied' ? ' — v konzoli Firebase chybí nová pravidla (firestore.rules).' : '.') + '</div>';
+  else if (_zprPohled === 'nove' && _zprNove) obsah = _zprNoveHtml();
+  else if (_zprPohled === 'vlakno' && _zprOtevrene && _zpr.vlakna[_zprOtevrene]) obsah = _zprVlaknoHtml(_zpr.vlakna[_zprOtevrene]);
+  else obsah = _zprSeznamHtml();
+  return '<div class="uc-okno zpr-okno">'
+    + '<div class="uc-hlava"><span class="uc-titul">Zprávy</span>'
+    + '<span class="zpr-podtitul">' + (uc ? 'Hlášení a poznámky pro majitele skladu' : 'Hlášení a poznámky od účetního') + '</span>'
+    + (uc ? '<button class="uc-btn zpr-nove-btn" onclick="zprNoveHlaseni()">+ Nové hlášení</button>' : '')
+    + '<button class="xb" onclick="zavriZpravy()">✕</button></div>'
+    + '<div class="uc-telo"><nav class="uc-nav">' + nav + '</nav><main class="uc-obsah">' + obsah + '</main></div></div>';
+}
+function _zprSeznamHtml() {
+  var sez = _zprSeznam(_zprFiltr), uc = jeUctetni();
+  var popis = {
+    otevrene: uc ? 'Hlášení, která majitel ještě neuzavřel.' : 'Co je potřeba vyřešit. Nové svítí, dokud je nepřepneš.',
+    pripomenout: 'Odložené na později — v den připomenutí se vrátí mezi otevřené.',
+    hotove: 'Vyřešená hlášení.',
+    polozky: 'Poznámky, které jste si napsali u položek. Píše se v detailu položky.',
+  }[_zprFiltr];
+  if (!sez.length) {
+    return '<div class="uc-pod">' + popis + '</div><div class="uc-prazdne">'
+      + (_zprFiltr === 'otevrene' ? (uc ? 'Nic otevřeného. Nové hlášení založíš tlačítkem nahoře — k položce z jejího detailu.' : 'Nic nečeká. 👌') : 'Nic tu není.')
+      + '</div>';
+  }
+  return '<div class="uc-pod">' + popis + '</div><div class="zpr-seznam">' + sez.map(function(v) {
+    var z = zprZpravyVlakna(v.id), posl = z[z.length - 1];
+    var nadpis = v.typ === 'polozka' ? (v.polozkaNazev || 'Položka') : (v.predmet || '(bez předmětu)');
+    var stitek = v.typ === 'polozka' ? '<span class="zpr-druh">Poznámka</span>' : '<span class="zpr-druh">' + escHtml(ZPR_DRUHY[v.druh] || 'Hlášení') + '</span>';
+    var nahled = posl ? '<b>' + _zprKdoText(posl.od) + ':</b> ' + escHtml(String(posl.text || '').slice(0, 160)) : '';
+    return '<button class="zpr-radek' + (zprPozornost(v) ? ' pozor' : '') + (zprNeprectene(v) ? ' neprect' : '') + '" data-vlakno="' + v.id + '" onclick="zprOtevri(\'' + v.id + '\')">'
+      + '<span class="zpr-tecka"></span><span class="zpr-r-telo">'
+      + '<span class="zpr-r-hore">' + stitek + _zprStavChip(v) + '<span class="zpr-cas">' + _zprCas(_zprPosledniCas(v)) + '</span></span>'
+      + '<span class="zpr-r-nadpis">' + escHtml(nadpis) + '</span>'
+      + (v.typ === 'hlaseni' && v.polozkaNazev ? '<span class="zpr-r-pol">↳ ' + escHtml(v.polozkaNazev) + '</span>' : '')
+      + (nahled ? '<span class="zpr-r-nahled">' + nahled + '</span>' : '')
+      + '</span></button>';
+  }).join('') + '</div>';
+}
+function _zprBublinyHtml(z) {
+  if (!z.length) return '<div class="zpr-zadne">Zatím bez zpráv.</div>';
+  var ja = _zprKdo();
+  return z.map(function(m) {
+    return '<div class="zpr-bub' + (m.od === ja ? ' moje' : '') + '"><div class="zpr-bub-hl">' + _zprKdoText(m.od) + ' · ' + _zprCas(m.t) + '</div>'
+      + '<div class="zpr-bub-text">' + escHtml(m.text || '') + '</div></div>';
+  }).join('');
+}
+function _zprVlaknoHtml(v) {
+  var uc = jeUctetni(), s = zprStav(v);
+  var h = '<button class="uc-mini zpr-zpet" onclick="zprZpet()">‹ Zpět</button>';
+  if (v.typ === 'polozka') {
+    h += '<h3 class="uc-h">' + escHtml(v.polozkaNazev || 'Položka') + '</h3>'
+      + '<div class="zpr-meta"><span class="zpr-druh">Poznámky k položce</span>'
+      + '<button class="uc-mini" onclick="zprOtevriPolozku(\'' + _zprBezpecne(v.polozkaId) + '\')">Otevřít položku</button></div>';
+  } else {
+    h += '<h3 class="uc-h">' + escHtml(v.predmet || '(bez předmětu)') + '</h3>'
+      + '<div class="zpr-meta"><span class="zpr-druh">' + escHtml(ZPR_DRUHY[v.druh] || 'Hlášení') + '</span>' + _zprStavChip(v)
+      + '<span class="zpr-cas">založeno ' + _zprCas(v.vytvoreno) + '</span>'
+      + (v.polozkaId ? '<button class="uc-mini" onclick="zprOtevriPolozku(\'' + _zprBezpecne(v.polozkaId) + '\')">↳ ' + escHtml(v.polozkaNazev || 'Položka') + '</button>' : '')
+      + '</div>';
+    if (!uc) {
+      var ulozeny = ZPR_STAVY[v.stav] ? v.stav : 'nove';
+      h += '<div class="zpr-stavy"><span class="zpr-stavy-n">Stav</span>'
+        + ['nove', 'rozprac', 'hotovo'].map(function(k) {
+          return '<button class="uc-filtr' + (ulozeny === k ? ' akt' : '') + '" data-stav="' + k + '" onclick="zprNastavStav(\'' + v.id + '\',\'' + k + '\')">' + ZPR_STAVY[k] + '</button>';
+        }).join('')
+        + '<button class="uc-filtr' + (ulozeny === 'pripomenout' ? ' akt' : '') + '" data-stav="pripomenout" onclick="zprVyberDatum()">Připomenout'
+        + (ulozeny === 'pripomenout' && v.pripomenout ? ' ' + _zprDatumText(v.pripomenout) : '') + '…</button>';
+      if (_zprVyberData) {
+        h += '<span class="zpr-datum"><input type="date" id="zprDatum" min="' + _zprDnes(1) + '" value="' + escHtml(v.pripomenout && v.pripomenout > _zprDnes() ? v.pripomenout : _zprDnes(7)) + '">'
+          + '<button class="uc-btn" onclick="zprNastavStav(\'' + v.id + '\',\'pripomenout\')">Nastavit</button></span>';
+      }
+      h += '</div>';
+    } else if (s === 'pripomenout') {
+      h += '<div class="uc-pod">Majitel se k tomu vrátí ' + _zprDatumText(v.pripomenout) + '.</div>';
+    }
+  }
+  h += '<div class="zpr-zpravy">' + _zprBublinyHtml(zprZpravyVlakna(v.id)) + '</div>'
+    + '<div class="zpr-psani"><textarea id="zprOdpoved" rows="3" maxlength="' + ZPR_MAX_TEXT + '" placeholder="' + (uc ? 'Napiš majiteli…' : 'Odpověz účetnímu…') + '"'
+    + ' onkeydown="if((event.ctrlKey||event.metaKey)&&event.key===\'Enter\')zprOdpovez()"></textarea>'
+    + '<button class="uc-btn" onclick="zprOdpovez()">Odeslat</button></div>';
+  return h;
+}
+function _zprNoveHtml() {
+  var n = _zprNove;
+  return '<button class="uc-mini zpr-zpet" onclick="zprZpet()">‹ Zpět</button>'
+    + '<h3 class="uc-h">Nové hlášení</h3>'
+    + '<div class="uc-pod">Majitel ho uvidí v aplikaci a do pár minut mu přijde mail. Stav, který mu nastaví, uvidíš tady.</div>'
+    + '<div class="zpr-form"><div class="zpr-form-n">Druh</div><div class="uc-filtry">'
+    + Object.keys(ZPR_DRUHY).map(function(k) {
+      return '<button class="uc-filtr' + (n.druh === k ? ' akt' : '') + '" data-druh="' + k + '" onclick="zprNovyDruh(\'' + k + '\')">' + ZPR_DRUHY[k] + '</button>';
+    }).join('') + '</div>'
+    + (n.polozkaId ? '<div class="zpr-form-n">Položka</div><div class="zpr-form-pol">↳ ' + escHtml(n.polozkaNazev || '') + '</div>' : '')
+    + '<div class="zpr-form-n">Předmět</div><input id="zprNPredmet" class="zpr-inp" maxlength="140" placeholder="Krátce, o co jde">'
+    + '<div class="zpr-form-n">Zpráva</div><textarea id="zprNText" class="zpr-inp" rows="6" maxlength="' + ZPR_MAX_TEXT + '" placeholder="Co nesedí, co chybí nebo co bys potřeboval…"></textarea>'
+    + '<div class="uc-akce" style="margin-top:14px;"><button class="uc-btn" onclick="zprOdesliHlaseni()">Odeslat hlášení</button>'
+    + '<button class="uc-btn druhe" onclick="zprZpet()">Zrušit</button></div>'
+    + (n.polozkaId ? '' : '<div class="uc-poznamka">Hlášení k jedné položce založíš z jejího detailu tlačítkem „Nahlásit".</div>')
+    + '</div>';
+}
+
+/* ── Poznámky v detailu položky ── */
+function poznamkyDetailHtml(it) {
+  if (!it || !_zpr.nacteno) return '';
+  var uc = jeUctetni(), id = zprVlaknoPolozky(it.id);
+  var z = _zpr.vlakna[id] ? zprZpravyVlakna(id) : [];
+  var hlaseni = [];
+  for (var k in _zpr.vlakna) { var v = _zpr.vlakna[k]; if (v.typ === 'hlaseni' && String(v.polozkaId) === String(it.id)) hlaseni.push(v); }
+  var h = '<div id="detPoznamky" class="zpr-det">'
+    + '<div class="zpr-det-titul">Poznámky' + (z.length ? ' <span>' + z.length + '</span>' : '') + '</div>';
+  if (z.length) h += '<div class="zpr-zpravy mala">' + _zprBublinyHtml(z) + '</div>';
+  h += '<div class="zpr-psani mala"><textarea id="zprDetText" rows="2" maxlength="' + ZPR_MAX_TEXT + '" placeholder="' + (uc ? 'Poznámka pro majitele…' : 'Poznámka pro účetního…') + '"'
+    + ' onkeydown="if((event.ctrlKey||event.metaKey)&&event.key===\'Enter\')zprPoznamka(\'' + _zprBezpecne(it.id) + '\')"></textarea>'
+    + '<button class="btn-sec" onclick="zprPoznamka(\'' + _zprBezpecne(it.id) + '\')">Přidat</button></div>';
+  if (hlaseni.length) {
+    h += '<div class="zpr-det-hl">' + hlaseni.map(function(v) {
+      return '<button class="zpr-det-odkaz" onclick="cm(\'moDetail\');openZpravy(\'' + v.id + '\')">'
+        + '<span class="zpr-druh">' + escHtml(ZPR_DRUHY[v.druh] || 'Hlášení') + '</span>' + escHtml(v.predmet || '') + _zprStavChip(v) + '</button>';
+    }).join('') + '</div>';
+  }
+  if (uc) h += '<button class="zpr-det-nahlasit" onclick="zprNoveHlaseni(\'' + _zprBezpecne(it.id) + '\')">Nahlásit problém s položkou</button>';
+  return h + '</div>';
+}
+function zprPoOtevreniDetailu(itemId) { _zprPrecist(zprVlaknoPolozky(itemId)); }
+
+/* ── Překreslení po snímku ── */
+function zprPrekresli() {
+  var n = zprPocet(), uc = jeUctetni();
+  var btn = document.getElementById('btnZpravy');
+  if (btn) {
+    btn.style.display = (_zprUnsub || _zpr.nacteno) ? 'flex' : 'none';
+    btn.setAttribute('data-tip', uc ? 'Zprávy pro majitele' : 'Zprávy od účetního');
+    btn.classList.toggle('zpr-svitit', n > 0);
+  }
+  [document.getElementById('zpravyPocet'), document.getElementById('zpravyPocetU')].forEach(function(el) {
+    if (!el) return;
+    el.textContent = n > 99 ? '99+' : String(n);
+    el.style.display = n ? '' : 'none';
+  });
+  if (document.getElementById('zprOv')) _zprVykresli();
+  var det = document.getElementById('moDetail'), box = document.getElementById('detPoznamky');
+  if (det && det.classList.contains('open') && typeof currentDetailId !== 'undefined' && currentDetailId) {
+    var it = items.find(function(i) { return i.id === currentDetailId; });
+    var html = poznamkyDetailHtml(it);
+    if (box) _zprZachovej(box, function() { box.outerHTML = html || '<div id="detPoznamky"></div>'; });
+    else if (html) {   // zprávy dorazily až po otevření detailu
+      var dc = document.getElementById('detailContent');
+      if (dc) dc.insertAdjacentHTML('beforeend', html);
+    }
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -19118,6 +19683,7 @@ document.addEventListener('fb-auth', function(e) {
 
   // Odhlášení — zruš listener a vyčisti data
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
+  try { _zprZastav(); } catch(e) {}
   // Režim účetního patří k účtu, ne k záložce. Vypíná se při každé změně
   // přihlášení, ne jen při odhlášení — Firebase umí ohlásit rovnou nového
   // uživatele a ten by jinak zdědil cizí kóji i zákaz ukládání.
@@ -19149,6 +19715,8 @@ document.addEventListener('fb-auth', function(e) {
 function _spustSkladPosluchace() {
     var fns = window._fbFns;
     var _firstSnapshot = true;
+    // Zprávy od účetního — vlastní kolekce, čte se z téže kóje (ZPRÁVY A POZNÁMKY)
+    try { _zprSpust(); } catch(e) { console.warn('zprávy:', e); }
     ukazStaraData();   // dokud cloud mlčí, ať je vidět, jak stará data to jsou
 
     // Posloucháme celou kolekci — hlavní dokument i archivy přijdou v jednom

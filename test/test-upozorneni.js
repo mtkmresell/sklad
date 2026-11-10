@@ -47,6 +47,8 @@ const DEN = 86400000;
 const RANO_LETO = Date.UTC(2026, 7, 25, 8, 0, 0);
 
 let DOKUMENTY = {};
+let ZPRAVY = {};             // users/{uid}/zpravy — null = pravidla nepustí
+let POSTA_ZPRAV_PADA = null; // 'posta' | 'znacka'
 let volani = [];
 let posta = [];
 let logy = [];
@@ -64,6 +66,7 @@ global.fetch = async function (url, opts = {}) {
   volani.push({ url: a, method: (opts.method || 'GET').toUpperCase(), telo: opts.body });
   if (a.includes('signInWithPassword')) return odp(200, { idToken: 'TOKEN', localId: 'ctecka1' });
   if (a.includes('api.resend.com')) {
+    if (POSTA_ZPRAV_PADA === 'posta') return odp(500, { message: 'výpadek' });
     posta.push(JSON.parse(opts.body));
     return odp(200, { id: 'mail_1' });
   }
@@ -72,6 +75,19 @@ global.fetch = async function (url, opts = {}) {
       const id = n.split('/').pop();
       return DOKUMENTY[id] ? { found: dok(n, DOKUMENTY[id]) } : { missing: n };
     }));
+  }
+  // Zprávy od účetního (ZPRÁVY OD ÚČETNÍHO) — před '/sklad', protože
+  // jméno projektu „sklad-…" je v každé adrese
+  if (a.includes('/zpravy')) {
+    if ((opts.method || 'GET').toUpperCase() === 'PATCH') {
+      if (POSTA_ZPRAV_PADA === 'znacka') return odp(403, {});
+      const f = JSON.parse(opts.body).fields;
+      ZPRAVY._mail = { odeslanoDo: Number(f.odeslanoDo.doubleValue !== undefined ? f.odeslanoDo.doubleValue : f.odeslanoDo.integerValue) };
+      return odp(200, {});
+    }
+    if (ZPRAVY === null) return odp(403, {});
+    const pre = 'projects/sklad-7eec9/databases/(default)/documents/users/' + UID + '/zpravy/';
+    return odp(200, { documents: Object.keys(ZPRAVY).map(id => dok(pre + id, ZPRAVY[id])) });
   }
   if (a.includes('/crm/main')) {
     return odp(200, dok('crm/main', { customers: [{ id: 'c1', name: 'Petr Novák', phone: '777123456' }], partners: [] }));
@@ -766,6 +782,115 @@ function prodanoPred(ted, dnu) {
     ['PATCH', 'PUT', 'DELETE'].includes(v.method) ||
     (v.method === 'POST' && !v.url.includes(':batchGet') && !v.url.includes('signIn')));
   shoda('žádný zápis do Firestore', zapisy.map(v => v.method + ' ' + v.url), []);
+
+  /* ══════════════════════════════════════════════════════════════ */
+  /* Zprávy od účetního: pětiminutový cron hlásí novou zprávu krátkým
+     mailem bez textu, ranní obhlídka připomíná nevyřízené. Pětiminutový
+     cron nesmí pouštět komisi ani obhlídku. */
+  sekce('14) Zprávy od účetního');
+  const PET = { cron: '*/5 * * * *' };
+  async function cron5(ted) {
+    posta = []; volani = [];
+    Date.now = () => ted;
+    try { await bezLogu(() => worker.scheduled(PET, ENV, {})); } finally { Date.now = puvodniNow; }
+    return posta;
+  }
+  const T0 = RANO_LETO - 3 * 3600000;   // 7:00 v Praze
+  // Sklad s inzerátem, který právě vypršel — ranní mail by se poslal
+  nastavSklad([
+    { id: 'a', name: 'Dunk Low Panda', sku: 'DD1391', saleState: 'stock',
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
+  ]);
+  ZPRAVY = {
+    v_a: { typ: 'hlaseni', druh: 'doklad', predmet: 'Chybí faktura k Jordanům', stav: 'nove', vytvoreno: T0 - DEN },
+    m_1: { vlakno: 'v_a', od: 'ucetni', text: 'TAJNY TEXT ZPRAVY', t: T0 - DEN },
+  };
+
+  let p = await cron5(T0);
+  ok('první běh nic nepošle', p.length === 0, JSON.stringify(p.map(x => x.subject)));
+  ok('jen založí značku', ZPRAVY._mail && ZPRAVY._mail.odeslanoDo === T0 - DEN, JSON.stringify(ZPRAVY._mail));
+  ok('pětiminutový cron nesahá na sklad ani komisi',
+    volani.every(v => /zpravy|signIn/.test(v.url)), JSON.stringify(volani.map(v => v.url)));
+
+  ZPRAVY.m_2 = { vlakno: 'v_a', od: 'ucetni', text: 'TAJNY TEXT DRUHE', t: T0 + 60000 };
+  p = await cron5(T0 + 90000);
+  ok('účetní možná ještě píše — chvíli se počká', p.length === 0);
+  p = await cron5(T0 + 5 * 60000);
+  ok('pak přijde mail', p.length === 1, JSON.stringify(p.map(x => x.subject)));
+  ok('předmět říká, že je nová zpráva', p[0] && /nová zpráva od účetního/.test(p[0].subject), p[0] && p[0].subject);
+  ok('v mailu je předmět hlášení', p[0] && /Chybí faktura k Jordanům/.test(p[0].text));
+  ok('text zprávy v mailu není', p[0] && !/TAJNY/.test(p[0].text + p[0].html));
+  ok('značka se posunula', ZPRAVY._mail.odeslanoDo === T0 + 60000);
+  p = await cron5(T0 + 10 * 60000);
+  ok('podruhé o téže zprávě ne', p.length === 0);
+
+  // Zpráva, kterou majitel mezitím otevřel, se mailem nehlásí
+  ZPRAVY.m_3 = { vlakno: 'v_a', od: 'ucetni', text: 'x', t: T0 + 11 * 60000 };
+  ZPRAVY.v_a.cteniM = T0 + 12 * 60000;
+  p = await cron5(T0 + 15 * 60000);
+  ok('přečtenou zprávu nehlásí', p.length === 0);
+  ok('ale značku posune', ZPRAVY._mail.odeslanoDo === T0 + 11 * 60000);
+
+  // Odpověď majitele mail nespustí
+  ZPRAVY.m_4 = { vlakno: 'v_a', od: 'majitel', text: 'díky', t: T0 + 16 * 60000 };
+  p = await cron5(T0 + 20 * 60000);
+  ok('vlastní odpověď majitele mail nespustí', p.length === 0);
+
+  // Když pošta spadne, značka zůstane — zkusí se to znovu
+  ZPRAVY.v_pol_s1 = { typ: 'polozka', polozkaId: 's1', polozkaNazev: 'Dunk Low Panda · 42' };
+  ZPRAVY.m_5 = { vlakno: 'v_pol_s1', od: 'ucetni', text: 'osobní?', t: T0 + 21 * 60000 };
+  POSTA_ZPRAV_PADA = 'posta';
+  p = await cron5(T0 + 25 * 60000);
+  ok('při výpadku pošty se značka neposune', ZPRAVY._mail.odeslanoDo === T0 + 11 * 60000);
+  ok('a do logu to jde', logy.some(l => /zprávy od účetního/.test(l)), JSON.stringify(logy));
+  POSTA_ZPRAV_PADA = null;
+  p = await cron5(T0 + 30 * 60000);
+  ok('příště to dojde', p.length === 1 && /Poznámka k položce Dunk Low Panda/.test(p[0].text), p[0] && p[0].text);
+
+  // V deset ráno pětiminutový cron ranní obhlídku nepošle
+  p = await cron5(RANO_LETO);
+  ok('pětiminutový cron v deset neposílá ranní obhlídku', p.length === 0, JSON.stringify(p.map(x => x.subject)));
+
+  // Ranní obhlídka: nevyřízené každý den, dokud nejsou Hotovo
+  const dnes = new Date(RANO_LETO).toISOString().slice(0, 10);
+  const vcera = new Date(RANO_LETO - DEN).toISOString().slice(0, 10);
+  const zitra = new Date(RANO_LETO + DEN).toISOString().slice(0, 10);
+  ZPRAVY = {
+    v_a: { typ: 'hlaseni', druh: 'doklad', predmet: 'Nove hlaseni', stav: 'nove' },
+    v_b: { typ: 'hlaseni', druh: 'navrh', predmet: 'Rozpracovane hlaseni', stav: 'rozprac' },
+    v_c: { typ: 'hlaseni', druh: 'dotaz', predmet: 'Hotove hlaseni', stav: 'hotovo' },
+    v_d: { typ: 'hlaseni', druh: 'dotaz', predmet: 'Odlozene hlaseni', stav: 'pripomenout', pripomenout: zitra },
+    v_e: { typ: 'hlaseni', druh: 'chyba', predmet: 'Pripomenuti dnes', stav: 'pripomenout', pripomenout: dnes },
+    v_pol_x: { typ: 'polozka', polozkaNazev: 'Necteny kus', cteniM: 5 },
+    m_1: { vlakno: 'v_pol_x', od: 'ucetni', text: 'a', t: 10 },
+    v_pol_y: { typ: 'polozka', polozkaNazev: 'Precteny kus', cteniM: 50 },
+    m_2: { vlakno: 'v_pol_y', od: 'ucetni', text: 'b', t: 10 },
+    _mail: { odeslanoDo: 10 },
+  };
+  let r = await cron(RANO_LETO);
+  const txt = r[0] ? r[0].text : '';
+  ok('ranní mail přijde', r.length === 1);
+  ok('s blokem zpráv od účetního', /ZPRÁVY OD ÚČETNÍHO/.test(txt), txt);
+  ok('nové a rozpracované tam jsou', /Nove hlaseni/.test(txt) && /Rozpracovane hlaseni/.test(txt));
+  ok('připomenutí, jehož den přišel, taky', /Pripomenuti dnes/.test(txt));
+  ok('hotové a odložené ne', !/Hotove hlaseni/.test(txt) && !/Odlozene hlaseni/.test(txt));
+  ok('nepřečtená poznámka ano, přečtená ne', /Necteny kus/.test(txt) && !/Precteny kus/.test(txt));
+  ok('předmět to zmíní', /4 zprávy od účetního/.test(r[0] && r[0].subject), r[0] && r[0].subject);
+  ok('ranní obhlídka nic nezapisuje', !volani.some(v => v.method === 'PATCH'));
+
+  // Bez inzerátu, jen se zprávou — mail přijde kvůli ní
+  nastavSklad([]);
+  r = await cron(RANO_LETO);
+  ok('nevyřízená zpráva sama stačí na ranní mail', r.length === 1);
+  // Kolekce, kterou pravidla nepustí, obhlídku neshodí
+  nastavSklad([
+    { id: 'a', name: 'Dunk Low Panda', sku: 'DD1391', saleState: 'stock',
+      platforms: ['Bazoš.cz'], bazosCheckedAt: { 'Bazoš.cz': inzeratZbyva(RANO_LETO, 0) } },
+  ]);
+  ZPRAVY = null;
+  r = await cron(RANO_LETO);
+  ok('nepřečtené zprávy obhlídku neshodí', r.length === 1 && /Dunk Low Panda/.test(r[0].text));
+  ZPRAVY = {};
 
   vypis(selhalo ? '\n' + selhalo + ' z ' + (proslo + selhalo) + ' kontrol selhalo'
     : '\nOK (' + proslo + ' kontrol)');

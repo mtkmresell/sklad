@@ -3957,6 +3957,7 @@ function sestavZpravu(polozky, ted, data, crm, volby) {
     payoutBlok(polozky, dnes, skupiny),
     denVTydnu(dnes) === TYDENNI_DEN ? tydenniBlok(polozky, dnes, skupiny, volby.pkNevezme) : null,
     cas.den === 1 ? mesicniBlok(polozky, cas, dnes, crm) : null,
+    zpravyBlok(volby.zpravy, ted),
   ].flat().filter(Boolean);
 
   if (!bloky.length) return null;
@@ -4046,8 +4047,186 @@ async function pripravUpozorneni(env, volby) {
     ? await nactiCrm(token, env.SKLAD_UID)
     : null;
 
-  return { polozky, zprava: sestavZpravu(polozky, ted, data, crm, volby) };
+  /* Nevyřízené zprávy od účetního jdou do ranní obhlídky každý den,
+     dokud je majitel nepřepne na Hotovo. Když se nepřečtou (třeba
+     v konzoli Firebase ještě leží stará pravidla), obhlídka jede dál
+     bez nich — o vypršelý inzerát se kvůli tomu přijít nesmí. */
+  let zpravy = null;
+  try { zpravy = await nactiZpravy(token, env.SKLAD_UID); }
+  catch (e) { console.error('zprávy od účetního se nenačetly: ' + (e && e.message || e)); }
+
+  return { polozky, zprava: sestavZpravu(polozky, ted, data, crm, Object.assign({}, volby, { zpravy })) };
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   ZPRÁVY OD ÚČETNÍHO
+
+   Účetní píše majiteli z aplikace (index.html ZPRÁVY A POZNÁMKY) do
+   `users/{majitel}/zpravy`. Konektor o tom posílá dvojí poštu:
+
+   **Hned** — cron co pět minut (`ZPRAVY_CRON`) nedělá nic jiného než
+   tohle: najde zprávy od účetního novější než značka `_mail` a pošle
+   krátký mail, že v aplikaci něco čeká. **Text zprávy v mailu není**,
+   jen předmět hlášení nebo název položky — pošta jde přes cizí službu
+   a číst se to má v aplikaci, kde se na to dá i odpovědět.
+
+   **Každé ráno** — blok v ranní obhlídce se vším, co je otevřené
+   (Nové, Rozpracované, připomenutí, jehož den přišel). Dokud majitel
+   hlášení nepřepne na Hotovo, připomíná se denně; o to stál.
+
+   Značka `_mail` je jediné, co sem čtečka smí zapsat (firestore.rules,
+   jeZnackaMailu). Píše se **až po odeslání**: když pošta selže, zkusí
+   se to za pět minut znovu, místo aby se zpráva tiše přeskočila.
+   Při prvním běhu se značka jen založí — jinak by přišel mail o všem,
+   co kdy účetní napsal.
+
+   Zprávu, kterou majitel mezitím v aplikaci otevřel (`cteniM`), mailem
+   nehlásí — už o ní ví. A posílá se až po `ZPRAVY_KLID_MS` od poslední
+   zprávy, ať tři zprávy napsané po sobě nejsou tři maily.
+══════════════════════════════════════════════════════════════════════ */
+const ZPRAVY_CRON = '*/5 * * * *';
+const ZPRAVY_ZNACKA = '_mail';
+const ZPRAVY_KLID_MS = 2 * 60 * 1000;
+const ZPR_DRUHY = { chyba: 'Chyba v datech', doklad: 'Chybí doklad', dotaz: 'Dotaz', navrh: 'Návrh na úpravu' };
+const ZPR_STAVY = { nove: 'Nové', rozprac: 'Rozpracované', hotovo: 'Hotovo', pripomenout: 'Připomenout' };
+
+async function nactiZpravy(token, uid) {
+  const vlakna = {}, zpravy = [];
+  let znacka = null, stranka = null;
+  do {
+    const u = new URL(FS_BASE + '/users/' + uid + '/zpravy');
+    u.searchParams.set('pageSize', '300');
+    if (stranka) u.searchParams.set('pageToken', stranka);
+    const r = await fetch(u, { headers: { Authorization: 'Bearer ' + token } });
+    if (r.status === 404) break;
+    if (!r.ok) throw new Error('čtení zpráv selhalo: ' + r.status);
+    const j = await r.json();
+    for (const d of j.documents || []) {
+      const id = d.name.split('/').pop();
+      const o = rozbalPole(d.fields || {});
+      o.id = id;
+      if (id.startsWith('v_')) vlakna[id] = o;
+      else if (id.startsWith('m_') && o.vlakno) zpravy.push(o);
+      else if (id === ZPRAVY_ZNACKA) znacka = o;
+    }
+    stranka = j.nextPageToken;
+  } while (stranka);
+  return { vlakna, zpravy, znacka };
+}
+
+// Pražské datum jako RRRR-MM-DD — v tom tvaru ukládá aplikace připomenutí
+function prazskeDatum(t) {
+  const c = prazskeCasti(t);
+  return c.rok + '-' + String(c.mesic).padStart(2, '0') + '-' + String(c.den).padStart(2, '0');
+}
+
+// Stejně jako zprStav() v aplikaci: připomenutí, jehož den přišel, je Nové
+function zpravaStav(v, dnes) {
+  if (!v || v.typ !== 'hlaseni') return null;
+  const s = ZPR_STAVY[v.stav] ? v.stav : 'nove';
+  if (s === 'pripomenout') return (v.pripomenout && v.pripomenout <= dnes) ? 'nove' : 'pripomenout';
+  return s;
+}
+
+function zpravyNadpis(v) {
+  if (!v) return 'Zpráva';
+  if (v.typ === 'polozka') return 'Poznámka k položce ' + (v.polozkaNazev || '');
+  return v.predmet || 'Hlášení';
+}
+
+/* Ranní blok: otevřená hlášení a poznámky u položek, které majitel
+   ještě nečetl. */
+function zpravyBlok(z, ted) {
+  if (!z) return null;
+  const dnes = prazskeDatum(ted);
+  const nalezy = [];
+  for (const v of Object.values(z.vlakna)) {
+    const s = zpravaStav(v, dnes);
+    if (v.typ === 'hlaseni') {
+      if (s !== 'nove' && s !== 'rozprac') continue;
+      nalezy.push({ hlavni: zpravyNadpis(v),
+        vedlejsi: (ZPR_DRUHY[v.druh] || 'Hlášení') + ' · ' + (v.stav === 'pripomenout' ? 'připomenutí' : ZPR_STAVY[s].toLowerCase()),
+        nove: s === 'nove' });
+    } else if (v.typ === 'polozka') {
+      const cteni = v.cteniM || 0;
+      if (!z.zpravy.some(m => m.vlakno === v.id && m.od === 'ucetni' && (m.t || 0) > cteni)) continue;
+      nalezy.push({ hlavni: zpravyNadpis(v), vedlejsi: 'nepřečtená poznámka', nove: true });
+    }
+  }
+  if (!nalezy.length) return null;
+  nalezy.sort((a, b) => (b.nove - a.nove) || a.hlavni.localeCompare(b.hlavni, 'cs'));
+  return {
+    nadpis: 'Zprávy od účetního',
+    uvod: 'Nevyřízené. Dokud hlášení nepřepneš na Hotovo, připomenu ho každé ráno.',
+    polozky: nalezy.map(n => ({ hlavni: n.hlavni, vedlejsi: n.vedlejsi })),
+    predmet: pocet(nalezy.length, ['zpráva od účetního', 'zprávy od účetního', 'zpráv od účetního']),
+  };
+}
+
+/* Co hlásit hned. Vrací { zprava, znacka }: zprava null = neposílat;
+   znacka = kam posunout `_mail` (null = nechat, jak je). */
+function zpravyKOhlaseni(z, ted) {
+  const odUcetniho = z.zpravy.filter(m => m.od === 'ucetni' && typeof m.t === 'number');
+  const nejnovejsi = odUcetniho.reduce((a, m) => Math.max(a, m.t), 0);
+  const odeslanoDo = z.znacka && typeof z.znacka.odeslanoDo === 'number' ? z.znacka.odeslanoDo : null;
+  if (odeslanoDo === null) return { zprava: null, znacka: nejnovejsi };
+  const nove = odUcetniho.filter(m => m.t > odeslanoDo);
+  if (!nove.length) return { zprava: null, znacka: null };
+  // Účetní možná ještě píše — počká se na chvilku klidu
+  if (ted - nejnovejsi < ZPRAVY_KLID_MS) return { zprava: null, znacka: null };
+  // Co majitel mezitím v aplikaci otevřel, už ví
+  const neprectene = nove.filter(m => !(z.vlakna[m.vlakno] && (z.vlakna[m.vlakno].cteniM || 0) >= m.t));
+  if (!neprectene.length) return { zprava: null, znacka: nejnovejsi };
+
+  const podleVlakna = new Map();
+  for (const m of neprectene) podleVlakna.set(m.vlakno, (podleVlakna.get(m.vlakno) || 0) + 1);
+  const polozky = [...podleVlakna.entries()].map(([id, n]) => {
+    const v = z.vlakna[id];
+    const druh = v && v.typ === 'hlaseni' ? (ZPR_DRUHY[v.druh] || 'Hlášení') : 'Poznámka';
+    return { hlavni: zpravyNadpis(v), vedlejsi: druh + (n > 1 ? ' · ' + pocet(n, ['zpráva', 'zprávy', 'zpráv']) : '') };
+  });
+  const blok = {
+    nadpis: 'Zprávy od účetního',
+    uvod: 'Účetní ti napsal v aplikaci. Celé je to tam — odpovíš a nastavíš stav přímo u zprávy.',
+    polozky,
+  };
+  const dnes = prazskyDen(ted);
+  return {
+    zprava: {
+      predmet: 'Sklad: ' + (neprectene.length === 1 ? 'nová zpráva od účetního'
+        : pocet(neprectene.length, ['nová zpráva', 'nové zprávy', 'nových zpráv']) + ' od účetního'),
+      text: textZpravy(dnes, [blok], PATICKA_BEZ_PENEZ),
+      html: htmlZpravy(dnes, [blok], PATICKA_BEZ_PENEZ),
+    },
+    znacka: nejnovejsi,
+  };
+}
+
+async function zapisZnackuMailu(env, token, kdy) {
+  const telo = { fields: zabal({ odeslanoDo: kdy, kdy: new Date().toISOString() }).mapValue.fields };
+  const r = await fetch(FS_BASE + '/users/' + env.SKLAD_UID + '/zpravy/' + ZPRAVY_ZNACKA, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify(telo),
+  });
+  if (!r.ok) {
+    if (r.status === 403) {
+      throw new Error('Firestore značku mailu odmítl (403) — v konzoli nejspíš leží stará pravidla. '
+        + 'Publikuj znění z firestore.rules, je tam funkce jeZnackaMailu.');
+    }
+    throw new Error('zápis značky mailu selhal: ' + r.status);
+  }
+}
+
+async function zpravyHlidka(env, ted) {
+  const token = await prihlas(env);
+  const z = await nactiZpravy(token, env.SKLAD_UID);
+  const { zprava, znacka } = zpravyKOhlaseni(z, ted);
+  if (zprava) await posliMail(env, zprava);
+  if (znacka !== null) await zapisZnackuMailu(env, token, znacka);
+  return { odeslano: !!zprava, predmet: zprava ? zprava.predmet : null };
+}
+/* ── KONEC ZPRÁV OD ÚČETNÍHO ── */
 
 /* ══════════════════════════════════════════════════════════════════════
    ADRESA PRO APLIKACI
@@ -4424,6 +4603,20 @@ export default {
      ten, kterému zrovna vychází desátá v Praze — přechod na letní čas se
      nemusí hlídat dvakrát do roka. */
   async scheduled(event, env, ctx) {
+    /* Pětiminutový cron hlídá jen zprávy od účetního (ZPRÁVY OD
+       ÚČETNÍHO). Komise ani obhlídka se na něm pouštět nesmí — srovnání
+       by běželo dvanáctkrát za hodinu kvůli něčemu úplně jinému. */
+    if (event && event.cron === ZPRAVY_CRON) {
+      const chybi = ['SKLAD_EMAIL', 'SKLAD_HESLO', 'SKLAD_UID'].concat(MAIL_TAJEMSTVI).filter(k => !env[k]);
+      if (chybi.length) { console.error('zprávy od účetního: chybí ' + chybi.join(', ')); return; }
+      try {
+        const v = await zpravyHlidka(env, Date.now());
+        if (v.odeslano) console.log('odesláno: ' + v.predmet);
+      } catch (e) {
+        console.error('zprávy od účetního: ' + (e && e.stack || e));
+      }
+      return;
+    }
     let pkVysledek = null;
     /* Komise napřed: mail pak vychází z čerstvě srovnaného stavu.
        Když spadne, ranní obhlídka musí proběhnout stejně — jsou to dvě

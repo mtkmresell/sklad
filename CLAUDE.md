@@ -773,6 +773,46 @@ telefonu jsou záložky nahoře a řádek tabulky je karta.
 Okno se zavírá Escapem i klikem mimo. Hlídá to `test-ucetnictvi.js`
 a v pohledu účetního `test-uctetni.js`, sekce 16c a 16d.
 
+### Zprávy a poznámky (`ZPRÁVY A POZNÁMKY`)
+
+Účetní píše majiteli z aplikace (majitel, 10. 11. 2026): **hlášení**
+(Chyba v datech, Chybí doklad, Dotaz, Návrh na úpravu) jako vlákno
+konverzace a **poznámky v detailu položky** (vlákno `v_pol_<id>`, píšou
+oba). Majitel má okno **Zprávy** (obálka v hlavičce s červeným počtem),
+účetní totéž v oranžové liště. Majitel nastavuje stav — Nové →
+Rozpracované → Hotovo, nebo Připomenout k datu — a účetní ho vidí.
+Okno stojí na kostře Účetnictví (`.uc-okno`, záložky vlevo).
+
+Data jsou **mimo sklad**, v `users/{majitel}/zpravy`: vlákna `v_…`,
+každá zpráva vlastní dokument `m_…` (pole zpráv by si dva píšící
+přepisovali), značka konektoru `_mail`. Čte je vlastní posluchač
+(`_zprSpust`, spouští se se skladovým, zastavuje při odhlášení).
+
+Čtyři věci se nesmí rozbít:
+
+- **Účetní tu zapisuje, ale jen vyjmenované** — pravidla Firestore
+  (`jeZpravaUcetniho`, `jeNoveVlaknoUcetniho`, `jePrecteniUcetnim`):
+  zprávu se svým podpisem, vlákno ve stavu Nové a u existujícího vlákna
+  jen `cteniU`. Do skladu dál nesmí nic. Proto se u existujícího vlákna
+  posílá **jen** `cteniU` — merge s dalšími poli by pravidla odmítla.
+- **Stav mění jen majitel** (brána v `zprNastavStav` i v pravidlech).
+  „Připomenout" se nikde nepřepíná zpátky: `zprStav()` od data
+  připomenutí vrací Nové. Konektor má kopii (`zpravaStav`).
+- **Počet svítí, dokud se hlášení nepřepne** — majiteli i přečtené Nové
+  (`zprPozornost`), ať to má na očích; účetnímu nepřečtené zprávy
+  a změna stavu (`stavZmenen`).
+- **Snímek uprostřed psaní nesmaže rozepsané** (`_zprZachovej`).
+
+**Mail** posílá konektor (`ZPRÁVY OD ÚČETNÍHO`): pětiminutový cron
+`*/5 * * * *` pošle krátký mail **bez textu zprávy** (jen předmět /
+název položky), až po dvou minutách klidu a ne o tom, co majitel už
+otevřel; značku `_mail` píše až po odeslání. Ranní obhlídka připomíná
+nevyřízená hlášení každý den, dokud nejsou Hotovo. Pětiminutový cron
+nesmí pouštět komisi ani obhlídku.
+
+Hlídá to `test-zpravy.js`, `test-pravidla.js` (blok zpráv)
+a `test-upozorneni.js`, sekce 14.
+
 ### Společný nákupní doklad (`SPOLEČNÝ NÁKUPNÍ DOKLAD`)
 
 Odkaz na nákupní doklad (`invoiceUrl`) vložený k jednomu kusu dostanou
@@ -996,6 +1036,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | odkaz na doklad pro celý nákup | `SPOLEČNÝ NÁKUPNÍ DOKLAD` |
 | obrázek pro stejné kusy | `SPOLEČNÝ OBRÁZEK POLOŽKY` |
 | okno pro účetního (měsíc) | `ÚČETNICTVÍ` |
+| zprávy a poznámky účetní ↔ majitel | `ZPRÁVY A POZNÁMKY`, v konektoru `ZPRÁVY OD ÚČETNÍHO` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1071,8 +1112,9 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 
 | co | kde | stav |
 |---|---|---|
-| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** (ověřeno z příkazové řádky: lísteček `pozadavek_*` projde, `data`/`cache`/`sold_*`/`photo_*` dávají 403) |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (6. 11.) — v repozitáři je nový odkaz „Otevřít sklad" na `sklad.mtkm-resell.workers.dev` a pole `web` a `nejde` u `sklad_kontrola` (odkaz na e-shop pod názvem místa v Kontrolách listingů; skilly ho musí posílat). Předtím **nasazeno 31. 10.** (verze `dc8e92a`) — ověřeno: v chatu přibyl nástroj `sklad_kontrola`, který starší verze nemá, a `pika_prodeje` vrací vystavené kusy z Pikastore i Purekickz. Tím dorazily i opravy mailů o potížích (`replaced_by_submission_piece`, pomlčka ve velikosti, `pkNeznaVelikost`) a pondělní obhlídka s „Purekickz nevezme". Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
+| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **čeká na publikování** (10. 11.) — nový blok `zpravy` pro zprávy účetního. Dokud v konzoli není, okno Zprávy hlásí, že chybí pravidla, a nic se neuloží. Předtím hotovo (lísteček `pozadavek_*` ověřený z příkazové řádky) |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (6. 11., znovu 10. 11.: mail o zprávách od účetního a jejich blok v ranní obhlídce) — v repozitáři je nový odkaz „Otevřít sklad" na `sklad.mtkm-resell.workers.dev` a pole `web` a `nejde` u `sklad_kontrola` (odkaz na e-shop pod názvem místa v Kontrolách listingů; skilly ho musí posílat). Předtím **nasazeno 31. 10.** (verze `dc8e92a`) — ověřeno: v chatu přibyl nástroj `sklad_kontrola`, který starší verze nemá, a `pika_prodeje` vrací vystavené kusy z Pikastore i Purekickz. Tím dorazily i opravy mailů o potížích (`replaced_by_submission_piece`, pomlčka ve velikosti, `pkNeznaVelikost`) a pondělní obhlídka s „Purekickz nevezme". Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — další nasazení je proto lepší od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
+| třetí cron trigger `*/5 * * * *` | Cloudflare → Worker → Settings → Triggers | **čeká** (10. 11.) — mail o nové zprávě od účetního. Bez něj chodí zprávy jen v ranní obhlídce. Potřebuje i nasazený konektor a nová pravidla |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
 **Podle textu odmítnutí se pozná, která verze běží.** Hlášku ze starého
@@ -1627,7 +1669,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 72 souborů
+node test/run.js              # kontrola syntaxe + všech 73 souborů
 node test/run.js archive      # jen vybrané
 ```
 

@@ -262,6 +262,9 @@ function pozadavek(cesta, telo, metoda = 'POST') {
     /* Jediné místo, kde se zapisuje do Firestore — a ani tam se nesahá
        na sklad, jen se položí lísteček `pozadavek_…` pro aplikaci. */
     ['POŽADAVEK PRO APLIKACI', '── Skládání a úprava'],
+    /* Značka `_mail` u zpráv od účetního — kam až se poslal mail. Do
+       skladu ani do zpráv samotných se tu nesahá. */
+    ['ZPRÁVY OD ÚČETNÍHO', 'KONEC ZPRÁV OD ÚČETNÍHO'],
   ].map(function (dvojice) {
     const od = zdroj.indexOf(dvojice[0]), do_ = zdroj.indexOf(dvojice[1]);
     ok('úsek „' + dvojice[0] + '" se v souboru našel', od > 0 && do_ > od, od + '..' + do_);
@@ -275,7 +278,9 @@ function pozadavek(cesta, telo, metoda = 'POST') {
       mimo.push(m[1] + ' na znaku ' + m.index);
     }
   }
-  shoda('zápisové sloveso jen v komisi a u lístečku', mimo, []);
+  shoda('zápisové sloveso jen v komisi, u lístečku a u značky mailu', mimo, []);
+  const zapisZnacky = zdroj.slice(zdroj.indexOf('async function zapisZnackuMailu'), zdroj.indexOf('async function zpravyHlidka'));
+  ok('značka mailu míří jen na zpravy/_mail', /'\/zpravy\/' \+ ZPRAVY_ZNACKA/.test(zapisZnacky) && /ZPRAVY_ZNACKA = '_mail'/.test(zdroj));
 
   /* Zápis do Firestore smí mířit **jedině** na dokument s tím jménem.
      Kdyby se adresa poskládala jinak, čtečka by ji sice neprotlačila

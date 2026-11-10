@@ -7,6 +7,27 @@ module.exports = function installFakeFirestore() {
   window.__reads = [];
   var clone = function(v) { return JSON.parse(JSON.stringify(v)); };
   function mkRef(args) { return { path: [].slice.call(args, 1).join('/') }; }
+  /* Posluchač kolekce zpráv (ZPRÁVY A POZNÁMKY). Ozve se sám po
+     každém zápisu do své kolekce — jako skutečný Firestore, který
+     ohlásí i vlastní zápis hned. Sklad zůstává na ručním
+     __emitSnapshot, na tom stojí testy synchronizace. */
+  window.__posluchaci = {};
+  function snimekKolekce(cesta) {
+    var pre = cesta + '/';
+    var keys = Object.keys(window.__store).filter(function(k) {
+      return k.indexOf(pre) === 0 && k.slice(pre.length).indexOf('/') === -1;
+    });
+    return {
+      forEach: function(f) {
+        keys.forEach(function(k) { f({ id: k.slice(pre.length), ref: { path: k }, data: function() { return clone(window.__store[k]); } }); });
+      },
+    };
+  }
+  function ozvi(cestaDokumentu) {
+    var kol = cestaDokumentu.slice(0, cestaDokumentu.lastIndexOf('/'));
+    if (window.__posluchaci[kol]) setTimeout(window.__posluchaci[kol], 0);
+  }
+  window.__ozviKolekci = function(kol) { if (window.__posluchaci[kol]) window.__posluchaci[kol](); };
   window._fbDb = { fake: true };
   window._fbUser = { uid: 'u1' };
   window._fbFns = {
@@ -39,11 +60,13 @@ module.exports = function installFakeFirestore() {
       window.__store[ref.path] = (opts && opts.merge)
         ? Object.assign({}, window.__store[ref.path] || {}, clone(data))
         : clone(data);
+      ozvi(ref.path);
       return Promise.resolve();
     },
     deleteDoc: function(ref) {
       if (window.__failWrites) return Promise.reject(new Error('offline'));
       delete window.__store[ref.path];
+      ozvi(ref.path);
       return Promise.resolve();
     },
     writeBatch: function() {
@@ -64,6 +87,12 @@ module.exports = function installFakeFirestore() {
     },
     // onSnapshot nad kolekcí — snímek se skládá ze všech dokumentů pod cestou
     onSnapshot: function(ref, next, err) {
+      if (/\/zpravy$/.test(ref.path)) {
+        var emit = function() { next(snimekKolekce(ref.path)); };
+        window.__posluchaci[ref.path] = emit;
+        setTimeout(emit, 0);
+        return function() { if (window.__posluchaci[ref.path] === emit) delete window.__posluchaci[ref.path]; };
+      }
       function mkSnap() {
         var pre = ref.path + '/';
         var keys = Object.keys(window.__store).filter(function(k) {

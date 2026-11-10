@@ -77,7 +77,7 @@ if (crm) {
 
 /* ── Kdo smí zapisovat ──────────────────────────────────────────────── */
 const zapisy = kod.match(/allow write:([^;]*)/g) || [];
-ok('zápis je definovaný u obou bloků', zapisy.length === 2, 'nalezeno: ' + zapisy.length);
+ok('zápis je definovaný u všech tří bloků', zapisy.length === 3, 'nalezeno: ' + zapisy.length);
 const zapisSklad = zapisy[0] || '', zapisCrm = zapisy[1] || '';
 
 /* Do skladu píše majitel — a nově čtečka, ale **jen lísteček** pro
@@ -113,6 +113,37 @@ if (/jePozadavekCtecky/.test(zapisSklad)) {
     ok('ale lísteček projde', re.test('pozadavek_a1b2c3'), vzorek);
   }
 }
+/* ── Zprávy (index.html ZPRÁVY A POZNÁMKY) ─────────────────────────────
+   Jediné místo, kam smí účetní zapisovat. Hlídá se, že jen vyjmenované:
+   svou zprávu, nové vlákno ve stavu Nové a značku přečtení. Kdyby
+   prošel obecný zápis, mohl by účetní přepsat stav i cizí zprávy. */
+const zpravy = (function () {
+  const i = kod.indexOf('match /users/{uid}/zpravy/');
+  return i === -1 ? '' : kod.slice(i, kod.indexOf('\n    }', i));
+})();
+ok('zprávy mají vlastní blok', !!zpravy);
+if (zpravy) {
+  const radek = function (op) { return ((zpravy.match(new RegExp('allow ' + op + ':([^;]*)')) || [])[1] || '').trim(); };
+  ok('zprávy čte majitel i účetní', /jeMajitel/.test(radek('read')) && /jeUcetni/.test(radek('read')), radek('read'));
+  const w = radek('write');
+  ok('obecný zápis do zpráv má jen majitel (a čtečka značku mailu)',
+    (w.match(/je[A-Za-z]+/g) || []).every(function (x) { return x === 'jeMajitel' || x === 'jeZnackaMailu'; }), w);
+  ok('účetní zakládá jen zprávu a vlákno',
+    (radek('create').match(/je[A-Za-z]+/g) || []).every(function (x) { return x === 'jeZpravaUcetniho' || x === 'jeNoveVlaknoUcetniho'; }), radek('create'));
+  ok('úprava jen značkou přečtení', radek('update') === 'if jePrecteniUcetnim(uid, dokument)', radek('update'));
+  ok('účetní nemaže', !/allow delete/.test(zpravy));
+  const telo = function (fn) { return (kod.match(new RegExp('function ' + fn + '\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n    \\}')) || [])[1] || ''; };
+  ok('značka mailu jen pro čtečku a jen _mail', /jeCtecka\(uid\)/.test(telo('jeZnackaMailu')) && /dokument == '_mail'/.test(telo('jeZnackaMailu')), telo('jeZnackaMailu'));
+  ok('zpráva účetního nese jeho podpis', /od == 'ucetni'/.test(telo('jeZpravaUcetniho')), telo('jeZpravaUcetniho'));
+  ok('nové vlákno účetního jen ve stavu Nové', /get\('stav', 'nove'\) == 'nove'/.test(telo('jeNoveVlaknoUcetniho')), telo('jeNoveVlaknoUcetniho'));
+  ok('přečtení mění jen cteniU', /hasOnly\(\['cteniU'\]\)/.test(telo('jePrecteniUcetnim')), telo('jePrecteniUcetnim'));
+  for (const fn of ['jeZpravaUcetniho', 'jeNoveVlaknoUcetniho', 'jePrecteniUcetnim']) {
+    ok(fn + ' je vázaná na účetního', /jeUcetni\(uid\)/.test(telo(fn)), telo(fn));
+    const vz = (telo(fn).match(/matches\('([^']+)'\)/) || [])[1];
+    ok(fn + ' nepustí na jiné dokumenty', !!vz && !new RegExp(vz).test('_mail') && !new RegExp(vz).test('data'), vz);
+  }
+}
+
 ok('nikde není zápis bez podmínky', !/allow write:\s*if\s+true/.test(kod));
 ok('nikde není čtení bez podmínky', !/allow read:\s*if\s+true/.test(kod));
 ok('nikde není allow bez upřesnění operace', !/allow\s*:\s*if/.test(kod));
