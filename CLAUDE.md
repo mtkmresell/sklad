@@ -803,12 +803,32 @@ přepisovali), značka konektoru `_mail`. Čte je vlastní posluchač
   a změna stavu (`stavZmenen`).
 - **Snímek uprostřed psaní nesmaže rozepsané** (`_zprZachovej`).
 
+- **Nepřečtená zpráva vytáhne hlášení mezi Otevřené**, i když je Hotové
+  nebo odložené (`zprNovaZprava`) — jinak svítil počet u obálky
+  a v Otevřených nebylo nic. Samotná změna stavu ne.
+- **První Escape v rozepsaném poli jen odejde z pole**, okno zůstane.
+
 **Mail** posílá konektor (`ZPRÁVY OD ÚČETNÍHO`): pětiminutový cron
 `*/5 * * * *` pošle krátký mail **bez textu zprávy** (jen předmět /
 název položky), až po dvou minutách klidu a ne o tom, co majitel už
-otevřel; značku `_mail` píše až po odeslání. Ranní obhlídka připomíná
-nevyřízená hlášení každý den, dokud nejsou Hotovo. Pětiminutový cron
-nesmí pouštět komisi ani obhlídku.
+otevřel; `odeslanoDo` v `_mail` posune až po odeslání. Ranní obhlídka
+připomíná nevyřízená hlášení každý den, dokud nejsou Hotovo.
+
+Tři věci kolem mailu, na které se přišlo hned po nasazení (10. 11. 2026
+majiteli zkušební mail nepřišel):
+
+- **První běh nesmí spolknout čerstvé zprávy.** Dřív se při prvním běhu
+  jen založila značka — a zapadla tím přesně zkušební zpráva. Teď se
+  bez značky hlásí zprávy z posledních `ZPRAVY_PRVNI_OKNO_MS` (24 h).
+- **Zprávy se hlídají při každém cronu**; pětiminutový se pozná podle
+  kroku v minutách (`jeCastyCron`), ne přesného textu, a **nesmí
+  pouštět komisi ani obhlídku**.
+- **Značka se píše při každém běhu** (`zkontrolovano`, při selhání
+  pošty `chyba`) a aplikace ji majiteli ukazuje dole v okně Zpráv
+  (`zprStopaKonektoru`): v pořádku / přes 20 minut ticho („cron asi
+  neběží") / potíž s poštou. „Nebylo co poslat" a „neběží" se dřív
+  nedalo odlišit. Zprávu otevřenou v aplikaci dřív, než cron proběhl,
+  mail schválně nehlásí — při zkoušení je potřeba chvíli počkat.
 
 Hlídá to `test-zpravy.js`, `test-pravidla.js` (blok zpráv)
 a `test-upozorneni.js`, sekce 14.

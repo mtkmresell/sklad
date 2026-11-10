@@ -162,6 +162,31 @@ const POLOZKY = [
   check('stav Rozpracované', z.v[vlId].stav === 'rozprac' && z.v[vlId].stavZmenen > 0);
   check('počet klesl', (await pocet()) === '1', await pocet());
 
+  // Stopa konektoru: kdy naposledy kontroloval zprávy
+  await page.evaluate(() => zprZpet());
+  const stopa = async (mail) => {
+    await page.evaluate((d) => {
+      if (d.mail) window.__store['users/' + d.m + '/zpravy/_mail'] = d.mail;
+      else delete window.__store['users/' + d.m + '/zpravy/_mail'];
+      window.__ozviKolekci('users/' + d.m + '/zpravy');
+    }, { m: MAJITEL, mail });
+    await page.waitForTimeout(80);
+    return page.evaluate(() => { const el = document.querySelector('#zprOv .zpr-stopa'); return el ? el.className + '|' + el.textContent : ''; });
+  };
+  let s = await stopa(null);
+  check('bez značky: konektor se zatím neozval', /s-nic/.test(s) && /neozval/.test(s), s);
+  s = await stopa({ odeslanoDo: 1, zkontrolovano: Date.now() - 3 * 60000 });
+  check('čerstvá kontrola: v pořádku', /s-ok/.test(s) && /naposledy kontroloval/.test(s), s);
+  s = await stopa({ odeslanoDo: 1, zkontrolovano: Date.now() - 60 * 60000 });
+  check('hodinu ticho: varování, že cron asi neběží', /s-ticho/.test(s) && /cron asi neběží/.test(s), s);
+  s = await stopa({ odeslanoDo: 1, kdy: new Date(Date.now() - 2 * 60000).toISOString() });
+  check('starší konektor bez zkontrolovano: bere se kdy', /s-ok/.test(s), s);
+  s = await stopa({ odeslanoDo: 1, zkontrolovano: Date.now(), chyba: 'mail se neodeslal: výpadek' });
+  check('potíž s poštou je vidět', /s-chyba/.test(s) && /výpadek/.test(s), s);
+  await stopa(null);
+  await page.click('#zprOv [data-vlakno="' + vlId + '"]');
+  await page.waitForTimeout(150);
+
   // Odpověď; snímek uprostřed psaní nesmí smazat rozepsané
   await page.fill('#zprOdpoved', 'Rozepsaná odpo');
   await page.evaluate((m) => window.__ozviKolekci('users/' + m + '/zpravy'), MAJITEL);
@@ -229,15 +254,28 @@ const POLOZKY = [
   await page.waitForTimeout(100);
   check('účetnímu svítí obě vlákna', (await pocet()) === '2', await pocet());
   check('i v oranžovém pruhu', await page.evaluate(() => document.getElementById('zpravyPocetU').textContent === '2'));
-  await page.evaluate(() => { openZpravy(); zprFiltr('hotove'); });
+  await page.evaluate(() => { openZpravy(); zprFiltr('otevrene'); });
   await page.waitForTimeout(100);
-  check('hlášení je mezi Hotovými', await page.evaluate((id) => !!document.querySelector('#zprOv [data-vlakno="' + id + '"]'), vlId));
+  check('účetní stopu konektoru nevidí', await page.evaluate(() => !document.querySelector('#zprOv .zpr-stopa')));
+  // Hotové, ale s nepřečtenou odpovědí — musí být vidět mezi Otevřenými
+  check('Hotové s nepřečtenou odpovědí je mezi Otevřenými', await page.evaluate((id) => !!document.querySelector('#zprOv [data-vlakno="' + id + '"]'), vlId));
   await page.click('#zprOv [data-vlakno="' + vlId + '"]');
   await page.waitForTimeout(200);
   check('účetní vidí stav Hotovo', await page.evaluate(() => /Hotovo/.test(document.querySelector('#zprOv .zpr-meta').textContent)));
   z = await zpravy();
   check('přečtení zapíše jen cteniU', z.v[vlId].cteniU > 0 && z.v[vlId].stav === 'hotovo');
   check('zbývá jedno nepřečtené', (await pocet()) === '1', await pocet());
+  check('po přečtení se vrátí mezi Hotové', await page.evaluate((id) => _zprVFiltru(_zpr.vlakna[id], 'hotove') && !_zprVFiltru(_zpr.vlakna[id], 'otevrene'), vlId));
+
+  // Escape v rozepsaném poli jen odejde z pole, okno zůstane
+  await page.fill('#zprOdpoved', 'rozepsané');
+  await page.focus('#zprOdpoved');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(80);
+  check('první Escape v psaní okno nezavře', await page.evaluate(() => !!document.getElementById('zprOv') && document.getElementById('zprOdpoved').value === 'rozepsané'));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(80);
+  check('druhý Escape ano', await page.evaluate(() => !document.getElementById('zprOv')));
   await page.evaluate(() => zavriZpravy());
 
   // ══════════════════════════════════════════════════════════════

@@ -82,7 +82,11 @@ global.fetch = async function (url, opts = {}) {
     if ((opts.method || 'GET').toUpperCase() === 'PATCH') {
       if (POSTA_ZPRAV_PADA === 'znacka') return odp(403, {});
       const f = JSON.parse(opts.body).fields;
-      ZPRAVY._mail = { odeslanoDo: Number(f.odeslanoDo.doubleValue !== undefined ? f.odeslanoDo.doubleValue : f.odeslanoDo.integerValue) };
+      const hodnota = x => x.doubleValue !== undefined ? Number(x.doubleValue)
+        : x.integerValue !== undefined ? Number(x.integerValue)
+        : x.stringValue !== undefined ? x.stringValue : null;
+      ZPRAVY._mail = {};
+      for (const k of Object.keys(f)) ZPRAVY._mail[k] = hodnota(f[k]);
       return odp(200, {});
     }
     if (ZPRAVY === null) return odp(403, {});
@@ -843,9 +847,38 @@ function prodanoPred(ted, dnu) {
   p = await cron5(T0 + 25 * 60000);
   ok('při výpadku pošty se značka neposune', ZPRAVY._mail.odeslanoDo === T0 + 11 * 60000);
   ok('a do logu to jde', logy.some(l => /zprávy od účetního/.test(l)), JSON.stringify(logy));
+  ok('potíž je vidět ve značce (aplikace ji ukáže)', /mail se neodeslal/.test(ZPRAVY._mail.chyba || ''), JSON.stringify(ZPRAVY._mail));
   POSTA_ZPRAV_PADA = null;
   p = await cron5(T0 + 30 * 60000);
   ok('příště to dojde', p.length === 1 && /Poznámka k položce Dunk Low Panda/.test(p[0].text), p[0] && p[0].text);
+
+  ok('po úspěchu potíž zmizí', !ZPRAVY._mail.chyba, JSON.stringify(ZPRAVY._mail));
+  ok('značka nese čas kontroly', ZPRAVY._mail.zkontrolovano === T0 + 30 * 60000, JSON.stringify(ZPRAVY._mail));
+
+  /* První běh nesmí spolknout čerstvou zprávu — přesně tak zapadla
+     zkušební zpráva majitele hned po nasazení (10. 11. 2026). */
+  ZPRAVY = {
+    v_n: { typ: 'hlaseni', druh: 'dotaz', predmet: 'Čerstvé hlášení', stav: 'nove' },
+    m_1: { vlakno: 'v_n', od: 'ucetni', text: 'x', t: T0 - 10 * 60000 },
+    v_s: { typ: 'hlaseni', druh: 'dotaz', predmet: 'Staré hlášení', stav: 'nove' },
+    m_2: { vlakno: 'v_s', od: 'ucetni', text: 'x', t: T0 - 3 * DEN },
+  };
+  p = await cron5(T0);
+  ok('první běh pošle čerstvou nepřečtenou zprávu', p.length === 1 && /Čerstvé hlášení/.test(p[0].text), JSON.stringify(p.map(x => x.text)));
+  ok('ale ne staré', p[0] && !/Staré hlášení/.test(p[0].text));
+
+  // Cloudflare může „každých 5 minut" zapsat i jinak
+  ZPRAVY.m_3 = { vlakno: 'v_n', od: 'ucetni', text: 'y', t: T0 + 60000 };
+  posta = []; volani = []; Date.now = () => T0 + 10 * 60000;
+  try { await bezLogu(() => worker.scheduled({ cron: '0/5 * * * *' }, ENV, {})); } finally { Date.now = puvodniNow; }
+  ok('i 0/5 se pozná jako častý cron', posta.length === 1 && volani.every(v => /zpravy|signIn|resend/.test(v.url)),
+    JSON.stringify(volani.map(v => v.url)));
+
+  // Zprávy hlídá i ranní cron, kdyby pětiminutový chyběl
+  ZPRAVY.m_4 = { vlakno: 'v_n', od: 'ucetni', text: 'z', t: T0 + 20 * 60000 };
+  p = await cron(T0 + 30 * 60000);
+  ok('denní cron zprávy taky pohlídá', p.some(x => /nová zpráva od účetního/.test(x.subject)), JSON.stringify(p.map(x => x.subject)));
+  ZPRAVY = { _mail: { odeslanoDo: T0 + 30 * 60000 } };
 
   // V deset ráno pětiminutový cron ranní obhlídku nepošle
   p = await cron5(RANO_LETO);
@@ -876,7 +909,9 @@ function prodanoPred(ted, dnu) {
   ok('hotové a odložené ne', !/Hotove hlaseni/.test(txt) && !/Odlozene hlaseni/.test(txt));
   ok('nepřečtená poznámka ano, přečtená ne', /Necteny kus/.test(txt) && !/Precteny kus/.test(txt));
   ok('předmět to zmíní', /4 zprávy od účetního/.test(r[0] && r[0].subject), r[0] && r[0].subject);
-  ok('ranní obhlídka nic nezapisuje', !volani.some(v => v.method === 'PATCH'));
+  ok('ranní obhlídka zapisuje jen značku zpráv',
+    volani.filter(v => v.method === 'PATCH').every(v => /\/zpravy\/_mail$/.test(v.url)),
+    JSON.stringify(volani.filter(v => v.method === 'PATCH').map(v => v.url)));
 
   // Bez inzerátu, jen se zprávou — mail přijde kvůli ní
   nastavSklad([]);

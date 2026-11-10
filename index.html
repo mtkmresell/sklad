@@ -215,6 +215,11 @@ body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 .zpr-stav.s-hotovo { background:rgba(200,255,0,0.08); color:var(--accent); }
 .zpr-stav.s-pripomenout { background:var(--surface); color:var(--muted); border:1px solid var(--border); }
 .zpr-zpet { margin-bottom:14px; }
+.zpr-stopa { margin-top:22px; font-size:12px; color:var(--muted); line-height:1.5; }
+.zpr-stopa::before { content:''; display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:8px; vertical-align:1px; background:var(--accent); }
+.zpr-stopa.s-ticho, .zpr-stopa.s-chyba { color:var(--warning); }
+.zpr-stopa.s-ticho::before, .zpr-stopa.s-chyba::before { background:var(--warning); }
+.zpr-stopa.s-nic::before { background:var(--muted); }
 .zpr-meta { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:6px 0 16px; }
 .zpr-meta .zpr-cas { margin-left:0; }
 .zpr-stavy { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:12px 14px; margin-bottom:16px;
@@ -11773,12 +11778,15 @@ function _zprPosledniCas(v) {
 }
 /* Nepřečtené = od druhé strany přišlo něco po mém posledním čtení.
    Účetnímu se jako novinka počítá i změna stavu. */
-function zprNeprectene(v) {
+function zprNovaZprava(v) {
   if (!v) return false;
   var ja = _zprKdo(), cteni = v[_zprCteniPole()] || 0;
-  var nove = zprZpravyVlakna(v.id).some(function(m) { return m.od !== ja && (m.t || 0) > cteni; });
-  if (!nove && ja === 'ucetni' && (v.stavZmenen || 0) > cteni) nove = true;
-  return nove;
+  return zprZpravyVlakna(v.id).some(function(m) { return m.od !== ja && (m.t || 0) > cteni; });
+}
+function zprNeprectene(v) {
+  if (!v) return false;
+  if (zprNovaZprava(v)) return true;
+  return _zprKdo() === 'ucetni' && (v.stavZmenen || 0) > (v.cteniU || 0);
 }
 /* Co svítí na tlačítku. Majiteli i hlášení ve stavu Nové, dokud ho
    nepřepne — „mít to na očích", ne jen nepřečtené. */
@@ -11799,13 +11807,14 @@ function _zprSpust() {
   if (!fns || !window._fbDb || !uid) return;
   try {
     _zprUnsub = fns.onSnapshot(fns.collection(window._fbDb, 'users', uid, 'zpravy'), function(snap) {
-      var vl = {}, zp = [];
+      var vl = {}, zp = [], mail = null;
       snap.forEach(function(d) {
         var x = d.data() || {}; x.id = d.id;
         if (/^v_/.test(d.id)) vl[d.id] = x;
         else if (/^m_/.test(d.id) && x.vlakno) zp.push(x);
+        else if (d.id === '_mail') mail = x;
       });
-      _zpr = { vlakna: vl, zpravy: zp, nacteno: true };
+      _zpr = { vlakna: vl, zpravy: zp, mail: mail, nacteno: true };
       zprPrekresli();
     }, function(err) {
       console.warn('zprávy:', err);
@@ -11944,14 +11953,19 @@ function openZpravy(vlaknoId) {
 }
 function zavriZpravy() { var ov = document.getElementById('zprOv'); if (ov) ov.remove(); _zprNove = null; }
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' && document.getElementById('zprOv')) zavriZpravy();
+  if (e.key !== 'Escape' || !document.getElementById('zprOv')) return;
+  /* První Escape v rozepsaném poli jen odejde z pole — jinak zavřel
+     okno i s napsaným textem. */
+  var a = document.activeElement;
+  if (a && a.closest && a.closest('#zprOv') && /^(TEXTAREA|INPUT)$/.test(a.tagName) && a.value) { a.blur(); return; }
+  zavriZpravy();
 });
 function zprFiltr(f) { _zprFiltr = f; _zprPohled = 'seznam'; _zprOtevrene = null; _zprNove = null; _zprVykresli(); }
 function zprOtevri(id) {
   var v = _zpr.vlakna[id]; if (!v) return;
   _zprOtevrene = id; _zprPohled = 'vlakno'; _zprVyberData = false;
   if (v.typ === 'polozka') _zprFiltr = 'polozky';
-  else { var s = zprStav(v); _zprFiltr = s === 'hotovo' ? 'hotove' : s === 'pripomenout' ? 'pripomenout' : 'otevrene'; }
+  else { var s = zprStav(v); _zprFiltr = zprNovaZprava(v) ? 'otevrene' : s === 'hotovo' ? 'hotove' : s === 'pripomenout' ? 'pripomenout' : 'otevrene'; }
   _zprVykresli();
   _zprPrecist(id);
   var ob = document.querySelector('#zprOv .uc-obsah'); if (ob) ob.scrollTop = ob.scrollHeight;
@@ -11998,10 +12012,13 @@ function _zprStavChip(v) {
 function _zprVFiltru(v, f) {
   if (f === 'polozky') return v.typ === 'polozka';
   if (v.typ !== 'hlaseni') return false;
-  var s = zprStav(v);
-  if (f === 'otevrene') return s === 'nove' || s === 'rozprac';
-  if (f === 'pripomenout') return s === 'pripomenout';
-  return s === 'hotovo';
+  /* Nepřečtená zpráva vytáhne hlášení mezi Otevřené, i když je Hotové
+     nebo odložené — jinak svítil počet u obálky a v Otevřených nebylo
+     nic (účetní dopsal do vyřízeného hlášení). Samotná změna stavu ne. */
+  var s = zprStav(v), nova = zprNovaZprava(v);
+  if (f === 'otevrene') return s === 'nove' || s === 'rozprac' || nova;
+  if (f === 'pripomenout') return s === 'pripomenout' && !nova;
+  return s === 'hotovo' && !nova;
 }
 function _zprSeznam(f) {
   var arr = [];
@@ -12050,7 +12067,31 @@ function _zprOknoHtml() {
     + '<button class="xb" onclick="zavriZpravy()">✕</button></div>'
     + '<div class="uc-telo"><nav class="uc-nav">' + nav + '</nav><main class="uc-obsah">' + obsah + '</main></div></div>';
 }
+/* Stopa konektoru (`_mail`): kdy naposledy kontroloval a jestli se mail
+   povedl. Bez ní vypadal „cron neběží" stejně jako „nebylo co poslat" —
+   majitel po nasazení test poslal a mail nepřišel, aniž by šlo poznat
+   proč (10. 11. 2026). Jen majiteli; účetnímu do toho nic není. */
+var ZPR_KONEKTOR_TICHO_MS = 20 * 60 * 1000;
+function zprStopaKonektoru() {
+  var m = _zpr.mail;
+  if (!m) return { stav: 'nic', text: 'Mail o nových zprávách hlídá konektor — zatím se neozval. Hlídá ho pětiminutový cron v Cloudflare.' };
+  var kdy = typeof m.zkontrolovano === 'number' ? m.zkontrolovano : (Date.parse(m.kdy || '') || 0);
+  if (m.chyba) return { stav: 'chyba', text: 'Mail o nových zprávách se nepovedl (' + _zprCas(kdy) + '): ' + m.chyba };
+  if (!kdy || Date.now() - kdy > ZPR_KONEKTOR_TICHO_MS) {
+    return { stav: 'ticho', text: 'Konektor zprávy nekontroloval ' + (kdy ? 'od ' + _zprCas(kdy) : 'vůbec')
+      + ' — pětiminutový cron asi neběží a maily o nových zprávách nechodí.' };
+  }
+  return { stav: 'ok', text: 'Mail o nových zprávách hlídá konektor — naposledy kontroloval ' + _zprCas(kdy) + '.' };
+}
+function _zprStopaHtml() {
+  if (jeUctetni() || !_zpr.nacteno) return '';
+  var s = zprStopaKonektoru();
+  return '<div class="zpr-stopa s-' + s.stav + '">' + escHtml(s.text) + '</div>';
+}
 function _zprSeznamHtml() {
+  return _zprSeznamTelo() + _zprStopaHtml();
+}
+function _zprSeznamTelo() {
   var sez = _zprSeznam(_zprFiltr), uc = jeUctetni();
   var popis = {
     otevrene: uc ? 'Hlášení, která majitel ještě neuzavřel.' : 'Co je potřeba vyřešit. Nové svítí, dokud je nepřepneš.',

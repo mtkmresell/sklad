@@ -4075,10 +4075,22 @@ async function pripravUpozorneni(env, volby) {
    hlášení nepřepne na Hotovo, připomíná se denně; o to stál.
 
    Značka `_mail` je jediné, co sem čtečka smí zapsat (firestore.rules,
-   jeZnackaMailu). Píše se **až po odeslání**: když pošta selže, zkusí
-   se to za pět minut znovu, místo aby se zpráva tiše přeskočila.
-   Při prvním běhu se značka jen založí — jinak by přišel mail o všem,
-   co kdy účetní napsal.
+   jeZnackaMailu). `odeslanoDo` se posune **až po odeslání**: když pošta
+   selže, zkusí se to za pět minut znovu, místo aby se zpráva tiše
+   přeskočila. Při prvním běhu (značka ještě není) se hlásí jen zprávy
+   z posledních `ZPRAVY_PRVNI_OKNO_MS` — ne všechno, co kdy účetní
+   napsal. Dřív první běh nehlásil nic a spolkl přesně tu zkušební
+   zprávu, kterou majitel poslal hned po nasazení (10. 11. 2026).
+
+   Značka se zapisuje **při každém běhu** (`zkontrolovano`, při potížích
+   i `chyba`) — aplikace z ní v okně Zpráv ukazuje, kdy konektor
+   naposledy kontroloval. Bez toho vypadal „cron neběží" stejně jako
+   „nebylo co poslat".
+
+   Hlídání běží **při každém cronu**, ne jen na pětiminutovém; ten se
+   pozná podle kroku v minutách (`jeCastyCron`), ne podle přesného
+   textu — Cloudflare ho při výběru „každých 5 minut" může zapsat jinak
+   a hlídání by pak tiše neběželo nikdy.
 
    Zprávu, kterou majitel mezitím v aplikaci otevřel (`cteniM`), mailem
    nehlásí — už o ní ví. A posílá se až po `ZPRAVY_KLID_MS` od poslední
@@ -4087,6 +4099,12 @@ async function pripravUpozorneni(env, volby) {
 const ZPRAVY_CRON = '*/5 * * * *';
 const ZPRAVY_ZNACKA = '_mail';
 const ZPRAVY_KLID_MS = 2 * 60 * 1000;
+const ZPRAVY_PRVNI_OKNO_MS = 24 * 3600 * 1000;
+
+// Cron s krokem v minutách (`*/5 * * * *`, `0/5 * * * *`) — ten hlídá jen zprávy
+function jeCastyCron(cron) {
+  return /^(\*|0)\/\d+\s/.test(String(cron || '').trim());
+}
 const ZPR_DRUHY = { chyba: 'Chyba v datech', doklad: 'Chybí doklad', dotaz: 'Dotaz', navrh: 'Návrh na úpravu' };
 const ZPR_STAVY = { nove: 'Nové', rozprac: 'Rozpracované', hotovo: 'Hotovo', pripomenout: 'Připomenout' };
 
@@ -4164,16 +4182,16 @@ function zpravyBlok(z, ted) {
 }
 
 /* Co hlásit hned. Vrací { zprava, znacka }: zprava null = neposílat;
-   znacka = kam posunout `_mail` (null = nechat, jak je). */
+   znacka = nová hodnota `odeslanoDo` (zapisuje se vždycky, s časem běhu). */
 function zpravyKOhlaseni(z, ted) {
   const odUcetniho = z.zpravy.filter(m => m.od === 'ucetni' && typeof m.t === 'number');
   const nejnovejsi = odUcetniho.reduce((a, m) => Math.max(a, m.t), 0);
-  const odeslanoDo = z.znacka && typeof z.znacka.odeslanoDo === 'number' ? z.znacka.odeslanoDo : null;
-  if (odeslanoDo === null) return { zprava: null, znacka: nejnovejsi };
+  const ulozene = z.znacka && typeof z.znacka.odeslanoDo === 'number' ? z.znacka.odeslanoDo : null;
+  const odeslanoDo = ulozene === null ? ted - ZPRAVY_PRVNI_OKNO_MS : ulozene;
   const nove = odUcetniho.filter(m => m.t > odeslanoDo);
-  if (!nove.length) return { zprava: null, znacka: null };
+  if (!nove.length) return { zprava: null, znacka: odeslanoDo };
   // Účetní možná ještě píše — počká se na chvilku klidu
-  if (ted - nejnovejsi < ZPRAVY_KLID_MS) return { zprava: null, znacka: null };
+  if (ted - nejnovejsi < ZPRAVY_KLID_MS) return { zprava: null, znacka: odeslanoDo };
   // Co majitel mezitím v aplikaci otevřel, už ví
   const neprectene = nove.filter(m => !(z.vlakna[m.vlakno] && (z.vlakna[m.vlakno].cteniM || 0) >= m.t));
   if (!neprectene.length) return { zprava: null, znacka: nejnovejsi };
@@ -4202,8 +4220,9 @@ function zpravyKOhlaseni(z, ted) {
   };
 }
 
-async function zapisZnackuMailu(env, token, kdy) {
-  const telo = { fields: zabal({ odeslanoDo: kdy, kdy: new Date().toISOString() }).mapValue.fields };
+async function zapisZnackuMailu(env, token, kdy, ted, chyba) {
+  const telo = { fields: zabal({ odeslanoDo: kdy, zkontrolovano: ted, chyba: chyba || null,
+    kdy: new Date(ted).toISOString() }).mapValue.fields };
   const r = await fetch(FS_BASE + '/users/' + env.SKLAD_UID + '/zpravy/' + ZPRAVY_ZNACKA, {
     method: 'PATCH',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -4222,8 +4241,18 @@ async function zpravyHlidka(env, ted) {
   const token = await prihlas(env);
   const z = await nactiZpravy(token, env.SKLAD_UID);
   const { zprava, znacka } = zpravyKOhlaseni(z, ted);
-  if (zprava) await posliMail(env, zprava);
-  if (znacka !== null) await zapisZnackuMailu(env, token, znacka);
+  if (zprava) {
+    try { await posliMail(env, zprava); }
+    catch (e) {
+      // Značka zůstane, kde byla — příště se to zkusí znovu. Potíž ale
+      // uvidí majitel v aplikaci, do logu Workeru se nikdo nedívá.
+      const stara = z.znacka && typeof z.znacka.odeslanoDo === 'number' ? z.znacka.odeslanoDo : znacka;
+      const hlaska = 'mail se neodeslal: ' + String((e && e.hlaska) || (e && e.message) || e).slice(0, 200);
+      try { await zapisZnackuMailu(env, token, Math.min(stara, znacka), ted, hlaska); } catch (e2) {}
+      throw e;
+    }
+  }
+  await zapisZnackuMailu(env, token, znacka, ted, null);
   return { odeslano: !!zprava, predmet: zprava ? zprava.predmet : null };
 }
 /* ── KONEC ZPRÁV OD ÚČETNÍHO ── */
@@ -4603,20 +4632,21 @@ export default {
      ten, kterému zrovna vychází desátá v Praze — přechod na letní čas se
      nemusí hlídat dvakrát do roka. */
   async scheduled(event, env, ctx) {
-    /* Pětiminutový cron hlídá jen zprávy od účetního (ZPRÁVY OD
-       ÚČETNÍHO). Komise ani obhlídka se na něm pouštět nesmí — srovnání
-       by běželo dvanáctkrát za hodinu kvůli něčemu úplně jinému. */
-    if (event && event.cron === ZPRAVY_CRON) {
-      const chybi = ['SKLAD_EMAIL', 'SKLAD_HESLO', 'SKLAD_UID'].concat(MAIL_TAJEMSTVI).filter(k => !env[k]);
-      if (chybi.length) { console.error('zprávy od účetního: chybí ' + chybi.join(', ')); return; }
+    /* Zprávy od účetního (ZPRÁVY OD ÚČETNÍHO) se hlídají při každém
+       cronu. Častý cron (pětiminutový) nedělá nic jiného — komise ani
+       obhlídka se na něm pouštět nesmí, srovnání by běželo dvanáctkrát
+       za hodinu kvůli něčemu úplně jinému. */
+    const chybiZpr = ['SKLAD_EMAIL', 'SKLAD_HESLO', 'SKLAD_UID'].concat(MAIL_TAJEMSTVI).filter(k => !env[k]);
+    if (chybiZpr.length) console.error('zprávy od účetního: chybí ' + chybiZpr.join(', '));
+    else {
       try {
         const v = await zpravyHlidka(env, Date.now());
         if (v.odeslano) console.log('odesláno: ' + v.predmet);
       } catch (e) {
         console.error('zprávy od účetního: ' + (e && e.stack || e));
       }
-      return;
     }
+    if (event && jeCastyCron(event.cron)) return;
     let pkVysledek = null;
     /* Komise napřed: mail pak vychází z čerstvě srovnaného stavu.
        Když spadne, ranní obhlídka musí proběhnout stejně — jsou to dvě

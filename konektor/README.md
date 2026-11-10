@@ -578,6 +578,11 @@ maily, a vůbec ne, když už si to majitel v aplikaci přečetl. Bez téhle
 hodiny se o zprávách dozvíš jen z ranní obhlídky, kde jsou nevyřízená
 hlášení každý den, dokud je nepřepneš na Hotovo.
 
+**Při zkoušení počkej**: zprávu, kterou si v aplikaci otevřeš dřív, než
+cron proběhne (do pěti minut), mail schválně nehlásí. Dole v okně Zprávy
+je vidět, kdy konektor naposledy kontroloval — když tam stojí, že se
+přes 20 minut neozval, cron neběží.
+
 Kam až mail odešel, si konektor zapisuje do `users/{uid}/zpravy/_mail`
 — **potřebuje k tomu nová pravidla Firestore** (`jeZnackaMailu`
 v `firestore.rules`). Se starými skončí každý běh v logu hláškou
