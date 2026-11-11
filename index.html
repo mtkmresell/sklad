@@ -238,6 +238,18 @@ body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 .zpr-bub-hl { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); margin-bottom:4px; }
 .zpr-bub-text { font-size:14px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
 .zpr-zadne { color:var(--muted); font-size:13px; }
+.zpr-karta-popis { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:4px 0 18px; }
+.zpr-popis-text { font-size:14px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
+.zpr-popis-prazdny { font-size:13px; color:var(--muted); font-style:italic; }
+.zpr-kom-h { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.zpr-kom-h span { color:var(--text); }
+.zpr-komentare { display:flex; flex-direction:column; margin-bottom:12px; border-left:2px solid var(--border); }
+.zpr-kom { padding:6px 0 8px 12px; }
+.zpr-kom-hl { font-size:11px; color:var(--muted); margin-bottom:2px; }
+.zpr-kom-hl b { color:var(--text); font-weight:600; }
+.zpr-kom-text { font-size:13.5px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+.zpr-psani.mala textarea { min-height:0; }
+.zpr-nepov { color:var(--muted); text-transform:none; letter-spacing:0; }
 .zpr-psani { display:flex; gap:10px; align-items:flex-end; }
 .zpr-psani textarea, .zpr-inp { flex:1; width:100%; box-sizing:border-box; background:var(--surface2); border:1px solid var(--border); color:var(--text);
   border-radius:10px; padding:10px 12px; font:inherit; font-size:14px; resize:vertical; }
@@ -11869,6 +11881,15 @@ function zprZpravyVlakna(id) {
   return _zpr.zpravy.filter(function(m) { return m.vlakno === id; })
     .sort(function(a, b) { return (a.t || 0) - (b.t || 0); });
 }
+/* Hlášení = popis + komentáře. Popis je úvodní zpráva (uvod); starší
+   hlášení ho nemají, tam je popisem první zpráva od toho, kdo hlášení
+   založil. Prázdná zpráva (jen oznámení) mezi komentáře nepatří. */
+function zprRozdelHlaseni(v) {
+  var z = zprZpravyVlakna(v.id), popis = null;
+  for (var i = 0; i < z.length; i++) if (z[i].uvod) { popis = z[i]; break; }
+  if (!popis && z.length && z[0].od === (v.zalozil || 'ucetni')) popis = z[0];
+  return { popis: popis, komentare: z.filter(function(m) { return m !== popis && String(m.text || '').trim(); }) };
+}
 function _zprPosledniCas(v) {
   var z = zprZpravyVlakna(v.id);
   return Math.max(v.vytvoreno || 0, v.stavZmenen || 0, z.length ? (z[z.length - 1].t || 0) : 0);
@@ -12031,8 +12052,43 @@ function zprChybiTlacitko(it, x) {
     var v = _zpr.vlakna[k];
     if (v.typ === 'hlaseni' && String(v.polozkaId) === String(it.id) && v.predmet === predmet && zprStav(v) !== 'hotovo') { uz = v; break; }
   }
-  if (uz) return '<button class="chybi-doplnit chybi-nahlaseno" onclick="cm(\'moDetail\');openZpravy(\'' + uz.id + '\')">Nahlášeno · ' + escHtml(ZPR_STAVY[zprStav(uz)] || '') + '</button>';
-  return '<button class="chybi-doplnit" data-druh="' + druh + '" onclick="zprNoveHlaseni(\'' + id + '\',\'' + druh + '\',' + escHtml(JSON.stringify(predmet)) + ')">Nahlásit</button>';
+  if (uz) return _zprNahlasenoTlacitko(uz);
+  return '<button class="chybi-doplnit" data-druh="' + druh + '" onclick="zprNahlasHned(\'' + id + '\',\'' + druh + '\',' + escHtml(JSON.stringify(predmet)) + ',this)">Nahlásit</button>';
+}
+function _zprNahlasenoTlacitko(v) {
+  return '<button class="chybi-doplnit chybi-nahlaseno" onclick="cm(\'moDetail\');openZpravy(\'' + v.id + '\')">Nahlášeno · ' + escHtml(ZPR_STAVY[zprStav(v)] || '') + '</button>';
+}
+/* Oznámení jedním klikem (majitel, 11. 11. 2026): „pro něj stačí, když
+   reportne chybějící doklad a dojde mi to". Žádný formulář — vznikne
+   hlášení s prázdným popisem. Úvodní zpráva (uvod) se zapíše i prázdná:
+   podle zpráv konektor pozná, o čem poslat mail. */
+function zprNahlasHned(itemId, druh, predmet, btn) {
+  if (!jeUctetni() || !_zpr.nacteno) return;
+  var it = items.find(function(i) { return String(i.id) === String(itemId); });
+  if (!it) return;
+  for (var k in _zpr.vlakna) {   // dvojklik nezaloží dvě
+    var u = _zpr.vlakna[k];
+    if (u.typ === 'hlaseni' && String(u.polozkaId) === String(it.id) && u.predmet === predmet && zprStav(u) !== 'hotovo') return;
+  }
+  var id = _zprZalozHlaseni(ZPR_DRUHY[druh] ? druh : 'chyba', predmet, '', it);
+  if (btn && btn.parentNode) btn.outerHTML = _zprNahlasenoTlacitko(_zpr.vlakna[id]);
+  showToast('Nahlášeno. Majitel to uvidí v aplikaci a přijde mu mail.');
+  if (typeof zprPrekresli === 'function') zprPrekresli();
+  return id;
+}
+/* Založí hlášení: vlákno + úvodní zpráva s popisem (příznak uvod —
+   v kartě je to popis, ne komentář). */
+function _zprZalozHlaseni(druh, predmet, text, it) {
+  var t = Date.now(), id = _zprNoveId('v_');
+  var v = { typ: 'hlaseni', druh: druh, predmet: String(predmet).slice(0, 140), stav: 'nove',
+    zalozil: 'ucetni', vytvoreno: t, cteniU: t };
+  if (it) { v.polozkaId = String(it.id); v.polozkaNazev = _zprNazevPolozky(it); }
+  _zpr.vlakna[id] = Object.assign({ id: id }, v);   // ať je vidět hned, ne až po snímku
+  var m = { vlakno: id, od: 'ucetni', text: String(text || '').slice(0, ZPR_MAX_TEXT), t: t, uvod: true };
+  var mid = _zprNoveId('m_');
+  _zpr.zpravy.push(Object.assign({ id: mid }, m));
+  _zprZapis(id, v).then(function() { return _zprZapis(mid, m); }).catch(function() {});
+  return id;
 }
 function zprNovyDruh(d) { if (_zprNove && ZPR_DRUHY[d]) { _zprNove.druh = d; _zprVykresli(); } }
 function zprOdesliHlaseni() {
@@ -12040,15 +12096,10 @@ function zprOdesliHlaseni() {
   var p = document.getElementById('zprNPredmet'), tx = document.getElementById('zprNText');
   var predmet = p ? p.value.trim() : '', text = tx ? tx.value.trim() : '';
   if (!predmet) { showToast('Napiš předmět — podle něj se hlášení pozná v seznamu.', 'err'); if (p) p.focus(); return; }
-  if (!text) { showToast('Napiš, o co jde.', 'err'); if (tx) tx.focus(); return; }
-  var t = Date.now(), id = _zprNoveId('v_');
-  var v = { typ: 'hlaseni', druh: _zprNove.druh, predmet: predmet.slice(0, 140), stav: 'nove',
-    zalozil: 'ucetni', vytvoreno: t, cteniU: t };
-  if (_zprNove.polozkaId) { v.polozkaId = _zprNove.polozkaId; v.polozkaNazev = _zprNove.polozkaNazev || ''; }
-  _zprZapis(id, v).then(function() { return _zprZapisZpravu(id, text); }).then(function() {
-    showToast('Hlášení odesláno. Majitel ho uvidí v aplikaci a přijde mu mail.');
-  }).catch(function() {});
-  _zpr.vlakna[id] = Object.assign({ id: id }, v);   // ať se dá hned otevřít
+  var it = _zprNove.polozkaId ? items.find(function(i) { return String(i.id) === String(_zprNove.polozkaId); }) : null;
+  var id = _zprZalozHlaseni(_zprNove.druh, predmet, text, it);
+  if (!it && _zprNove.polozkaId) { _zpr.vlakna[id].polozkaId = _zprNove.polozkaId; }
+  showToast('Hlášení odesláno. Majitel ho uvidí v aplikaci a přijde mu mail.');
   _zprNove = null; _zprOtevrene = id; _zprPohled = 'vlakno'; _zprFiltr = 'otevrene';
   _zprVykresli();
 }
@@ -12221,7 +12272,7 @@ function _zprSeznamTelo() {
       + '</div>';
   }
   return '<div class="uc-pod">' + popis + '</div><div class="zpr-seznam">' + sez.map(function(v) {
-    var z = zprZpravyVlakna(v.id), posl = z[z.length - 1];
+    var z = zprZpravyVlakna(v.id).filter(function(m) { return String(m.text || '').trim(); }), posl = z[z.length - 1];
     var nadpis = v.typ === 'polozka' ? (v.polozkaNazev || 'Položka') : (v.predmet || '(bez předmětu)');
     var stitek = v.typ === 'polozka' ? '<span class="zpr-druh">Poznámka</span>' : '<span class="zpr-druh">' + escHtml(ZPR_DRUHY[v.druh] || 'Hlášení') + '</span>';
     var nahled = posl ? '<b>' + _zprKdoText(posl.od) + ':</b> ' + escHtml(String(posl.text || '').slice(0, 160)) : '';
@@ -12272,10 +12323,27 @@ function _zprVlaknoHtml(v) {
       h += '<div class="uc-pod">Majitel se k tomu vrátí ' + _zprDatumText(v.pripomenout) + '.</div>';
     }
   }
-  h += '<div class="zpr-zpravy">' + _zprBublinyHtml(zprZpravyVlakna(v.id)) + '</div>'
-    + '<div class="zpr-psani"><textarea id="zprOdpoved" rows="3" maxlength="' + ZPR_MAX_TEXT + '" placeholder="' + (uc ? 'Napiš majiteli…' : 'Odpověz účetnímu…') + '"'
-    + ' onkeydown="if((event.ctrlKey||event.metaKey)&&event.key===\'Enter\')zprOdpovez()"></textarea>'
-    + '<button class="uc-btn" onclick="zprOdpovez()">Odeslat</button></div>';
+  var odesli = ' onkeydown="if((event.ctrlKey||event.metaKey)&&event.key===\'Enter\')zprOdpovez()"';
+  if (v.typ === 'polozka') {   // poznámky u položky zůstávají jako rozhovor
+    h += '<div class="zpr-zpravy">' + _zprBublinyHtml(zprZpravyVlakna(v.id)) + '</div>'
+      + '<div class="zpr-psani"><textarea id="zprOdpoved" rows="3" maxlength="' + ZPR_MAX_TEXT + '" placeholder="' + (uc ? 'Napiš majiteli…' : 'Odpověz účetnímu…') + '"' + odesli + '></textarea>'
+      + '<button class="uc-btn" onclick="zprOdpovez()">Odeslat</button></div>';
+    return h;
+  }
+  /* Hlášení je karta, ne chat (majitel, 11. 11. 2026): nahoře popis,
+     pod ním komentáře k téhle věci — a jen když je co dodat. */
+  var r = zprRozdelHlaseni(v);
+  h += '<div class="zpr-karta-popis">' + (r.popis && r.popis.text
+      ? '<div class="zpr-popis-text">' + escHtml(r.popis.text) + '</div>'
+      : '<div class="zpr-popis-prazdny">' + (uc ? 'Bez popisu — předmět stačí.' : 'Účetní to jen oznámil, popis nepřipsal.') + '</div>')
+    + '</div>'
+    + '<div class="zpr-kom-h">Komentáře' + (r.komentare.length ? ' <span>' + r.komentare.length + '</span>' : '') + '</div>'
+    + (r.komentare.length ? '<div class="zpr-komentare">' + r.komentare.map(function(m) {
+        return '<div class="zpr-kom"><div class="zpr-kom-hl"><b>' + _zprKdoText(m.od) + '</b> · ' + _zprCas(m.t) + '</div>'
+          + '<div class="zpr-kom-text">' + escHtml(m.text || '') + '</div></div>';
+      }).join('') + '</div>' : '')
+    + '<div class="zpr-psani mala"><textarea id="zprOdpoved" rows="2" maxlength="' + ZPR_MAX_TEXT + '" placeholder="' + (uc ? 'Připsat komentář majiteli (nepovinné)…' : 'Připsat komentář účetnímu — třeba „nemám ho, dohledám"…') + '"' + odesli + '></textarea>'
+    + '<button class="uc-btn" onclick="zprOdpovez()">Přidat</button></div>';
   return h;
 }
 function _zprNoveHtml() {
@@ -12289,7 +12357,7 @@ function _zprNoveHtml() {
     }).join('') + '</div>'
     + (n.polozkaId ? '<div class="zpr-form-n">Položka</div><div class="zpr-form-pol">↳ ' + escHtml(n.polozkaNazev || '') + '</div>' : '')
     + '<div class="zpr-form-n">Předmět</div><input id="zprNPredmet" class="zpr-inp" maxlength="140" placeholder="Krátce, o co jde" value="' + escHtml(n.predmet || '') + '">'
-    + '<div class="zpr-form-n">Zpráva</div><textarea id="zprNText" class="zpr-inp" rows="6" maxlength="' + ZPR_MAX_TEXT + '" placeholder="Co nesedí, co chybí nebo co bys potřeboval…"></textarea>'
+    + '<div class="zpr-form-n">Popis <span class="zpr-nepov">— nepovinný</span></div><textarea id="zprNText" class="zpr-inp" rows="5" maxlength="' + ZPR_MAX_TEXT + '" placeholder="Když předmět stačí, nech prázdné. Jinak co nesedí, co chybí nebo co navrhuješ…"></textarea>'
     + '<div class="uc-akce" style="margin-top:14px;"><button class="uc-btn" onclick="zprOdesliHlaseni()">Odeslat hlášení</button>'
     + '<button class="uc-btn druhe" onclick="zprZpet()">Zrušit</button></div>'
     + (n.polozkaId ? '' : '<div class="uc-poznamka">Hlášení k jedné položce založíš z jejího detailu tlačítkem „Nahlásit".</div>')

@@ -184,7 +184,9 @@ const POLOZKY = [
       sk: localStorage.getItem('sklad_v3'),
       savedAt: localStorage.getItem('sklad_v3_savedAt'),
       dirty: localStorage.getItem('sklad_v3_dirty'),
-      store: window.__store,
+      // Zprávy majiteli jsou jediné, kam účetní zapisovat smí (Nahlásit
+      // jedním klikem); co v nich smí, hlídá test-zpravy.js
+      store: Object.keys(window.__store).filter(k => !/\/zpravy\//.test(k)).sort().map(k => [k, window.__store[k]]),
     });
     // Sloupce platforem jsou sbalené — rozbal je, ať jsou fajfky na dosah
     if (window.platExpanded) { platExpanded.platforms = true; platExpanded.eshopy = true; platExpanded.local = true; }

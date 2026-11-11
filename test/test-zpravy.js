@@ -102,6 +102,11 @@ const POLOZKY = [
   check('zpráva je podepsaná účetním', z.m.length === 1 && z.m[0].od === 'ucetni' && z.m[0].vlakno === vlId, JSON.stringify(z.m));
   check('po odeslání je otevřené vlákno', await page.evaluate(() => _zprPohled === 'vlakno' && !!document.getElementById('zprOdpoved')));
   check('účetní nevidí přepínač stavu', await page.evaluate(() => !document.querySelector('#zprOv .zpr-stavy')));
+  /* Hlášení je karta, ne chat: popis nahoře, komentáře pod ním */
+  check('úvodní zpráva je popis (uvod)', z.m[0].uvod === true);
+  check('popis je v kartě, ne v bublině', await page.evaluate(() =>
+    /nevidím nákupní doklad/.test(document.querySelector('#zprOv .zpr-karta-popis').textContent) && !document.querySelector('#zprOv .zpr-bub')));
+  check('zatím bez komentářů', await page.evaluate(() => !document.querySelector('#zprOv .zpr-kom')));
 
   // Stav účetní nezmění, ani přímým voláním
   await page.evaluate((id) => zprNastavStav(id, 'hotovo'), vlId);
@@ -136,20 +141,43 @@ const POLOZKY = [
   await page.waitForTimeout(150);
   check('v boxu Chybí je Nahlásit (doklad)', await page.evaluate(() =>
     !!document.querySelector('#detailContent .chybi-box button[data-druh="doklad"]')));
+  /* Jedním klikem, bez formuláře — účetnímu stačí oznámit (majitel, 11. 11.) */
   await page.click('#detailContent .chybi-box button[data-druh="doklad"]');
-  await page.waitForTimeout(150);
-  check('formulář má druh Chybí doklad a předmět', await page.evaluate(() =>
-    _zprNove && _zprNove.druh === 'doklad' && /^Chybí: Nákupní doklad/.test(document.getElementById('zprNPredmet').value)));
-  check('kurzor je rovnou v textu', await page.evaluate(() => document.activeElement && document.activeElement.id === 'zprNText'));
-  await page.fill('#zprNText', 'Prosím o fakturu.');
-  await page.click('text=Odeslat hlášení');
   await page.waitForTimeout(300);
-  await page.evaluate(() => { zavriZpravy(); openDetail('s1'); });
-  await page.waitForTimeout(150);
-  check('podruhé už Nahlášeno · Nové', await page.evaluate(() => {
+  check('Nahlásit neotevře formulář ani nezavře detail', await page.evaluate(() =>
+    !_zprNove && document.getElementById('moDetail').classList.contains('open') && !document.querySelector('#zprOv .zpr-okno')));
+  check('tlačítko se hned změní na Nahlášeno · Nové', await page.evaluate(() => {
     var b = document.querySelector('#detailContent .chybi-box .chybi-nahlaseno');
-    return !!b && /Nahlášeno · Nové/.test(b.textContent) && !document.querySelector('#detailContent .chybi-box button[data-druh]');
+    return !!b && /Nahlášeno · Nové/.test(b.textContent) && !document.querySelector('#detailContent .chybi-box button[data-druh="doklad"]');
   }));
+  z = await zpravy();
+  const chybiId = Object.keys(z.v).find(k => /^Chybí: Nákupní doklad/.test(z.v[k].predmet || ''));
+  check('vzniklo hlášení Chybí doklad k položce', !!chybiId && z.v[chybiId].druh === 'doklad' && z.v[chybiId].polozkaId === 's1' && z.v[chybiId].stav === 'nove', JSON.stringify(z.v));
+  check('s prázdnou úvodní zprávou (kvůli mailu)', z.m.filter(m => m.vlakno === chybiId).length === 1
+    && z.m.find(m => m.vlakno === chybiId).uvod === true && z.m.find(m => m.vlakno === chybiId).text === '');
+  check('druhé kliknutí druhé hlášení nezaloží', await page.evaluate(() => {
+    var n = Object.keys(_zpr.vlakna).length; zprNahlasHned('s1', 'doklad', Object.values(_zpr.vlakna).find(v => /^Chybí: Nákupní/.test(v.predmet || '')).predmet);
+    return Object.keys(_zpr.vlakna).length === n;
+  }));
+  await page.evaluate(() => { cm('moDetail'); openDetail('s1'); });
+  await page.waitForTimeout(150);
+  check('po znovuotevření taky Nahlášeno', await page.evaluate(() => !!document.querySelector('#detailContent .chybi-box .chybi-nahlaseno')));
+  await page.click('#detailContent .chybi-box .chybi-nahlaseno');
+  await page.waitForTimeout(150);
+  check('Nahlášeno otevře kartu hlášení', await page.evaluate((id) => _zprOtevrene === id && !!document.querySelector('#zprOv .zpr-karta-popis'), chybiId));
+  check('karta říká, že je bez popisu', await page.evaluate(() => /Bez popisu/.test(document.querySelector('#zprOv .zpr-karta-popis').textContent)));
+  await page.fill('#zprOdpoved', 'Je to ta z Zalanda.');
+  await page.click('#zprOv .zpr-psani .uc-btn');
+  await page.waitForTimeout(250);
+  check('komentář pod kartou', await page.evaluate(() => {
+    var k = document.querySelectorAll('#zprOv .zpr-kom');
+    return k.length === 1 && /z Zalanda/.test(k[0].textContent) && /Ty/.test(k[0].textContent);
+  }));
+  check('v seznamu je náhled komentáře, ne prázdný popis', await page.evaluate((id) => {
+    zprZpet(); var r = document.querySelector('#zprOv [data-vlakno="' + id + '"] .zpr-r-nahled');
+    return !!r && /Zalanda/.test(r.textContent);
+  }, chybiId));
+  await page.evaluate(() => zavriZpravy());
   await page.evaluate(() => cm('moDetail'));
   // Ať zbytek testu počítá s jedním hlášením — tohle druhé se uklidí
   await page.evaluate((d) => {
@@ -231,7 +259,7 @@ const POLOZKY = [
   await page.waitForTimeout(300);
   z = await zpravy();
   check('odpověď majitele', z.m.some(m => m.od === 'majitel' && m.vlakno === vlId && /doplním/.test(m.text)));
-  check('odpověď je ve vlákně vidět', await page.evaluate(() => /doplním/.test(document.querySelector('#zprOv .zpr-zpravy').textContent)));
+  check('odpověď je komentář pod kartou', await page.evaluate(() => /doplním/.test(document.querySelector('#zprOv .zpr-komentare').textContent)));
 
   // Připomenout: minulé datum ne, budoucí ano
   await page.click('#zprOv [data-stav="pripomenout"]');

@@ -310,9 +310,9 @@ sloupec Akce (`tableHTML`, `!jeUctetni()` u hlavičky **i** buněk —
 jinak se tabulka rozjede), na kartě fajfky míst, nahoře dlaždice Čeká
 (`.stat-ceka`) ani filtr Listing (`#localListingFilterWrap`). V boxu
 **Chybí** v detailu má místo Doplnit tlačítko **Nahlásit**
-(`zprChybiTlacitko`): založí hlášení s druhem a předmětem předvyplněnými,
-a když už k položce otevřené hlášení se stejným předmětem visí, ukáže
-„Nahlášeno · stav" a otevře ho — druhé se nezakládá. Hlídá to
+(`zprChybiTlacitko`, `zprNahlasHned`): **jedním klikem, bez formuláře**
+založí hlášení Chybí doklad s předmětem „Chybí: …" a tlačítko se hned
+změní na „Nahlášeno · stav" (otevře kartu hlášení) — druhé se nezakládá. Hlídá to
 `test-uctetni.js` 16e a `test-zpravy.js`, sekce 2.
 
 `test-uctetni.js` kliká na všechno, na co v pohledu účetního jde
@@ -800,12 +800,22 @@ a v pohledu účetního `test-uctetni.js`, sekce 16c a 16d.
 ### Zprávy a poznámky (`ZPRÁVY A POZNÁMKY`)
 
 Účetní píše majiteli z aplikace (majitel, 10. 11. 2026): **hlášení**
-(Chyba v datech, Chybí doklad, Dotaz, Návrh na úpravu) jako vlákno
-konverzace a **poznámky v detailu položky** (vlákno `v_pol_<id>`, píšou
+(Chyba v datech, Chybí doklad, Dotaz, Návrh na úpravu) a **poznámky
+v detailu položky** (vlákno `v_pol_<id>`, píšou
 oba). Majitel má okno **Zprávy** (obálka v hlavičce s červeným počtem),
 účetní totéž v oranžové liště. Majitel nastavuje stav — Nové →
 Rozpracované → Hotovo, nebo Připomenout k datu — a účetní ho vidí.
 Okno stojí na kostře Účetnictví (`.uc-okno`, záložky vlevo).
+
+**Hlášení je karta, ne chat** (majitel, 11. 11. 2026: „ne všechny věci
+ve stylu zpráv a konverzace, ale i jen jako oznámení"). Nahoře předmět,
+stav a **popis**, pod ním **komentáře** k té věci — jen když je co
+dodat. Popis je úvodní zpráva s příznakem `uvod` (u starších hlášení
+první zpráva zakladatele, `zprRozdelHlaseni`) a je **nepovinný**.
+Úvodní zpráva se zapíše **i prázdná**: konektor posílá mail podle zpráv,
+ne vláken, a bez ní by oznámení jedním klikem mail nevyvolalo (a nový
+konektor kvůli tomu nasazovat netřeba). Poznámky u položky zůstávají
+jako rozhovor.
 
 Data jsou **mimo sklad**, v `users/{majitel}/zpravy`: vlákna `v_…`,
 každá zpráva vlastní dokument `m_…` (pole zpráv by si dva píšící
