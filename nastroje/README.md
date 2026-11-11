@@ -1,5 +1,8 @@
 # Čtečka skladu
 
+> Pro lokální kontroly listingů na PC (Python, čte sklad a posílá
+> výsledky do aplikace) je `sklad_firestore.py` — viz `LOKALNI_KONTROLY.md`.
+
 Program, který přečte data z cloudu a vypíše je. Díky tomu se dá na sklad
 zeptat rovnou, bez otevírání aplikace v prohlížeči.
 

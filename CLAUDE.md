@@ -1074,6 +1074,18 @@ bez knihoven; `test-shoda.js` prohání obě cesty stejnými daty a porovnává,
 co z nich vypadne, aby se ty dvě kopie nerozešly.
 Podrobnosti v `konektor/README.md`.
 
+**Lokální kontroly** (Bazoš a další, běží na majitelově PC, mimo
+repozitář) se na SKLAD napojují přes `nastroje/sklad_firestore.py`
+(jen standardní knihovna Pythonu): čte sklad z Firestore a fajfky
+i výsledek kontroly zapisuje **stejným lístečkem `pozadavek_…` jako
+konektor** — tvar `{kdy, zmeny}` a `{kdy, kontrola: {misto, datum,
+report, web, chybi, smazat, nejde, poznamka}}`. Přihlašuje se účtem
+čtečky, heslo bere ze Správce pověření Windows, nikdy ze souboru na
+Disku (složka se synchronizuje do cloudu). Kdo mění tvar lístečku
+v aplikaci nebo konektoru, musí změnit i tenhle soubor —
+`test-skladpy.js` dává jeho lístečky skutečné aplikaci. Postup
+a další kroky: `nastroje/LOKALNI_KONTROLY.md`.
+
 Do skladu ani konektor nezapisuje. Jedinou výjimkou je `sklad_listing`,
 a ani ten sklad nemění — položí lísteček `pozadavek_…` a provede ho
 aplikace (`POŽADAVKY Z KONEKTORU` výš). `test-konektor.js` hlídá, že
@@ -1688,7 +1700,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 73 souborů
+node test/run.js              # kontrola syntaxe + všech 74 souborů
 node test/run.js archive      # jen vybrané
 ```
 
