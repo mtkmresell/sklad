@@ -140,7 +140,12 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   .main)`; na mobilu .main odjede a platí hlavička. Během animace
   schovávání panelů (0,3 s) sleduje hranu po snímcích
   (`sledujAnimaci`). **Nové pruhy nad seznamem nic dalšího nepotřebují.**
-  Hlídá to `test-hlavickasloupcu.js`.
+  **V Prodáno se lepí pruh měsíce i hlavička jeho tabulky** (`PRODÁNO —
+  PŘILEPENÝ MĚSÍC A SLOUPCE`, `soldLepeni`) — tam čistým CSS `sticky`,
+  každý měsíc je vlastní tabulka a další měsíc ten předchozí vystrčí.
+  `#itemsGrid` má jinak `overflow-x:auto`, takže v Prodáno dostane třídu
+  `sold-pohled` s `overflow:visible` — bez toho by se lepení vázalo na
+  něj a nedělo by se nic. Hlídá to `test-hlavickasloupcu.js`.
 - Před commitem vždy `node test/run.js`.
 - **Hotovou a otestovanou změnu commituj a pushuj do `main` sám, bez ptaní.**
   Majitel si to tak výslovně řekl (3. 10. 2026): aplikaci jen obnoví a vyzkouší.

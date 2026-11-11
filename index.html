@@ -835,6 +835,15 @@ header { flex-shrink: 0; }
 
 #cloudSyncStatus:empty{display:none;}
 
+/* PRODÁNO — PŘILEPENÝ MĚSÍC A SLOUPCE (viz soldLepeni). #itemsGrid má
+   jinak overflow-x:auto, a tím by se lepení vázalo na něj místo na
+   rolující seznam a nedělo by se nic. */
+#itemsGrid.sold-pohled { overflow:visible; }
+.sold-mesic-hl { position:sticky; top:var(--lepit-od,0px); z-index:6;
+  box-shadow:0 8px 0 var(--bg), 0 -8px 0 var(--bg); }
+.sold-tab thead th { position:sticky; top:calc(var(--lepit-od,0px) + var(--mesic-h,44px)); z-index:5;
+  background:var(--bg); box-shadow:inset 0 -1px 0 var(--border); }
+
 td:has(.td-actions){text-align:right;}
 
 /* Styled select */
@@ -21161,8 +21170,8 @@ function renderSoldView(){
   groups.forEach(function(grp){
     var gs=calcSoldStats(grp.items);
     var mn=MONTHS_FULL[parseInt(grp.month)]||grp.month;
-    html+='<div style="margin-bottom:28px;">';
-    html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:8px 14px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--accent);">';
+    html+='<div class="sold-mesic" style="margin-bottom:28px;">';
+    html+='<div class="sold-mesic-hl" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;padding:8px 14px;background:var(--surface2);border-radius:8px;border-left:3px solid var(--accent);">';
     html+='<span style="font-family:\'Syne\',sans-serif;font-weight:700;font-size:15px;">'+mn+' '+grp.year+'</span>';
     html+='<span style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+grp.items.length+' ks</span>';
     html+='<div style="flex:1;"></div>';
@@ -21173,7 +21182,7 @@ function renderSoldView(){
     if(_grpTotalCost>0)html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">'+czk(_grpTotalCost)+' inv.</span>';
     html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">'+czk(gs.totalRevenue)+' tržby</span>';
     html+='</div>';
-    html+='<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+    html+='<table class="sold-tab" style="width:100%;border-collapse:collapse;font-size:12px;">';
     html+='<thead><tr style="border-bottom:1px solid var(--border);">';
     ['Typ','Název','SKU','Vel.','Nákup','Prodej','Zisk','ROI','Kde prodáno','Č.obj.','Datum vypl.'].forEach(function(h,i){
       var w=['80px','','90px','70px','100px','100px','90px','60px','110px','90px','90px'][i];
@@ -21272,8 +21281,27 @@ function renderSoldView(){
   });
   html+='</div>';
   grid.innerHTML=html;
+  grid.classList.add('sold-pohled');
+  soldLepeni();
   initSoldSelects();
 }
+/* PRODÁNO — PŘILEPENÝ MĚSÍC A SLOUPCE (majitel, 11. 11. 2026)
+   Každý měsíc má vlastní tabulku a u delšího se při rolování ztratilo,
+   který sloupec je který. Pruh měsíce a hlavička jeho tabulky se lepí
+   nahoru (CSS sticky) a další měsíc je vystrčí. Tady se jen spočítá, kam
+   přesně: na počítači k horní hraně .main, na mobilu pod přilepenou
+   hlavičku aplikace; hlavička sloupců hned pod pruh měsíce. */
+function soldLepeni() {
+  var grid = document.getElementById('itemsGrid');
+  if (!grid || !grid.classList.contains('sold-pohled')) return;
+  var hl = grid.querySelector('.sold-mesic-hl');
+  var mobil = window.matchMedia('(max-width:700px)').matches;
+  var hdr = document.querySelector('header');
+  var od = mobil && hdr ? Math.round(hdr.getBoundingClientRect().height) : 0;
+  grid.style.setProperty('--lepit-od', od + 'px');
+  grid.style.setProperty('--mesic-h', (hl ? hl.offsetHeight + 8 : 44) + 'px');
+}
+window.addEventListener('resize', function() { soldLepeni(); });
 
 function renderStockAnalytics() {
   var grid = document.getElementById('itemsGrid');

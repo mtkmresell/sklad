@@ -15,6 +15,13 @@ for (let i = 0; i < 60; i++) {
   SEED.push({ id: 's' + i, name: 'Skladový ' + i, category: 'sneakers', buyPrice: 1000, buyCurrency: 'CZK',
     saleState: 'stock', location: 'Doma', dateAdded: Date.now() - i * 1000, buyDate: datum(10), tags: [] });
 }
+// Prodáno: dva měsíce po třiceti prodejích
+for (let i = 0; i < 60; i++) {
+  const m = i < 30 ? '2026-10' : '2026-09';
+  SEED.push({ id: 'p' + i, name: 'Prodaný ' + i, category: 'sneakers', buyPrice: 1000, buyCurrency: 'CZK',
+    saleState: 'paid', sellPrice: 2000, profit: 1000, soldWhere: 'Vinted', saleDate: m + '-0' + (1 + i % 9),
+    payoutDate: m + '-1' + (i % 9), dateAdded: Date.now() - i * 1000, buyDate: '2026-08-01', tags: [] });
+}
 
 async function otevri(browser, opts) {
   const ctx = await browser.newContext(opts);
@@ -81,6 +88,42 @@ const odroluj = (page, mobil) => page.evaluate(async (mobil) => {
   check('klon sedí pod pruhem účetního, nezakrývá ho', p.klon !== null && p.klon >= p.lista - 1, JSON.stringify(p));
   check('a sedí na hraně seznamu', p.klon !== null && Math.abs(p.klon - p.main) <= 1, JSON.stringify(p));
   if (process.env.SNIMEK) await o.page.screenshot({ path: process.env.SNIMEK + '/ucetni-rolovani.png', clip: { x: 0, y: 0, width: 1400, height: 200 } });
+  check('žádné chyby', o.errs.length === 0, o.errs.join(' | '));
+  await o.ctx.close();
+
+  /* Prodáno: pruh měsíce a hlavička jeho tabulky se lepí nahoru */
+  const prodano = async (page, mobil, y) => page.evaluate(async (a) => {
+    switchTab('sold'); soldViewMode = 'table'; renderSoldView();
+    await new Promise(r => setTimeout(r, 200));
+    const main = document.querySelector('.main');
+    if (a.mobil) { window.scrollTo(0, a.y); window.dispatchEvent(new Event('scroll')); }
+    else { main.scrollTop = a.y; main.dispatchEvent(new Event('scroll')); }
+    await new Promise(r => setTimeout(r, 600));
+    const vid = [...document.querySelectorAll('.sold-mesic-hl')].map(h => h.getBoundingClientRect());
+    const ths = [...document.querySelectorAll('.sold-tab thead th:first-child')].map(t => t.getBoundingClientRect());
+    const hore = a.mobil ? document.querySelector('header').getBoundingClientRect().bottom : main.getBoundingClientRect().top;
+    // který pruh je přilepený: ten, jehož skupina sahá přes horní hranu
+    const sk = [...document.querySelectorAll('.sold-mesic')].findIndex(g => { const r = g.getBoundingClientRect(); return r.top < hore + 1 && r.bottom > hore + 120; });
+    return { hore: Math.round(hore), sk, hl: sk >= 0 ? Math.round(vid[sk].top) : null, hlDole: sk >= 0 ? Math.round(vid[sk].bottom) : null,
+      th: sk >= 0 ? Math.round(ths[sk].top) : null, text: sk >= 0 ? document.querySelectorAll('.sold-mesic-hl')[sk].textContent.slice(0, 20) : '' };
+  }, { mobil, y });
+
+  section('Prodáno — počítač');
+  o = await otevri(browser, { viewport: { width: 1400, height: 800 } });
+  for (const [y, popis] of [[600, 'první měsíc'], [1700, 'druhý měsíc']]) {
+    p = await prodano(o.page, false, y);
+    check(popis + ': pruh měsíce je přilepený nahoře', p.sk >= 0 && Math.abs(p.hl - p.hore) <= 1, JSON.stringify(p));
+    check(popis + ': hlavička sloupců hned pod ním', p.sk >= 0 && p.th >= p.hlDole && p.th - p.hlDole <= 10, JSON.stringify(p));
+  }
+  if (process.env.SNIMEK) await o.page.screenshot({ path: process.env.SNIMEK + '/prodano-lepeni.png', clip: { x: 0, y: 0, width: 1400, height: 260 } });
+  check('žádné chyby', o.errs.length === 0, o.errs.join(' | '));
+  await o.ctx.close();
+
+  section('Prodáno — mobil');
+  o = await otevri(browser, { viewport: { width: 390, height: 760 }, hasTouch: true, isMobile: true });
+  p = await prodano(o.page, true, 900);
+  check('pruh měsíce visí pod přilepenou hlavičkou', p.sk >= 0 && Math.abs(p.hl - p.hore) <= 1, JSON.stringify(p));
+  check('hlavička sloupců hned pod ním', p.sk >= 0 && p.th >= p.hlDole && p.th - p.hlDole <= 10, JSON.stringify(p));
   check('žádné chyby', o.errs.length === 0, o.errs.join(' | '));
   await o.ctx.close();
 
