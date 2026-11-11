@@ -1327,17 +1327,31 @@ Na staré adrese jdou vytáhnout v konzoli:
   GitHub Pro). Pak taky smazat zmínky o GitHub Pages odsud a ze skillu
   `zmena`.
 
-### Lokální kontroly — čeká na majitele doma (11. 11. 2026)
+### Lokální kontroly — Bazoš čeká na první ostrý běh (11. 11. 2026)
 
-`nastroje/sklad_firestore.py` je hotový a otestovaný (kroky 1 a 2
-zadání „Lokální kontroly SKLAD."). Majitel byl v práci (bez admin
-práv), zbývá **doma**: uložit soubor do `G:\Můj disk\Claude\MTKM-kontroly`,
-`python sklad_firestore.py nastavit` (účet čtečky do Správce pověření),
-`python sklad_firestore.py test`, a pak nechat Clauda v chatu zapojit
-modul do `bazos_kontrola.py` podle `nastroje/LOKALNI_KONTROLY.md`.
-**Připomeň to.** Modul je obecný pro jakékoli místo, ne jen Bazoš.
-Otevřené otázky ze zadání: může PC běžet trvale, nebo se budit (Wake
-on LAN rozdělaný)? Kterou kontrolu převést po Bazoši jako první?
+`sklad_firestore.py` na PC majitele běží (přihlášení čtečky ve Správci
+pověření, `test` vidí sklad). **Heslo se při `nastavit` bere ze schránky**
+(jen Enter) — psát ho do příkazového řádku Windows naslepo a vkládat
+Ctrl+V majiteli nešlo vůbec.
+
+`nastroje/bazos_kontrola.py` (kopie skriptu z PC, upravená) už nečte
+`sklad.json` a nepotřebuje Clauda v chatu: sklad načte z cloudu, sám
+rozhodne **Smazat** (inzerát bez kusu skladem, jistě spárovaný s prodaným
+modelem → nejčerstvější prodaný kus na velikost), **Opravit**, **Není ve
+SKLADu** a fajfky, vypíše náhled a po „a" pošle lístečky (fajfky, pak
+kontrola Bazoš.cz a Bazoš.sk s počtem inzerátů a limitem 50). Report
+v artifactu odpadl. Pravidla ze skillu `bazos-kontrola` platí dál.
+**Nejistá shoda nikam nejde** — jen do výpisu „OVĚŘIT RUČNĚ" a do
+poznámky kontroly; a modelu, kterému se inzerát možná jen nespároval,
+se fajfka neodškrtne. Hlídá to `test-bazoskontrola.js`.
+
+**Zbývá (připomínej):** majitel uloží novou verzi do
+`G:\Můj disk\Claude\MTKM-kontroly`, pustí ji a pošle výpis — první
+ostrý běh ukáže, jestli párování s prodanými nesype moc „ověřit ručně".
+Pak skill `bazos-kontrola` přepsat na „spusť skript" (skilly žijí
+u majitele v Claudovi). Otevřené otázky ze zadání: může PC běžet trvale,
+nebo se budit (Wake on LAN rozdělaný)? Kterou kontrolu převést po
+Bazoši jako první?
 
 Pořadí domluvené 11. 11.: doma dokončit Bazoš (kroky výš), **pak
 skládat další kontroly** (každý web vlastní skript, napojený na tentýž
@@ -1853,7 +1867,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 76 souborů
+node test/run.js              # kontrola syntaxe + všech 77 souborů
 node test/run.js archive      # jen vybrané
 ```
 

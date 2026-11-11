@@ -82,7 +82,22 @@ Ze skladu se do kontroly berou kusy **na skladě**, bez balíků a bez
 míst *Zrušeno*, *Vráceno*, *Poškozené* (`VYRADIT_MISTA`). *Na cestě*
 a *Bude vráceno* skladem jsou — podle pravidel kontroly.
 
-## Pro Clauda: jak to napojit do `bazos_kontrola.py`
+## Bazoš kontrola — hotová (`bazos_kontrola.py`)
+
+Tady v `nastroje/` je upravená `bazos_kontrola.py`. Patří do složky
+MTKM-kontroly místo té staré (vedle `sklad_firestore.py`). Spouští se
+stejně (`SPUSTIT_bazos.bat` nebo `python bazos_kontrola.py`):
+
+1. Načte sklad z cloudu a projde Bazoš.cz a Bazoš.sk jako dřív.
+2. Vypíše nálezy: SMAZAT, OPRAVIT, NENÍ VE SKLAD, FAJFKA +/− a OVĚŘIT
+   RUČNĚ (párování nejisté — tyhle se nikam neposílají).
+3. Zeptá se **„Odeslat do SKLADu? (a/n)"**. Až po „a" pošle fajfky
+   a kontrolu obou míst. `--nahled` jen ukáže, `--odeslat` neptá se.
+
+Výsledek je pak v aplikaci v okně Kontroly listingů. Claude v chatu ani
+report v artifactu už potřeba nejsou.
+
+## Pro Clauda: jak to napojit do další kontroly
 
 Nejjednodušší je použít modul přímo, místo čtení `sklad.json`:
 
