@@ -149,6 +149,9 @@ function python(args, env) {
   fs.writeFileSync(path.join(tmp, 'k.json'), JSON.stringify({
     misto: 'Bazoš.cz', chybi: ['b', 'w', 'nic'], smazat: ['w', 'a'], nejde: [{ id: 'b', duvod: 'Bazoš velikost nebere' }],
     web: 'https://www.bazos.cz/hodnoceni.php?idmail=1', report: 'javascript:alert(1)', poznamka: 'Vše ostatní sedí',
+    opravit: [{ nazev: 'Jordan 4 Black Cat', odkaz: 'https://www.bazos.cz/inzerat/1/', inzerat: '43, 44', sklad: '44', ids: ['a', 'zadny'] }],
+    neniVeSkladu: [{ nazev: 'Supreme Box Logo', odkaz: 'javascript:x', velikost: 'L' }],
+    inzeratu: 50, limit: 50,
   }));
   r = await spust(['kontrola', 'k.json']);
   let v = JSON.parse(r.out.slice(0, r.out.lastIndexOf('}') + 1));
@@ -156,7 +159,8 @@ function python(args, env) {
   ok('chybí: jen kus skladem', JSON.stringify(v.kontrola.chybi) === '["b"]', JSON.stringify(v.kontrola));
   ok('smazat: jen prodaný kus', JSON.stringify(v.kontrola.smazat) === '["w"]');
   ok('neexistující a nesedící kusy jsou v nelze', v.nelze.length === 3, JSON.stringify(v.nelze));
-  ok('odkaz javascript: neprojde', v.kontrola.report === '' && v.pozor.length === 1, JSON.stringify(v.pozor));
+  ok('odkaz javascript: neprojde', v.kontrola.report === '' && v.kontrola.neniVeSkladu[0].odkaz === '' && v.pozor.length === 2, JSON.stringify(v.pozor));
+  ok('opravit: jen existující id', JSON.stringify(v.kontrola.opravit[0].ids) === '["a"]', JSON.stringify(v.kontrola.opravit));
   fs.writeFileSync(path.join(tmp, 'k2.json'), JSON.stringify({ misto: 'Bazos', chybi: [] }));
   r = await spust(['kontrola', 'k2.json', '--odeslat']);
   ok('neznámé místo se odmítne a nic nezapíše', /nezname_misto/.test(r.out) && zapisy.length === 0, r.out);
@@ -172,7 +176,8 @@ function python(args, env) {
   const k = rozbal({ mapValue: { fields: kontrolaZapis.telo.fields } });
   ok('tvar jako u konektoru (kdy + kontrola)', Object.keys(k).sort().join() === 'kdy,kontrola', JSON.stringify(k));
   ok('pole kontroly jako u konektoru',
-    Object.keys(k.kontrola).sort().join() === 'chybi,datum,misto,nejde,poznamka,report,smazat,web', JSON.stringify(k.kontrola));
+    Object.keys(k.kontrola).sort().join() === 'chybi,datum,inzeratu,limit,misto,nejde,neniVeSkladu,opravit,poznamka,report,smazat,web',
+    JSON.stringify(k.kontrola));
 
   fs.writeFileSync(path.join(tmp, 'f.json'), JSON.stringify({ zmeny: [
     { id: 'b', platforma: 'Bazoš.cz', zaskrtnout: true },
@@ -225,6 +230,28 @@ function python(args, env) {
   ok('i s nejde, webem a poznámkou', kb && kb.nejde.length === 1 && kb.nejde[0].duvod === 'Bazoš velikost nebere'
     && /^https:\/\/www\.bazos\.cz/.test(kb.web) && kb.poznamka === 'Vše ostatní sedí', JSON.stringify(kb));
   ok('lístečky aplikace uklidí', vysledek.smazano.length === 2, JSON.stringify(vysledek.smazano));
+  ok('opravit, není ve skladu i limit dorazily', kb && kb.opravit.length === 1 && kb.neniVeSkladu.length === 1
+    && kb.inzeratu === 50 && kb.limit === 50, JSON.stringify(kb));
+
+  /* Okno Kontroly listingů: sekce Opravit a Není ve skladu, limit
+     a Opraveno / Vyřízeno po jednom inzerátu. */
+  const okno = () => page.evaluate(() => {
+    var ov = document.getElementById('kontrolyOv');
+    return { text: ov ? ov.textContent.replace(/\s+/g, ' ') : '', plno: !!(ov && ov.querySelector('.kl-limit-plno')),
+      odkaz: ov && ov.querySelector('.kl-inz a.kl-tl-odkaz') ? ov.querySelector('.kl-inz a.kl-tl-odkaz').getAttribute('href') : null,
+      pocet: kontrolyPocetOtevrenych() };
+  });
+  await page.evaluate(() => { var ov = document.getElementById('kontrolyOv'); if (ov) ov.remove(); openKontroly('Bazoš.cz'); });
+  let o = await okno();
+  ok('sekce Opravit s velikostmi', /Opravit na Bazoš\.cz/.test(o.text) && /V inzerátu: 43, 44 · skladem: 44/.test(o.text), o.text.slice(0, 600));
+  ok('sekce Není ve skladu', /Na Bazoš\.cz, ale není ve skladu/.test(o.text) && /Supreme Box Logo/.test(o.text), o.text.slice(0, 600));
+  ok('limit 50/50 svítí', /50\/50 inzerátů/.test(o.text) && o.plno, o.text.slice(0, 300));
+  ok('odkaz na inzerát', o.odkaz === 'https://www.bazos.cz/inzerat/1/', o.odkaz);
+  ok('počet u tlačítka je zahrnuje', o.pocet === 4, o.pocet);   // chybí b, smazat w, opravit 1, není 1
+  await page.click('#kontrolyOv .kl-inz[data-druh="opravit"] .kl-hotovo');
+  await page.waitForTimeout(100);
+  o = await okno();
+  ok('Opraveno inzerát odklidí', !/Opravit na Bazoš/.test(o.text) && o.pocet === 3, o.text.slice(0, 300));
   ok('žádné chyby na stránce', errs.length === 0, errs.join(' | '));
   await browser.close();
 

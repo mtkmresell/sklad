@@ -738,6 +738,14 @@ nedozví:
 > `nejde` = kusy skladem, které tam nalistovat nejdou, jako
 > `{sku, nazev, velikost, duvod}`,
 > `poznamka` = jednou větou payouty. Volej to i při čisté kontrole.
+> Má-li report sekci Opravit, pošli ji jako `opravit` =
+> `{nazev, odkaz, inzerat, sklad}` (velikosti v inzerátu a skladem),
+> Není ve SKLAD. jako `neniVeSkladu` = `{nazev, odkaz, velikost}` a počet
+> inzerátů s limitem jako `inzeratu`, `limit`.
+
+Opravit, Není ve SKLAD. a limit jsou nepovinné a umí je **až konektor
+nasazený po 11. 11. 2026** — starší je tiše zahodí. Lokální kontroly na PC
+(`nastroje/sklad_firestore.py`) je posílají samy, bez konektoru.
 
 ## Bezpečnost
 

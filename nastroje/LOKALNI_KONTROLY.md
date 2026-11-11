@@ -109,16 +109,27 @@ i v aplikaci. Bazoš.cz a Bazoš.sk jsou dvě místa — dvě kontroly.
 
 Token platí hodinu; běh Bazoše trvá minuty, takže stačí jeden.
 
-**Co okno Kontroly listingů zatím neumí:** sekci *Opravit* (velikosti
-v inzerátu nesedí se skladem), *Není ve SKLAD.* (inzerát, ke kterému
-ve skladu nic není) a počet inzerátů proti limitu 50. Do té doby ať
-jdou počty do `poznamka`. Doplnění okna je **krok 3** zadání.
+**Opravit, Není ve SKLAD. a limit** umí okno Kontroly listingů od
+11. 11. 2026 (krok 3) — posílají se v téže kontrole:
+
+```python
+S.posli_kontrolu(token, data, polozky, 'Bazoš.cz', chybi=[...], smazat=[...],
+                 opravit=[{'nazev': 'Nike Mind 001', 'odkaz': 'https://…/inzerat/123/',
+                           'inzerat': '45, 46', 'sklad': '46', 'ids': ['id kusu skladem']}],
+                 neni_ve_skladu=[{'nazev': 'Supreme Box Logo', 'odkaz': 'https://…', 'velikost': 'L'}],
+                 inzeratu=47, limit=50, web='https://www.bazos.cz/hodnoceni.php?…', odeslat=True)
+```
+
+V okně jsou to sekce **Opravit** (s velikostmi v inzerátu a skladem,
+odkazem na inzerát a tlačítkem Opraveno) a **Na Bazoš.cz, ale není ve
+skladu** (Vyřízeno), u místa štítek „47/50 inzerátů" — na limitu
+oranžový. `ids` u Opravit jsou nepovinné; když jsou, jde z řádku
+otevřít detail kusu.
 
 ## Další kroky (zadání, body 3–8)
 
-- **3 Zobrazení v aplikaci** — rozšířit okno Kontroly listingů o Opravit,
-  Není ve SKLAD. a limit, ať artifact není potřeba. Dělá Claude Code
-  v `index.html`; lísteček se rozšíří o nová pole.
+- **3 Zobrazení v aplikaci** — hotovo (Opravit, Není ve SKLAD., limit).
+  Zbývá, aby je skript posílal.
 - **6 Tlačítko ve SKLADu + hlídač** — potřebuje nové pravidlo ve
   Firestore: aplikace zapíše „spusť kontrolu", program na PC to uvidí
   a smí to po sobě uklidit. Dnes čtečka smí zapsat jen `pozadavek_…`

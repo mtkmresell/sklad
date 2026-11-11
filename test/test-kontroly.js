@@ -40,6 +40,7 @@ function rozbal(v) {
   if (!v) return v;
   if ('stringValue' in v) return v.stringValue;
   if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return Number(v.doubleValue);
   if ('booleanValue' in v) return v.booleanValue;
   if ('nullValue' in v) return null;
   if ('arrayValue' in v) return (v.arrayValue.values || []).map(rozbal);
@@ -132,6 +133,19 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   ok('kus s fajfkou, kde podle kontroly nevisí, se ohlásí',
     (v.data.pozor || []).some(p => p.id === 's3' && /fajfku/.test(p.duvod)), JSON.stringify(v.data.pozor));
   ok('odpověď neslibuje, že je hotovo', /aplikace/.test(v.data.poznamka) && !/hotovo/i.test(v.data.poznamka), v.data.poznamka);
+
+  /* Opravit a Není ve SKLADu (krok 3 lokálních kontrol, 11. 11. 2026):
+     inzeráty, ne kusy — jen se očistí, nedohledávají. */
+  v = await nastroj({ misto: 'Bazoš.cz', inzeratu: 47, limit: 50,
+    opravit: [{ nazev: 'Nike Mind 001', odkaz: 'https://obleceni.bazos.cz/inzerat/1/', inzerat: '45, 46', sklad: '46', ids: ['s1', 'neni'] },
+      { nazev: 'Zlý odkaz', odkaz: 'javascript:alert(1)', inzerat: '41', sklad: '42' }],
+    neniVeSkladu: [{ nazev: 'Supreme Box Logo', odkaz: 'https://obleceni.bazos.cz/inzerat/2/', velikost: 'L' }, 'nesmysl'] });
+  ok('kontrola s inzeráty se zadá', v.data && v.data.stav === 'zadano' && v.data.opravit === 2 && v.data.neni_ve_skladu === 1, v.text.slice(0, 300));
+  shoda('opravit: neznámé id a javascript: odkaz pryč',
+    v.listek.kontrola.opravit.map(x => [x.odkaz, x.ids.join()]),
+    [['https://obleceni.bazos.cz/inzerat/1/', 's1'], ['', '']]);
+  shoda('není ve skladu: nesmysl vynechán', v.listek.kontrola.neniVeSkladu.map(x => x.nazev), ['Supreme Box Logo']);
+  shoda('počet a limit', [v.listek.kontrola.inzeratu, v.listek.kontrola.limit], [47, 50]);
 
   v = await nastroj({ misto: 'Hypeboost', smazat: [{ sku: 'DD1391-100', velikost: '42' }, 'p1'], chybi: ['s2'] });
   shoda('id ze skladu jde taky', [v.listek.kontrola.chybi, v.listek.kontrola.smazat], [['s2'], ['w1', 'p1']]);

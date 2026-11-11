@@ -30,7 +30,8 @@ Příkazy (python sklad_firestore.py …):
   sklad [sklad.json]            uloží sklad ve formátu [id, název, velikost, cz, sk]
                                 (a vedle prodane.json s prodanými kusy)
   fajfky soubor.json [--odeslat]     {"zmeny": [{"id", "platforma", "zaskrtnout"}]}
-  kontrola soubor.json [--odeslat]   {"misto", "chybi", "smazat", "nejde", "report", "web", "poznamka"}
+  kontrola soubor.json [--odeslat]   {"misto", "chybi", "smazat", "nejde", "opravit", "neniVeSkladu",
+                                      "inzeratu", "limit", "report", "web", "poznamka"}
 
 Bez --odeslat se jen ukáže, co by se poslalo, a nic se nezapíše.
 
@@ -415,13 +416,39 @@ def posli_fajfky(token, data, polozky, zmeny, odeslat=False, uid=MAJITEL_UID):
     return vysledek
 
 
+def _inzeraty(seznam, s_ids, polozky, pozor, druh):
+    """Opravit / Není ve SKLADu — inzeráty, ne kusy. Odkaz jen http(s)."""
+    podle_id = {it.get('id') for it in polozky if it}
+    out = []
+    for x in list(seznam or [])[:KONTROLA_NEJVIC]:
+        if not isinstance(x, dict):
+            continue
+        odkaz = str(x.get('odkaz') or '').strip()
+        if odkaz and (not odkaz.lower().startswith(('https://', 'http://')) or len(odkaz) > 500):
+            pozor.append({'duvod': 'odkaz u %s „%s“ se neuložil — musí začínat https://' % (druh, x.get('nazev'))})
+            odkaz = ''
+        o = {'nazev': str(x.get('nazev') or '')[:200], 'velikost': str(x.get('velikost') or '')[:100], 'odkaz': odkaz}
+        if s_ids:
+            o['inzerat'] = str(x.get('inzerat') or '')[:200]
+            o['sklad'] = str(x.get('sklad') or '')[:200]
+            o['ids'] = [i for i in (x.get('ids') or []) if isinstance(i, str) and i in podle_id][:50]
+        if o['nazev'] or o['odkaz']:
+            out.append(o)
+    return out
+
+
 def posli_kontrolu(token, data, polozky, misto, chybi=(), smazat=(), nejde=(), report='', web='',
-                   poznamka='', datum=None, odeslat=False, uid=MAJITEL_UID):
+                   poznamka='', datum=None, odeslat=False, uid=MAJITEL_UID,
+                   opravit=(), neni_ve_skladu=(), inzeratu=None, limit=None):
     """Výsledek kontroly jednoho místa → okno Kontroly listingů v aplikaci.
 
     chybi  = id kusů skladem, které na místě nevisí (sekce Přidat)
     smazat = id prodaných kusů, které tam pořád visí (sekce Smazat)
     nejde  = [{"id": ..., "duvod": "..."}] kusy, které místo nevezme
+    opravit = [{"nazev", "odkaz", "inzerat": "41, 42.5", "sklad": "42.5, 44", "ids": [...]}]
+             inzeráty, kde velikosti nesedí se skladem (ids = kusy skladem, nepovinné)
+    neni_ve_skladu = [{"nazev", "odkaz", "velikost"}] inzerát běží, kus ve skladu nikdy nebyl
+    inzeratu, limit = počet inzerátů na místě a jeho limit (Bazoš 50)
     Stejný tvar jako sklad_kontrola v konektoru; ukládá se i čistá
     kontrola bez nálezů („vše sedí" je taky zpráva). Bez odeslat=True jen náhled.
     """
@@ -431,7 +458,7 @@ def posli_kontrolu(token, data, polozky, misto, chybi=(), smazat=(), nejde=(), r
     if misto not in mista:
         return {'stav': 'nezname_misto', 'poznamka': 'Takové místo prodeje v nastavení není: %s' % misto,
                 'mista_v_nastaveni': mista}
-    for seznam in (chybi, smazat, nejde):
+    for seznam in (chybi, smazat, nejde, opravit, neni_ve_skladu):
         if len(seznam or []) > KONTROLA_NEJVIC:
             return {'stav': 'moc_polozek', 'poznamka': 'Najednou nejvýš %d položek v seznamu.' % KONTROLA_NEJVIC}
     podle_id = {it.get('id'): it for it in polozky if it}
@@ -479,6 +506,10 @@ def posli_kontrolu(token, data, polozky, misto, chybi=(), smazat=(), nejde=(), r
         'smazat': smazat_ids,
         'nejde': nejde_out,
         'poznamka': (poznamka or '')[:500],
+        'opravit': _inzeraty(opravit, True, polozky, pozor, 'Opravit'),
+        'neniVeSkladu': _inzeraty(neni_ve_skladu, False, polozky, pozor, 'Není ve SKLADu'),
+        'inzeratu': inzeratu if isinstance(inzeratu, int) and inzeratu >= 0 else None,
+        'limit': limit if isinstance(limit, int) and limit >= 0 else None,
     }
     vysledek = {'kontrola': kontrola, 'nelze': nelze, 'pozor': pozor}
     if not odeslat:
@@ -565,7 +596,9 @@ def hlavni(argv):
         o = _nacti_json(zbytek[0])
         _vypis(posli_kontrolu(token, data, polozky, o.get('misto'), o.get('chybi') or [],
                               o.get('smazat') or [], o.get('nejde') or [], o.get('report') or '',
-                              o.get('web') or '', o.get('poznamka') or '', o.get('datum'), odeslat))
+                              o.get('web') or '', o.get('poznamka') or '', o.get('datum'), odeslat,
+                              opravit=o.get('opravit') or [], neni_ve_skladu=o.get('neniVeSkladu') or [],
+                              inzeratu=o.get('inzeratu'), limit=o.get('limit')))
         if not odeslat:
             print('\nNic se neodeslalo. Odešleš to s --odeslat.')
         return 0

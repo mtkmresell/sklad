@@ -499,6 +499,19 @@ který majitel nikdy nepoužil (30. 10. 2026).
   (`kontrolyZastarale`). Jen místa, která už kontrolu měla — co se
   nekontroluje vůbec, by svítilo napořád a varování by se přestalo číst.
 
+**Opravit a Není ve SKLADu** (11. 11. 2026, krok 3 lokálních kontrol —
+ať report v artifactu není potřeba): kontrola nese i `opravit`
+(`{nazev, odkaz, inzerat, sklad, ids}` — velikosti v inzerátu nesedí se
+skladem), `neniVeSkladu` (`{nazev, odkaz, velikost}` — inzerát běží,
+ve skladu nic) a `inzeratu` / `limit` (štítek „47/50 inzerátů",
+na limitu oranžový). Jsou to **inzeráty, ne kusy**: stav kusu je
+nevyřídí, odklikávají se po jednom (Opraveno / Vyřízeno, `hotovoInz`,
+klíč `kontrolaKlicInzeratu`) nebo je smaže další kontrola. Do počtu
+u tlačítka jdou, do značek u kusů ne. Očistí je `_klInzeraty` v aplikaci,
+`skladKontrola` v konektoru a `_inzeraty` v `nastroje/sklad_firestore.py`
+— **tvar se musí měnit na všech třech místech**; `test-skladpy.js` ho
+prohání celou cestou Python → aplikace → okno.
+
 Krok „zavolej `sklad_kontrola`" musí být **v každém kontrolním skillu**;
 skilly žijí v Claudovi u majitele, ne v repozitáři. Znění kroku je
 v `konektor/README.md`. Hlídá to `test-kontroly.js`.
@@ -1145,7 +1158,7 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 | co | kde | stav |
 |---|---|---|
 | `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** — blok `zpravy` publikovaný 10. 11. (majitel); předtím ověřený lísteček `pozadavek_*` z příkazové řádky |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (10. 11. odpoledne: oprava mailu o zprávách — první běh, hlídání při každém cronu, `zkontrolovano` pro stopu v aplikaci). Předtím nasazeno 10. 11. dopoledne (zprávy od účetního). Dokud běží starší verze, ukazuje aplikace v okně Zpráv falešné „cron asi neběží“ — starší verze značku nepíše při každém běhu. Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — nasazovat od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (11. 11.: `sklad_kontrola` umí `opravit`, `neniVeSkladu`, `inzeratu`, `limit`; 10. 11. odpoledne: oprava mailu o zprávách — první běh, hlídání při každém cronu, `zkontrolovano` pro stopu v aplikaci). Předtím nasazeno 10. 11. dopoledne (zprávy od účetního). Dokud běží starší verze, ukazuje aplikace v okně Zpráv falešné „cron asi neběží“ — starší verze značku nepíše při každém běhu. Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — nasazovat od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
 | třetí cron trigger `*/5 * * * *` | Cloudflare → Worker konektoru → Settings → Triggers → Cron Triggers → Add | **hotovo, ověřeno 10. 11.** — v cloudu se ve 14:15 zapsala značka `zpravy/_mail`. Zkušební mail nepřišel kvůli chybě prvního běhu, opraveno |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
@@ -1192,6 +1205,18 @@ Na staré adrese jdou vytáhnout v konzoli:
   majitel odstřihl od aplikace (Pages ze soukromého repozitáře chce
   GitHub Pro). Pak taky smazat zmínky o GitHub Pages odsud a ze skillu
   `zmena`.
+
+### Lokální kontroly — čeká na majitele doma (11. 11. 2026)
+
+`nastroje/sklad_firestore.py` je hotový a otestovaný (kroky 1 a 2
+zadání „Lokální kontroly SKLAD."). Majitel byl v práci (bez admin
+práv), zbývá **doma**: uložit soubor do `G:\Můj disk\Claude\MTKM-kontroly`,
+`python sklad_firestore.py nastavit` (účet čtečky do Správce pověření),
+`python sklad_firestore.py test`, a pak nechat Clauda v chatu zapojit
+modul do `bazos_kontrola.py` podle `nastroje/LOKALNI_KONTROLY.md`.
+**Připomeň to.** Modul je obecný pro jakékoli místo, ne jen Bazoš.
+Otevřené otázky ze zadání: může PC běžet trvale, nebo se budit (Wake
+on LAN rozdělaný)? Kterou kontrolu převést po Bazoši jako první?
 
 ### Názvy příspěvků na Instagramu
 

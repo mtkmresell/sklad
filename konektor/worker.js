@@ -490,8 +490,29 @@ async function skladKontrola(env, a) {
 
   /* Ukládá se i čistá kontrola bez nálezů — „Hypeboost 30. 10.: vše
      sedí" je stejně cenná informace jako seznam chyb. */
+  /* Inzeráty k opravě (velikosti nesedí se skladem) a inzeráty bez kusu
+     ve skladu — přicházejí jako text z webu, ne jako kusy, takže se
+     nedohledávají; jen očistí. Stejný tvar posílají lokální kontroly
+     (nastroje/sklad_firestore.py). */
+  const inzeraty = (seznam, sIds) => (Array.isArray(seznam) ? seznam : []).slice(0, KONTROLA_NEJVIC).map(x => {
+    if (!x || typeof x !== 'object') return null;
+    let odkaz = typeof x.odkaz === 'string' ? x.odkaz.trim() : '';
+    if (odkaz && (!/^https?:\/\//i.test(odkaz) || odkaz.length > 500)) odkaz = '';
+    const o = { nazev: String(x.nazev || '').slice(0, 200), velikost: String(x.velikost || '').slice(0, 100), odkaz };
+    if (sIds) {
+      o.inzerat = String(x.inzerat || '').slice(0, 200);
+      o.sklad = String(x.sklad || '').slice(0, 200);
+      o.ids = (Array.isArray(x.ids) ? x.ids : []).filter(id => typeof id === 'string' && polozky.some(it => it && it.id === id)).slice(0, 50);
+    }
+    return (o.nazev || o.odkaz) ? o : null;
+  }).filter(Boolean);
+  const cislo = v => (typeof v === 'number' && isFinite(v) && v >= 0) ? Math.round(v) : null;
+  const opravit = inzeraty(a.opravit, true);
+  const neniVeSkladu = inzeraty(a.neniVeSkladu, false);
+
   const dokument = await zapisPozadavek(env, token,
-    { kontrola: { misto, datum, report, web, chybi, smazat, nejde, poznamka } });
+    { kontrola: { misto, datum, report, web, chybi, smazat, nejde, poznamka,
+      opravit, neniVeSkladu, inzeratu: cislo(a.inzeratu), limit: cislo(a.limit) } });
   return {
     stav: 'zadano',
     dokument,
@@ -499,6 +520,8 @@ async function skladKontrola(env, a) {
     chybi: chybi.length,
     smazat: smazat.length,
     nejde: nejde.length,
+    opravit: opravit.length,
+    neni_ve_skladu: neniVeSkladu.length,
     nelze: nelze.length ? nelze : undefined,
     pozor: pozor.length ? pozor : undefined,
     poznamka: 'Výsledek kontroly je uložený. **Převezme ho aplikace**, ne konektor — když ji '
@@ -837,6 +860,25 @@ const NASTROJE = [
         },
         poznamka: { type: 'string', description: 'Krátké shrnutí, které má být vidět '
           + 'v aplikaci — třeba payouty („nejlevnější u 12 z 30"). Nejvýš 500 znaků.' },
+        opravit: {
+          type: 'array',
+          description: 'Inzeráty, kde velikosti v inzerátu nesedí s tím, co je skladem '
+            + '(v reportu Opravit). Jeden záznam na inzerát.',
+          items: { type: 'object', properties: {
+            nazev: { type: 'string' }, odkaz: { type: 'string', description: 'https://… na inzerát' },
+            inzerat: { type: 'string', description: 'velikosti v inzerátu, např. "41, 42.5"' },
+            sklad: { type: 'string', description: 'velikosti skladem, např. "42.5, 44"' },
+            ids: { type: 'array', items: { type: 'string' }, description: 'id kusů skladem (volitelné)' } } },
+        },
+        neniVeSkladu: {
+          type: 'array',
+          description: 'Inzeráty, které běží, ale ve skladu k nim nikdy nic nebylo '
+            + '(v reportu Není ve SKLAD.).',
+          items: { type: 'object', properties: {
+            nazev: { type: 'string' }, odkaz: { type: 'string' }, velikost: { type: 'string' } } },
+        },
+        inzeratu: { type: 'number', description: 'Kolik inzerátů na místě visí (u Bazoše bez topovaných).' },
+        limit: { type: 'number', description: 'Limit inzerátů na místě (Bazoš 50).' },
       },
       required: ['misto'],
     },
