@@ -131,6 +131,16 @@ ne (nebo v jiné verzi), takže čísla vypadala pokaždé jinak. Nevracej odkaz
   zkrátil stránku tak, že se seznam vešel, rolování spadlo na nulu
   a panel se vrátil. Schovává se proto, jen když po schování zbude co
   rolovat. Hlídá to `test-rolovani.js`.
+- **Plovoucí hlavička sloupců se lepí k horní hraně seznamu**
+  (`KLON SE LEPÍ K HORNÍ HRANĚ SEZNAMU` v `updateTheadClone`). Klon
+  `thead` je `position:fixed` a dřív se pozicoval podle výšky hlavičky
+  a filtrů — o všem ostatním mezi hlavičkou a seznamem nevěděl a sedl
+  přes to: přes pruh pohledu účetního i přes proužek o staré kopii dat
+  (majitel, 11. 11. 2026). Teď bere `max(spodek hlavičky, horní hrana
+  .main)`; na mobilu .main odjede a platí hlavička. Během animace
+  schovávání panelů (0,3 s) sleduje hranu po snímcích
+  (`sledujAnimaci`). **Nové pruhy nad seznamem nic dalšího nepotřebují.**
+  Hlídá to `test-hlavickasloupcu.js`.
 - Před commitem vždy `node test/run.js`.
 - **Hotovou a otestovanou změnu commituj a pushuj do `main` sám, bez ptaní.**
   Majitel si to tak výslovně řekl (3. 10. 2026): aplikaci jen obnoví a vyzkouší.
@@ -1799,7 +1809,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 74 souborů
+node test/run.js              # kontrola syntaxe + všech 75 souborů
 node test/run.js archive      # jen vybrané
 ```
 

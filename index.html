@@ -23504,7 +23504,23 @@ rebuildBrandTables();
     }
 
     updateTheadClone();
+    sledujAnimaci();
   });
+
+  /* Panely se schovávají animací (0,3 s) a hrana .main se během ní
+     posouvá. Klon ji po tu dobu sleduje po snímcích — jinak by zůstal
+     viset tam, kde hrana byla na začátku, a seznam by pod ním prosvítal
+     nebo ho zakrýval. */
+  var _animDo = 0;
+  function sledujAnimaci() {
+    var bezi = _animDo > Date.now();
+    _animDo = Date.now() + 400;
+    if (bezi) return;
+    (function krok() {
+      updateTheadClone();
+      if (Date.now() < _animDo) requestAnimationFrame(krok);
+    })();
+  }
 
   /* updateTheadClone se volá ze scroll handleru, renderItems wrapperu a resize — RAF loop není potřeba */
 
@@ -23553,10 +23569,15 @@ rebuildBrandTables();
     if (!theadEl) return;
     var theadRect = theadEl.getBoundingClientRect();
     var headerEl  = document.querySelector('header');
-    var headerH   = headerEl ? headerEl.offsetHeight : 0;
-    var filtersVisible = !filtersEl.classList.contains('hide-panel');
-    // Na mobilu filtry odjedou se stránkou — klon pak patří pod hlavičku, ne nad obrazovku
-    var topOffset = Math.max(headerH, filtersVisible ? filtersEl.getBoundingClientRect().bottom : 0);
+    /* KLON SE LEPÍ K HORNÍ HRANĚ SEZNAMU (.main), ne pod hlavičku.
+       Dřív se počítal z výšky hlavičky a viditelných filtrů — o všem
+       ostatním mezi hlavičkou a seznamem nevěděl a sedl přes to: přes
+       oranžový pruh pohledu účetního i přes proužek o staré kopii dat
+       (majitel, 11. 11. 2026). Horní hrana .main je vždycky pod vším,
+       co nad seznamem zrovna je. Na mobilu roluje celá stránka a .main
+       odjede nahoru — pak platí spodek přilepené hlavičky. */
+    var headerB   = headerEl ? headerEl.getBoundingClientRect().bottom : 0;
+    var topOffset = Math.max(headerB, mainEl.getBoundingClientRect().top);
     if (theadRect.bottom < topOffset + 5 && tableRect.bottom > topOffset + 30) {
       if (!cloneEl || cloneEl.querySelectorAll('th').length === 0) buildClone();
       syncCloneWidths();
