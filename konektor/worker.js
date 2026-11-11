@@ -4147,7 +4147,7 @@ const ZPRAVY_PRVNI_OKNO_MS = 24 * 3600 * 1000;
 function jeCastyCron(cron) {
   return /^(\*|0)\/\d+\s/.test(String(cron || '').trim());
 }
-const ZPR_DRUHY = { chyba: 'Chyba v datech', doklad: 'Chybí doklad', dotaz: 'Dotaz', navrh: 'Návrh na úpravu' };
+const ZPR_DRUHY = { chyba: 'Chyba v datech', doklad: 'Chybějící doklad', dotaz: 'Dotaz', navrh: 'Návrh na úpravu' };
 const ZPR_STAVY = { nove: 'Nové', rozprac: 'Rozpracované', hotovo: 'Hotovo', pripomenout: 'Připomenout' };
 
 async function nactiZpravy(token, uid) {

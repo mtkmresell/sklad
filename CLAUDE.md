@@ -814,8 +814,16 @@ dodat. Popis je úvodní zpráva s příznakem `uvod` (u starších hlášení
 první zpráva zakladatele, `zprRozdelHlaseni`) a je **nepovinný**.
 Úvodní zpráva se zapíše **i prázdná**: konektor posílá mail podle zpráv,
 ne vláken, a bez ní by oznámení jedním klikem mail nevyvolalo (a nový
-konektor kvůli tomu nasazovat netřeba). Poznámky u položky zůstávají
-jako rozhovor.
+konektor kvůli tomu nasazovat netřeba). **Prázdný popis se neukazuje.**
+Poznámky u položky zůstávají jako rozhovor.
+
+Rozložení karty určil majitel (11. 11. 2026): nadpis, **barevný štítek
+druhu** (`_zprDruhChip`, „Chybějící doklad" oranžově), pod ním stav
+a kdy založeno, pak **karta položky** (`_zprPolozkaKarta`: obrázek,
+název, SKU, velikost, nákup, stav a co chybí — to, o čem hlášení je,
+zvýrazněné) s tlačítkem **Doplnit …** rovnou do úpravy na chybějící
+pole (`zprDoplnit`, jen majitel) a Otevřít položku; pod tím přepínač
+stavu a komentáře.
 
 Data jsou **mimo sklad**, v `users/{majitel}/zpravy`: vlákna `v_…`,
 každá zpráva vlastní dokument `m_…` (pole zpráv by si dva píšící

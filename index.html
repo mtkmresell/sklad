@@ -238,6 +238,26 @@ body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 .zpr-bub-hl { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); margin-bottom:4px; }
 .zpr-bub-text { font-size:14px; line-height:1.5; white-space:pre-wrap; word-break:break-word; }
 .zpr-zadne { color:var(--muted); font-size:13px; }
+.zpr-druh.d-doklad { color:var(--warning,#ffaa00); border-color:rgba(255,170,0,0.4); background:rgba(255,170,0,0.10); }
+.zpr-druh.d-chyba { color:var(--danger); border-color:rgba(255,68,68,0.4); background:rgba(255,68,68,0.10); }
+.zpr-druh.d-dotaz { color:#6cb6ff; border-color:rgba(108,182,255,0.4); background:rgba(108,182,255,0.10); }
+.zpr-druh.d-navrh { color:var(--accent); border-color:rgba(200,255,0,0.35); background:rgba(200,255,0,0.08); }
+.zpr-hl-druh { margin:8px 0 2px; }
+.zpr-hl-druh .zpr-druh { font-size:11px; padding:3px 9px; }
+.zpr-pol { display:flex; gap:16px; align-items:flex-start; background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px; margin:0 0 18px; }
+.zpr-pol-img { width:96px; height:72px; flex:none; object-fit:contain; border-radius:8px; background:#fff; }
+.zpr-pol-img.prazdny { background:var(--surface); border:1px solid var(--border); }
+.zpr-pol-telo { flex:1; min-width:0; }
+.zpr-pol-nazev { font-family:'Syne',sans-serif; font-weight:700; font-size:15px; line-height:1.3; margin-bottom:6px; }
+.zpr-pol-meta { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12.5px; }
+.zpr-pol-meta i { font-style:normal; font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-right:3px; }
+.zpr-pol-chybi { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.zpr-pol-chip { font-size:11px; padding:2px 9px; border-radius:20px; border:1px solid rgba(255,170,0,0.35); color:var(--warning,#ffaa00); }
+.zpr-pol-chip.cil { background:rgba(255,170,0,0.14); }
+.zpr-pol-ok { margin-top:10px; font-size:12.5px; color:var(--accent); }
+.zpr-pol-akce { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.zpr-pol-pryc { color:var(--muted); font-size:13px; display:block; }
+@media (max-width:600px) { .zpr-pol { gap:12px; padding:12px; } .zpr-pol-img { width:64px; height:48px; } }
 .zpr-karta-popis { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin:4px 0 18px; }
 .zpr-popis-text { font-size:14px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
 .zpr-popis-prazdny { font-size:13px; color:var(--muted); font-style:italic; }
@@ -11848,7 +11868,7 @@ function _ucVykresli() {
 
    Hlídá to test-zpravy.js.
 ══════════════════════════════════════════════════════════════════════ */
-var ZPR_DRUHY = { chyba: 'Chyba v datech', doklad: 'Chybí doklad', dotaz: 'Dotaz', navrh: 'Návrh na úpravu' };
+var ZPR_DRUHY = { chyba: 'Chyba v datech', doklad: 'Chybějící doklad', dotaz: 'Dotaz', navrh: 'Návrh na úpravu' };
 var ZPR_STAVY = { nove: 'Nové', rozprac: 'Rozpracované', hotovo: 'Hotovo', pripomenout: 'Připomenout' };
 var ZPR_MAX_TEXT = 4000;
 var _zpr = { vlakna: {}, zpravy: [], nacteno: false };
@@ -11884,6 +11904,49 @@ function zprZpravyVlakna(id) {
 /* Hlášení = popis + komentáře. Popis je úvodní zpráva (uvod); starší
    hlášení ho nemají, tam je popisem první zpráva od toho, kdo hlášení
    založil. Prázdná zpráva (jen oznámení) mezi komentáře nepatří. */
+function _zprDruhChip(v) {
+  var d = ZPR_DRUHY[v.druh] ? v.druh : 'chyba';
+  return '<span class="zpr-druh d-' + d + '">' + escHtml(ZPR_DRUHY[v.druh] || 'Hlášení') + '</span>';
+}
+/* Položka v hlášení: obrázek, název, SKU, velikost, nákup — a co jí
+   chybí, s tlačítkem rovnou na doplnění (majitel) */
+function _zprPolozkaKarta(v) {
+  var it = items.find(function(i) { return String(i.id) === String(v.polozkaId); });
+  if (!it) return '<div class="zpr-pol zpr-pol-pryc">↳ ' + escHtml(v.polozkaNazev || 'Položka') + ' — ve skladu už není</div>';
+  var id = _zprBezpecne(it.id), uc = jeUctetni();
+  var img = it.imgUrl ? '<img class="zpr-pol-img" src="' + escHtml(it.imgUrl) + '" alt="" loading="lazy">' : '<span class="zpr-pol-img prazdny"></span>';
+  var meta = [];
+  if (it.sku) meta.push('<span><i>SKU</i> ' + escHtml(it.sku) + '</span>');
+  if (it.size) meta.push('<span><i>Vel.</i> ' + escHtml(it.size) + '</span>');
+  if (it.buyDate) meta.push('<span><i>Nákup</i> ' + escHtml(fmtDate(it.buyDate)) + (it.buyWhere ? ' · ' + escHtml(it.buyWhere) : '') + '</span>');
+  if (it.orderNum) meta.push('<span><i>Obj.</i> ' + escHtml(it.orderNum) + '</span>');
+  var stav = it.saleState === 'paid' ? 'Prodáno' : it.saleState === 'waiting' ? 'Čeká' : 'Na skladě';
+  meta.push('<span><i>Stav</i> ' + stav + '</span>');
+  var c = typeof coChybi === 'function' ? coChybi(it) : [];
+  var cil = null;   // co hlášení řeší: podle předmětu, jinak první doklad
+  c.forEach(function(x) { if (!cil && v.predmet === 'Chybí: ' + String(x.popis || x.nazev || '').slice(0, 120)) cil = x; });
+  if (!cil && v.druh === 'doklad') c.forEach(function(x) { if (!cil && (x.id === 'nakup' || x.id === 'prodej')) cil = x; });
+  var chybi = c.length
+    ? '<div class="zpr-pol-chybi">' + c.map(function(x) { return '<span class="zpr-pol-chip' + (x === cil ? ' cil' : '') + '">' + escHtml(x.nazev || x.popis) + '</span>'; }).join('') + '</div>'
+    : (v.druh === 'doklad' ? '<div class="zpr-pol-ok">✓ U položky už nic nechybí</div>' : '');
+  var akce = '';
+  if (!uc && cil) {
+    akce = cil.pole
+      ? '<button class="uc-btn" onclick="zprDoplnit(\'' + id + '\',\'' + escHtml(cil.pole) + '\')">Doplnit ' + escHtml((cil.nazev || 'údaj').toLowerCase()) + '</button>'
+      : (cil.id === 'prodej' ? '<button class="uc-btn" onclick="zavriZpravy();openSaleDocument(\'' + id + '\')">Vystavit doklad</button>' : '');
+  }
+  akce += '<button class="uc-btn druhe" onclick="zprOtevriPolozku(\'' + id + '\')">Otevřít položku</button>';
+  return '<div class="zpr-pol">' + img + '<div class="zpr-pol-telo">'
+    + '<div class="zpr-pol-nazev">' + escHtml(it.name || v.polozkaNazev || 'Položka') + '</div>'
+    + '<div class="zpr-pol-meta">' + meta.join('') + '</div>' + chybi
+    + '<div class="zpr-pol-akce">' + akce + '</div></div></div>';
+}
+function zprDoplnit(itemId, pole) {
+  if (jeUctetni()) return;
+  zavriZpravy();
+  openEdit(itemId);
+  setTimeout(function() { if (typeof chybiNaPole === 'function') chybiNaPole(pole); }, 150);
+}
 function zprRozdelHlaseni(v) {
   var z = zprZpravyVlakna(v.id), popis = null;
   for (var i = 0; i < z.length; i++) if (z[i].uvod) { popis = z[i]; break; }
@@ -12274,7 +12337,7 @@ function _zprSeznamTelo() {
   return '<div class="uc-pod">' + popis + '</div><div class="zpr-seznam">' + sez.map(function(v) {
     var z = zprZpravyVlakna(v.id).filter(function(m) { return String(m.text || '').trim(); }), posl = z[z.length - 1];
     var nadpis = v.typ === 'polozka' ? (v.polozkaNazev || 'Položka') : (v.predmet || '(bez předmětu)');
-    var stitek = v.typ === 'polozka' ? '<span class="zpr-druh">Poznámka</span>' : '<span class="zpr-druh">' + escHtml(ZPR_DRUHY[v.druh] || 'Hlášení') + '</span>';
+    var stitek = v.typ === 'polozka' ? '<span class="zpr-druh">Poznámka</span>' : _zprDruhChip(v);
     var nahled = posl ? '<b>' + _zprKdoText(posl.od) + ':</b> ' + escHtml(String(posl.text || '').slice(0, 160)) : '';
     return '<button class="zpr-radek' + (zprPozornost(v) ? ' pozor' : '') + (zprNeprectene(v) ? ' neprect' : '') + '" data-vlakno="' + v.id + '" onclick="zprOtevri(\'' + v.id + '\')">'
       + '<span class="zpr-tecka"></span><span class="zpr-r-telo">'
@@ -12301,11 +12364,14 @@ function _zprVlaknoHtml(v) {
       + '<div class="zpr-meta"><span class="zpr-druh">Poznámky k položce</span>'
       + '<button class="uc-mini" onclick="zprOtevriPolozku(\'' + _zprBezpecne(v.polozkaId) + '\')">Otevřít položku</button></div>';
   } else {
+    /* Rozložení podle majitele (11. 11. 2026): nadpis, barevný druh,
+       pod ním stav a kdy, pak položka s obrázkem a tlačítkem na
+       doplnění, nakonec komentáře. */
     h += '<h3 class="uc-h">' + escHtml(v.predmet || '(bez předmětu)') + '</h3>'
-      + '<div class="zpr-meta"><span class="zpr-druh">' + escHtml(ZPR_DRUHY[v.druh] || 'Hlášení') + '</span>' + _zprStavChip(v)
-      + '<span class="zpr-cas">založeno ' + _zprCas(v.vytvoreno) + '</span>'
-      + (v.polozkaId ? '<button class="uc-mini" onclick="zprOtevriPolozku(\'' + _zprBezpecne(v.polozkaId) + '\')">↳ ' + escHtml(v.polozkaNazev || 'Položka') + '</button>' : '')
-      + '</div>';
+      + '<div class="zpr-hl-druh">' + _zprDruhChip(v) + '</div>'
+      + '<div class="zpr-meta">' + _zprStavChip(v)
+      + '<span class="zpr-cas">založeno ' + _zprCas(v.vytvoreno) + '</span></div>'
+      + (v.polozkaId ? _zprPolozkaKarta(v) : '');
     if (!uc) {
       var ulozeny = ZPR_STAVY[v.stav] ? v.stav : 'nove';
       h += '<div class="zpr-stavy"><span class="zpr-stavy-n">Stav</span>'
@@ -12333,10 +12399,9 @@ function _zprVlaknoHtml(v) {
   /* Hlášení je karta, ne chat (majitel, 11. 11. 2026): nahoře popis,
      pod ním komentáře k téhle věci — a jen když je co dodat. */
   var r = zprRozdelHlaseni(v);
-  h += '<div class="zpr-karta-popis">' + (r.popis && r.popis.text
-      ? '<div class="zpr-popis-text">' + escHtml(r.popis.text) + '</div>'
-      : '<div class="zpr-popis-prazdny">' + (uc ? 'Bez popisu — předmět stačí.' : 'Účetní to jen oznámil, popis nepřipsal.') + '</div>')
-    + '</div>'
+  // Prázdný popis se neukazuje — oznámení jedním klikem žádný nemá a dopsat ho nejde
+  h += (r.popis && String(r.popis.text || '').trim()
+      ? '<div class="zpr-karta-popis"><div class="zpr-popis-text">' + escHtml(r.popis.text) + '</div></div>' : '')
     + '<div class="zpr-kom-h">Komentáře' + (r.komentare.length ? ' <span>' + r.komentare.length + '</span>' : '') + '</div>'
     + (r.komentare.length ? '<div class="zpr-komentare">' + r.komentare.map(function(m) {
         return '<div class="zpr-kom"><div class="zpr-kom-hl"><b>' + _zprKdoText(m.od) + '</b> · ' + _zprCas(m.t) + '</div>'

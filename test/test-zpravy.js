@@ -164,8 +164,20 @@ const POLOZKY = [
   check('po znovuotevření taky Nahlášeno', await page.evaluate(() => !!document.querySelector('#detailContent .chybi-box .chybi-nahlaseno')));
   await page.click('#detailContent .chybi-box .chybi-nahlaseno');
   await page.waitForTimeout(150);
-  check('Nahlášeno otevře kartu hlášení', await page.evaluate((id) => _zprOtevrene === id && !!document.querySelector('#zprOv .zpr-karta-popis'), chybiId));
-  check('karta říká, že je bez popisu', await page.evaluate(() => /Bez popisu/.test(document.querySelector('#zprOv .zpr-karta-popis').textContent)));
+  check('Nahlášeno otevře kartu hlášení', await page.evaluate((id) => _zprOtevrene === id && !!document.querySelector('#zprOv .zpr-pol'), chybiId));
+  check('prázdný popis se neukazuje', await page.evaluate(() => !document.querySelector('#zprOv .zpr-karta-popis')));
+  check('štítek Chybějící doklad je barevný', await page.evaluate(() => {
+    var d = document.querySelector('#zprOv .zpr-hl-druh .zpr-druh.d-doklad'); return !!d && /Chybějící doklad/.test(d.textContent);
+  }));
+  check('karta položky s názvem, SKU a tím, co chybí', await page.evaluate(() => {
+    var k = document.querySelector('#zprOv .zpr-pol'); if (!k) return false;
+    var it = items.find(i => i.id === 's1');
+    return k.textContent.indexOf(it.name) >= 0 && (!it.sku || k.textContent.indexOf(it.sku) >= 0)
+      && !!k.querySelector('.zpr-pol-chip.cil') && !!k.querySelector('.zpr-pol-img');
+  }));
+  check('účetní nemá Doplnit, jen Otevřít položku', await page.evaluate(() =>
+    !/Doplnit/.test(document.querySelector('#zprOv .zpr-pol-akce').textContent) && /Otevřít položku/.test(document.querySelector('#zprOv .zpr-pol-akce').textContent)));
+  if (process.env.SNIMEK) await page.screenshot({ path: process.env.SNIMEK + '/ucetni.png' });
   await page.fill('#zprOdpoved', 'Je to ta z Zalanda.');
   await page.click('#zprOv .zpr-psani .uc-btn');
   await page.waitForTimeout(250);
@@ -217,6 +229,23 @@ const POLOZKY = [
   check('otevřením se vlákno přečte', z.v[vlId].cteniM > 0);
   check('Nové svítí dál, dokud se nepřepne', (await pocet()) === '2', await pocet());
   check('majitel má přepínač stavu', await page.evaluate(() => !!document.querySelector('#zprOv .zpr-stavy')));
+  // Majitel má u položky v hlášení rovnou Doplnit (bez zakládání vlákna — jen vykreslení)
+  check('majitel má v kartě položky Doplnit nákupní doklad', await page.evaluate(() => {
+    var it = items.find(i => i.id === 's1');
+    var x = coChybi(it).find(c => c.id === 'nakup');
+    var h = _zprPolozkaKarta({ polozkaId: 's1', druh: 'doklad', predmet: 'Chybí: ' + x.popis });
+    return /Doplnit nákupní doklad/.test(h) && /zprDoplnit/.test(h);
+  }));
+  if (process.env.SNIMEK) {
+    await page.evaluate(() => {
+      var it = items.find(i => i.id === 's1'), x = coChybi(it).find(c => c.id === 'nakup');
+      _zpr.vlakna.v_ukazka = { id: 'v_ukazka', typ: 'hlaseni', druh: 'doklad', predmet: 'Chybí: ' + x.popis, stav: 'nove', vytvoreno: Date.now(), polozkaId: 's1', polozkaNazev: it.name };
+      zprOtevri('v_ukazka');
+    });
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: process.env.SNIMEK + '/majitel.png' });
+    await page.evaluate(() => { delete _zpr.vlakna.v_ukazka; zprOtevri(Object.keys(_zpr.vlakna).find(k => _zpr.vlakna[k].typ === 'hlaseni')); });
+  }
 
   await page.click('#zprOv [data-stav="rozprac"]');
   await page.waitForTimeout(200);
