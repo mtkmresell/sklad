@@ -847,6 +847,12 @@ Druhé kolo (majitel, 11. 11. 2026), nevracej:
   se šipkou.
 - **Účetní nevidí v detailu sekci Prodej** (cílovka, strategie).
 - Nadpis chatu pod hlášením je **Zprávy**, ne Komentáře.
+- **Chat má pevnou výšku** (340 px, na mobilu 45 % výšky) a zprávy se
+  rolují **jen v něm**, s posuvníkem jako `.main`. Dřív s každou zprávou
+  rostlo celé okno a po odeslání skočilo nahoru — `_zprVykresli` proto
+  drží rolování okna i chatu: dole zůstane dole, po vlastní zprávě
+  (`_zprNaKonec`) a při otevření vlákna je chat na konci, rozečtená
+  historie zůstane na místě. Hlídá to `test-zpravy.js`, sekce 2.
 
 **Prodáno pro účetního** (majitel, 11. 11. 2026): účetní zpracovává
 vždycky **minulý měsíc** (v listopadu říjen), takže se mu Prodáno

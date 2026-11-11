@@ -274,7 +274,15 @@ body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 .zpr-chat { background:rgba(0,0,0,0.28); border:1px solid var(--border); border-radius:14px; padding:14px; }
 .zpr-chat-h { font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; }
 .zpr-chat-h span { color:var(--text); }
-.zpr-chat-zpravy { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+.zpr-chat-zpravy { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; height:340px; overflow-y:auto; overscroll-behavior:contain; padding-right:8px; }
+.zpr-chat-zpravy > .zpr-zadne { margin:auto; }
+.zpr-chat-zpravy > .zpr-bub:first-child { margin-top:auto; }
+.zpr-chat-zpravy::-webkit-scrollbar { width:6px !important; height:0 !important; display:block !important; }
+.zpr-chat-zpravy::-webkit-scrollbar-track { background:var(--surface2) !important; border-radius:3px !important; }
+.zpr-chat-zpravy::-webkit-scrollbar-thumb { background:rgba(200,255,0,0.4) !important; border-radius:3px !important; }
+.zpr-chat-zpravy::-webkit-scrollbar-thumb:hover { background:rgba(200,255,0,0.65) !important; }
+.zpr-chat-zpravy { scrollbar-width:thin !important; scrollbar-color:rgba(200,255,0,0.4) var(--surface2) !important; }
+@media (max-width:600px) { .zpr-chat-zpravy { height:45vh; min-height:220px; } }
 .zpr-vstup { position:relative; }
 .zpr-rostouci { display:block; width:100%; box-sizing:border-box; resize:none; overflow-y:auto; max-height:220px; min-height:42px;
   background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:12px; padding:11px 13px;
@@ -12291,6 +12299,7 @@ function zprOdpovez() {
   var text = ta ? ta.value.trim() : '';
   if (!text || !_zprOtevrene) { if (ta) ta.focus(); return; }
   ta.value = ''; ta.style.height = '';
+  _zprNaKonec = true;   // vlastní zprávu chci vidět
   _zprZapisZpravu(_zprOtevrene, text).catch(function() { if (ta && !ta.value) ta.value = text; });
 }
 function zprOtevriPolozku(itemId) {
@@ -12358,9 +12367,24 @@ function _zprZachovej(koren, fn) {
   if (fokus) { var f = document.getElementById(fokus); if (f) { f.focus(); try { if (sel) f.setSelectionRange(sel[0], sel[1]); } catch(e) {} } }
 }
 
+/* Rolování přežije překreslení (majitel, 11. 11. 2026): po odeslání
+   zprávy okno skočilo nahoru. Okno zůstane, kde bylo; chat má pevnou
+   výšku a roluje se jen v něm — dole zůstane dole, nové otevření začne
+   u poslední zprávy, rozečtená historie zůstane na místě. */
+var _zprNaKonec = false;
 function _zprVykresli() {
   var ov = document.getElementById('zprOv'); if (!ov) return;
+  var klic = _zprPohled + ':' + (_zprOtevrene || '');
+  var stejne = ov.getAttribute('data-pohled') === klic;
+  var ob = ov.querySelector('.uc-obsah'), y = ob ? ob.scrollTop : 0;
+  var ch = ov.querySelector('.zpr-chat-zpravy');
+  var chY = ch ? ch.scrollTop : 0, chDole = !ch || ch.scrollHeight - ch.scrollTop - ch.clientHeight < 24;
   _zprZachovej(ov, function() { ov.innerHTML = _zprOknoHtml(); });
+  ov.setAttribute('data-pohled', klic);
+  var ob2 = ov.querySelector('.uc-obsah'); if (ob2 && stejne) ob2.scrollTop = y;
+  var ch2 = ov.querySelector('.zpr-chat-zpravy');
+  if (ch2) ch2.scrollTop = (!stejne || chDole || _zprNaKonec) ? ch2.scrollHeight : chY;
+  _zprNaKonec = false;
 }
 function _zprOknoHtml() {
   var uc = jeUctetni();

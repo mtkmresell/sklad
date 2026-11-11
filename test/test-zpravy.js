@@ -197,9 +197,36 @@ const POLOZKY = [
     var k = document.querySelectorAll('#zprOv .zpr-chat .zpr-bub');
     return k.length === 1 && /z Zalanda/.test(k[0].textContent) && /Ty/.test(k[0].textContent);
   }));
+  /* Hodně zpráv: chat má pevnou výšku a roluje jen on; po odeslání
+     okno neuskočí nahoru a chat zůstane dole (majitel, 11. 11. 2026) */
+  const chatPred = await page.evaluate(() => document.querySelector('#zprOv .zpr-chat-zpravy').offsetHeight);
+  for (let i = 0; i < 12; i++) {
+    await page.fill('#zprOdpoved', 'Zpráva číslo ' + i + '\nna dva řádky');
+    await page.press('#zprOdpoved', 'Enter');
+    await page.waitForTimeout(40);
+  }
+  await page.waitForTimeout(250);
+  const chat = await page.evaluate(() => {
+    var c = document.querySelector('#zprOv .zpr-chat-zpravy'), ob = document.querySelector('#zprOv .uc-obsah');
+    ob.scrollTop = ob.scrollHeight; var obY = ob.scrollTop;
+    var cs = getComputedStyle(c);
+    return { h: c.offsetHeight, preteka: c.scrollHeight > c.clientHeight + 50, overflow: cs.overflowY,
+      dole: c.scrollHeight - c.scrollTop - c.clientHeight < 24, obY: obY };
+  });
+  check('chat má pořád stejnou výšku', chat.h === chatPred, chatPred + ' → ' + chat.h);
+  check('zprávy se rolují uvnitř chatu', chat.preteka && chat.overflow === 'auto', JSON.stringify(chat));
+  check('po odeslání je chat dole', chat.dole, JSON.stringify(chat));
+  await page.fill('#zprOdpoved', 'Ještě jedna');
+  await page.press('#zprOdpoved', 'Enter');
+  await page.waitForTimeout(250);
+  check('okno po odeslání neuskočí nahoru', await page.evaluate((y) => {
+    var ob = document.querySelector('#zprOv .uc-obsah'), c = document.querySelector('#zprOv .zpr-chat-zpravy');
+    return ob.scrollTop === y && c.scrollHeight - c.scrollTop - c.clientHeight < 24;
+  }, chat.obY));
+  if (process.env.SNIMEK) await page.screenshot({ path: process.env.SNIMEK + '/chat.png' });
   check('v seznamu je náhled komentáře, ne prázdný popis', await page.evaluate((id) => {
     zprZpet(); var r = document.querySelector('#zprOv [data-vlakno="' + id + '"] .zpr-r-nahled');
-    return !!r && /Zalanda/.test(r.textContent);
+    return !!r && /Ještě jedna/.test(r.textContent);
   }, chybiId));
   await page.evaluate(() => zavriZpravy());
   await page.evaluate(() => cm('moDetail'));
