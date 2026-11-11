@@ -4181,10 +4181,13 @@ function prazskeDatum(t) {
 }
 
 // Stejně jako zprStav() v aplikaci: připomenutí, jehož den přišel, je Nové
-function zpravaStav(v, dnes) {
+function zpravaStav(v, dnes, zpravy) {
   if (!v || v.typ !== 'hlaseni') return null;
-  const s = ZPR_STAVY[v.stav] ? v.stav : 'nove';
-  if (s === 'pripomenout') return (v.pripomenout && v.pripomenout <= dnes) ? 'nove' : 'pripomenout';
+  let s = ZPR_STAVY[v.stav] ? v.stav : 'nove';
+  if (s === 'pripomenout') s = (v.pripomenout && v.pripomenout <= dnes) ? 'nove' : 'pripomenout';
+  // Připomenutí od účetního (zpráva s příznakem) vrací hlášení mezi Nové — kopie zprStav v aplikaci
+  const p = (zpravy || []).reduce((a, m) => (m.vlakno === v.id && m.pripomenuti && (m.t || 0) > a) ? m.t : a, 0);
+  if (p && p > (v.stavZmenen || 0)) return 'nove';
   return s;
 }
 
@@ -4201,7 +4204,7 @@ function zpravyBlok(z, ted) {
   const dnes = prazskeDatum(ted);
   const nalezy = [];
   for (const v of Object.values(z.vlakna)) {
-    const s = zpravaStav(v, dnes);
+    const s = zpravaStav(v, dnes, z.zpravy);
     if (v.typ === 'hlaseni') {
       if (s !== 'nove' && s !== 'rozprac') continue;
       nalezy.push({ hlavni: zpravyNadpis(v),

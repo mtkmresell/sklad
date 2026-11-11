@@ -823,7 +823,29 @@ a kdy založeno, pak **karta položky** (`_zprPolozkaKarta`: obrázek,
 název, SKU, velikost, nákup, stav a co chybí — to, o čem hlášení je,
 zvýrazněné) s tlačítkem **Doplnit …** rovnou do úpravy na chybějící
 pole (`zprDoplnit`, jen majitel) a Otevřít položku; pod tím přepínač
-stavu a komentáře.
+stavu a komentáře. **Karta položky je celá proklik do detailu**
+(tlačítko Otevřít položku majitel nechtěl); Doplnit má `stopPropagation`.
+
+Druhé kolo (majitel, 11. 11. 2026), nevracej:
+
+- **Komentáře jsou chatovací panel** (`_zprChat`): vykrojený tmavší
+  prostor, bubliny, dole pole s **šipkou uvnitř**. Pole **nejde
+  roztahovat** a roste s textem do 220 px, pak roluje (`zprRostouci`).
+  **Enter odešle, Shift+Enter nový řádek.** Totéž u poznámek u položky.
+- **Poznámka v detailu nemá tlačítko** — uloží se Enterem, odchodem
+  z pole i zavřením detailu (`zprPoznamkaUloz` v `cm('moDetail')`).
+  Prázdná nic. Překreslení po snímku pole přestaví a vyvolá blur —
+  `_zprBehemPrekresleni` brání uložení napůl napsané poznámky.
+- **Nahlášeno · dnes / včera / před N dny** (od posledního nahlášení)
+  a vedle **točící se šipka ↻** = připomenout (`zprPripomen`, jen
+  účetní, nejdřív `ZPR_PRIPOMENOUT_PO_MS` = den po nahlášení). Nové
+  hlášení nevzniká: zapíše se prázdná zpráva s `pripomenuti` a
+  `zprStav` vrací Nové, dokud majitel stav nezmění (`stavZmenen`
+  novější). Stav v cloudu účetní přepsat nesmí (pravidla), proto ne
+  přes `stav`. Konektor má kopii v `zpravaStav`. Platí i pro vyřízené
+  hlášení — Nahlásit ho znovu nezakládá, ukáže „Nahlášeno · vyřízeno"
+  se šipkou.
+- **Účetní nevidí v detailu sekci Prodej** (cílovka, strategie).
 
 Data jsou **mimo sklad**, v `users/{majitel}/zpravy`: vlákna `v_…`,
 každá zpráva vlastní dokument `m_…` (pole zpráv by si dva píšící

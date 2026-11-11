@@ -106,7 +106,15 @@ const POLOZKY = [
   check('úvodní zpráva je popis (uvod)', z.m[0].uvod === true);
   check('popis je v kartě, ne v bublině', await page.evaluate(() =>
     /nevidím nákupní doklad/.test(document.querySelector('#zprOv .zpr-karta-popis').textContent) && !document.querySelector('#zprOv .zpr-bub')));
-  check('zatím bez komentářů', await page.evaluate(() => !document.querySelector('#zprOv .zpr-kom')));
+  check('zatím bez komentářů', await page.evaluate(() => !document.querySelector('#zprOv .zpr-chat .zpr-bub')));
+  check('chatovací panel s polem a šipkou', await page.evaluate(() => !!document.querySelector('#zprOv .zpr-chat .zpr-vstup #zprOdpoved') && !!document.querySelector('#zprOv .zpr-vstup .zpr-odeslat')));
+  check('pole pro psaní nejde roztahovat', await page.evaluate(() => getComputedStyle(document.getElementById('zprOdpoved')).resize === 'none'));
+  check('pole roste s textem', await page.evaluate(() => {
+    var ta = document.getElementById('zprOdpoved'), h0 = ta.offsetHeight;
+    ta.value = 'a\nb\nc\nd\ne'; zprRostouci(ta);
+    var h1 = ta.offsetHeight; ta.value = ''; ta.style.height = '';
+    return h1 > h0 + 30;
+  }));
 
   // Stav účetní nezmění, ani přímým voláním
   await page.evaluate((id) => zprNastavStav(id, 'hotovo'), vlId);
@@ -119,9 +127,11 @@ const POLOZKY = [
   await page.evaluate(() => openDetail('s1'));
   await page.waitForTimeout(150);
   check('detail má Poznámky', await page.evaluate(() => !!document.getElementById('detPoznamky')));
+  check('účetní nevidí v detailu sekci Prodej (strategie)', await page.evaluate(() => !/Strategie/.test(document.getElementById('detailContent').textContent)));
+  check('poznámka nemá tlačítko Přidat', await page.evaluate(() => !document.querySelector('#detPoznamky .btn-sec')));
   check('účetní má Nahlásit problém s položkou', await page.evaluate(() => !!document.querySelector('#detPoznamky .zpr-det-nahlasit')));
   await page.fill('#zprDetText', 'Tohle je podle mě osobní kus.');
-  await page.click('#detPoznamky .btn-sec');
+  await page.press('#zprDetText', 'Enter');   // bez tlačítka — Enter uloží
   await page.waitForTimeout(300);
   z = await zpravy();
   check('vlákno poznámek u položky', z.v.v_pol_s1 && z.v.v_pol_s1.typ === 'polozka' && z.v.v_pol_s1.polozkaId === 's1', JSON.stringify(z.v.v_pol_s1));
@@ -146,9 +156,9 @@ const POLOZKY = [
   await page.waitForTimeout(300);
   check('Nahlásit neotevře formulář ani nezavře detail', await page.evaluate(() =>
     !_zprNove && document.getElementById('moDetail').classList.contains('open') && !document.querySelector('#zprOv .zpr-okno')));
-  check('tlačítko se hned změní na Nahlášeno · Nové', await page.evaluate(() => {
+  check('tlačítko se hned změní na Nahlášeno · dnes (se šipkou)', await page.evaluate(() => {
     var b = document.querySelector('#detailContent .chybi-box .chybi-nahlaseno');
-    return !!b && /Nahlášeno · Nové/.test(b.textContent) && !document.querySelector('#detailContent .chybi-box button[data-druh="doklad"]');
+    return !!b && /Nahlášeno · dnes/.test(b.textContent) && !!document.querySelector('#detailContent .chybi-box .chybi-pripomen') && !document.querySelector('#detailContent .chybi-box button[data-druh="doklad"]');
   }));
   z = await zpravy();
   const chybiId = Object.keys(z.v).find(k => /^Chybí: Nákupní doklad/.test(z.v[k].predmet || ''));
@@ -162,6 +172,7 @@ const POLOZKY = [
   await page.evaluate(() => { cm('moDetail'); openDetail('s1'); });
   await page.waitForTimeout(150);
   check('po znovuotevření taky Nahlášeno', await page.evaluate(() => !!document.querySelector('#detailContent .chybi-box .chybi-nahlaseno')));
+  if (process.env.SNIMEK) await page.screenshot({ path: process.env.SNIMEK + '/detail.png' });
   await page.click('#detailContent .chybi-box .chybi-nahlaseno');
   await page.waitForTimeout(150);
   check('Nahlášeno otevře kartu hlášení', await page.evaluate((id) => _zprOtevrene === id && !!document.querySelector('#zprOv .zpr-pol'), chybiId));
@@ -175,14 +186,15 @@ const POLOZKY = [
     return k.textContent.indexOf(it.name) >= 0 && (!it.sku || k.textContent.indexOf(it.sku) >= 0)
       && !!k.querySelector('.zpr-pol-chip.cil') && !!k.querySelector('.zpr-pol-img');
   }));
-  check('účetní nemá Doplnit, jen Otevřít položku', await page.evaluate(() =>
-    !/Doplnit/.test(document.querySelector('#zprOv .zpr-pol-akce').textContent) && /Otevřít položku/.test(document.querySelector('#zprOv .zpr-pol-akce').textContent)));
+  check('účetní nemá Doplnit ani tlačítko Otevřít — proklik je celá karta', await page.evaluate(() =>
+    !document.querySelector('#zprOv .zpr-pol-akce') && !/Otevřít položku/.test(document.querySelector('#zprOv .zpr-pol').textContent)
+    && document.querySelector('#zprOv .zpr-pol').classList.contains('bez-akci')));
   if (process.env.SNIMEK) await page.screenshot({ path: process.env.SNIMEK + '/ucetni.png' });
   await page.fill('#zprOdpoved', 'Je to ta z Zalanda.');
-  await page.click('#zprOv .zpr-psani .uc-btn');
+  await page.click('#zprOv .zpr-odeslat');
   await page.waitForTimeout(250);
   check('komentář pod kartou', await page.evaluate(() => {
-    var k = document.querySelectorAll('#zprOv .zpr-kom');
+    var k = document.querySelectorAll('#zprOv .zpr-chat .zpr-bub');
     return k.length === 1 && /z Zalanda/.test(k[0].textContent) && /Ty/.test(k[0].textContent);
   }));
   check('v seznamu je náhled komentáře, ne prázdný popis', await page.evaluate((id) => {
@@ -284,11 +296,14 @@ const POLOZKY = [
   await page.waitForTimeout(100);
   check('snímek nesmaže rozepsaný text', await page.evaluate(() => document.getElementById('zprOdpoved').value === 'Rozepsaná odpo'));
   await page.fill('#zprOdpoved', 'Díky, doplním to dnes.');
-  await page.click('#zprOv .zpr-psani .uc-btn');
+  await page.focus('#zprOdpoved');
+  await page.keyboard.press('Shift+Enter');   // nový řádek, neodešle
+  check('Shift+Enter neodešle', await page.evaluate(() => document.getElementById('zprOdpoved').value.length > 0));
+  await page.keyboard.press('Enter');
   await page.waitForTimeout(300);
   z = await zpravy();
   check('odpověď majitele', z.m.some(m => m.od === 'majitel' && m.vlakno === vlId && /doplním/.test(m.text)));
-  check('odpověď je komentář pod kartou', await page.evaluate(() => /doplním/.test(document.querySelector('#zprOv .zpr-komentare').textContent)));
+  check('odpověď je komentář pod kartou', await page.evaluate(() => /doplním/.test(document.querySelector('#zprOv .zpr-chat-zpravy').textContent)));
 
   // Připomenout: minulé datum ne, budoucí ano
   await page.click('#zprOv [data-stav="pripomenout"]');
@@ -326,7 +341,7 @@ const POLOZKY = [
   check('majitel tlačítko Nahlásit nemá', await page.evaluate(() => !document.querySelector('#detPoznamky .zpr-det-nahlasit')));
   check('otevřením detailu je poznámka přečtená', (await pocet()) === '0', await pocet());
   await page.fill('#zprDetText', 'Není, je to na fakturu.');
-  await page.click('#detPoznamky .btn-sec');
+  await page.press('#zprDetText', 'Enter');   // bez tlačítka — Enter uloží
   await page.waitForTimeout(300);
   z = await zpravy();
   check('majitel odpověděl u položky', z.m.some(m => m.od === 'majitel' && m.vlakno === 'v_pol_s1'));
@@ -368,6 +383,35 @@ const POLOZKY = [
   await page.waitForTimeout(80);
   check('druhý Escape ano', await page.evaluate(() => !document.getElementById('zprOv')));
   await page.evaluate(() => zavriZpravy());
+
+  /* Připomenutí (↻): vyřízené hlášení se vrátí mezi Nové, nic se nezdvojí */
+  z = await zpravy();
+  const mPred = z.m.length;
+  await page.evaluate((id) => zprPripomen(id), vlId);
+  check('čerstvé hlášení připomenout nejde', (await zpravy()).m.length === mPred);
+  await page.evaluate((d) => {
+    window.__store['users/' + d.m + '/zpravy/' + d.id].vytvoreno = Date.now() - 3 * 86400000;
+    window.__ozviKolekci('users/' + d.m + '/zpravy');
+  }, { m: MAJITEL, id: vlId });
+  await page.waitForTimeout(100);
+  check('Nahlášeno ukazuje stáří', await page.evaluate((id) => /Nahlášeno · vyřízeno/.test(_zprNahlasenoTlacitko(_zpr.vlakna[id]))
+    && (_zpr.vlakna[id].stav = 'rozprac', /před 3 dny/.test(_zprNahlasenoTlacitko(_zpr.vlakna[id]))), vlId));
+  await page.evaluate((id) => { _zpr.vlakna[id].stav = 'hotovo'; zprPripomen(id); }, vlId);
+  await page.waitForTimeout(250);
+  z = await zpravy();
+  const prip = z.m.filter(m => m.vlakno === vlId && m.pripomenuti);
+  check('připomenutí je jedna zpráva účetního, ne nové hlášení', prip.length === 1 && prip[0].od === 'ucetni' && prip[0].text === ''
+    && Object.keys(z.v).filter(k => z.v[k].predmet === z.v[vlId].predmet).length === 1);
+  check('stav v cloudu účetní nepřepsal', z.v[vlId].stav === 'hotovo');
+  check('hlášení je zase Nové', await page.evaluate((id) => zprStav(_zpr.vlakna[id]) === 'nove', vlId));
+  check('připomenutí není v komentářích', await page.evaluate((id) => zprRozdelHlaseni(_zpr.vlakna[id]).komentare.every(m => !m.pripomenuti), vlId));
+  await prihlas(MAJITEL);
+  await emit();
+  await page.waitForTimeout(100);
+  check('majiteli se připomenuté hlášení vrátilo mezi Nové', await page.evaluate((id) => zprStav(_zpr.vlakna[id]) === 'nove' && zprPozornost(_zpr.vlakna[id]), vlId));
+  await page.evaluate((id) => zprNastavStav(id, 'hotovo'), vlId);
+  await page.waitForTimeout(150);
+  check('majitel ho zase uzavře', await page.evaluate((id) => zprStav(_zpr.vlakna[id]) === 'hotovo', vlId));
 
   // ══════════════════════════════════════════════════════════════
   section('5) Odhlášení');
