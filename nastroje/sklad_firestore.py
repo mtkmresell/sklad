@@ -536,6 +536,52 @@ def _nacti_json(cesta):
         raise ChybaSkladu('Soubor %s není platný JSON: %s' % (cesta, e))
 
 
+def _jen_heslo(text):
+    """Ze zkopírovaného textu vezme heslo: bez konce řádku a okolních mezer.
+
+    Kopíruje se z nastavení prostředí, kde je řádek celý („SKLAD_HESLO=…"),
+    takže se případné jméno proměnné před rovnítkem utne."""
+    t = (text or '').strip()
+    if t.startswith('SKLAD_HESLO='):
+        t = t[len('SKLAD_HESLO='):].strip()
+    return t
+
+
+def heslo_ze_schranky():
+    """Přečte schránku Windows (PowerShell), jinde přes tkinter."""
+    import subprocess
+    try:
+        r = subprocess.run(['powershell', '-NoProfile', '-Command', 'Get-Clipboard -Raw'],
+                           capture_output=True, timeout=15)
+        if r.returncode == 0:
+            for kod in ('utf-8', 'cp1250', 'cp852'):
+                try:
+                    return _jen_heslo(r.stdout.decode(kod))
+                except UnicodeDecodeError:
+                    continue
+    except Exception:
+        pass
+    try:
+        import tkinter
+        okno = tkinter.Tk()
+        okno.withdraw()
+        try:
+            return _jen_heslo(okno.clipboard_get())
+        finally:
+            okno.destroy()
+    except Exception:
+        return ''
+
+
+def vymaz_schranku():
+    import subprocess
+    try:
+        subprocess.run(['powershell', '-NoProfile', '-Command', 'Set-Clipboard -Value $null'],
+                       capture_output=True, timeout=15)
+    except Exception:
+        pass
+
+
 def hlavni(argv):
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -550,11 +596,22 @@ def hlavni(argv):
 
     if prikaz == 'nastavit':
         import getpass
-        print('Přihlášení účtu ČTEČKY (ne tvého hlavního účtu). Heslo se při psaní neukazuje.')
+        print('Přihlášení účtu ČTEČKY (ne tvého hlavního účtu).')
         email = input('E-mail: ').strip()
+        # Psaní hesla do příkazového řádku je naslepo (nic se neukazuje)
+        # a vložení přes Ctrl+V tam často nejde vůbec. Proto stačí heslo
+        # zkopírovat a dát jen Enter — vezme se ze schránky.
+        print('Heslo zkopíruj (Ctrl+C) a tady dej jen Enter. Nebo ho napiš — při psaní se nic neukazuje.')
         heslo = getpass.getpass('Heslo: ')
+        ze_schranky = not heslo
+        if ze_schranky:
+            heslo = heslo_ze_schranky()
+            if not heslo:
+                raise ChybaSkladu('Ve schránce nic není. Zkopíruj heslo (Ctrl+C) a spusť to znovu.')
         prihlas(email, heslo)          # ověří, že sedí, dřív než se uloží
         uloz_pristup(email, heslo)
+        if ze_schranky:
+            vymaz_schranku()            # heslo ve schránce nemá co dělat
         print('Uloženo do Správce pověření Windows pod jménem %s. Přihlášení funguje.' % POVERENI_JMENO)
         return 0
 

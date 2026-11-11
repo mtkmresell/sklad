@@ -37,8 +37,16 @@ Windows** — trezor na hesla, zamčený tvým přihlášením do Windows:
 python sklad_firestore.py nastavit
 ```
 
-Zeptá se na e-mail a heslo čtečky (heslo se při psaní neukazuje),
-ověří, že sedí, a uloží je. Stačí jednou. Najdeš je pak v *Ovládací
+Zeptá se na e-mail a heslo čtečky, ověří, že sedí, a uloží je.
+**Heslo stačí zkopírovat (Ctrl+C) a u otázky na heslo dát jen Enter** —
+vezme se ze schránky a schránka se pak vymaže. Psát ho do příkazového
+řádku jde taky, ale naslepo (nic se neukazuje) a vložení přes Ctrl+V
+tam často nefunguje; majitel ho tam takhle nedostal vůbec.
+
+E-mail i heslo čtečky jsou v nastavení prostředí Claude Code
+(claude.ai → Code → Environments → Default → proměnné `SKLAD_EMAIL`
+a `SKLAD_HESLO`). Klidně se zkopíruje celý řádek `SKLAD_HESLO=…`,
+jméno před rovnítkem se utne. Stačí jednou. Najdeš je pak v *Ovládací
 panely → Správce pověření → Pověření systému Windows* pod jménem
 `SKLAD-kontroly`.
 

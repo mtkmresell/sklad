@@ -135,6 +135,20 @@ function python(args, env) {
   r = await spust(['test'], { SKLAD_EMAIL: '', SKLAD_HESLO: '' });
   ok('bez údajů: poradí příkaz nastavit', r.kod === 1 && /nastavit/.test(r.out), r.out);
 
+  // Heslo ze schránky (nastavit): do příkazového řádku Windows se heslo
+  // psát naslepo a vkládat Ctrl+V nedaří — majitel ho tam nedostal vůbec.
+  const kodPy = [
+    'import sys; sys.path.insert(0, sys.argv[1]); import sklad_firestore as S',
+    'print(S._jen_heslo("abc\\r\\n") == "abc")',
+    'print(S._jen_heslo("SKLAD_HESLO=tajne heslo\\n") == "tajne heslo")',
+    'print(S._jen_heslo("") == "")',
+    'print(S.heslo_ze_schranky() == "")',
+  ].join('\n');
+  r = await new Promise(res => execFile('python3', ['-c', kodPy, path.dirname(SKRIPT)], { cwd: tmp, env: { PATH: process.env.PATH, HOME: tmp }, timeout: 30000 },
+    (err, so, se) => res({ kod: err ? err.code : 0, out: String(so) + String(se) })));
+  ok('heslo ze schránky: konec řádku i „SKLAD_HESLO=" se utne, prázdná schránka nespadne',
+    r.kod === 0 && r.out.trim().split('\n').every(l => l.trim() === 'True'), r.out);
+
   sekce('2) sklad.json ve starém formátu');
   r = await spust(['sklad', 'sklad.json']);
   const sklad = JSON.parse(fs.readFileSync(path.join(tmp, 'sklad.json'), 'utf8'));
