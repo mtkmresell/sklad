@@ -846,6 +846,16 @@ Druhé kolo (majitel, 11. 11. 2026), nevracej:
   hlášení — Nahlásit ho znovu nezakládá, ukáže „Nahlášeno · vyřízeno"
   se šipkou.
 - **Účetní nevidí v detailu sekci Prodej** (cílovka, strategie).
+- Nadpis chatu pod hlášením je **Zprávy**, ne Komentáře.
+
+**Prodáno pro účetního** (majitel, 11. 11. 2026): účetní zpracovává
+vždycky **minulý měsíc** (v listopadu říjen), takže se mu Prodáno
+poprvé otevře rovnou na něm (`_soldUcMesic`, `_soldMinulyMesic`) —
+pak si filtr přepíná sám. Vedle roku a měsíce je filtr **Doklad**
+(`soldDokladFilter`, i pro majitele): Prodejní doklad / Faktura / Bez
+dokladu podle `getPlatDocType` místa prodeje. Filtr Zaúčtováno majitel
+zatím nechce (má v plánu něco jiného), měna taky ne. Hlídá to
+`test-uctetni.js`, sekce 16f.
 
 Data jsou **mimo sklad**, v `users/{majitel}/zpravy`: vlákna `v_…`,
 každá zpráva vlastní dokument `m_…` (pole zpráv by si dva píšící

@@ -595,6 +595,28 @@ const POLOZKY = [
   check('dlaždice Čeká není', !pohled.ceka);
   check('filtr Listing není', !pohled.listing);
 
+  section('16f) Prodáno: minulý měsíc a filtr Doklad');
+  const prod = await page.evaluate(() => {
+    switchTab('sold'); soldViewMode = 'table'; renderSoldView();
+    var mm = _soldMinulyMesic();
+    var r = { rok: soldYearFilter, mesic: soldMonthFilter, cekam: mm, filtr: !!document.getElementById('rokDokladBtn') };
+    var vidim = () => ['p1', 'p2'].filter(id => !!document.querySelector('#itemsGrid [data-id="' + id + '"]'));
+    soldYearFilter = 'all'; soldMonthFilter = 'all';
+    soldDokladFilter = 'all'; renderSoldView(); r.vse = vidim();
+    soldDokladFilter = 'doklad'; renderSoldView(); r.doklad = vidim();
+    soldDokladFilter = 'nic'; renderSoldView(); r.nic = vidim();
+    soldDokladFilter = 'faktura'; renderSoldView(); r.faktura = vidim();
+    soldDokladFilter = 'all'; renderSoldView();
+    return r;
+  });
+  check('účetnímu se Prodáno otevře na minulém měsíci', prod.rok === prod.cekam.rok && prod.mesic === prod.cekam.mesic, JSON.stringify(prod));
+  check('filtr Doklad je v Prodáno', prod.filtr);
+  check('bez filtru oba prodeje', prod.vse.length === 2, JSON.stringify(prod.vse));
+  check('Prodejní doklad = Vinted', JSON.stringify(prod.doklad) === '["p2"]', JSON.stringify(prod.doklad));
+  check('Bez dokladu = StockX', JSON.stringify(prod.nic) === '["p1"]', JSON.stringify(prod.nic));
+  check('Faktura nic', prod.faktura.length === 0, JSON.stringify(prod.faktura));
+  await page.evaluate(() => switchTab('stock'));
+
   section('16b) Kalkulačka marže se účetnímu neotevře');
   await page.evaluate(() => { switchTab('stock'); if (typeof setView === 'function') setView('table'); renderItems(); });
   await page.waitForTimeout(300);

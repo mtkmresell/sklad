@@ -3502,6 +3502,7 @@ function zapniUctetniRezim(majitelUid) {
   if (_uctetniRezim) return;
   _uctetniRezim = true;
   _uctetniMajitel = majitelUid;
+  _soldUcMesic = false;   // Prodáno se mu otevře na minulém měsíci
   document.body.classList.add('uctetni');
 
   // Účetní vidí jen podnikání — přepínač profilů mu mizí, tak ať v něm
@@ -3524,6 +3525,8 @@ function vypniUctetniRezim() {
   _uctetniRezim = false;
   _uctetniMajitel = null;
   _ucZauc = null; _ucZaucUid = null;   // značky zaúčtováno patří účtu účetního
+  if (_soldUcMesic) { soldYearFilter = 'all'; soldMonthFilter = 'all'; soldDokladFilter = 'all'; }
+  _soldUcMesic = false;
   document.body.classList.remove('uctetni');
   var lista = document.getElementById('uctetniLista');
   if (lista && lista.parentNode) lista.parentNode.removeChild(lista);
@@ -12496,7 +12499,7 @@ function _zprVlaknoHtml(v) {
   // Prázdný popis se neukazuje — oznámení jedním klikem žádný nemá a dopsat ho nejde
   h += (r.popis && String(r.popis.text || '').trim()
       ? '<div class="zpr-karta-popis"><div class="zpr-popis-text">' + escHtml(r.popis.text) + '</div></div>' : '');
-  h += _zprChat(r.komentare, 'Komentáře', uc ? 'Napiš majiteli…' : 'Napiš účetnímu — třeba „nemám ho, dohledám"…');
+  h += _zprChat(r.komentare, 'Zprávy', uc ? 'Napiš majiteli…' : 'Napiš účetnímu — třeba „nemám ho, dohledám"…');
   return h;
 }
 function _zprNoveHtml() {
@@ -20701,6 +20704,18 @@ var soldViewMode='table';
 var stockViewMode='table';
 var soldYearFilter='all';
 var soldMonthFilter='all';
+/* FILTR DOKLADU V PRODÁNO (majitel, 11. 11. 2026): podle toho, co se
+   u místa prodeje vystavuje (getPlatDocType) — Prodejní doklad, Faktura,
+   nebo nic (doklad řeší platforma). */
+var soldDokladFilter='all';
+var SOLD_DOKLAD_FILTR = { doklad: 'Prodejní doklad', faktura: 'Faktura', nic: 'Bez dokladu' };
+/* Účetní zpracovává vždycky minulý měsíc (v listopadu říjen), takže se
+   mu Prodáno poprvé otevře rovnou na něm. Pak si filtr přepne sám. */
+var _soldUcMesic = false;
+function _soldMinulyMesic() {
+  var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);
+  return { rok: String(d.getFullYear()), mesic: String(d.getMonth() + 1).padStart(2, '0') };
+}
 var MONTHS_CS=['','Led','Úno','Bře','Dub','Kvě','Čer','Čvc','Srp','Zář','Říj','Lis','Pro'];
 var MONTHS_FULL=['','Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
 
@@ -20999,7 +21014,7 @@ function calcSoldStats(list){
 }
 
 function initSoldSelects() {
-  ['rokYear','rokMonth'].forEach(function(id) {
+  ['rokYear','rokMonth','rokDoklad'].forEach(function(id) {
     var btn = document.getElementById(id+'Btn');
     var drop = document.getElementById(id+'Drop');
     if (!btn || !drop) return;
@@ -21025,6 +21040,7 @@ function renderSoldView(){
   var empty=document.getElementById('emptyState');
   if(!grid)return;
   var soldAll=getSoldItems();
+  if(jeUctetni() && !_soldUcMesic){ var _mm=_soldMinulyMesic(); soldYearFilter=_mm.rok; soldMonthFilter=_mm.mesic; _soldUcMesic=true; }
   var soldWhereFilter=document.getElementById('filterSoldWhere')?.value||'';
   var soldQ=(document.getElementById('searchInput')?.value||'').trim().toLowerCase();
   var sold=soldAll.filter(function(it){
@@ -21034,6 +21050,7 @@ function renderSoldView(){
     if(soldYearFilter!=='all'&&_yr!==soldYearFilter)return false;
     if(soldMonthFilter!=='all'&&_mo!==soldMonthFilter)return false;
     if(soldWhereFilter&&(it.soldWhere||'')!==soldWhereFilter)return false;
+    if(soldDokladFilter!=='all'&&getPlatDocType(it.soldWhere)!==soldDokladFilter)return false;
     if(!chybiProjde(it))return false;
     if(soldQ){
       var _hit=[it.name,it.sku,it.orderNum,it.saleRef,it.soldWhere,it.buyWhere].some(function(v){ return (v||'').toLowerCase().includes(soldQ); });
@@ -21049,6 +21066,7 @@ function renderSoldView(){
     var d=it.payoutDate||it.saleDate||''; if(!d) return '';
     var p=d.split('.'); return p.length===3?p[2]:d.substring(0,4);
   }).filter(Boolean))].sort(function(a,b){return b-a;});
+  if(soldYearFilter!=='all'&&years.indexOf(soldYearFilter)===-1){ years.push(soldYearFilter); years.sort(function(a,b){return b-a;}); }
   var stats=calcSoldStats(sold);
   // Do analytiky prodejů účetní nesmí — tlačítko je skryté, ale režim může
   // zbýt uložený z dřívějška
@@ -21094,6 +21112,7 @@ function renderSoldView(){
       var d=it.payoutDate||it.saleDate||''; if(!d) return '';
       var p=d.split('.'); return p.length===3?p[1].padStart(2,'0'):d.substring(5,7);
     }).filter(Boolean))].sort();
+    if(soldMonthFilter!=='all'&&miy.indexOf(soldMonthFilter)===-1){ miy.push(soldMonthFilter); miy.sort(); }
     html+='<span style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);">Měsíc:</span>';
     var monthLabel = soldMonthFilter==='all' ? 'Všechny' : (MONTHS_FULL[parseInt(soldMonthFilter)]||soldMonthFilter);
     html+='<div class="rok-wrap" id="rokMonthWrap"><div class="rok-btn" id="rokMonthBtn"><span class="rok-label">'+monthLabel+'</span><span class="rok-arrow">▾</span></div><div class="rok-drop" id="rokMonthDrop">';
@@ -21101,6 +21120,11 @@ function renderSoldView(){
     miy.forEach(function(m){html+='<div class="rok-opt'+(soldMonthFilter===m?' selected':'')+'" onclick="soldMonthFilter=\''+m+'\';renderSoldView();">'+MONTHS_FULL[parseInt(m)]+'</div>';});
     html+='</div></div>';
   }
+  html+='<span style="font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);">Doklad:</span>';
+  html+='<div class="rok-wrap" id="rokDokladWrap"><div class="rok-btn" id="rokDokladBtn"><span class="rok-label">'+(SOLD_DOKLAD_FILTR[soldDokladFilter]||'Všechny')+'</span><span class="rok-arrow">▾</span></div><div class="rok-drop" id="rokDokladDrop">';
+  html+='<div class="rok-opt'+(soldDokladFilter==='all'?' selected':'')+'" data-doklad="all" onclick="soldDokladFilter=\'all\';renderSoldView();">Všechny</div>';
+  Object.keys(SOLD_DOKLAD_FILTR).forEach(function(k){html+='<div class="rok-opt'+(soldDokladFilter===k?' selected':'')+'" data-doklad="'+k+'" onclick="soldDokladFilter=\''+k+'\';renderSoldView();">'+SOLD_DOKLAD_FILTR[k]+'</div>';});
+  html+='</div></div>';
   html+='<div style="flex:1;"></div>';
   html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted);">'+sold.length+' prodejů</span>';
   html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--accent);font-weight:700;background:rgba(200,255,0,0.12);padding:2px 8px;border-radius:4px;border:1px solid rgba(200,255,0,0.3);">'+czk(stats.totalProfit)+'</span>';
