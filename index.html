@@ -103,6 +103,10 @@ body.uctetni #btnCustomerMode,
 body.uctetni #btnStockAnalytics,
 body.uctetni #btnPayoutCal,
 body.uctetni .bulk-bar,
+/* Čeká účetní nevidí, tak ani jeho dlaždice; listingy (místa prodeje)
+   řeší jen majitel (11. 11. 2026) */
+body.uctetni .stat-ceka,
+body.uctetni #localListingFilterWrap,
 /* „Analytika" v Prodáno se skládá až za běhu a nemá vlastní id */
 body.uctetni [onclick*="soldViewMode="] { display:none !important; }
 
@@ -5171,8 +5175,8 @@ function renderStats(){
       '<div class="stat-label">'+cur.label+'</div>'+
       '<div class="stat-value">'+czk(cur.total)+'</div>'+
     '</div>'+
-    '<div class="stat-card"><div class="stat-label">Čeká</div><div class="stat-value sv-yellow">'+wi.length+'</div></div>'+
-    (pendingRev>0?'<div class="stat-card" data-action="nextpendingrev" data-tip="Klikni: celkem → payouty → vrácení" style="cursor:pointer;min-width:175px;max-width:175px;width:175px;"><div class="stat-label">'+_curPendingLbl+'</div><div class="stat-value sv-yellow">'+czk(_curPendingVal)+'</div></div>':'')+
+    '<div class="stat-card stat-ceka"><div class="stat-label">Čeká</div><div class="stat-value sv-yellow">'+wi.length+'</div></div>'+
+    (pendingRev>0?'<div class="stat-card stat-ceka" data-action="nextpendingrev" data-tip="Klikni: celkem → payouty → vrácení" style="cursor:pointer;min-width:175px;max-width:175px;width:175px;"><div class="stat-label">'+_curPendingLbl+'</div><div class="stat-value sv-yellow">'+czk(_curPendingVal)+'</div></div>':'')+
     '<div class="stat-card" data-action="nextsold" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;"><div class="stat-label">'+_curSoldLbl+'</div><div class="stat-value sv-yellow">'+_curSoldVal+'</div></div>'+
     '<div class="stat-card" data-action="nextprofit" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;min-width:175px;"><div class="stat-label">'+_curProfitLbl+'</div><div class="stat-value '+(_curProfitVal>=0?'sv-green':'sv-red')+'">'+czkSign(_curProfitVal)+'</div></div>'+
     '<div class="stat-card" data-action="nextrev" data-tip="Klikni: měsíc → rok → celkem" style="cursor:pointer;min-width:175px;max-width:175px;width:175px;"><div class="stat-label">'+_curRevLbl+'</div><div class="stat-value sv-orange">'+czk(_curRevVal)+'</div></div>'+
@@ -6260,7 +6264,7 @@ function tableHTML(list) {
       ${tab==='stock'?(function(){var _loc=it.location||'Doma';var _lc=_loc==='Na cestě'?'var(--warning)':_loc==='Vráceno'?'#ff4444':_loc==='Bude vráceno'?'#ff4444':_loc==='Zrušeno'?'#ff4444':_loc!=='Doma'?'var(--accent2)':'var(--muted)';var _dpdClick2=it.trackingCarrier==='DPD'&&it.trackingNum?' onclick="event.stopPropagation();zkopiruj(\''+it.trackingNum+'\',function(){showToast(\''+it.trackingNum+' zkopírováno\');});"':' onclick="event.stopPropagation()"';
 var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.trackingUrl?'<a href="'+it.trackingUrl+'" target="_blank"'+_dpdClick2+' class="trk-loc-link" style="color:'+_lc+';text-decoration:none;">'+_loc+'</a>':_loc;return '<td style="font-size:12px;text-align:center;color:'+_lc+'">'+_locTxt+'</td>'})():''}
       ${tab==='stock'?daysCell(it):''}
-      ${tab==='stock'?((()=>{
+      ${tab==='stock'&&!jeUctetni()?((()=>{
         const GROUPS=getPlatGroups();
         return ['platforms','eshopy','local'].map(grpKey=>{
           const grp=GROUPS[grpKey];
@@ -6306,12 +6310,12 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
           </td>`;
         }).join('');
       })()):''}      
-      <td style="border-left:1px solid var(--border)"><div class="td-actions">
+      ${jeUctetni()?'':`<td style="border-left:1px solid var(--border)"><div class="td-actions">
         ${tab==='stock'?`<button class="ta-btn" data-action="edit" data-id="${it.id}">Upravit</button>`:''}
         ${tab==="stock"&&it.location!=="Vráceno"&&it.location!=="Zrušeno"?`<button class="ta-btn ta-ceka" data-action="sell" data-id="${it.id}">Prodat</button>`:""}
         ${it.saleState==='waiting'?waitStateBtn(it):''}
         <button class="ta-btn t-del" data-action="del" data-id="${it.id}">✕</button>
-      </div></td>
+      </div></td>`}
     </tr>`;
   }).join('');
 
@@ -6338,10 +6342,10 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
       ${tab==='sold'?'<th style="width:60px;text-align:center">ROI</th>':''}
       ${tab==='stock'?'<th style="width:90px;text-align:center">Sklad</th>':''}
       ${tab==='stock'?'<th style="width:60px;text-align:center">Dní</th>':''}
-      ${tab==='stock'?'<th data-action=\'platexpand\' data-group=\'platforms\' id=\'thPlatforms\' style=\'border-left:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none;\' ><span id=\'pgLbl0\'>Platformy</span> <span id=\'pgArr0\' style=\'color:var(--muted);font-size:10px;\'>▶</span></th>':''}
-      ${tab==='stock'?'<th data-action=\'platexpand\' data-group=\'eshopy\' id=\'thEshopy\' style=\'border-left:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none;\' ><span id=\'pgLbl1\'>Komise</span> <span id=\'pgArr1\' style=\'color:var(--muted);font-size:10px;\'>▶</span></th>':''}
-      ${tab==='stock'?'<th data-action=\'platexpand\' data-group=\'local\' id=\'thLocal\' style=\'border-left:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none;\' ><span id=\'pgLbl2\'>Local</span> <span id=\'pgArr2\' style=\'color:var(--muted);font-size:10px;\'>▶</span>'+(function(){var counts=window.BAZOS_PLATS?window.BAZOS_PLATS.map(function(bp){return {p:bp,n:bazosActiveCount(bp)};}).filter(function(x){return x.n>0;}):[];return counts.map(function(x){var over=x.n>=BAZOS_LIMIT;return '<span title="'+x.p+': '+x.n+'/50 inzerátů" style="margin-left:4px;font-size:9px;font-family:monospace;padding:1px 4px;border-radius:3px;background:'+(over?'#ff003320':'#c8ff0015')+';color:'+(over?'#ff4444':'#8ab200')+';border:1px solid '+(over?'#ff333344':'#c8ff0030')+';">'+x.n+'/50</span>';}).join('');})()+' </th>':''}      
-      ${tab==='waiting'?'<th style="width:1%;white-space:nowrap;border-left:1px solid var(--border)">Akce</th>':'<th style="width:1%;white-space:nowrap;border-left:1px solid var(--border)">Akce</th>'}
+      ${tab==='stock'&&!jeUctetni()?'<th data-action=\'platexpand\' data-group=\'platforms\' id=\'thPlatforms\' style=\'border-left:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none;\' ><span id=\'pgLbl0\'>Platformy</span> <span id=\'pgArr0\' style=\'color:var(--muted);font-size:10px;\'>▶</span></th>':''}
+      ${tab==='stock'&&!jeUctetni()?'<th data-action=\'platexpand\' data-group=\'eshopy\' id=\'thEshopy\' style=\'border-left:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none;\' ><span id=\'pgLbl1\'>Komise</span> <span id=\'pgArr1\' style=\'color:var(--muted);font-size:10px;\'>▶</span></th>':''}
+      ${tab==='stock'&&!jeUctetni()?'<th data-action=\'platexpand\' data-group=\'local\' id=\'thLocal\' style=\'border-left:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none;\' ><span id=\'pgLbl2\'>Local</span> <span id=\'pgArr2\' style=\'color:var(--muted);font-size:10px;\'>▶</span>'+(function(){var counts=window.BAZOS_PLATS?window.BAZOS_PLATS.map(function(bp){return {p:bp,n:bazosActiveCount(bp)};}).filter(function(x){return x.n>0;}):[];return counts.map(function(x){var over=x.n>=BAZOS_LIMIT;return '<span title="'+x.p+': '+x.n+'/50 inzerátů" style="margin-left:4px;font-size:9px;font-family:monospace;padding:1px 4px;border-radius:3px;background:'+(over?'#ff003320':'#c8ff0015')+';color:'+(over?'#ff4444':'#8ab200')+';border:1px solid '+(over?'#ff333344':'#c8ff0030')+';">'+x.n+'/50</span>';}).join('');})()+' </th>':''}      
+      ${jeUctetni()?'':'<th style="width:1%;white-space:nowrap;border-left:1px solid var(--border)">Akce</th>'}
     </tr></thead>
     <tbody>${rows}${(function(){
   if(tab!=='waiting') return '';
@@ -6460,7 +6464,7 @@ function cardHTML(it){
   if((it.qty||1)>1) metas.push({type:'txt',val:`×${it.qty}`});
   const stMap={stock:['sd-stock','Na skladě'],waiting:['sd-waiting','Čeká'],paid:['sd-paid','Zaplaceno']};
   const st=stMap[it.saleState||'stock'];
-  const platHtml=(!customerMode&&it.platforms&&it.platforms.length)?`<div class="plats-row">${it.platforms.map(p=>`<span class="pc pc-on">${p}</span>`).join('')}</div>`:'';
+  const platHtml=(!customerMode&&!jeUctetni()&&it.platforms&&it.platforms.length)?`<div class="plats-row">${it.platforms.map(p=>`<span class="pc pc-on">${p}</span>`).join('')}</div>`:'';
   const priceHtml= customerMode ? '' : `<div class="card-prices">
     <div class="pb"><div class="pl">Nákup</div><div class="pv pv-buy${(it.saleState||'stock')==='stock'?' calc-buy':''}">${it.buyCurrency==='EUR'?(it.buyPrice||0)+' €':czk(it.buyPrice||0)}</div></div>
     ${(tab!=='stock'&&it.sellPrice)?`<div class="pb"><div class="pl">Prodej</div><div class="pv pv-sell">${it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)}</div></div>`:''}
@@ -10930,6 +10934,9 @@ function chybiDetailHtml(it) {
       : (x.id === 'prodej'
         ? '<button class="chybi-doplnit" onclick="openSaleDocument(\'' + escHtml(it.id) + '\')">Vystavit</button>'
         : '');
+    /* Účetní doplnit nic nemůže — může to ale jedním klikem nahlásit
+       majiteli (ZPRÁVY A POZNÁMKY). Když už hlášení visí, odkáže se na něj. */
+    if (jeUctetni() && typeof zprChybiTlacitko === 'function') akce = zprChybiTlacitko(it, x) || akce;
     h += '<div class="chybi-radek"><span>' + escHtml(x.popis) + '</span>' + akce + '</div>';
   });
   return h + '</div>';
@@ -11997,16 +12004,35 @@ function _zprNazevPolozky(it) {
 }
 
 /* ── Nové hlášení (jen účetní) ── */
-function zprNoveHlaseni(itemId) {
+function zprNoveHlaseni(itemId, druh, predmet) {
   if (!jeUctetni()) return;
   var it = itemId ? items.find(function(i) { return i.id === itemId; }) : null;
-  _zprNove = { druh: it ? 'chyba' : 'dotaz', polozkaId: it ? String(it.id) : null, polozkaNazev: it ? _zprNazevPolozky(it) : null };
+  _zprNove = { druh: ZPR_DRUHY[druh] ? druh : (it ? 'chyba' : 'dotaz'), predmet: predmet || '',
+    polozkaId: it ? String(it.id) : null, polozkaNazev: it ? _zprNazevPolozky(it) : null };
   var det = document.getElementById('moDetail');
   if (det && det.classList.contains('open')) cm('moDetail');
   openZpravy();
   _zprPohled = 'nove';
   _zprVykresli();
-  setTimeout(function() { var p = document.getElementById('zprNPredmet'); if (p) p.focus(); }, 30);
+  setTimeout(function() {
+    // S předvyplněným předmětem rovnou do textu — stačí dopsat a odeslat
+    var p = document.getElementById(predmet ? 'zprNText' : 'zprNPredmet'); if (p) p.focus();
+  }, 30);
+}
+/* Tlačítko do boxu „Chybí" v detailu (jen účetní). Doklad → druh Chybí
+   doklad. Visí-li k položce otevřené hlášení se stejným předmětem,
+   nezakládá se druhé — tlačítko ho otevře. */
+function zprChybiTlacitko(it, x) {
+  if (!jeUctetni() || !_zpr.nacteno || !it) return '';
+  var predmet = 'Chybí: ' + String(x.popis || x.nazev || '').slice(0, 120);
+  var druh = (x.id === 'nakup' || x.id === 'prodej') ? 'doklad' : 'chyba';
+  var id = _zprBezpecne(it.id), uz = null;
+  for (var k in _zpr.vlakna) {
+    var v = _zpr.vlakna[k];
+    if (v.typ === 'hlaseni' && String(v.polozkaId) === String(it.id) && v.predmet === predmet && zprStav(v) !== 'hotovo') { uz = v; break; }
+  }
+  if (uz) return '<button class="chybi-doplnit chybi-nahlaseno" onclick="cm(\'moDetail\');openZpravy(\'' + uz.id + '\')">Nahlášeno · ' + escHtml(ZPR_STAVY[zprStav(uz)] || '') + '</button>';
+  return '<button class="chybi-doplnit" data-druh="' + druh + '" onclick="zprNoveHlaseni(\'' + id + '\',\'' + druh + '\',' + escHtml(JSON.stringify(predmet)) + ')">Nahlásit</button>';
 }
 function zprNovyDruh(d) { if (_zprNove && ZPR_DRUHY[d]) { _zprNove.druh = d; _zprVykresli(); } }
 function zprOdesliHlaseni() {
@@ -12262,7 +12288,7 @@ function _zprNoveHtml() {
       return '<button class="uc-filtr' + (n.druh === k ? ' akt' : '') + '" data-druh="' + k + '" onclick="zprNovyDruh(\'' + k + '\')">' + ZPR_DRUHY[k] + '</button>';
     }).join('') + '</div>'
     + (n.polozkaId ? '<div class="zpr-form-n">Položka</div><div class="zpr-form-pol">↳ ' + escHtml(n.polozkaNazev || '') + '</div>' : '')
-    + '<div class="zpr-form-n">Předmět</div><input id="zprNPredmet" class="zpr-inp" maxlength="140" placeholder="Krátce, o co jde">'
+    + '<div class="zpr-form-n">Předmět</div><input id="zprNPredmet" class="zpr-inp" maxlength="140" placeholder="Krátce, o co jde" value="' + escHtml(n.predmet || '') + '">'
     + '<div class="zpr-form-n">Zpráva</div><textarea id="zprNText" class="zpr-inp" rows="6" maxlength="' + ZPR_MAX_TEXT + '" placeholder="Co nesedí, co chybí nebo co bys potřeboval…"></textarea>'
     + '<div class="uc-akce" style="margin-top:14px;"><button class="uc-btn" onclick="zprOdesliHlaseni()">Odeslat hlášení</button>'
     + '<button class="uc-btn druhe" onclick="zprZpet()">Zrušit</button></div>'

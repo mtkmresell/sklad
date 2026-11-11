@@ -12,7 +12,7 @@ projdi nejdřív ten návod — postup je stejný a pravidla se doplňují.
 | | |
 |---|---|
 | **vidí** | Na skladě, Prodáno, hledání napříč sekcemi, odhlášení, vysvětlivky |
-| **nevidí** | Čeká, Zákazníci, Wishlist, analytiku, kalkulačku marží, cílové ceny v Co chybí, chybějící listingy, osobní položky, přepínač profilů |
+| **nevidí** | Čeká (ani její dlaždici), Zákazníci, Wishlist, analytiku, kalkulačku marží, cílové ceny v Co chybí, místa prodeje (sloupce Platformy / Komise / Local, filtr Listing), chybějící listingy, osobní položky, přepínač profilů |
 | **nemůže** | přidat, upravit ani smazat položku; prokliknout se na StockX ani na sledování zásilky |
 | **smí** | otevřít a vytisknout **prodejní doklad** u každého vyplaceného prodeje, kde místo prodeje vystavuje doklad — bez toho, aby ho majitel otevřel první; je to jeho práce |
 | **Zprávy** | hlášení pro majitele (chyba v datech, chybí doklad, dotaz, návrh na úpravu) a poznámky v detailu položky. Majitel je má v aplikaci a do pár minut mu přijde mail; stav (Nové, Rozpracované, Hotovo, Připomenout) mění jen majitel a účetní ho vidí. Ukládá se do `users/{majitel}/zpravy` — **jediné místo, kam účetní zapisuje**, a pravidla mu tam povolí jen vlastní zprávu, nové vlákno a značku přečtení |

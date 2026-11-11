@@ -130,6 +130,40 @@ const POLOZKY = [
   check('detail se zavřel', await page.evaluate(() => !document.getElementById('moDetail').classList.contains('open')));
   await page.evaluate(() => zavriZpravy());
 
+  /* Box „Chybí" v detailu: účetní doplnit nemůže, ale může nahlásit —
+     s předvyplněným druhem a předmětem. Podruhé už jen „Nahlášeno". */
+  await page.evaluate(() => openDetail('s1'));
+  await page.waitForTimeout(150);
+  check('v boxu Chybí je Nahlásit (doklad)', await page.evaluate(() =>
+    !!document.querySelector('#detailContent .chybi-box button[data-druh="doklad"]')));
+  await page.click('#detailContent .chybi-box button[data-druh="doklad"]');
+  await page.waitForTimeout(150);
+  check('formulář má druh Chybí doklad a předmět', await page.evaluate(() =>
+    _zprNove && _zprNove.druh === 'doklad' && /^Chybí: Nákupní doklad/.test(document.getElementById('zprNPredmet').value)));
+  check('kurzor je rovnou v textu', await page.evaluate(() => document.activeElement && document.activeElement.id === 'zprNText'));
+  await page.fill('#zprNText', 'Prosím o fakturu.');
+  await page.click('text=Odeslat hlášení');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { zavriZpravy(); openDetail('s1'); });
+  await page.waitForTimeout(150);
+  check('podruhé už Nahlášeno · Nové', await page.evaluate(() => {
+    var b = document.querySelector('#detailContent .chybi-box .chybi-nahlaseno');
+    return !!b && /Nahlášeno · Nové/.test(b.textContent) && !document.querySelector('#detailContent .chybi-box button[data-druh]');
+  }));
+  await page.evaluate(() => cm('moDetail'));
+  // Ať zbytek testu počítá s jedním hlášením — tohle druhé se uklidí
+  await page.evaluate((d) => {
+    var pre = 'users/' + d.m + '/zpravy/';
+    var vl = Object.keys(window.__store).filter(k => k.indexOf(pre + 'v_') === 0 && window.__store[k].predmet && /^Chybí:/.test(window.__store[k].predmet));
+    vl.forEach(k => {
+      var id = k.slice(pre.length);
+      Object.keys(window.__store).forEach(m => { if (m.indexOf(pre + 'm_') === 0 && window.__store[m].vlakno === id) delete window.__store[m]; });
+      delete window.__store[k];
+    });
+    window.__ozviKolekci('users/' + d.m + '/zpravy');
+  }, { m: MAJITEL });
+  await page.waitForTimeout(80);
+
   const skladPo = await page.evaluate((m) => JSON.stringify(window.__store['users/' + m + '/sklad/data']), MAJITEL);
   check('sklad majitele zůstal netknutý', skladPred === skladPo);
   check('účetní nezapsal nic mimo zprávy', await page.evaluate((d) => Object.keys(window.__store).every(function(k) {

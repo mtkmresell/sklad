@@ -576,6 +576,23 @@ const POLOZKY = [
   check('změněný obchod přestane být zaúčtovaný', zauc.poZmene === 'zmena', zauc.poZmene);
   check('po znovuotevření se značky načtou', zauc.znovu === 'ok', zauc.znovu);
 
+  section('16e) Místa prodeje, Akce, Čeká a Listing účetní nevidí');
+  const pohled = await page.evaluate(() => {
+    switchTab('stock'); if (typeof setView === 'function') setView('table'); renderItems();
+    var th = [...document.querySelectorAll('#itemsGrid table.items-table thead th')].map(e => e.textContent.trim());
+    var radek = document.querySelector('#itemsGrid table.items-table tbody tr[data-id]');
+    var vid = (s) => { var el = document.querySelector(s); return !!el && getComputedStyle(el).display !== 'none'; };
+    return { th: th, tdPocet: radek ? radek.children.length : -1,
+      plat: !!document.querySelector('#itemsGrid [data-action="toggleplat"], #itemsGrid #thPlatforms'),
+      ceka: [...document.querySelectorAll('.stat-ceka')].some(e => getComputedStyle(e).display !== 'none'),
+      listing: vid('#localListingFilterWrap') };
+  });
+  check('sloupce Platformy / Komise / Local nejsou', !pohled.plat && !pohled.th.some(t => /Platformy|Komise|Local/.test(t)), pohled.th.join('|'));
+  check('sloupec Akce není', pohled.th.indexOf('Akce') === -1, pohled.th.join('|'));
+  check('hlavička sedí s řádkem', pohled.th.length === pohled.tdPocet, pohled.th.length + ' vs ' + pohled.tdPocet);
+  check('dlaždice Čeká není', !pohled.ceka);
+  check('filtr Listing není', !pohled.listing);
+
   section('16b) Kalkulačka marže se účetnímu neotevře');
   await page.evaluate(() => { switchTab('stock'); if (typeof setView === 'function') setView('table'); renderItems(); });
   await page.waitForTimeout(300);

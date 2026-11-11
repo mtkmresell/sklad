@@ -304,6 +304,17 @@ měl schované v CSS, ale klik na nákupní cenu ji otevíral dál — přesně
 ta past výš. Brána je v `toggleCalc()` a klik na cenu u účetního
 otevře detail jako u jiné buňky.
 
+**Místa prodeje a listingy účetního nezajímají** (majitel, 11. 11. 2026):
+v tabulce Na skladě nemá sloupce Platformy / Komise / Local ani prázdný
+sloupec Akce (`tableHTML`, `!jeUctetni()` u hlavičky **i** buněk —
+jinak se tabulka rozjede), na kartě fajfky míst, nahoře dlaždice Čeká
+(`.stat-ceka`) ani filtr Listing (`#localListingFilterWrap`). V boxu
+**Chybí** v detailu má místo Doplnit tlačítko **Nahlásit**
+(`zprChybiTlacitko`): založí hlášení s druhem a předmětem předvyplněnými,
+a když už k položce otevřené hlášení se stejným předmětem visí, ukáže
+„Nahlášeno · stav" a otevře ho — druhé se nezakládá. Hlídá to
+`test-uctetni.js` 16e a `test-zpravy.js`, sekce 2.
+
 `test-uctetni.js` kliká na všechno, na co v pohledu účetního jde
 kliknout, a kouká, jestli se `items` nebo úložiště změnily — sekce 9
 až 13; kalkulačku hlídá sekce 16b.
@@ -1217,6 +1228,13 @@ modul do `bazos_kontrola.py` podle `nastroje/LOKALNI_KONTROLY.md`.
 **Připomeň to.** Modul je obecný pro jakékoli místo, ne jen Bazoš.
 Otevřené otázky ze zadání: může PC běžet trvale, nebo se budit (Wake
 on LAN rozdělaný)? Kterou kontrolu převést po Bazoši jako první?
+
+Pořadí domluvené 11. 11.: doma dokončit Bazoš (kroky výš), **pak
+skládat další kontroly** (každý web vlastní skript, napojený na tentýž
+`sklad_firestore.py`) a **nakonec malou aplikaci** s jednoduchým
+rozhraním — výběr jedné kontroly nebo všech naráz (kroky 4–5 zadání:
+okno s kolečkem, jeden spouštěč). Tuzex, TheBeast a další zatím běží
+přes skilly v chatu a konektor.
 
 ### Názvy příspěvků na Instagramu
 
