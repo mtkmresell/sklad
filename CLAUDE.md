@@ -15,6 +15,7 @@ ověřuje přes GitHub API (workflow „pages build and deployment", id `2565736
 
 ```
 index.html     celá aplikace — 20 200 řádků, 86 % JS, 7 % CSS, 8 % HTML
+finance.js     prostředí Finance (daňová evidence) — vlastní soubor, viz FINANCE
 fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repozitáře
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
@@ -928,6 +929,43 @@ majiteli zkušební mail nepřišel):
 Hlídá to `test-zpravy.js`, `test-pravidla.js` (blok zpráv)
 a `test-upozorneni.js`, sekce 14.
 
+### Finance — daňová evidence (`finance.js`, `FINANCE — DAŇOVÁ EVIDENCE`)
+
+Druhé pracovní prostředí (majitel, 11. 11. 2026): přepínač **Sklad |
+Finance** v hlavičce. Tabulka transakcí z výpisů **Air Bank** a **Revolut
+Pro** se záložkami Air Bank / Revolut / Dohromady, měsíc ‹ ›, souhrn po
+měnách, filtry (Příjmy, Výdaje, Bez dokladu) a hledání. U každé
+transakce **odkaz na doklad** (OneDrive, jako `invoiceUrl` u položek —
+účetní jen klikne a stáhne), kategorie, poznámka a „Doklad není
+potřeba“ (převody mezi vlastními účty, poplatky). Plán dalších kroků:
+párování se sklad prodeji / nákupy, pohled účetního po měsících, export
+pro jeho program, automatické stahování výpisů.
+
+Čtyři věci se nesmí rozbít:
+
+- **Vlastní soubor a vlastní kolekce** (`users/{uid}/finance`), aby
+  chyba ve financích nikdy nesáhla na sklad a obráceně. Do skladu
+  finance.js nezapisuje nic. `index.html` jen načte skript, má přepínač
+  v hlavičce a CSS; spouští ho `_spustSkladPosluchace` (`finSpust`)
+  a zastavuje `fb-auth` (`finZastav`). **`finance.js` nesmí do
+  `.assetsignore`**, jinak na webu chybí.
+- **Každá transakce je vlastní dokument `t_<banka>_<otisk>`.** Otisk je
+  z reference banky (Air Bank „Referenční číslo“, Revolut „ID“), bez ní
+  z obsahu řádku a pořadí shody v souboru. **Stejný výpis podruhé nic
+  nezdvojí** a ručně doplněný doklad nepřepíše (náhled nové pohyby
+  odfiltruje dřív, než se zapíše).
+- **Sloupce výpisu se poznávají podle názvu** (`FIN_SLOUPCE`, bez
+  diakritiky), ne podle pořadí. Bez data nebo částky se nic neuloží
+  a řekne se to. Revolut: bere se jen `State = COMPLETED`. Air Bank
+  umí poslat i windows-1250, dekóduje se podle toho.
+- **Účetní Finance zatím nevidí** (přepínač i `prepniProstredi` mají
+  bránu `jeUctetni()`); pravidla mu čtení už dovolují, pohled pro něj
+  přijde jako další krok.
+
+**Ruční krok:** blok `finance` ve `firestore.rules` se musí publikovat
+v konzoli Firebase, jinak cloud zápis odmítne (aplikace to řekne).
+Hlídá to `test-finance.js`.
+
 ### Společný nákupní doklad (`SPOLEČNÝ NÁKUPNÍ DOKLAD`)
 
 Odkaz na nákupní doklad (`invoiceUrl`) vložený k jednomu kusu dostanou
@@ -1152,6 +1190,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | obrázek pro stejné kusy | `SPOLEČNÝ OBRÁZEK POLOŽKY` |
 | okno pro účetního (měsíc) | `ÚČETNICTVÍ` |
 | zprávy a poznámky účetní ↔ majitel | `ZPRÁVY A POZNÁMKY`, v konektoru `ZPRÁVY OD ÚČETNÍHO` |
+| Finance (daňová evidence, výpisy) | `finance.js`, v index.html `FINANCE — DAŇOVÁ EVIDENCE` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1239,7 +1278,7 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 
 | co | kde | stav |
 |---|---|---|
-| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo** — blok `zpravy` publikovaný 10. 11. (majitel); předtím ověřený lísteček `pozadavek_*` z příkazové řádky |
+| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **čeká** — nový blok `finance` (11. 11., Finance). Blok `zpravy` publikovaný 10. 11. (majitel); předtím ověřený lísteček `pozadavek_*` z příkazové řádky |
 | `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (11. 11.: `sklad_kontrola` umí `opravit`, `neniVeSkladu`, `inzeratu`, `limit`; 10. 11. odpoledne: oprava mailu o zprávách — první běh, hlídání při každém cronu, `zkontrolovano` pro stopu v aplikaci). Předtím nasazeno 10. 11. dopoledne (zprávy od účetního). Dokud běží starší verze, ukazuje aplikace v okně Zpráv falešné „cron asi neběží“ — starší verze značku nepíše při každém běhu. Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — nasazovat od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
 | třetí cron trigger `*/5 * * * *` | Cloudflare → Worker konektoru → Settings → Triggers → Cron Triggers → Add | **hotovo, ověřeno 10. 11.** — v cloudu se ve 14:15 zapsala značka `zpravy/_mail`. Zkušební mail nepřišel kvůli chybě prvního běhu, opraveno |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
@@ -1814,7 +1853,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 75 souborů
+node test/run.js              # kontrola syntaxe + všech 76 souborů
 node test/run.js archive      # jen vybrané
 ```
 

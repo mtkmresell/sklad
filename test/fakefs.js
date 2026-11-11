@@ -78,6 +78,7 @@ module.exports = function installFakeFirestore() {
           if (window.__failWrites) return Promise.reject(new Error('offline'));
           ops.forEach(function(o) {
             if (o.t === 'set') window.__store[o.path] = o.data; else delete window.__store[o.path];
+            ozvi(o.path);   // posluchači zpráv a financí; sklad má vlastní __emitSnapshot
           });
           window.__commits++;
           window.__lastBatch = ops.map(function(o) { return o.t + ' ' + o.path; });
@@ -87,7 +88,7 @@ module.exports = function installFakeFirestore() {
     },
     // onSnapshot nad kolekcí — snímek se skládá ze všech dokumentů pod cestou
     onSnapshot: function(ref, next, err) {
-      if (/\/zpravy$/.test(ref.path)) {
+      if (/\/(zpravy|finance)$/.test(ref.path)) {
         var emit = function() { next(snimekKolekce(ref.path)); };
         window.__posluchaci[ref.path] = emit;
         setTimeout(emit, 0);

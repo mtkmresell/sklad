@@ -834,6 +834,91 @@ header { flex-shrink: 0; }
 }
 
 #cloudSyncStatus:empty{display:none;}
+/* ── FINANCE — DAŇOVÁ EVIDENCE (finance.js) ──────────────────────────
+   Druhé prostředí: třída na <body> schová všechno skladové a ukáže
+   #financeApp. Sklad zůstává v DOM, jen schovaný — přepnutí zpátky nic
+   nepřestavuje. */
+.prostredi-switch { display:flex; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; gap:2px; flex-shrink:0; }
+.ps-btn { background:none; border:none; color:var(--muted); font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600; padding:5px 11px; border-radius:6px; cursor:pointer; }
+.ps-btn.active { background:var(--text); color:#000; }
+.ps-btn[data-kam="finance"].active { background:#6cb6ff; }
+body.prostredi-finance #profileSwitch, body.prostredi-finance .header-tabs, body.prostredi-finance #statsBarWrap,
+body.prostredi-finance .filters, body.prostredi-finance .main, body.prostredi-finance #customersSection,
+body.prostredi-finance #theadClone, body.prostredi-finance #stareDataPruh,
+body.prostredi-finance .header-right > :not(#userBadge):not(#btnSettings) { display:none !important; }
+#financeApp { display:none; }
+body.prostredi-finance #financeApp { display:block; flex:1; min-height:0; overflow-y:auto; padding:16px 18px 40px; }
+.fin-lista { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.fin-zal { display:flex; background:var(--surface2); border-radius:8px; padding:3px; gap:2px; }
+.fin-zal-btn { background:none; border:none; color:var(--muted); font-family:inherit; font-size:13px; font-weight:500; padding:7px 13px; border-radius:6px; cursor:pointer; }
+.fin-zal-btn span { font-family:'DM Mono',monospace; font-size:10px; opacity:.7; margin-left:3px; }
+.fin-zal-btn.akt { background:#6cb6ff; color:#000; }
+.fin-obdobi { display:flex; align-items:center; gap:6px; }
+.fin-obd-text { font-family:'Syne',sans-serif; font-weight:700; font-size:16px; min-width:150px; text-align:center; }
+.fin-sip, .fin-mini { background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:7px; cursor:pointer; font-family:inherit; }
+.fin-sip { width:32px; height:32px; font-size:18px; line-height:1; }
+.fin-mini { font-size:11px; padding:6px 10px; color:var(--muted); }
+.fin-mini.akt { color:#6cb6ff; border-color:#6cb6ff; }
+.fin-import-btn { margin-left:auto; }
+.fin-dlazdice { display:flex; gap:9px; flex-wrap:wrap; margin-bottom:14px; }
+.fin-dl { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; min-width:120px; text-align:left; font-family:inherit; color:var(--text); }
+.fin-dl-l { font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+.fin-dl-v { font-family:'Syne',sans-serif; font-weight:700; font-size:17px; margin-top:2px; font-variant-numeric:tabular-nums; }
+#financeApp .plus, .fin-modal .plus { color:var(--accent); }
+#financeApp .minus, .fin-modal .minus { color:var(--text); }
+.fin-dl-bez { cursor:pointer; }
+.fin-dl-bez.svit { border-color:rgba(255,140,26,.55); }
+.fin-dl-bez.svit .fin-dl-v { color:#ff8c1a; }
+.fin-filtry { display:flex; gap:7px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+.fin-inp { flex:1; min-width:180px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:inherit; font-size:13px; padding:8px 11px; outline:none; }
+.fin-inp:focus { border-color:#6cb6ff; }
+.fin-chip { background:none; border:1px solid var(--border); color:var(--muted); border-radius:20px; padding:5px 12px; font-size:12px; font-family:inherit; cursor:pointer; }
+.fin-chip.akt { border-color:#6cb6ff; color:#6cb6ff; background:rgba(108,182,255,.08); }
+.fin-pocet { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-left:auto; }
+.fin-tab-obal { overflow-x:auto; }
+.fin-tab { width:100%; border-collapse:collapse; font-size:13px; }
+.fin-tab th { background:var(--bg); font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); text-align:left; padding:9px 10px; border-bottom:1px solid var(--border); position:static; }
+.fin-tab td { padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top; max-width:none; white-space:normal; overflow:visible; }
+.fin-tab tbody tr { cursor:pointer; }
+.fin-tab tbody tr:hover td { background:var(--surface2); }
+.fin-tab .r { text-align:right; } .fin-tab .c { text-align:center; }
+.fin-d { white-space:nowrap !important; font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); }
+.fin-pr { font-weight:600; }
+.fin-ucet, .fin-vs { display:block; font-family:'DM Mono',monospace; font-size:10.5px; color:var(--muted); font-weight:400; margin-top:2px; }
+.fin-zp { color:var(--muted); max-width:340px !important; }
+.fin-c { white-space:nowrap !important; font-family:'Syne',sans-serif; font-weight:700; font-variant-numeric:tabular-nums; }
+.fin-kat { font-size:11px; border:1px solid var(--border); border-radius:20px; padding:2px 9px; white-space:nowrap; }
+.fin-banka { font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; border-radius:5px; padding:2px 7px; white-space:nowrap; }
+.fin-banka.b-airbank { color:#8fd14f; border:1px solid rgba(143,209,79,.4); }
+.fin-banka.b-revolut { color:#6cb6ff; border:1px solid rgba(108,182,255,.4); }
+.fin-dok { display:inline-flex; width:24px; height:24px; border-radius:50%; align-items:center; justify-content:center; font-size:12px; font-weight:700; text-decoration:none; }
+.fin-dok.ok { background:rgba(200,255,0,.12); color:var(--accent); }
+.fin-dok.chybi { background:rgba(255,140,26,.14); color:#ff8c1a; }
+.fin-dok.nic { color:var(--muted); }
+.fin-prazdne { color:var(--muted); font-size:14px; line-height:1.6; border:1px dashed var(--border); border-radius:var(--radius); padding:24px; text-align:center; }
+.fin-prazdne b { color:var(--text); }
+.fin-modal { max-width:560px; }
+.fin-det-castka { font-family:'Syne',sans-serif; font-weight:800; font-size:26px; margin:-6px 0 14px; font-variant-numeric:tabular-nums; }
+.fin-det-info { background:var(--surface2); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:16px; }
+.fin-r { display:flex; gap:12px; padding:4px 0; font-size:13px; }
+.fin-r span { color:var(--muted); min-width:120px; font-family:'DM Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding-top:2px; }
+.fin-r b { font-weight:500; word-break:break-word; }
+.fin-otevrit { display:inline-block; margin-top:8px; }
+.fin-chk { display:flex; gap:8px; align-items:center; font-size:12.5px; color:var(--muted); margin-top:10px; cursor:pointer; }
+.fin-smazat { flex:1; }
+.fin-pom { color:var(--muted); font-size:13px; line-height:1.55; margin-bottom:12px; }
+.fin-banky { display:flex; gap:10px; margin-bottom:12px; }
+.fin-banka-volba { display:flex; align-items:center; gap:7px; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:13px; }
+.fin-nahled { margin-top:12px; }
+.fin-nahled-sum { font-size:13px; margin-bottom:8px; }
+.fin-nahled-r { display:grid; grid-template-columns:90px 1fr auto; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--border); }
+.fin-chyba { color:var(--danger); font-size:13px; }
+@media (max-width:700px) {
+  body.prostredi-finance #financeApp { overflow:visible; padding:12px 12px 40px; }
+  .fin-import-btn { margin-left:0; width:100%; }
+  .fin-zp { max-width:none !important; }
+}
+
 
 /* PRODÁNO — PŘILEPENÝ MĚSÍC A SLOUPCE (viz soldLepeni). #itemsGrid má
    jinak overflow-x:auto, a tím by se lepení vázalo na něj místo na
@@ -1939,6 +2024,11 @@ td:has(.td-actions) { width: 1%; white-space: nowrap; }
 
 <header>
   <div class="logo">SKLAD<span>.</span></div>
+  <!-- Přepínač pracovního prostředí (FINANCE — DAŇOVÁ EVIDENCE, finance.js) -->
+  <div class="prostredi-switch" id="prostrediSwitch" style="display:none;">
+    <button class="ps-btn active" data-kam="sklad" onclick="prepniProstredi('sklad')">Sklad</button>
+    <button class="ps-btn" data-kam="finance" onclick="prepniProstredi('finance')">Finance</button>
+  </div>
   <div class="prof-switch" id="profileSwitch">
     <button class="pf-btn" data-prof="business" onclick="setProfile('business')" data-tip="Podnikatelský sklad">Podnikání</button>
     <button class="pf-btn" data-prof="personal" onclick="setProfile('personal')" data-tip="Osobní sbírka">Osobní</button>
@@ -20104,6 +20194,7 @@ document.addEventListener('fb-auth', function(e) {
   // Odhlášení — zruš listener a vyčisti data
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
   try { _zprZastav(); } catch(e) {}
+  try { if (window.finZastav) finZastav(); } catch(e) {}
   // Režim účetního patří k účtu, ne k záložce. Vypíná se při každé změně
   // přihlášení, ne jen při odhlášení — Firebase umí ohlásit rovnou nového
   // uživatele a ten by jinak zdědil cizí kóji i zákaz ukládání.
@@ -20137,6 +20228,8 @@ function _spustSkladPosluchace() {
     var _firstSnapshot = true;
     // Zprávy od účetního — vlastní kolekce, čte se z téže kóje (ZPRÁVY A POZNÁMKY)
     try { _zprSpust(); } catch(e) { console.warn('zprávy:', e); }
+    // Finance — vlastní kolekce a vlastní soubor (finance.js)
+    try { if (window.finSpust) finSpust(); } catch(e) { console.warn('finance:', e); }
     ukazStaraData();   // dokud cloud mlčí, ať je vidět, jak stará data to jsou
 
     // Posloucháme celou kolekci — hlavní dokument i archivy přijdou v jednom
@@ -23976,5 +24069,7 @@ rebuildBrandTables();
 </div>
 </div>
 
+<!-- FINANCE — DAŇOVÁ EVIDENCE: druhé pracovní prostředí, vlastní soubor -->
+<script src="finance.js"></script>
 </body>
 </html>

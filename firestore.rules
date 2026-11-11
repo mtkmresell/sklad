@@ -109,6 +109,14 @@ service cloud.firestore {
       allow write: if jeMajitel(uid);
     }
 
+    // Finance — daňová evidence, transakce z výpisů (finance.js).
+    // Zapisuje jen majitel; účetní čte, protože pro něj to celé je.
+    // Čtečka (AI) sem nesmí — výpisy z účtu do chatu nepatří.
+    match /users/{uid}/finance/{dokument} {
+      allow read:  if jeMajitel(uid) || jeUcetni(uid);
+      allow write: if jeMajitel(uid);
+    }
+
     // Zprávy a poznámky mezi účetním a majitelem (index.html ZPRÁVY
     // A POZNÁMKY). Účetní tu jako jediné místo smí zapisovat — ale jen
     // to, co je vyjmenované níž: svou zprávu, nové vlákno a značku,

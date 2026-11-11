@@ -77,7 +77,21 @@ if (crm) {
 
 /* ── Kdo smí zapisovat ──────────────────────────────────────────────── */
 const zapisy = kod.match(/allow write:([^;]*)/g) || [];
-ok('zápis je definovaný u všech tří bloků', zapisy.length === 3, 'nalezeno: ' + zapisy.length);
+ok('zápis je definovaný u všech čtyř bloků (sklad, crm, finance, zprávy)', zapisy.length === 4, 'nalezeno: ' + zapisy.length);
+
+/* Finance (finance.js): výpisy z účtu. Zapisuje jen majitel, účetní čte,
+   čtečka (AI, konektor) sem nesmí vůbec. */
+const finance = (function () {
+  const i = kod.indexOf('match /users/{uid}/finance/');
+  return i === -1 ? '' : kod.slice(i, kod.indexOf('\n    }', i) + 6);
+})();
+ok('Finance mají vlastní blok', !!finance);
+if (finance) {
+  const r = (op) => ((finance.match(new RegExp('allow ' + op + ':([^;]*)')) || [])[1] || '').trim();
+  ok('Finance zapisuje jen majitel', r('write') === 'if jeMajitel(uid)', r('write'));
+  ok('Finance čte účetní', /jeUcetni/.test(r('read')));
+  ok('Finance NEČTE čtečka', !/jeCtecka/.test(r('read')), r('read'));
+}
 const zapisSklad = zapisy[0] || '', zapisCrm = zapisy[1] || '';
 
 /* Do skladu píše majitel — a nově čtečka, ale **jen lísteček** pro
