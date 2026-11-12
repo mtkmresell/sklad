@@ -138,6 +138,14 @@ spouštěče dopsat), nebo ho program při odmítnutí zapomene sám.
 - **Tuzex** jen čte (Inventory, ceny z tuzexstore.com). Ceny v €,
   payout 74 % − 2 €, Nejsi nejlevnější s doporučenou cenou končící 9.
 
+- **SneakersNow** (`sneakersnow/`) jen čte nabídky a katalog. Provize 20 %,
+  doporučená cena končí 90 pod tržním minimem.
+- **Stuffsell** (`stuffsell/`) jen čte (Inventory, ceny ze stuffsell.cz).
+  Payout 77,5 % − 30 Kč, doporučená cena končí 90. Kus u jiného komisního
+  prodejce se nehlásí.
+- **Adonio** (`adonio/`) jen čte stránku Moje nabídky. Payout cena −
+  max(25 %, 700 Kč), doporučená = nejnižší − 1 Kč.
+
 Když web vrátí něco nečekaného, leží to v `<místo>/debug/` — pošli to
 Claudovi (umí si to přečíst z Disku).
 

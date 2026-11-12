@@ -1418,6 +1418,20 @@ Tuzex: ConsignR API (`x-client-host`), ceny v €, Nejsi nejlevnější proti
 (nesmaže, nepřidá, fajfku nemění). Hlídá to `test-thebeast.js`,
 `test-sellect.js` a `test-tuzex.js`.
 
+**SneakersNow, Stuffsell a Adonio** (12. 11. 2026, čekají na první ostrý
+běh), stejná kostra. SneakersNow (snconsign.cz) je Supabase: přihlášení
+a čtení tabulek `submitted_products` / `catalog_models` stejnou cestou
+jako jejich stránka (adresa a veřejný klíč se berou z jejich stránky
+při každém běhu), párování z `kontrola.py` skillu. Stuffsell je ConsignR
+jako Tuzex (`x-client-host: 4d7f5a.consignr.store`), v Kč, e-shop
+stuffsell.cz jen dostupné varianty, kus u jiného komisního prodejce se
+nehlásí nikam. Adonio (consign-adonio.eu) je Next.js + Supabase se
+stránkou skládanou na serveru: přihlášení přes Supabase, cookie ve tvaru
+`@supabase/ssr` (`cookie_relace`) a z `/listings` se čte text jako
+`innerText` ve skillu (`rozeber`); nesedí-li počet s „N nab.", jde text
+do `debug/`. Hlídá to `test-sneakersnow.js`, `test-stuffsell.js`
+a `test-adonio.js`.
+
 Dál: **WTB Market** (bez přihlášení), další weby s přihlášením.
 Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,
 nebo se budit (Wake on LAN rozdělaný)?
@@ -1936,7 +1950,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 82 souborů
+node test/run.js              # kontrola syntaxe + všech 85 souborů
 node test/run.js archive      # jen vybrané
 ```
 
