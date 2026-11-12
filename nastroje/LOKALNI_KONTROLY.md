@@ -99,6 +99,14 @@ u místa otevře podrobný report (jako dřív artifact): Smazat, Opravit
 s větou, co udělat, Zaškrtnutí ve SKLADu, Není ve SKLADu, Ověřit ručně,
 náhledy a limit. Claude v chatu už potřeba není.
 
+### Refresher a Section
+
+Stejně jako Bazoš: `SPUSTIT_refresher.bat` (`refresher_kontrola.py`)
+a `SPUSTIT_section.bat` (`section_kontrola.py`). Obě jen čtou — Refresher
+veřejný profil, Section tabulku sdílenou odkazem (CSV export) a veřejný
+e-shop. Nic se nikam nepřihlašuje. Section zatím nečte záložky INSTORE
+a Poslední kusy.
+
 ### Report pro další kontroly
 
 `S.posli_report(token, data, polozky, report, odeslat=True)` — sekce si

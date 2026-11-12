@@ -1379,10 +1379,23 @@ Novou verzi skriptu lze majiteli nahrát rovnou na Google Disk (konektor
 Drive): obsah existujícího souboru přepsat nejde, starý se přejmenuje
 na `…_stary.py` a nový vznikne vedle.
 
-**Další kontroly (domluveno 12. 11.):** bez přihlášení jdou jen
-**Refresher** a **WTB Market** — ty jsou na řadě. **Section** má jen
-Google Sheets (odkaz od majitele). Ostatní weby chtějí přihlášení;
-majitel souhlasí, ať si program heslo pamatuje a přihlašuje se sám.
+**Refresher a Section (12. 11. 2026, čekají na první ostrý běh u
+majitele):** `nastroje/refresher_kontrola.py` čte profil
+(`/ajx/profil/market?seller=…&page=N`) a detaily inzerátů, pravidla ze
+skillu — jen **velikosti modelu se sčítají přes všechny jeho inzeráty**
+(skill porovnával každý inzerát zvlášť a u modelu rozděleného do dvou
+inzerátů by odškrtl fajfku visícímu kusu). Náhled na ostrých datech:
+63 inzerátů, 10 smazat, 6 opravit, 2 není ve SKLADu, 3 fajfky.
+`nastroje/section_kontrola.py` čte list ONLINE KOMISE jako veřejný CSV
+export (tabulka je sdílená odkazem) a e-shop z `products.json`; Přidat,
+Smazat (prodané, duplicitní, neznámé), cena e-shop ≠ tabulka, nahozeno
+a na e-shopu není, jediný na e-shopu, fajfky a Payouty. **Záložky
+INSTORE a Poslední kusy zatím nečte.** Hlídá to `test-refresher.js`
+a `test-section.js`. Spouštěče `SPUSTIT_refresher.bat`, `SPUSTIT_section.bat`.
+Staré verze na Disku majitel chce přejmenované na „MUZES SMAZAT - …".
+
+Dál: **WTB Market** (bez přihlášení), pak weby s přihlášením — majitel
+souhlasí, ať si program heslo pamatuje a přihlašuje se sám.
 Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,
 nebo se budit (Wake on LAN rozdělaný)?
 
@@ -1900,7 +1913,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 77 souborů
+node test/run.js              # kontrola syntaxe + všech 79 souborů
 node test/run.js archive      # jen vybrané
 ```
 
