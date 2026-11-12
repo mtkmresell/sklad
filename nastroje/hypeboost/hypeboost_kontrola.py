@@ -151,7 +151,8 @@ def main(argv):
     with P.Prohlizec() as b:
         s = b.otevri(WEB, 3000)
         P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, "https://hypeboost.com/en/login")
-        d = s.evaluate(JS_NABIDKY)
+        with S.pracuji("Čtu listingy na Hypeboost"):
+            d = s.evaluate(JS_NABIDKY)
         if d["bad"]:
             raise RuntimeError("Hypeboost: %d stránek se nenačetlo (429). Spusť znovu — výsledek by nebyl spolehlivý." % d["bad"])
         if not d["radky"]:
@@ -171,7 +172,8 @@ def main(argv):
         print(f"Trvalo {int(time.time() - start)} s. Teď se ještě prodlouží almost expired (asi 2,5 s na listing).")
 
         def prodluz():
-            r["prodlouzeno"] = s.evaluate(JS_PRODLOUZIT)
+            with S.pracuji("Prodlužuji almost expired na Hypeboost"):
+                r["prodlouzeno"] = s.evaluate(JS_PRODLOUZIT)
             print("Prodlouženo %(ok)d z %(found)d" % r["prodlouzeno"] + (" (%(fail)d selhalo)" % r["prodlouzeno"] if r["prodlouzeno"]["fail"] else ""))
             rep.update(sestav_report(r, datum, polozky))
 

@@ -275,7 +275,8 @@ def zkontroluj(kod, misto, modely, prodane):
     inzeraty, pocet, web = nacti_profil(misto, kod)
     print(f"Inzerátů na profilu: {pocet if pocet is not None else len(inzeraty)} (načteno {len(inzeraty)})")
     print(f"  Čtu detaily {len(inzeraty)} inzerátů (po dvou naráz)…", flush=True)
-    S.paralelne(nacti_velikosti, inzeraty, 2)   # Bazoš je citlivý — víc najednou ne
+    with S.pracuji("Čtu detaily inzerátů"):
+        S.paralelne(nacti_velikosti, inzeraty, 2)   # Bazoš je citlivý — víc najednou ne
     return vyhodnot(kod, plat, inzeraty, pocet, web, modely, prodane)
 
 

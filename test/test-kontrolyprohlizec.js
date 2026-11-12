@@ -231,10 +231,12 @@ const odeslano = (r, misto) => {
 
   sekce('8) Prohlížeč a zdroj');
   for (const [m, misto, login] of [['tnsky', 'Tnsky', 'https://sell.tnsky.cz/login'], ['sneakerstore', 'Sneakerstore', 'https://sell.sneakerstore.cz/users/sign_in'],
-    ['hypeboost', 'Hypeboost', 'https://hypeboost.com/en/login'], ['klekt', 'Klekt', 'https://klekt.com/login'], ['released', 'Released', 'https://sell-releasedcz-dev.web.app/login']]) {
+    ['hypeboost', 'Hypeboost', 'https://hypeboost.com/en/login'], ['released', 'Released', 'https://sell-releasedcz-dev.web.app/login']]) {
     r = await spust(m, ['--nahled']);
     ok(m + ': přihlásí se sám heslem ze Správce pověření (jejich formulář)', r.j && r.j.volano.includes('prihlas_sam ' + misto + ' ' + login), JSON.stringify(r.j && r.j.volano.slice(0, 3)));
   }
+  r = await spust('klekt', ['--nahled']);
+  ok('KLEKT: přihlašovací kód chodí mailem → jen přihlášení v okně, heslo nechce', r.j && !r.j.volano.some(x => /prihlas_sam/.test(x)));
   r = await spust('facebook', ['--nahled']);
   ok('Facebook: jen ruční přihlášení (samostatné by mohlo účet zablokovat)', r.j && !r.j.volano.some(x => /prihlas_sam/.test(x)));
   for (const m of ['hypeboost', 'klekt']) {

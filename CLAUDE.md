@@ -518,6 +518,13 @@ který majitel nikdy nepoužil (30. 10. 2026).
   **Do počtu u tlačítka ani do značek u kusů nejdou** — v aplikaci se
   s nimi nedá nic udělat a svítily by napořád. Platí, dokud je kus
   skladem a neodklikl se Hotovo.
+- **Okno neproblikává** (majitel, 12. 11. 2026: „každým klikem okna
+  problikávají"). Okno se postaví jednou, dál se mění jen místa, jejichž
+  obsah se změnil (`posledni` v `openKontroly`) — okno zůstane tímtéž
+  prvkem i s rolováním. Rozbalení a sbalení jede výškou (`prepniMisto`,
+  `animujVysku`), vyřízený řádek odjede jako duch (`.kl-duch`, bez
+  `data-*`, `pointer-events:none`); **stav se mění hned**, duch je jen
+  vzhled. Hlídá to `test-kontroly.js`, sekce 12c.
 - **Křížek jen na dotykovém zařízení** (`hover:hover and pointer:fine`
   ho schová). Na počítači se zavírá Escapem nebo klikem mimo okno.
 - **Víc než `KONTROLA_STARA_DNI` (5) dní bez kontroly se zvýrazní**:
@@ -1465,9 +1472,17 @@ jen u vybraných id. Adonio ukazuje „Načítám…" a nabídky dočte Chrome s
 stejnou přihlašovací cookie (`nacti_prohlizecem`). Prohlížeč běží
 s `locale="en-US"` — čtecí JS ze skillů počítá s „1,234 Kč" (Released);
 přesměrování během `goto` neshodí kontrolu (`P.jdi`). Tnsky listuje
-tabulkou i tlačítkem bez popisku; Klekt pozná přihlášení podle dat, ne
+tabulkou i tlačítkem bez popisku (vypnuté tlačítko se pozná podle
+`disabled`, ne podle třídy — Tailwind má v každé `disabled:opacity-50`); Klekt pozná přihlášení podle dat, ne
 podle stavu odpovědi (Remix vrací 200 i s přesměrováním). Prázdná
-schránka při zadávání hesla se zeptá znovu.
+schránka při zadávání hesla se zeptá znovu. Druhé kolo téhož dne: Adonio a Released
+změnily rozložení (Adonio má payout, kusy a stav na jednom řádku, prodané
+řádky se přeskakují; Released přidal sloupce Externí ID a Stav). Stránky
+v prohlížeči se dotahují, takže „nepřihlášeno" se řekne až po chvíli
+čekání (`_ok_pockej`). **KLEKT se přihlašuje kódem z e-mailu** — heslo
+nestačí, takže jen přihlášení v okně, žádné `prihlas_sam`. Dlouhé kroky
+ukazují průběh (`S.pracuji`, u KLEKT prodlužování po pěti s počtem) —
+majiteli kontrola vypadala, že se sekla.
 
 Dál: malá aplikace na spouštění všech kontrol.
 Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,

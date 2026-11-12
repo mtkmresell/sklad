@@ -201,9 +201,11 @@ def main(argv):
     print(f"Sklad z cloudu: {len(S.skladem(polozky))} kusů skladem")
     with P.Prohlizec() as b:
         s = b.otevri(WEB, 2500)
-        P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, "https://klekt.com/login")
+        # KLEKT posílá přihlašovací kód e-mailem — heslo nestačí, přihlášení je jen v okně
+        b.prihlaseni(s, JS_TEST, MISTO, WEB)
         s.evaluate(JS_LIB)
-        nabidky = s.evaluate(JS_NABIDKY)
+        with S.pracuji("Čtu nabídky na KLEKT"):
+            nabidky = s.evaluate(JS_NABIDKY)
         if not nabidky:
             surove = s.evaluate("fetch('/profile/seller/listings.data?page=1',{credentials:'include'}).then(async r=>r.status+' '+r.url+'\\n\\n'+await r.text()).catch(e=>String(e))")
             cesta = S.uloz_ladici(SLOZKA, "klekt_listings.txt", surove)
@@ -211,9 +213,11 @@ def main(argv):
         print(f"KLEKT: {len(nabidky)} nabídek, dohledávám EU velikosti a ceny v katalogu…")
         skus_sklad = sorted({x.get("sku") for x in k_vystaveni(polozky) if x.get("sku")})
         skus_nabidek = {n["sku"] for n in nabidky if n["sku"] and n["sku"] != "TBC"}
-        feed = s.evaluate(JS_FEED, sorted(skus_nabidek | set(skus_sklad)))   # 3 dotazy naráz
+        with S.pracuji("Dohledávám velikosti a ceny v katalogu KLEKT"):
+            feed = s.evaluate(JS_FEED, sorted(skus_nabidek | set(skus_sklad)))   # 3 dotazy naráz
         # katalog stačí u SKU, které na KLEKT ještě nevisí v žádné velikosti (visící katalog zná)
-        auto = s.evaluate(JS_AUTO, [k for k in skus_sklad if k not in skus_nabidek])
+        with S.pracuji("Ověřuji katalog KLEKT"):
+            auto = s.evaluate(JS_AUTO, [k for k in skus_sklad if k not in skus_nabidek])
         r = vyhodnot(nabidky, feed, auto, polozky)
         datum = S._iso_ted()
         for x in r["smazat"]:
@@ -227,7 +231,12 @@ def main(argv):
         ids = [n["id"] for n in nabidky if nsku(n["sku"]) not in IGNOROVAT]
 
         def prodluz():
-            r["prodlouzeno"] = s.evaluate(JS_PRODLOUZIT, ids)
+            r["prodlouzeno"] = {"ok": 0, "fail": []}
+            for i in range(0, len(ids), 5):   # po pěti, ať je vidět, kolik už je hotovo
+                print("\r  Prodlužuji expiraci na KLEKT… %d / %d   " % (min(i + 5, len(ids)), len(ids)), end="", flush=True)
+                d = s.evaluate(JS_PRODLOUZIT, ids[i:i + 5])
+                r["prodlouzeno"]["ok"] += d["ok"]; r["prodlouzeno"]["fail"] += d["fail"]
+            print()
             print("Expirace prodloužena u %d nabídek" % r["prodlouzeno"]["ok"] + (", selhalo %d" % len(r["prodlouzeno"]["fail"]) if r["prodlouzeno"]["fail"] else ""))
             rep.update(sestav_report(r, datum, polozky))
 

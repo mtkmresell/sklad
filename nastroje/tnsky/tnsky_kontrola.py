@@ -47,7 +47,7 @@ const rp=btn(/^10$|^25$|^50$/);if(rp){k(rp);await w(500);const o=[...document.qu
 const radky=()=>[...document.querySelectorAll('tbody tr')].map(tr=>{const td=[...tr.querySelectorAll('td')];const c=td.map(x=>x.innerText.replace(/\s+/g,' ').trim());if(c[3]!=='Active')return null;const L=td[0].innerText.split('\n').map(s=>s.trim()).filter(Boolean);const inp=tr.querySelector('input');const ml=((c[5]||'').match(/Market Low:\s*(\d+)/)||[])[1]||'';const sku=(L[1]||'—').split(' / ')[0].replace(/\.\.\.$/,'');const img=tr.querySelector('img');return [L[0],sku,c[1],inp?inp.placeholder:'',ml,img?img.src:'']}).filter(Boolean);
 const pata=()=>(document.body.innerText.match(/(\d+)–(\d+) of (\d+)/)||[]);
 // tlačítko „další stránka“: podle popisku, podle znaku, jinak poslední povolené tlačítko u patičky „1–100 of 111“
-const vypnute=b=>b.disabled||b.getAttribute('aria-disabled')==='true'||/disabled/.test(b.className||'');
+const vypnute=b=>b.disabled||b.getAttribute('aria-disabled')==='true'||b.classList.contains('disabled');
 const patka=()=>{let e=[...document.querySelectorAll('p,span,div')].find(x=>x.children.length===0&&/\d+–\d+ of \d+/.test(x.textContent));for(let i=0;e&&i<4&&e.querySelectorAll('button').length<2;i++)e=e.parentElement;return e;};
 const dalsi=()=>{const B=[...document.querySelectorAll('button,a[role=button]')];
   let b=B.find(b=>/next|další|dalsi/i.test((b.getAttribute('aria-label')||'')+' '+(b.getAttribute('title')||'')+' '+b.textContent.trim())&&!vypnute(b));
@@ -92,7 +92,8 @@ def nacti_nabidky():
         s = b.otevri(WEB, 3000)
         P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, "https://sell.tnsky.cz/login")
         for pokus in range(2):
-            r = s.evaluate(JS_NABIDKY)
+            with S.pracuji("Čtu nabídky na Tnsky (okno samo kliká filtry a stránky)"):
+                r = s.evaluate(JS_NABIDKY)
             if r and not r.get("chyba") and (r.get("celkem") is None or r["celkem"] == len(r["radky"])):
                 break
             P.jdi(s, WEB)

@@ -714,6 +714,38 @@ def dokonci_kontrolu(token, data, polozky, zmeny, report, kontrola, argv, pred_o
     return True
 
 
+class pracuji:
+    """with S.pracuji("Prodlužuji nabídky"): … — dokud krok běží, ukazuje
+    v okně točící se značku a uběhlé vteřiny, ať to nevypadá, že se kontrola
+    sekla. Na konci napíše, jak dlouho to trvalo."""
+    def __init__(self, text):
+        self.text = text
+
+    def __enter__(self):
+        import threading
+        self.start, self.konec = time.time(), threading.Event()
+        self.tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+        if not self.tty:
+            print("  %s…" % self.text, flush=True)
+            return self
+
+        def tocit():
+            znaky, i = "|/-\\", 0
+            while not self.konec.wait(0.5):
+                i += 1
+                print("\r  %s %s… %d s   " % (znaky[i % 4], self.text, time.time() - self.start), end="", flush=True)
+        self.vlakno = threading.Thread(target=tocit, daemon=True)
+        self.vlakno.start()
+        return self
+
+    def __exit__(self, typ, *a):
+        if self.tty:
+            self.konec.set()
+            self.vlakno.join(1)
+            print("\r  %s %s — %d s            " % ("x" if typ else "OK", self.text, time.time() - self.start), flush=True)
+        return False
+
+
 def paralelne(fn, seznam, vlaken=4):
     """fn pro každou položku, víc najednou; výsledky ve stejném pořadí.
     U citlivých webů (Bazoš, Refresher) jen 2–3 vlákna, ať nás neberou jako útok."""

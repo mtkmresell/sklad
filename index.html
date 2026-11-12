@@ -1047,7 +1047,13 @@ a.kl-jmeno:hover { color:var(--accent); text-decoration:underline; }
 @media (hover:hover) and (pointer:fine){ .kl-modal .xb { display:none; } }
 .kl-pocty { display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; }
 .kl-pocet-chip { font-family:'DM Mono',monospace; font-size:10px; padding:1px 7px; border-radius:4px; white-space:nowrap; }
-.kl-telo { padding:12px; border-top:1px solid var(--border); animation:rowIn 0.18s ease both; display:flex; flex-direction:column; gap:14px; }
+.kl-telo { padding:12px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:14px; }
+.kl-misto { transition:border-color .2s ease; }
+.kl-duch { display:grid; grid-template-columns:120px minmax(0,1fr) 56px 150px; align-items:center; column-gap:10px;
+  padding:8px 12px; border-top:1px solid var(--border); overflow:hidden; pointer-events:none; box-sizing:border-box; }
+.kl-duch.kl-duch-inz { grid-template-columns:minmax(0,1fr) auto; }
+.kl-duch.kl-duch-pryc { height:0 !important; padding-top:0; padding-bottom:0; opacity:0; transform:translateX(14px);
+  transition:height .26s cubic-bezier(.2,.7,.2,1) .06s, padding .26s ease .06s, opacity .18s ease, transform .18s ease; }
 /* Rozbalené místo — po vzoru reportu z kontroly: sekce s počtem,
    hlavička sloupců a karta řádků, SKU i název se kopírují klikem */
 .kl-poznamka { font-size:12px; color:var(--muted); background:var(--surface2); border:1px solid var(--border);
@@ -6157,9 +6163,9 @@ function openKontroly(rozbalit) {
     if (!t) return;
     var co = t.getAttribute('data-kl');
     if (co === 'zavrit') { zavri(); return; }
-    if (co === 'misto') { otevrene = otevrene === t.dataset.misto ? null : t.dataset.misto; prekresli(); return; }
-    if (co === 'hotovo') { kontrolaOdbav(t.dataset.misto, t.dataset.id); return; }
-    if (co === 'hotovo-inz') { kontrolaOdbavInzerat(t.dataset.misto, t.getAttribute('data-klic')); return; }
+    if (co === 'misto') { prepniMisto(t.dataset.misto); return; }
+    if (co === 'hotovo') { var duch = duchRadku(t); kontrolaOdbav(t.dataset.misto, t.dataset.id); vlozDucha(duch); return; }
+    if (co === 'hotovo-inz') { var duch2 = duchRadku(t); kontrolaOdbavInzerat(t.dataset.misto, t.getAttribute('data-klic')); vlozDucha(duch2); return; }
     if (co === 'detail') { zavri(); openDetail(t.dataset.id); return; }
     if (co === 'report') { openReport(t.dataset.misto); return; }
     if (co === 'kopirovat') {
@@ -6245,18 +6251,94 @@ function openKontroly(rozbalit) {
       }).join('') + '</div></div>';
   }
 
+  /* PLYNULÉ OKNO (majitel, 12. 11. 2026: „každým klikem okna problikávají“).
+     Dřív se při každém kliku přestavělo celé okno i s animací otevření
+     a skokem na začátek. Teď se okno postaví jednou a dál se mění jen
+     místa, jejichž obsah se opravdu změnil (`posledni`). Rozbalení
+     a sbalení jede výškou, vyřízený řádek odjede jako „duch“ — stav se
+     přitom mění hned, duch je jen vzhled a nedá se na něj kliknout. */
+  var posledni = {};
+  var bezPohybu = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function animujVysku(el, otevrit, hotovo) {
+    if (bezPohybu || !el) { if (hotovo) hotovo(); return; }
+    var h = el.scrollHeight;
+    el.style.overflow = 'hidden';
+    el.style.height = (otevrit ? 0 : h) + 'px';
+    el.style.opacity = otevrit ? '0' : '1';
+    void el.offsetHeight;
+    el.style.transition = 'height .24s cubic-bezier(.2,.7,.2,1), opacity .2s ease';
+    el.style.height = (otevrit ? h : 0) + 'px';
+    el.style.opacity = otevrit ? '1' : '0';
+    setTimeout(function () {
+      if (otevrit) ['overflow', 'height', 'opacity', 'transition'].forEach(function (k) { el.style[k] = ''; });
+      if (hotovo) hotovo();
+    }, 250);
+  }
+  function telo(misto) {
+    var el = null;
+    ov.querySelectorAll('.kl-misto').forEach(function (x) { if (x.getAttribute('data-klm') === misto) el = x; });
+    return el && el.querySelector('.kl-telo');
+  }
+  function prepniMisto(misto) {
+    var stare = otevrene ? telo(otevrene) : null;
+    var nove = otevrene === misto ? null : misto;
+    function dal() {
+      otevrene = nove;
+      prekresli();
+      if (nove) animujVysku(telo(nove), true);
+    }
+    if (stare) {
+      var hl = stare.parentNode;
+      if (hl) hl.classList.remove('rozbaleno');   // šipka se otočí hned
+      animujVysku(stare, false, dal);
+    } else dal();
+  }
+  function duchRadku(t) {
+    var r = t.closest('.kl-kus');
+    var blok = r && r.closest('.kl-sekce-blok');
+    if (!r || !blok || bezPohybu) return null;
+    var d = r.cloneNode(true);
+    d.className = r.className.replace(/\bkl-kus\b/, 'kl-duch').replace(/\bkl-inz\b/, 'kl-duch-inz');
+    [d].concat([].slice.call(d.querySelectorAll('*'))).forEach(function (e) {
+      [].slice.call(e.attributes).forEach(function (a) { if (/^data-/.test(a.name)) e.removeAttribute(a.name); });
+    });
+    d.setAttribute('aria-hidden', 'true');
+    return { el: d, vyska: r.offsetHeight, nadpis: blok.querySelector('.kl-sek-nadpis').textContent,
+      misto: r.closest('.kl-misto').getAttribute('data-klm'), index: [].indexOf.call(r.parentNode.children, r) };
+  }
+  function vlozDucha(d) {
+    if (!d) return;
+    var cil = null;
+    var t = telo(d.misto);
+    if (t) t.querySelectorAll('.kl-sekce-blok').forEach(function (b) {
+      if (b.querySelector('.kl-sek-nadpis').textContent === d.nadpis) cil = b.querySelector('.kl-karta');
+    });
+    if (!cil) return;   // poslední kus sekce — sekce zmizela celá
+    cil.insertBefore(d.el, cil.children[d.index] || null);
+    d.el.style.height = d.vyska + 'px';
+    void d.el.offsetHeight;
+    d.el.classList.add('kl-duch-pryc');
+    setTimeout(function () { if (d.el.parentNode) d.el.parentNode.removeChild(d.el); }, 300);
+  }
+
   function prekresli() {
     var vse = getKontroly();
     var mista = Object.keys(vse).filter(function (m) { return vse[m] && vse[m].datum; })
       .sort(function (a, b) { return String(vse[b].datum).localeCompare(String(vse[a].datum)); });
-    var h = '<div class="modal kl-modal">'
-      + '<div class="mh"><div class="mt2">Kontroly listingů</div><button class="xb" data-kl="zavrit">✕</button></div>'
-      + '<div class="kl-uvod">Výsledky kontrol listingů — z Clauda i z kontrol na PC. Po každé kontrole se sem uloží samy: co chybí, co smazat, co opravit.</div>';
+    if (!ov.querySelector('.kl-modal')) {
+      ov.innerHTML = '<div class="modal kl-modal">'
+        + '<div class="mh"><div class="mt2">Kontroly listingů</div><button class="xb" data-kl="zavrit">✕</button></div>'
+        + '<div class="kl-uvod">Výsledky kontrol listingů — z Clauda i z kontrol na PC. Po každé kontrole se sem uloží samy: co chybí, co smazat, co opravit.</div>'
+        + '<div class="kl-seznam"></div><div class="kl-konec"></div></div>';
+    }
+    var bloky = [], h = '';
     if (!mista.length) {
       h += '<div class="kl-prazdno">Zatím sem nedorazila žádná kontrola. Pusť v Claudovi kontrolu e-shopu; '
         + 'až skončí, výsledek se uloží sem (konektor musí být nasazený s nástrojem sklad_kontrola).</div>';
     }
+    var konec = h;
     mista.forEach(function (m) {
+      var h = '';
       var z = vse[m], st = kontrolaStav(m), dni = _klStari(z.datum);
       var rozb = otevrene === m;
       var stara = dni > KONTROLA_STARA_DNI;
@@ -6276,7 +6358,7 @@ function openKontroly(rozbalit) {
       var jmeno = z.web
         ? '<a class="kl-jmeno" href="' + escHtml(z.web) + '" target="_blank" rel="noopener" title="Otevřít ' + escHtml(m) + '">' + escHtml(m) + '</a>'
         : '<span class="kl-jmeno">' + escHtml(m) + '</span>';
-      h += '<div class="kl-misto' + (rozb ? ' rozbaleno' : '') + (stara ? ' kl-zastarala' : '') + '">'
+      h += '<div class="kl-misto' + (rozb ? ' rozbaleno' : '') + (stara ? ' kl-zastarala' : '') + '" data-klm="' + escHtml(m) + '">'
         + '<div class="kl-hlava" data-kl="misto" data-misto="' + escHtml(m) + '">'
         + '<span class="kl-sipka">▸</span>' + jmeno
         + '<span class="kl-kdy' + (stara ? ' kl-stara' : '') + '">' + _klDatum(z.datum)
@@ -6299,13 +6381,31 @@ function openKontroly(rozbalit) {
         h += '</div>';
       }
       h += '</div>';
+      bloky.push({ m: m, html: h });
     });
     var bez = vsechnaMistaProdeje().filter(function (m) { return mista.indexOf(m) === -1; });
     if (mista.length && bez.length) {
-      h += '<div class="kl-bez"><span>Bez kontroly:</span> ' + bez.map(escHtml).join(', ') + '</div>';
+      konec += '<div class="kl-bez"><span>Bez kontroly:</span> ' + bez.map(escHtml).join(', ') + '</div>';
     }
-    h += '</div>';
-    ov.innerHTML = h;
+    // Jen co se změnilo: stejná místa zůstanou stejnými prvky, jinak se vymění
+    var sez = ov.querySelector('.kl-seznam'), stare = {};
+    [].slice.call(sez.children).forEach(function (el) { stare[el.getAttribute('data-klm')] = el; });
+    var nove = {}, pouzite = [];
+    bloky.forEach(function (b) {
+      var el = stare[b.m];
+      if (!el || posledni[b.m] !== b.html) {
+        var tpl = document.createElement('div');
+        tpl.innerHTML = b.html;
+        el = tpl.firstChild;
+      }
+      nove[b.m] = b.html;
+      pouzite.push(el);
+      sez.appendChild(el);   // existující prvek se jen přesune na své místo
+    });
+    [].slice.call(sez.children).forEach(function (el) { if (pouzite.indexOf(el) === -1) sez.removeChild(el); });
+    posledni = nove;
+    var kon = ov.querySelector('.kl-konec');
+    if (kon.innerHTML !== konec) kon.innerHTML = konec;
   }
   window._klPrekresli = prekresli;
   prekresli();

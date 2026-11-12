@@ -113,6 +113,16 @@ const naz = (a) => (a || []).map(x => x.nazev + '|' + x.velikost).sort().join(' 
   r = await spust(['--nahled'], '', { stranka: '<main>Načítám…</main>', prohlizec: '<main>Načítám…</main>' });
   ok('ani prohlížeč nic → chyba a text do debug, nic se nepošle', r.j && /nenašla/.test(r.j.chyba) && r.j.zapisy.length === 0 && r.j.ladici.includes('adonio_listings.txt'));
 
+  const NOVY = ['Moje nabídky', '4 nab.', '—', 'Air Jordan 4 Retro Black Cat', 'CU1110-010', 'Přidat', 'Velikost Cena Payout Ks Status VAT',
+    '44', '9 990 Kč', '+400 Kč vs nejlevnější', '7 493 Kč 1 Aktivní Margin', 'Nastavit nejnižší cenu',
+    'Air Max 95 Sail', 'DM9104-001', 'Přidat', 'Velikost Cena Payout Ks Status VAT', '42', '3 990 Kč', '✓ Nejlevnější', '2 990 Kč 1 Neaktivní Margin', 'Obnovit',
+    '45', '3 990 Kč', '✓ Nejlevnější', '2 990 Kč 1 Aktivní Margin', '46', '3 990 Kč', '✓ Nejlevnější', '2 990 Kč 0 Prodáno Margin'].join('\n');
+  r = await spust(['--nahled'], '', { stranka: '<main>Načítám…</main>', prohlizec: NOVY });
+  const vn = r.j && r.j.vysledek;
+  ok('rozložení od 12. 11.: payout, ks a stav na jednom řádku; prodaný řádek se přeskočí a počet sedí',
+    vn && vn.nabidek === 3 && vn.aktivnich === 2 && r.j.ladici.length === 0
+    && (vn.platby || []).some(x => x.sku === 'CU1110-010' && x.cena === 9990 && x.payout === 7493), JSON.stringify(vn && [vn.nabidek, vn.aktivnich, r.j.ladici]) + r.out.slice(-300));
+
   sekce('2) Pravidla ze skillu');
   const pl = (re) => (v.platby || []).find(x => re.test(x.nazev)) || {};
   ok('dvojité SKU: vezme to, které je ve skladu; cena s mezerami', pl(/Black Cat/).sku === 'CU1110-010' && pl(/Black Cat/).cena === 9990

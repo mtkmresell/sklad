@@ -393,6 +393,39 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   ok('klik na značku otevře okno rovnou u toho místa', okno.je && okno.rozb === 'Hypeboost', JSON.stringify(okno));
   await page.evaluate(() => document.getElementById('kontrolyOv').remove());
 
+  sekce('12c) Okno neproblikává (majitel, 12. 11. 2026)');
+  /* Dřív se při každém kliku přestavělo celé okno i s animací otevření
+     a skokem nahoru. Okno musí zůstat tímtéž prvkem, rolování na místě
+     a vyřízený řádek odjet jako duch, na který se nedá kliknout. */
+  let plyn = await page.evaluate(() => {
+    openKontroly('Hypeboost');
+    const ov = document.getElementById('kontrolyOv');
+    const modal = ov.querySelector('.kl-modal');
+    const sec = [...ov.querySelectorAll('.kl-misto')].find(m => m.getAttribute('data-klm') === 'Section');
+    const out = { pred: ov.querySelectorAll('.kl-kus').length };
+    ov.querySelector('.kl-kus .kl-hotovo').click();
+    out.stejneOkno = ov.querySelector('.kl-modal') === modal;
+    out.stejneMisto = [...ov.querySelectorAll('.kl-misto')].find(m => m.getAttribute('data-klm') === 'Section') === sec;
+    out.po = ov.querySelectorAll('.kl-kus').length;
+    const d = ov.querySelector('.kl-duch');
+    out.duch = !!d && !d.querySelector('[data-kl]') && !d.hasAttribute('data-kl') && getComputedStyle(d).pointerEvents === 'none';
+    window.__klModal = modal;
+    return out;
+  });
+  ok('Hotovo okno nepřestaví (tentýž prvek, nezměněné místo zůstane)', plyn.stejneOkno && plyn.stejneMisto, JSON.stringify(plyn));
+  ok('kus z okna zmizí hned', plyn.po === plyn.pred - 1, JSON.stringify(plyn));
+  ok('a odjede jako duch, na který nejde kliknout', plyn.duch);
+  await page.waitForTimeout(450);
+  shoda('duch po animaci zmizí', await page.evaluate(() => document.querySelectorAll('#kontrolyOv .kl-duch').length), 0);
+  await page.evaluate(() => [...document.querySelectorAll('#kontrolyOv .kl-hlava')].find(h => h.textContent.indexOf('Section') !== -1).click());
+  await page.waitForTimeout(700);
+  plyn = await page.evaluate(() => ({ stejne: document.querySelector('#kontrolyOv .kl-modal') === window.__klModal,
+    rozb: [...document.querySelectorAll('#kontrolyOv .kl-misto.rozbaleno')].map(m => m.getAttribute('data-klm')),
+    styl: (document.querySelector('#kontrolyOv .kl-telo') || {}).getAttribute('style') || '' }));
+  ok('přepnutí místa: jedno se sbalí, druhé rozbalí, okno zůstane', plyn.stejne && JSON.stringify(plyn.rozb) === '["Section"]', JSON.stringify(plyn));
+  ok('po animaci nezůstane výška natvrdo', !/height/.test(plyn.styl), plyn.styl);
+  await page.evaluate(() => document.getElementById('kontrolyOv').remove());
+
   sekce('12a) Kusy, které nalistovat nejde');
   /* Majitel 6. 11. 2026: hromadné kopírování SKU a názvů jen u nich —
      ty, co jdou, se vyřizují po jednom. */

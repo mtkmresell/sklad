@@ -310,7 +310,8 @@ def main(argv):
     inzeraty = nacti_profil()
     print(f"Aktivních inzerátů na profilu: {len(inzeraty)}")
     print(f"  Čtu detaily {len(inzeraty)} inzerátů (po třech naráz)…", flush=True)
-    S.paralelne(nacti_detail, inzeraty, 3)
+    with S.pracuji("Čtu detaily inzerátů"):
+        S.paralelne(nacti_detail, inzeraty, 3)
     r = vyhodnot(inzeraty, skladem, prodane)
     datum = S._iso_ted()
     with open(VYSTUP, "w", encoding="utf-8") as f:

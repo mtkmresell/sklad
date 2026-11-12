@@ -70,7 +70,8 @@ def nacti(potrebne_fn):
     with P.Prohlizec() as b:
         s = b.otevri(WEB, 2500)
         P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, "https://sell.sneakerstore.cz/users/sign_in")
-        d = s.evaluate(JS_DATA)
+        with S.pracuji("Čtu nabídky a katalog Sneakerstore"):
+            d = s.evaluate(JS_DATA)
         forms = s.evaluate(JS_FORMY, list(potrebne_fn(d["live"], d["cat"]))) if d["live"] or d["cat"] else {}
     return d["live"], d["cat"], forms
 

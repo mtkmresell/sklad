@@ -158,7 +158,8 @@ def main(argv):
                 break
             s.reload(wait_until="domcontentloaded")
             s.wait_for_timeout(4000)
-        d = s.evaluate(JS_STAHNI)
+        with S.pracuji("Čtu inzeráty na Facebooku"):
+            d = s.evaluate(JS_STAHNI)
     if d.get("chyba") or not d.get("inzeraty"):
         raise RuntimeError("Facebook: %s. Nech okno prohlížeče větší (aspoň 1280 px) a spusť znovu." % (d.get("chyba") or "žádné inzeráty"))
     inz = list({i["id"]: i for i in d["inzeraty"]}.values())

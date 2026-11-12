@@ -163,6 +163,12 @@ Dvě kontroly přes prohlížeč naráz nepojedou (sdílí jeden profil) — dru
 
 - **Hypeboost** vždy prodlouží almost expired (+14 dní).
 - **KLEKT** vždy prodlouží expiraci na 60 dní (kromě IE5836).
+  KLEKT se přihlašuje **kódem z e-mailu** — heslo se proto nechce; když
+  přihlášení vyprší, přihlas se v okně Chromu a zmáčkni Enter.
+- **Tnsky** v okně Chromu samo kliká (filtr Active, 100 řádků, další
+  stránka) — to je v pořádku, jejich tabulka jinak číst nejde.
+- Dlouhé kroky (čtení, prodlužování) ukazují v okně točící se značku
+  a vteřiny; kontrola se nesekla, jen pracuje.
 - **Released** si pamatuje katalog v `released/katalog_released.json`.
 - **WTB**: zkopíruj text pingeru (Ctrl+C) a spusť `SPUSTIT_wtb.bat`.
   Do aplikace pošle report, až bude „WTB Market" v Nastavení → místa

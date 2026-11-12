@@ -118,6 +118,7 @@ def nacti_prohlizecem(cookie):
                             for k, v in (c.split("=", 1) for c in cookie.split(";") if "=" in c)])
         s = b.otevri(WEB, 2000)
         text = ""
+        print("  Čekám, až se nabídky v Chromu načtou…", flush=True)
         for _ in range(30):   # nejvýš ~45 s, než se nabídky dotáhnou
             text = s.evaluate("document.body.innerText")
             if "Načítám" not in text and re.search(r"\d+\s*nab\.|Přidat|Margin", text):
@@ -133,6 +134,13 @@ def _kc(s):
     return int(d) if d else 0
 
 
+RADEK_NOVY = re.compile(r"^([\d\s\u00a0\u202f]+)Kč (\d+) (Aktivní|Neaktivní|Prodáno)( Margin)?$")
+
+
+def prodanych(radky):
+    return sum(1 for r in radky if (RADEK_NOVY.match(r) or [None] * 4)[3] == "Prodáno") if radky else 0
+
+
 def rozeber(radky):
     """Moje nabídky (layout od 12. 10. 2026): produkt = název, SKU, „Přidat";
     varianta = velikost, Margin, ×1, Aktivní/Neaktivní, cena, nejlevnější / +N Kč, Payout, payout."""
@@ -144,6 +152,19 @@ def rozeber(radky):
             if j >= 0 and sku_re.match(radky[j]) and not re.search(r"[a-z]", radky[j]):
                 sku, j = radky[j], j - 1
             cur = (radky[j] if j >= 0 else "", sku)
+        elif cur and RADEK_NOVY.match(r):
+            # layout od 12. 11. 2026: velikost / cena / (✓ Nejlevnější | +N Kč vs nejlevnější) / „payout ks stav Margin“
+            m = RADEK_NOVY.match(r)
+            if m.group(3) == "Prodáno":
+                continue
+            j, diff = i - 1, 0
+            if j >= 0 and "nejlevnější" in radky[j].lower():
+                diff = _kc(radky[j]) if "vs" in radky[j] else 0
+                j -= 1
+            if j < 1 or not re.fullmatch(r"[\d\s\u00a0\u202f]+Kč", radky[j]):
+                continue
+            out.append({"nazev": cur[0], "sku": cur[1], "velikost": radky[j - 1], "cena": _kc(radky[j]),
+                        "diff": diff, "payout": _kc(m.group(1)), "aktivni": m.group(3) == "Aktivní"})
         elif r == "Margin" and cur and i > 0:
             konec = next((k for k in range(i + 1, min(i + 15, len(radky))) if radky[k] in ("Margin", "Přidat")), min(i + 15, len(radky)))
             blok = radky[i + 1:konec]
@@ -293,8 +314,10 @@ def main(argv):
         radky = nacti_prohlizecem(cookie)
         nabidky = rozeber(radky)
     pocet = next((int(m.group(1)) for x in radky for m in [re.match(r"^(\d+) nab\.?$", x)] if m), None)
-    print(f"Adonio: {len(nabidky)} nabídek" + (f" (stránka říká {pocet})" if pocet is not None else ""))
-    if not nabidky or "/login" in kam or (pocet is not None and pocet != len(nabidky)):
+    prodano = prodanych(radky)   # prodané řádky stránka do „N nab.“ počítá, kontrola je přeskakuje
+    print(f"Adonio: {len(nabidky)} nabídek" + (f" + {prodano} prodaných" if prodano else "")
+          + (f" (stránka říká {pocet})" if pocet is not None else ""))
+    if not nabidky or "/login" in kam or (pocet is not None and pocet != len(nabidky) + prodano):
         cesta = S.uloz_ladici(SLOZKA, "adonio_listings.txt", "\n".join(radky))
         if not nabidky:
             raise RuntimeError("Na stránce Moje nabídky se nenašla žádná nabídka. Text stránky je v %s — pošli ho Claudovi." % cesta)

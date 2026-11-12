@@ -95,11 +95,8 @@ class Prohlizec:
         """test_js vrací true, když je přihlášeno a data jsou vidět. Jinak požádá
         o přihlášení v okně (Cloudflare taky odklikneš tam) a zkusí znovu."""
         for _ in range(pokusu):
-            try:
-                if stranka.evaluate(test_js):
-                    return True
-            except Exception:
-                pass
+            if _ok_pockej(stranka, test_js, 8):
+                return True
             print("\n>>> V okně prohlížeče se přihlas na %s (případně odklikni ověření)." % misto)
             print(">>> Až uvidíš svoje nabídky, vrať se sem a zmáčkni Enter.")
             try:
@@ -132,6 +129,17 @@ def _ok(stranka, test_js):
         return bool(stranka.evaluate(test_js))
     except Exception:
         return False
+
+
+def _ok_pockej(stranka, test_js, sekund=12):
+    """Stránky se dotahují až v prohlížeči — „nepřihlášeno“ se smí říct až po chvíli čekání."""
+    konec = time.time() + sekund
+    while True:
+        if _ok(stranka, test_js):
+            return True
+        if time.time() > konec:
+            return False
+        stranka.wait_for_timeout(1500)
 
 
 def vypln_prihlaseni(stranka, email, heslo, cekat_s=25):
@@ -176,7 +184,7 @@ def prihlas_sam(b, stranka, test_js, misto, url, login_url=None):
     """Přihlásí se sám heslem ze Správce pověření Windows (jako Sellect, Tuzex…).
     Poprvé se zeptá na e-mail a heslo, uloží je až po povedeném přihlášení.
     Když to nepůjde (ověření „nejsem robot“…), požádá o přihlášení v okně."""
-    if _ok(stranka, test_js):
+    if _ok_pockej(stranka, test_js):
         return True
     import sklad_firestore as S
     for pokus in range(2):
@@ -185,7 +193,7 @@ def prihlas_sam(b, stranka, test_js, misto, url, login_url=None):
             jdi(stranka, login_url, 2000)
         vyplneno = vypln_prihlaseni(stranka, email, heslo)
         jdi(stranka, url, 2500)
-        if _ok(stranka, test_js):
+        if _ok_pockej(stranka, test_js):
             if nove:
                 S.uloz_prihlaseni_webu(misto, email, heslo)
             print("Přihlášeno na %s." % misto)
