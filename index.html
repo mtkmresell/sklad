@@ -1068,6 +1068,79 @@ a.kl-jmeno:hover { color:var(--accent); text-decoration:underline; }
 .kl-karta .kl-kus:first-child { border-top:none; }
 .kl-kus-jm { display:flex; align-items:center; gap:10px; min-width:0; }
 .kl-nahled { width:44px; height:32px; flex:none; object-fit:contain; border-radius:5px; background:#fff; }
+/* ── REPORT KONTROLY (celá obrazovka, po vzoru reportů v artifactu) ── */
+#reportOv { align-items:stretch; justify-content:center; padding:0; }
+.rp-stranka { background:var(--bg); width:100%; max-width:980px; height:100%; overflow-y:auto; overscroll-behavior:contain;
+  padding:22px 22px 70px; border-left:1px solid var(--border); border-right:1px solid var(--border); animation:rowIn 0.18s ease both; }
+.rp-hlava { display:flex; align-items:flex-start; gap:12px; margin-bottom:4px; }
+.rp-nadpis { font-family:Syne,sans-serif; font-size:22px; font-weight:800; letter-spacing:-0.01em; flex:1; }
+.rp-zavrit { background:var(--surface2); border:1px solid var(--border); color:var(--muted); border-radius:8px; font:inherit;
+  font-size:13px; padding:6px 12px; cursor:pointer; }
+.rp-zavrit:hover { color:var(--text); border-color:#555; }
+.rp-sub { color:var(--muted); font-size:12px; font-family:'DM Mono',monospace; margin-bottom:14px; }
+.rp-zalozky { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:18px; overflow-x:auto; }
+.rp-zalozka { background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-1px; color:var(--muted);
+  font:inherit; font-size:13px; font-weight:600; padding:8px 14px; cursor:pointer; white-space:nowrap; }
+.rp-zalozka.active { color:var(--accent); border-bottom-color:var(--accent); }
+.rp-limit { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:14px; }
+.rp-limit-cisla { display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+.rp-limit-cisla b { color:var(--text); font-size:17px; font-family:Syne,sans-serif; }
+.rp-bar { height:7px; border-radius:6px; background:var(--surface3); margin-top:9px; overflow:hidden; }
+.rp-bar i { display:block; height:100%; background:var(--accent); border-radius:6px; }
+.rp-bar.plno i { background:var(--chybi); }
+.rp-souhrn { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+.rp-souhrn span { font-size:12px; color:var(--muted); background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:4px 9px; }
+.rp-sekce { margin-bottom:24px; }
+.rp-sek-hlava { display:flex; align-items:center; gap:9px; flex-wrap:wrap; margin-bottom:8px; }
+.rp-sek-nadpis { font-size:15px; font-weight:700; }
+.rp-pocet { font-family:'DM Mono',monospace; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; background:var(--surface2); color:var(--muted); }
+.rp-b-smazat .rp-pocet { background:rgba(255,68,68,0.14); color:var(--danger); }
+.rp-b-opravit .rp-pocet { background:rgba(110,168,255,0.14); color:#6ea8ff; }
+.rp-b-pridat .rp-pocet { background:rgba(200,255,0,0.12); color:var(--accent); }
+.rp-b-fajfky .rp-pocet { background:rgba(230,191,90,0.14); color:#e6bf5a; }
+.rp-b-neni .rp-pocet { background:rgba(255,140,26,0.14); color:var(--chybi); }
+.rp-postup { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted2); }
+.rp-hromadne { margin-left:auto; font:inherit; font-size:11px; background:var(--surface2); color:var(--muted); border:1px solid var(--border);
+  border-radius:6px; padding:4px 10px; cursor:pointer; }
+.rp-hromadne:hover { color:var(--text); border-color:var(--accent); }
+.rp-poznamka { flex-basis:100%; font-size:12px; color:var(--muted); margin-top:-2px; }
+.rp-karta { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
+.rp-prazdno { padding:12px 14px; font-size:13px; color:var(--muted2); }
+.rp-radek { display:grid; grid-template-columns:34px minmax(0,1fr) auto auto; align-items:center; gap:10px;
+  padding:9px 12px; border-top:1px solid var(--border); }
+.rp-karta .rp-radek:first-child { border-top:none; }
+.rp-radek.hotovo { opacity:0.45; }
+.rp-radek.hotovo .rp-jmeno { text-decoration:line-through; }
+.rp-tick { appearance:none; -webkit-appearance:none; width:20px; height:20px; border:2px solid var(--border); border-radius:6px;
+  cursor:pointer; position:relative; background:var(--bg); margin:0; }
+.rp-tick:checked { background:var(--accent); border-color:var(--accent); }
+.rp-tick:checked::after { content:""; position:absolute; left:5px; top:1px; width:6px; height:11px; border:solid #000; border-width:0 2px 2px 0; transform:rotate(45deg); }
+.rp-obsah { display:flex; align-items:center; gap:10px; min-width:0; }
+.rp-nahled { width:56px; height:40px; flex:none; object-fit:contain; border-radius:6px; background:#fff; }
+.rp-nahled.prazdny { background:var(--surface2); }
+.rp-texty { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0; }
+.rp-jmeno { background:none; border:none; font:inherit; font-size:13px; color:var(--text); text-align:left; padding:2px 4px; margin:-2px -4px;
+  border-radius:5px; cursor:pointer; max-width:100%; }
+.rp-jmeno:hover { background:rgba(200,255,0,0.1); }
+.rp-jmeno.blesk { background:var(--accent); color:#000; }
+.rp-sku { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); background:none; border:none; padding:0; cursor:pointer; }
+.rp-sku:hover { color:var(--accent); }
+.rp-duvod { font-size:12px; color:var(--muted); line-height:1.4; }
+.rp-udaje { display:flex; gap:5px; flex-wrap:wrap; margin-top:2px; }
+.rp-udaje span { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); border:1px solid var(--border); border-radius:4px; padding:1px 6px; }
+.rp-udaje b { color:var(--text); font-weight:600; }
+.rp-vel { font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); white-space:nowrap; text-align:right; }
+.rp-akce { display:flex; gap:6px; }
+.rp-pata { display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--muted); margin-top:8px; }
+.rp-pata button { background:none; border:none; color:var(--muted); font:inherit; font-size:12px; text-decoration:underline; cursor:pointer; padding:0; }
+.rp-pata button:hover { color:var(--accent); }
+.kl-odkaz-btn { background:none; border:none; font-family:inherit; padding:0; cursor:pointer; }
+@media (max-width:640px){
+  .rp-stranka { padding:16px 14px 70px; border:none; }
+  .rp-radek { grid-template-columns:28px minmax(0,1fr) auto; }
+  .rp-akce { grid-column:2 / -1; }
+  .rp-nahled { width:46px; height:34px; }
+}
 .kl-nahled.prazdny { background:var(--surface); border:1px solid var(--border); }
 .kl-kus-t { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
 .kl-kopir { background:none; border:none; font:inherit; color:var(--text); text-align:left; cursor:pointer; padding:2px 5px;
@@ -5689,6 +5762,8 @@ function _provedPozadavky(snap) {
   var kSmazani = [], zmeneno = 0, odmitnuto = 0, kontroly = [];
   snap.forEach(function (d) {
     if (String(d.id).indexOf(POZADAVEK_PREFIX) !== 0) return;
+    // Report kontroly není požadavek: leží dál, dokud ho nepřepíše další (REPORT KONTROLY)
+    if (String(d.id).indexOf(REPORT_PREFIX) === 0) return;
     kSmazani.push(d.id);
     var v = d.data() || {};
     var kdy = v.kdy ? new Date(v.kdy).getTime() : 0;
@@ -5977,8 +6052,7 @@ function kontrolaDetailHtml(it) {
     if (x.druh === 'chybi' && (x.z.sFajfkou || []).indexOf(it.id) !== -1) {
       text += '<span class="kl-kdy kl-blok">Fajfku má, ale podle kontroly tam nevisí.</span>';
     }
-    var odkaz = x.z.report ? '<a class="kl-odkaz" href="' + escHtml(x.z.report)
-      + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Report</a>' : '';
+    var odkaz = kontrolaReportOdkaz(x.misto, x.z, 'data-action');
     h += '<div class="kl-radek"><span>' + text + '</span><span class="kl-akce">' + odkaz
       + '<button class="kl-hotovo" data-action="kontrolaodbav" data-id="' + escHtml(it.id) + '" data-misto="'
       + escHtml(x.misto) + '">' + (x.druh === 'chybi' ? 'Hotovo' : 'Smazáno') + '</button></span></div>';
@@ -6087,6 +6161,7 @@ function openKontroly(rozbalit) {
     if (co === 'hotovo') { kontrolaOdbav(t.dataset.misto, t.dataset.id); return; }
     if (co === 'hotovo-inz') { kontrolaOdbavInzerat(t.dataset.misto, t.getAttribute('data-klic')); return; }
     if (co === 'detail') { zavri(); openDetail(t.dataset.id); return; }
+    if (co === 'report') { openReport(t.dataset.misto); return; }
     if (co === 'kopirovat') {
       var text = t.getAttribute('data-text') || '';
       zkopiruj(text, function () {
@@ -6208,7 +6283,7 @@ function openKontroly(rozbalit) {
         + (dni === 0 ? ' · dnes' : dni === 1 ? ' · včera' : ' · před ' + dnyText(dni)) + '</span>'
         + (stara ? '<span class="kl-upominka">Zkontrolovat znovu</span>' : '')
         + limit + '<span class="kl-pocty">' + pocty + '</span>'
-        + (z.report ? '<a class="kl-odkaz" href="' + escHtml(z.report) + '" target="_blank" rel="noopener">Report</a>' : '')
+        + kontrolaReportOdkaz(m, z, 'data-kl')
         + '</div>';
       if (rozb) {
         h += '<div class="kl-telo">';
@@ -6235,6 +6310,258 @@ function openKontroly(rozbalit) {
   window._klPrekresli = prekresli;
   prekresli();
   document.body.appendChild(ov);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   REPORT KONTROLY
+
+   Kontroly na PC (nastroje/bazos_kontrola.py a další) umí totéž co skill
+   v chatu, až na jedno: artifact v Claudovi vyrobit nemůžou. Majitel
+   ale report používá — u e-shopů je v něm mnohem víc než v okně
+   Kontroly listingů (payouty, co nejde nalistovat, kopírovat vše) a do
+   okna by se to nevešlo (11. 11. 2026). Report je proto stránka tady
+   v aplikaci, za přihlášením, otevřená odkazem Report.
+
+   Data posílá skript do dokumentu `pozadavek_report_<místo>` — pravidla
+   čtečku pustí jen pod `pozadavek_…` a na nic jiného nesáhne. Na rozdíl
+   od lístečku se **neprovádí ani nemaže**; další report téhož místa ho
+   přepíše. Sekce si určuje skript, stránka vykreslí jakékoli, takže
+   nová kontrola nepotřebuje úpravu aplikace.
+
+   Odkaz Report v okně vede sem jen tehdy, když report není starší než
+   kontrola (`kontrolaReport`). Kontrola ze skillu (artifact) je pak
+   novější a odkaz vede tam, odkud přišla.
+
+   Dokument přijde po síti, takže se bere jen dohodnutý tvar
+   (`_reportZDokumentu`) a všechno se escapuje; odkazy jen http(s).
+   Odškrtnutí „hotovo" je jako v artifactu jen v tomhle prohlížeči.
+
+   Hlídá to test-bazoskontrola.js (sekce 4 a 5).
+══════════════════════════════════════════════════════════════════════ */
+var REPORT_PREFIX = 'pozadavek_report_';
+var SK_REPORT_HOTOVO = 'sklad_report_hotovo_v1';
+var REPORT_BARVY = ['smazat', 'opravit', 'pridat', 'fajfky', 'neni', 'overit', 'info'];
+var _reporty = {};
+
+function _rpOdkaz(u, n) {
+  return (typeof u === 'string' && /^https?:\/\//i.test(u) && u.length <= (n || 500)) ? u : '';
+}
+function _reportZDokumentu(v) {
+  if (!v || typeof v !== 'object' || !jeMistoProdeje(v.misto)) return null;
+  var d = new Date(typeof v.datum === 'string' ? v.datum : '');
+  if (isNaN(d.getTime())) return null;
+  var lim = v.limit && typeof v.limit === 'object' ? v.limit : null;
+  return {
+    misto: v.misto,
+    skupina: _klText(v.skupina, 60) || v.misto,
+    datum: d.toISOString(),
+    nadpis: _klText(v.nadpis, 120) || v.misto,
+    limit: lim && _klCislo(lim.pocet) != null && _klCislo(lim.max) ? { pocet: _klCislo(lim.pocet), max: _klCislo(lim.max) } : null,
+    souhrn: (Array.isArray(v.souhrn) ? v.souhrn : []).map(function (t) { return _klText(t, 200); }).filter(Boolean).slice(0, 12),
+    sekce: (Array.isArray(v.sekce) ? v.sekce : []).slice(0, 20).map(function (s) {
+      if (!s || typeof s !== 'object') return null;
+      return {
+        nazev: _klText(s.nazev, 120) || 'Sekce',
+        barva: REPORT_BARVY.indexOf(s.barva) !== -1 ? s.barva : 'info',
+        poznamka: _klText(s.poznamka, 300),
+        hromadne: s.hromadne === true,
+        radky: (Array.isArray(s.radky) ? s.radky : []).slice(0, KONTROLA_NEJVIC).map(function (r) {
+          if (!r || typeof r !== 'object') return null;
+          var o = { nazev: _klText(r.nazev, 200), velikost: _klText(r.velikost, 100), sku: _klText(r.sku, 80),
+            duvod: _klText(r.duvod, 400), odkaz: _rpOdkaz(r.odkaz), obrazek: _rpOdkaz(r.obrazek, 800),
+            ids: (Array.isArray(r.ids) ? r.ids : []).filter(function (id) { return typeof id === 'string' && id && id.length <= 80; }).slice(0, 50),
+            udaje: (Array.isArray(r.udaje) ? r.udaje : []).slice(0, 8).map(function (u) {
+              return u && typeof u === 'object' ? { popis: _klText(u.popis, 60), hodnota: _klText(u.hodnota, 120) } : null;
+            }).filter(function (u) { return u && (u.popis || u.hodnota); }) };
+          return (o.nazev || o.odkaz) ? o : null;
+        }).filter(Boolean)
+      };
+    }).filter(Boolean)
+  };
+}
+
+function _reportyZeSnimku(snap) {
+  if (jeUctetni()) { _reporty = {}; return; }
+  var nove = {};
+  snap.forEach(function (d) {
+    if (String(d.id).indexOf(REPORT_PREFIX) !== 0) return;
+    var r = _reportZDokumentu(d.data());
+    if (r && (!nove[r.misto] || nove[r.misto].datum < r.datum)) nove[r.misto] = r;
+  });
+  _reporty = nove;
+  if (window._klPrekresli) window._klPrekresli();
+  if (window._rpPrekresli) window._rpPrekresli();
+}
+
+// Report z PC platí, když není starší než poslední kontrola místa
+function kontrolaReport(misto) {
+  var r = _reporty[misto];
+  if (!r) return null;
+  var z = getKontroly()[misto];
+  if (z && z.datum && new Date(z.datum).getTime() > new Date(r.datum).getTime() + 60000) return null;
+  return r;
+}
+
+// Odkaz Report: na stránku v aplikaci, nebo na artifact ze skillu
+function kontrolaReportOdkaz(misto, z, atribut) {
+  if (kontrolaReport(misto)) {
+    return '<button class="kl-odkaz kl-odkaz-btn" ' + atribut + '="report" data-misto="' + escHtml(misto) + '">Report</button>';
+  }
+  return z && z.report ? '<a class="kl-odkaz" href="' + escHtml(z.report)
+    + '" target="_blank" rel="noopener" onclick="event.stopPropagation()">Report</a>' : '';
+}
+
+function _rpHotovo() {
+  try { var v = JSON.parse(localStorage.getItem(SK_REPORT_HOTOVO) || '{}'); return v && typeof v === 'object' ? v : {}; }
+  catch (e) { return {}; }
+}
+function _rpKlic(r) { return r.misto + '|' + r.datum; }
+
+function openReport(misto) {
+  if (jeUctetni()) return;
+  var stare = document.getElementById('reportOv');
+  if (stare) stare.remove();
+  if (!kontrolaReport(misto)) { showToast('Report k ' + misto + ' tu není.', 'err'); return; }
+  var aktivni = misto;
+  var ov = document.createElement('div');
+  ov.id = 'reportOv';
+  ov.className = 'mo open';
+  ov.style.zIndex = '1200';
+  function zavri() {
+    ov.remove(); window._rpPrekresli = null;
+    document.removeEventListener('keydown', esc, true);
+  }
+  // Escape zavře jen report, okno Kontroly pod ním zůstane
+  function esc(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); zavri(); } }
+  document.addEventListener('keydown', esc, true);
+
+  function radky(r) {
+    var h = _rpHotovo()[_rpKlic(r)] || {};
+    return { h: h, klic: function (si, ri) { return si + ':' + ri; } };
+  }
+  function nahled(x) {
+    var src = x.obrazek;
+    if (!src) {
+      var it = items.find(function (i) { return x.ids.indexOf(i.id) !== -1 && i.imgUrl; });
+      src = it ? it.imgUrl : '';
+    }
+    return src ? '<img class="rp-nahled" src="' + escHtml(src) + '" alt="" loading="lazy">' : '<span class="rp-nahled prazdny"></span>';
+  }
+  function prekresli() {
+    var r = kontrolaReport(aktivni);
+    if (!r) { zavri(); return; }
+    var bratri = Object.keys(_reporty).map(function (m) { return kontrolaReport(m); })
+      .filter(function (x) { return x && x.skupina === r.skupina; })
+      .sort(function (a, b) { return a.misto.localeCompare(b.misto, 'cs'); });
+    var st = radky(r), celkem = 0, hotovych = 0;
+    var d = new Date(r.datum);
+    var html = '<div class="rp-stranka"><div class="rp-hlava"><div class="rp-nadpis">' + escHtml(r.nadpis) + '</div>'
+      + '<button class="rp-zavrit" data-rp="zavrit">Zavřít</button></div>'
+      + '<div class="rp-sub">Poslední kontrola ' + d.getDate() + '. ' + (d.getMonth() + 1) + '. ' + d.getFullYear()
+      + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + '</div>';
+    if (bratri.length > 1) {
+      html += '<div class="rp-zalozky">' + bratri.map(function (b) {
+        return '<button class="rp-zalozka' + (b.misto === r.misto ? ' active' : '') + '" data-rp="zalozka" data-misto="'
+          + escHtml(b.misto) + '">' + escHtml(b.misto) + '</button>';
+      }).join('') + '</div>';
+    }
+    if (r.limit) {
+      var volno = r.limit.max - r.limit.pocet;
+      html += '<div class="rp-limit"><div class="rp-limit-cisla"><span><b>' + r.limit.pocet + ' / ' + r.limit.max + '</b> inzerátů</span>'
+        + '<span>' + (volno >= 0 ? 'ještě můžeš přidat <b>' + volno + '</b>' : 'přes limit o <b>' + (-volno) + '</b>') + '</span></div>'
+        + '<div class="rp-bar' + (volno <= 0 ? ' plno' : '') + '"><i style="width:' + Math.min(100, Math.round(r.limit.pocet / r.limit.max * 100)) + '%"></i></div></div>';
+    }
+    if (r.souhrn.length) html += '<div class="rp-souhrn">' + r.souhrn.map(function (t) { return '<span>' + escHtml(t) + '</span>'; }).join('') + '</div>';
+    r.sekce.forEach(function (s, si) {
+      var hot = 0;
+      s.radky.forEach(function (x, ri) { if (st.h[st.klic(si, ri)]) hot++; });
+      celkem += s.radky.length; hotovych += hot;
+      html += '<div class="rp-sekce rp-b-' + s.barva + '"><div class="rp-sek-hlava"><span class="rp-sek-nadpis">' + escHtml(s.nazev) + '</span>'
+        + '<span class="rp-pocet">' + s.radky.length + '</span>'
+        + (s.radky.length ? '<span class="rp-postup">' + hot + ' / ' + s.radky.length + ' hotovo</span>' : '')
+        + (s.hromadne && s.radky.length ? '<button class="rp-hromadne" data-rp="vse" data-sekce="' + si + '">Kopírovat vše</button>' : '')
+        + (s.poznamka && s.radky.length ? '<span class="rp-poznamka">' + escHtml(s.poznamka) + '</span>' : '') + '</div>'
+        + '<div class="rp-karta">' + (s.radky.length ? s.radky.map(function (x, ri) {
+          var k = st.klic(si, ri), je = !!st.h[k];
+          var detail = x.ids.filter(function (id) { return items.some(function (i) { return i.id === id; }); })[0];
+          return '<div class="rp-radek' + (je ? ' hotovo' : '') + '">'
+            + '<input type="checkbox" class="rp-tick" data-rp="hotovo" data-klic="' + k + '"' + (je ? ' checked' : '') + ' aria-label="Hotovo">'
+            + '<div class="rp-obsah">' + nahled(x) + '<div class="rp-texty">'
+            + '<button class="rp-jmeno" data-rp="kopirovat" data-text="' + escHtml(x.nazev) + '" title="Kliknutím zkopíruješ">' + escHtml(x.nazev || '—') + '</button>'
+            + (x.sku ? '<button class="rp-sku" data-rp="kopirovat" data-text="' + escHtml(x.sku) + '" title="Kliknutím zkopíruješ">' + escHtml(x.sku) + '</button>' : '')
+            + (x.duvod ? '<span class="rp-duvod">' + escHtml(x.duvod) + '</span>' : '')
+            + (x.udaje.length ? '<span class="rp-udaje">' + x.udaje.map(function (u) {
+              return '<span>' + escHtml(u.popis) + (u.popis && u.hodnota ? ' ' : '') + '<b>' + escHtml(u.hodnota) + '</b></span>';
+            }).join('') + '</span>' : '')
+            + '</div></div>'
+            + '<div class="rp-vel">' + escHtml(x.velikost || '') + '</div>'
+            + '<div class="rp-akce">'
+            + (x.odkaz ? '<a class="kl-tl kl-tl-odkaz" href="' + escHtml(x.odkaz) + '" target="_blank" rel="noopener">Odkaz</a>' : '')
+            + (detail ? '<button class="kl-tl" data-rp="detail" data-id="' + escHtml(detail) + '">Detail</button>' : '')
+            + '</div></div>';
+        }).join('') : '<div class="rp-prazdno">Nic, vše sedí.</div>') + '</div></div>';
+    });
+    html += '<div class="rp-pata"><span>Celkem ' + hotovych + ' / ' + celkem + ' vyřízeno</span>'
+      + (hotovych ? '<button data-rp="vynulovat">Vynulovat odškrtnutí</button>' : '') + '</div></div>';
+    var rol = ov.firstChild ? ov.firstChild.scrollTop : 0;
+    ov.innerHTML = html;
+    if (ov.firstChild) ov.firstChild.scrollTop = rol;
+  }
+  function ulozHotovo(r, h) {
+    var vse = _rpHotovo(), drz = {};
+    // Pamatují se jen reporty, které pořád existují
+    Object.keys(_reporty).forEach(function (m) { var k = _rpKlic(_reporty[m]); if (vse[k]) drz[k] = vse[k]; });
+    drz[_rpKlic(r)] = h;
+    _ulozLokal(SK_REPORT_HOTOVO, JSON.stringify(drz));
+  }
+
+  ov.addEventListener('click', function (e) {
+    if (e.target === ov) { zavri(); return; }
+    if (e.target.closest('a')) return;
+    var t = e.target.closest('[data-rp]');
+    if (!t) return;
+    var co = t.getAttribute('data-rp');
+    var r = kontrolaReport(aktivni);
+    if (co === 'zavrit') { zavri(); return; }
+    if (co === 'zalozka') { aktivni = t.dataset.misto; ov.firstChild.scrollTop = 0; prekresli(); return; }
+    if (co === 'detail') {
+      zavri();
+      var kl = document.getElementById('kontrolyOv');
+      if (kl) { kl.remove(); window._klPrekresli = null; var b = document.getElementById('btnKontroly'); if (b) b.classList.remove('active'); }
+      openDetail(t.dataset.id);
+      return;
+    }
+    if (co === 'kopirovat') {
+      var text = t.getAttribute('data-text') || '';
+      if (!text) return;
+      zkopiruj(text, function () {
+        t.classList.add('blesk'); setTimeout(function () { t.classList.remove('blesk'); }, 320);
+        showToast('Zkopírováno: ' + text);
+      });
+      return;
+    }
+    if (co === 'vse' && r) {
+      var s = r.sekce[+t.dataset.sekce];
+      if (!s) return;
+      // Po řádcích název ⇥ velikost ⇥ SKU — vloží se rovnou do tabulky
+      var txt = s.radky.map(function (x) { return [x.nazev, x.velikost, x.sku].join('\t'); }).join('\n');
+      zkopiruj(txt, function () { showToast('Zkopírováno: ' + s.radky.length + ' řádků'); });
+      return;
+    }
+    if (co === 'vynulovat' && r) { ulozHotovo(r, {}); prekresli(); return; }
+  });
+  ov.addEventListener('change', function (e) {
+    var t = e.target.closest('[data-rp="hotovo"]');
+    var r = kontrolaReport(aktivni);
+    if (!t || !r) return;
+    var h = Object.assign({}, _rpHotovo()[_rpKlic(r)] || {});
+    if (t.checked) h[t.dataset.klic] = 1; else delete h[t.dataset.klic];
+    ulozHotovo(r, h);
+    prekresli();
+  });
+  window._rpPrekresli = prekresli;
+  document.body.appendChild(ov);
+  prekresli();
 }
 
 function setView(mode) {
@@ -13728,6 +14055,7 @@ document.addEventListener('click', function(e) {
   if (action === 'opensizeTables') { cm('moSettings'); openSizeTables(); return; }
   if (action === 'openplatmgr') { openPlatMgr(); return; }
   if (action === 'kontroly') { openKontroly(btn.dataset.misto); return; }
+  if (action === 'report') { openReport(btn.dataset.misto); return; }
   if (action === 'kontrolaodbav') { kontrolaOdbav(btn.dataset.misto, id); return; }
   if (action === 'opencsvmodal') { openCsvModal(); return; }
   if (action === 'openaddmodal') { openAddModal(); return; }
@@ -20373,6 +20701,7 @@ function _spustSkladPosluchace() {
       try { _applyItemCacheDoc(cloud.cache, data.itemCache); } catch(e) { console.warn('cache našeptávače:', e); }
       /* Až úplně nakonec: požadavky z konektoru mají dosednout na
          srovnaná data, ne na stav, který se o řádek níž ještě přepíše. */
+      try { _reportyZeSnimku(snap); } catch(e) { console.warn('reporty kontrol:', e); }
       try { _provedPozadavky(snap); } catch(e) { console.warn('požadavky z konektoru:', e); }
       // Ze stejného důvodu až tady: výkupy, které čekaly na CRM (VÝKUP OD PARTNERA)
       try { vykupDopojCekajici(); } catch(e) { console.warn('výkupy čekající na CRM:', e); }

@@ -208,8 +208,8 @@ function python(args, env) {
 
   sekce('5) Zdroj');
   const zdroj = fs.readFileSync(SKRIPT, 'utf8');
-  ok('PATCH jen v zápisu lístečku', (zdroj.match(/'PATCH'/g) || []).length === 1
-    && /def _zapis_listecek[\s\S]*?'PATCH'/.test(zdroj));
+  ok('PATCH jen v jediné zapisovací funkci, a ta pustí jen pozadavek_…', (zdroj.match(/'PATCH'/g) || []).length === 1
+    && /def _zapis_dokument[\s\S]*?startswith\(POZADAVEK_PREFIX\)[\s\S]*?'PATCH'/.test(zdroj));
   ok('nic nemaže', !/'DELETE'/.test(zdroj));
   ok('jen standardní knihovna', !/^\s*(import|from)\s+(requests|google|firebase)/m.test(zdroj));
   ok('UID majitele sedí s pravidly', fs.readFileSync(path.resolve(__dirname, '..', 'firestore.rules'), 'utf8').indexOf(UID) !== -1);

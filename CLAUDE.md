@@ -539,6 +539,32 @@ u tlačítka jdou, do značek u kusů ne. Očistí je `_klInzeraty` v aplikaci,
 — **tvar se musí měnit na všech třech místech**; `test-skladpy.js` ho
 prohání celou cestou Python → aplikace → okno.
 
+**Report z kontroly na PC** (`REPORT KONTROLY`, 12. 11. 2026): skript
+artifact v Claudovi vyrobit nemůže, a majitel report používá — u e-shopů
+je v něm mnohem víc, než se vejde do okna (payouty, kopírovat vše), a
+v okně by to byl „bordel". Skript proto pošle report do dokumentu
+`pozadavek_report_<místo>` (`posli_report` v `sklad_firestore.py`,
+`klic_reportu`: „Bazoš.cz" → `bazos-cz`) a odkaz **Report** v okně
+otevře stránku přes celou obrazovku (`openReport`): záložky míst téže
+`skupiny`, limit s „ještě můžeš přidat N", sekce s počtem a postupem,
+řádky s náhledem (obrázek z řádku, jinak z kusu podle `ids`), kopírování
+klikem, „Kopírovat vše" u sekce s `hromadne`, zaškrtávátka hotovo (jen
+v prohlížeči, jako v artifactu). **Sekce si určuje skript** — nová
+kontrola nepotřebuje úpravu aplikace. Tři věci:
+
+- **Report se neprovádí ani nemaže** (`_provedPozadavky` ho přeskakuje);
+  přepíše ho až další report téhož místa. Smazaný by zmizel hned po
+  prvním snímku.
+- **Odkaz vede na report z PC, jen když není starší než kontrola**
+  (`kontrolaReport`, kontrola i report nesou stejný okamžik). Novější
+  kontrola ze skillu vede na svůj artifact.
+- Dokument přijde po síti: bere se jen tvar z `_reportZDokumentu`,
+  všechno se escapuje, odkazy i obrázky jen http(s). Do Firestore
+  zapisuje Python jedinou funkcí (`_zapis_dokument`), která pustí jen
+  `pozadavek_…`.
+
+Hlídá to `test-bazoskontrola.js`, sekce 4 a 5.
+
 Krok „zavolej `sklad_kontrola`" musí být **v každém kontrolním skillu**;
 skilly žijí v Claudovi u majitele, ne v repozitáři. Znění kroku je
 v `konektor/README.md`. Hlídá to `test-kontroly.js`.
@@ -1186,6 +1212,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | animace hledání | `HLEDÁNÍ — ANIMACE` |
 | šipky v detailu položky | `LISTOVÁNÍ DETAILEM PODLE OBRAZOVKY` |
 | kontroly listingů (okno, značky) | `KONTROLY LISTINGŮ` |
+| report z kontroly na PC (stránka) | `REPORT KONTROLY` |
 | odkaz na doklad pro celý nákup | `SPOLEČNÝ NÁKUPNÍ DOKLAD` |
 | obrázek pro stejné kusy | `SPOLEČNÝ OBRÁZEK POLOŽKY` |
 | okno pro účetního (měsíc) | `ÚČETNICTVÍ` |
@@ -1327,7 +1354,7 @@ Na staré adrese jdou vytáhnout v konzoli:
   GitHub Pro). Pak taky smazat zmínky o GitHub Pages odsud a ze skillu
   `zmena`.
 
-### Lokální kontroly — Bazoš čeká na první ostrý běh (11. 11. 2026)
+### Lokální kontroly — Bazoš běží, další kontroly (12. 11. 2026)
 
 `sklad_firestore.py` na PC majitele běží (přihlášení čtečky ve Správci
 pověření, `test` vidí sklad). **Heslo se při `nastavit` bere ze schránky**
@@ -1340,18 +1367,24 @@ rozhodne **Smazat** (inzerát bez kusu skladem, jistě spárovaný s prodaným
 modelem → nejčerstvější prodaný kus na velikost), **Opravit**, **Není ve
 SKLADu** a fajfky, vypíše náhled a po „a" pošle lístečky (fajfky, pak
 kontrola Bazoš.cz a Bazoš.sk s počtem inzerátů a limitem 50). Report
-v artifactu odpadl. Pravidla ze skillu `bazos-kontrola` platí dál.
+v artifactu nahradil report v aplikaci (`REPORT KONTROLY`). Pravidla
+ze skillu `bazos-kontrola` platí dál; **skill majitel nechává jako
+zálohu**, když nebude u PC — nemazat ani nepřepisovat.
 **Nejistá shoda nikam nejde** — jen do výpisu „OVĚŘIT RUČNĚ" a do
 poznámky kontroly; a modelu, kterému se inzerát možná jen nespároval,
 se fajfka neodškrtne. Hlídá to `test-bazoskontrola.js`.
 
-**Zbývá (připomínej):** majitel uloží novou verzi do
-`G:\Můj disk\Claude\MTKM-kontroly`, pustí ji a pošle výpis — první
-ostrý běh ukáže, jestli párování s prodanými nesype moc „ověřit ručně".
-Pak skill `bazos-kontrola` přepsat na „spusť skript" (skilly žijí
-u majitele v Claudovi). Otevřené otázky ze zadání: může PC běžet trvale,
-nebo se budit (Wake on LAN rozdělaný)? Kterou kontrolu převést po
-Bazoši jako první?
+První ostrý běh 11. 11.: 47 + 49 inzerátů za 70 s, „ověřit ručně" nula.
+Novou verzi skriptu lze majiteli nahrát rovnou na Google Disk (konektor
+Drive): obsah existujícího souboru přepsat nejde, starý se přejmenuje
+na `…_stary.py` a nový vznikne vedle.
+
+**Další kontroly (domluveno 12. 11.):** bez přihlášení jdou jen
+**Refresher** a **WTB Market** — ty jsou na řadě. **Section** má jen
+Google Sheets (odkaz od majitele). Ostatní weby chtějí přihlášení;
+majitel souhlasí, ať si program heslo pamatuje a přihlašuje se sám.
+Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,
+nebo se budit (Wake on LAN rozdělaný)?
 
 Pořadí domluvené 11. 11.: doma dokončit Bazoš (kroky výš), **pak
 skládat další kontroly** (každý web vlastní skript, napojený na tentýž

@@ -135,6 +135,7 @@ def nacti_profil(misto, kod):
 
 
 RE_POPIS = re.compile(r"""<div[^>]*class=["']?popisdetail["']?[^>]*>(.*?)</div>""", re.S | re.I)
+RE_OBRAZEK = re.compile(r"""<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']""", re.I)
 RE_VEL = re.compile(r"Ve[lľ]ikos[tť]\s*:\s*([^•\n]*?)\s*(?:•|\n|$)", re.I)
 
 
@@ -155,6 +156,8 @@ def nacti_velikosti(inz):
         t = re.search(r"<h1[^>]*>(.*?)</h1>", stranka, re.S)
         if t:
             inz["nazev"] = " ".join(bez_tagu(t.group(1)).split())
+    o = RE_OBRAZEK.search(stranka)
+    inz["obrazek"] = html.unescape(o.group(1)) if o else ""
     v = RE_VEL.search(popis.replace("<br>", "\n"))
     inz["velikosti_text"] = v.group(1).strip() if v else ""
     inz["velikosti"] = sorted(rozdel_velikosti(inz["velikosti_text"]), key=klic_vel)
@@ -316,7 +319,8 @@ def vyhodnot(kod, plat, inzeraty, pocet, web, modely, prodane):
                     duvod.append(f"V inzerátu je i {vel_text(navic)}, ve SKLAD. není, odebrat.")
             if duvod:
                 fix.append([name, vel_text(m["velikosti"]), " ".join(duvod)])
-                opravit.append({"nazev": name, "odkaz": inz_modelu[name][0]["url"],
+                opravit.append({"nazev": name, "odkaz": inz_modelu[name][0]["url"], "duvod": " ".join(duvod),
+                                "obrazek": inz_modelu[name][0].get("obrazek", ""),
                                 "inzerat": vel_text(vel_inz) if vel_inz else "velikost nenalezena",
                                 "sklad": vel_text(m["velikosti"]), "ids": [k["id"] for k in m["kusy"]]})
         # fajfky: inzerát běží -> zaškrtnout (1 id na model+velikost)
@@ -354,7 +358,7 @@ def vyhodnot(kod, plat, inzeraty, pocet, web, modely, prodane):
     # Dřív tohle rozhodoval Claude v chatu; teď se páruje s prodanými
     # stejně přísně jako se skladem. Nejistá shoda nejde nikam — radši
     # nic než tvrdit „smaž" o inzerátu, který je možná v pořádku.
-    smazat, neni_ve_skladu = [], []
+    smazat, neni_ve_skladu, smazat_radky = [], [], []
     for n in neznamé:
         inz = n.pop("_inz")
         mp, kand = sparuj(inz, prodane)
@@ -373,6 +377,9 @@ def vyhodnot(kod, plat, inzeraty, pocet, web, modely, prodane):
                     continue
                 vzato.add(k["size"])
                 smazat.append(k["id"])
+            smazat_radky.append({"nazev": mp["name"], "velikost": n["velikosti"], "odkaz": n["url"],
+                                 "ids": [i for i in smazat if any(k["id"] == i for k in mp["kusy"])],
+                                 "inzerat": n["nazev"], "obrazek": inz.get("obrazek", "")})
             n["vysledek"] = "smazat"
         elif mp == "overit" or kand:
             k_overeni.append({"nazev": n["nazev"], "velikosti": n["velikosti"], "url": n["url"],
@@ -380,7 +387,8 @@ def vyhodnot(kod, plat, inzeraty, pocet, web, modely, prodane):
             n["vysledek"] = "k_overeni"
         else:
             neni_ve_skladu.append({"nazev": n["nazev"], "odkaz": n["url"],
-                                   "velikost": "" if n["velikosti"] == "—" else n["velikosti"]})
+                                   "velikost": "" if n["velikosti"] == "—" else n["velikosti"],
+                                   "obrazek": inz.get("obrazek", "")})
             n["vysledek"] = "neni_ve_skladu"
 
     uloz_debug(f"inzeraty_{kod}.json", json.dumps(
@@ -398,6 +406,7 @@ def vyhodnot(kod, plat, inzeraty, pocet, web, modely, prodane):
         "k_overeni": k_overeni,      # skript si nebyl jistý párováním — jen do výpisu
         "zmeny": zmeny,
         "smazat": smazat,            # id prodaných kusů
+        "smazat_radky": smazat_radky,
         "opravit": opravit,
         "neni_ve_skladu": neni_ve_skladu,
     }
@@ -412,13 +421,52 @@ def poznamka(r):
     return " · ".join(casti)
 
 
-def posli(token, data, polozky, vysledek, odeslat):
-    """Nejdřív fajfky, pak kontroly — aplikace to v tomhle pořadí i zpracuje."""
+def sestav_report(kod, r, datum, modely, prodane):
+    """Report pro stránku v aplikaci — totéž, co dřív stavěl Claude do artifactu."""
+    plat = MISTA[kod]["platforma"]
+    kus = {k["id"]: (m["name"], k["size"]) for mm in (modely, prodane) for m in mm.values() for k in m["kusy"]}
+    sekce = [
+        {"nazev": "Smazat", "barva": "smazat", "poznamka": "Inzerát běží, ale kus už není skladem.",
+         "radky": [{"nazev": x["nazev"], "velikost": x["velikost"], "odkaz": x["odkaz"], "ids": x["ids"],
+                    "obrazek": x["obrazek"], "duvod": "Prodáno. Inzerát: " + x["inzerat"]} for x in r["smazat_radky"]]},
+        {"nazev": "Opravit", "barva": "opravit", "poznamka": "Velikosti v inzerátu neodpovídají skladu.",
+         "radky": [{"nazev": o["nazev"], "velikost": o["sklad"], "odkaz": o["odkaz"], "ids": o["ids"],
+                    "duvod": o["duvod"], "udaje": [{"popis": "V inzerátu", "hodnota": o["inzerat"]},
+                                                   {"popis": "Skladem", "hodnota": o["sklad"]}]} for o in r["opravit"]]},
+        {"nazev": "Zaškrtnutí ve SKLADu", "barva": "fajfky",
+         "poznamka": "Fajfky poslané do SKLADu, zapíše je aplikace.",
+         "radky": [{"nazev": kus.get(z["id"], ("?", ""))[0], "velikost": kus.get(z["id"], ("", ""))[1], "ids": [z["id"]],
+                    "duvod": ("Inzerát běží, chyběla fajfka " + plat + " — zaškrtnuto." if z["zaskrtnout"]
+                              else "Fajfka " + plat + " bez běžícího inzerátu — odškrtnuto.")} for z in r["zmeny"]]},
+        {"nazev": "Není ve SKLADu", "barva": "neni", "poznamka": "Inzerát běží, ve SKLADu takový kus není.",
+         "radky": [{"nazev": o["nazev"], "velikost": o["velikost"], "odkaz": o["odkaz"], "obrazek": o.get("obrazek", "")}
+                   for o in r["neni_ve_skladu"]]},
+    ]
+    if r["k_overeni"]:
+        sekce.append({"nazev": "Ověřit ručně", "barva": "overit",
+                      "poznamka": "Skript si párováním nebyl jistý — nic se s tím nedělalo.",
+                      "radky": [{"nazev": o["nazev"], "velikost": o["velikosti"], "odkaz": o["url"],
+                                 "duvod": "Možná: " + (", ".join(o["kandidati"]) or "nic podobného ve skladu")}
+                                for o in r["k_overeni"]]})
+    souhrn = []
+    if r["bez_velikosti"]:
+        souhrn.append(f"Bez velikosti v inzerátu: {r['bez_velikosti']}")
+    if r.get("nacteno") is not None and r.get("nacteno") != r["count"]:
+        souhrn.append(f"Načteno {r['nacteno']} z {r['count']} inzerátů")
+    return {"misto": plat, "skupina": "Bazoš", "nadpis": "Bazoš — listingy", "datum": datum,
+            "limit": {"pocet": r["count"], "max": LIMIT}, "souhrn": souhrn, "sekce": sekce}
+
+
+def posli(token, data, polozky, vysledek, odeslat, modely=None, prodane=None):
+    """Nejdřív fajfky, pak report a kontrola — aplikace to v tomhle pořadí i zpracuje."""
     zmeny = vysledek["cz"]["zmeny"] + vysledek["sk"]["zmeny"]
     f = S.posli_fajfky(token, data, polozky, zmeny, odeslat=odeslat)
     out = {"fajfky": f}
     for kod in ("cz", "sk"):
         r = vysledek[kod]
+        out["report_" + kod] = S.posli_report(token, data, polozky,
+                                              sestav_report(kod, r, vysledek["datum"], modely or {}, prodane or {}),
+                                              odeslat=odeslat)
         out[kod] = S.posli_kontrolu(
             token, data, polozky, MISTA[kod]["platforma"],
             chybi=[], smazat=r["smazat"], nejde=[], web=r["web"],
@@ -454,7 +502,8 @@ def main(argv):
     sklad_k = data.get("savedAt") or "?"
     print(f"Sklad z cloudu: {sum(len(m['kusy']) for m in modely.values())} kusů skladem, "
           f"{len(modely)} modelů (uloženo {sklad_k})")
-    vysledek = {"datum": datetime.date.today().isoformat(), "sklad_k": sklad_k}
+    # Kontrola i report nesou stejný okamžik — podle něj aplikace pozná, že k sobě patří
+    vysledek = {"datum": S._iso_ted(), "sklad_k": sklad_k}
     for kod in ("cz", "sk"):
         vysledek[kod] = zkontroluj(kod, MISTA[kod], modely, prodane)
     with open(VYSTUP, "w", encoding="utf-8") as f:
@@ -468,8 +517,8 @@ def main(argv):
               f"| není ve SKLAD {len(r['neni_ve_skladu'])} | fajfky {len(r['zmeny'])} | ověřit ručně {len(r['k_overeni'])}")
     print(f"Trvalo {int(time.time() - start)} s.")
 
-    nahled = posli(token, data, polozky, vysledek, odeslat=False)
-    for co in (nahled["fajfky"], nahled["cz"], nahled["sk"]):
+    nahled = posli(token, data, polozky, vysledek, False, modely, prodane)
+    for co in (nahled["fajfky"], nahled["cz"], nahled["sk"], nahled["report_cz"], nahled["report_sk"]):
         for x in co.get("nelze") or []:
             print("  (neodešle se:", x.get("nazev") or x.get("id"), "—", x.get("duvod"), ")")
         if co.get("stav") in ("nezname_mista", "nezname_misto"):
@@ -487,8 +536,8 @@ def main(argv):
             print("Nic se neposlalo.")
             return
     token = S.prihlas()   # kdyby se nad otázkou čekalo přes hodinu
-    hotovo = posli(token, data, polozky, vysledek, odeslat=True)
-    print("Posláno. Aplikace to převezme, až bude otevřená (okno Kontroly listingů).")
+    hotovo = posli(token, data, polozky, vysledek, True, modely, prodane)
+    print("Posláno. Aplikace to převezme, až bude otevřená (okno Kontroly listingů, odkaz Report).")
     if hotovo["fajfky"].get("stav") == "zadano":
         print(f"  fajfky: {len(hotovo['fajfky']['zmeny'])}")
 

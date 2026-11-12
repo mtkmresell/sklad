@@ -94,8 +94,30 @@ stejně (`SPUSTIT_bazos.bat` nebo `python bazos_kontrola.py`):
 3. Zeptá se **„Odeslat do SKLADu? (a/n)"**. Až po „a" pošle fajfky
    a kontrolu obou míst. `--nahled` jen ukáže, `--odeslat` neptá se.
 
-Výsledek je pak v aplikaci v okně Kontroly listingů. Claude v chatu ani
-report v artifactu už potřeba nejsou.
+Výsledek je pak v aplikaci v okně Kontroly listingů a odkaz **Report**
+u místa otevře podrobný report (jako dřív artifact): Smazat, Opravit
+s větou, co udělat, Zaškrtnutí ve SKLADu, Není ve SKLADu, Ověřit ručně,
+náhledy a limit. Claude v chatu už potřeba není.
+
+### Report pro další kontroly
+
+`S.posli_report(token, data, polozky, report, odeslat=True)` — sekce si
+kontrola skládá sama, aplikace vykreslí jakékoli:
+
+```python
+S.posli_report(token, data, polozky, {
+    'misto': 'Refresher', 'skupina': 'Refresher', 'nadpis': 'Refresher — listingy',
+    'datum': datum,                      # stejný okamžik jako v posli_kontrolu(datum=…)
+    'limit': {'pocet': 47, 'max': 50},   # nepovinné
+    'souhrn': ['Payouty sedí: 12'],
+    'sekce': [{'nazev': 'Smazat', 'barva': 'smazat', 'poznamka': '…', 'hromadne': False,
+               'radky': [{'nazev': …, 'velikost': …, 'sku': …, 'duvod': …, 'odkaz': 'https://…',
+                          'obrazek': 'https://…', 'ids': [id kusu], 'udaje': [{'popis': 'Payout', 'hodnota': '2 500 Kč'}]}]}],
+}, odeslat=True)
+```
+
+Barvy: `smazat`, `opravit`, `pridat`, `fajfky`, `neni`, `overit`, `info`.
+`hromadne: True` přidá k sekci „Kopírovat vše" (název ⇥ velikost ⇥ SKU).
 
 ## Pro Clauda: jak to napojit do další kontroly
 

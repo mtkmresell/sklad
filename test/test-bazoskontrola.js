@@ -41,7 +41,7 @@ const INZ = {
   cz: [
     { id: '1', nazev: 'Air Jordan 4 Retro Black Cat', velikosti_text: '44, 46', url: 'https://obleceni.bazos.cz/inzerat/1/x.php' },
     { id: '2', nazev: 'Nike Dunk Low Panda', velikosti_text: '42', url: 'https://obleceni.bazos.cz/inzerat/2/x.php' },
-    { id: '3', nazev: 'Supreme Box Logo Hoodie', velikosti_text: 'L', url: 'https://obleceni.bazos.cz/inzerat/3/x.php' },
+    { id: '3', nazev: 'Supreme Box Logo Hoodie <b>x</b>', velikosti_text: 'L', url: 'https://obleceni.bazos.cz/inzerat/3/x.php', obr: 'https://www.bazos.cz/img/1/3.jpg' },
     // Podobá se Sambě skladem, ale jistá shoda to není — patří do „ověřit ručně"
     { id: '4', nazev: 'Adidas Samba Black Gum Vintage Edition Rare', velikosti_text: '42', url: 'https://obleceni.bazos.cz/inzerat/4/x.php' },
   ],
@@ -61,13 +61,18 @@ B.DEBUG = sys.argv[3] + '/debug'
 zapisy = []
 B.S.prihlas = lambda *a: 'token'
 B.S.nacti_sklad = lambda token, uid=None: ({'platGroups': vstup['mista'], 'savedAt': 'x'}, vstup['sklad'])
-B.S._zapis_listecek = lambda token, uid, obsah: zapisy.append(obsah) or 'pozadavek_t%d' % len(zapisy)
+def zapis(token, uid, jmeno, obsah):
+    assert jmeno.startswith('pozadavek_')
+    zapisy.append({'jmeno': jmeno, 'obsah': obsah})
+    return jmeno
+B.S._zapis_dokument = zapis
 def profil(misto, kod):
     inz = [dict(i) for i in vstup['inz'][kod]]
     return inz, len(inz), 'https://www.bazos.%s/hodnoceni.php?idmail=1&idphone=2&jmeno=Gabriel+V.' % kod
 def velikosti(inz):
     inz['velikosti'] = sorted(B.rozdel_velikosti(inz['velikosti_text']), key=B.klic_vel)
     inz['popis_nalezen'] = True
+    inz['obrazek'] = inz.get('obr', '')
 B.nacti_profil = profil
 B.nacti_velikosti = velikosti
 import builtins
@@ -100,7 +105,7 @@ function spust(argv, odpoved) {
     && v.cz.opravit[0].nazev === 'Jordan 4 Black Cat' && v.cz.opravit[0].inzerat === '44, 46'
     && v.cz.opravit[0].sklad === '44, 45' && /inzerat\/1\//.test(v.cz.opravit[0].odkaz), JSON.stringify(v.cz.opravit));
   ok('Není ve SKLADu: Supreme', v.cz.neni_ve_skladu && v.cz.neni_ve_skladu.length === 1
-    && v.cz.neni_ve_skladu[0].nazev === 'Supreme Box Logo Hoodie' && v.cz.neni_ve_skladu[0].velikost === 'L', JSON.stringify(v.cz.neni_ve_skladu));
+    && v.cz.neni_ve_skladu[0].nazev === 'Supreme Box Logo Hoodie <b>x</b>' && v.cz.neni_ve_skladu[0].velikost === 'L', JSON.stringify(v.cz.neni_ve_skladu));
   ok('nejistá Samba jde do „ověřit ručně", ne do Smazat ani Není ve SKLADu',
     (v.cz.k_overeni || []).some(o => /Samba/.test(o.nazev)) && !(v.cz.neni_ve_skladu || []).some(o => /Samba/.test(o.nazev)),
     JSON.stringify(v.cz.k_overeni));
@@ -120,10 +125,25 @@ function spust(argv, odpoved) {
 
   sekce('3) Odeslání');
   r = await spust([], 'a');
-  const z = r.j ? r.j.zapisy : [];
-  ok('tři lístečky: fajfky, pak Bazoš.cz a Bazoš.sk', z.length === 3 && z[0].zmeny && z[1].kontrola && z[1].kontrola.misto === 'Bazoš.cz'
-    && z[2].kontrola.misto === 'Bazoš.sk', JSON.stringify(z).slice(0, 400));
+  const zap = r.j ? r.j.zapisy : [];
+  const z = zap.filter(x => !/^pozadavek_report_/.test(x.jmeno)).map(x => x.obsah);
+  const rep = zap.filter(x => /^pozadavek_report_/.test(x.jmeno));
+  ok('lístečky: fajfky, pak Bazoš.cz a Bazoš.sk', z.length === 3 && z[0].zmeny && z[1].kontrola && z[1].kontrola.misto === 'Bazoš.cz'
+    && z[2].kontrola.misto === 'Bazoš.sk', JSON.stringify(zap).slice(0, 400));
+  ok('report pro každé místo ve vlastním dokumentu', rep.length === 2 && rep[0].jmeno === 'pozadavek_report_bazos-cz'
+    && rep[1].jmeno === 'pozadavek_report_bazos-sk', rep.map(x => x.jmeno).join());
   const kcz = z[1] ? z[1].kontrola : {};
+  const rcz = rep[0] ? rep[0].obsah : { sekce: [] };
+  ok('report a kontrola nesou stejný okamžik', rcz.datum && rcz.datum === kcz.datum, rcz.datum + ' / ' + kcz.datum);
+  const sek = n => (rcz.sekce || []).find(s => s.nazev === n) || { radky: [] };
+  ok('report: Smazat s odkazem na inzerát a prodaným kusem', sek('Smazat').radky.length === 1 && sek('Smazat').radky[0].ids[0] === 'w'
+    && /inzerat\/2\//.test(sek('Smazat').radky[0].odkaz), JSON.stringify(sek('Smazat')));
+  ok('report: Opravit říká, co udělat', /je i 45, přidat/.test(sek('Opravit').radky[0] && sek('Opravit').radky[0].duvod)
+    && /je i 46, ve SKLAD. není, odebrat/.test(sek('Opravit').radky[0].duvod), JSON.stringify(sek('Opravit')));
+  ok('report: fajfky i Není ve SKLADu s obrázkem inzerátu', sek('Zaškrtnutí ve SKLADu').radky.length === 1
+    && sek('Není ve SKLADu').radky[0].obrazek === 'https://www.bazos.cz/img/1/3.jpg', JSON.stringify(rcz.sekce));
+  ok('report: Ověřit ručně', sek('Ověřit ručně').radky.length === 1, JSON.stringify(sek('Ověřit ručně')));
+  ok('report: limit 4 / 50', rcz.limit && rcz.limit.pocet === 4 && rcz.limit.max === 50, JSON.stringify(rcz.limit));
   ok('kontrola CZ: smazat, opravit, není ve skladu, počet a limit', JSON.stringify(kcz.smazat) === '["w"]'
     && kcz.opravit.length === 1 && kcz.neniVeSkladu.length === 1 && kcz.inzeratu === 4 && kcz.limit === 50
     && JSON.stringify(kcz.chybi) === '[]', JSON.stringify(kcz));
@@ -143,18 +163,61 @@ function spust(argv, odpoved) {
   await page.waitForFunction(() => typeof _provedPozadavky === 'function' && Array.isArray(items) && items.length > 0, { timeout: 20000 });
   await page.waitForTimeout(400);
   const kdy = new Date().toISOString();
+  const dokumenty = zap.map((x, i) => ({ id: /^pozadavek_report_/.test(x.jmeno) ? x.jmeno : 'pozadavek_t' + i,
+    data: /^pozadavek_report_/.test(x.jmeno) ? x.obsah : Object.assign({ kdy }, x.obsah) }));
   const res = await page.evaluate((d) => {
     window._fbDb = {}; window._fbUser = { uid: 'majitel1' };
-    window._fbFns = { doc: function () { return {}; }, deleteDoc: function () { return Promise.resolve(); } };
-    _provedPozadavky({ forEach: function (cb) { d.forEach(function (x, i) { cb({ id: 'pozadavek_t' + i, data: function () { return x; } }); }); } });
+    window.__smazano = [];
+    window._fbFns = { doc: function () { return { id: [].slice.call(arguments).pop() }; },
+      deleteDoc: function (ref) { window.__smazano.push(ref.id); return Promise.resolve(); } };
+    var snap = { forEach: function (cb) { d.forEach(function (x) { cb({ id: x.id, data: function () { return x.data; } }); }); } };
+    _reportyZeSnimku(snap);
+    _provedPozadavky(snap);
     var p = function (id) { return (items.find(function (i) { return i.id === id; }).platforms || []).join('|'); };
     return { a: p('a'), a2: p('a2'), b: p('b'), c: p('c'), kontroly: JSON.parse(localStorage.getItem('sklad_kontroly_v1') || '{}') };
-  }, z.map(x => Object.assign({ kdy }, x)));
+  }, dokumenty);
   ok('fajfky se provedly', /Bazoš\.sk/.test(res.a) && /Bazoš\.sk/.test(res.a2) && !/Bazoš\.cz/.test(res.b) && /Bazoš\.cz/.test(res.c), JSON.stringify(res));
   const kb = res.kontroly['Bazoš.cz'];
   ok('kontrola Bazoš.cz je v okně Kontroly listingů', kb && JSON.stringify(kb.smazat) === '["w"]' && kb.opravit.length === 1
     && kb.neniVeSkladu.length === 1 && kb.inzeratu === 4, JSON.stringify(kb));
   ok('i Bazoš.sk', !!res.kontroly['Bazoš.sk'], JSON.stringify(Object.keys(res.kontroly)));
+  ok('report se nemaže, lístečky ano', await page.evaluate(() => window.__smazano.length === 3
+    && !window.__smazano.some(function (j) { return /^pozadavek_report_/.test(j); })), await page.evaluate(() => JSON.stringify(window.__smazano)));
+
+  sekce('5) Stránka report');
+  await page.evaluate(() => { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open')); openKontroly('Bazoš.cz'); });
+  ok('v okně Kontroly je Report vedoucí do aplikace', await page.evaluate(() =>
+    !!document.querySelector('#kontrolyOv button.kl-odkaz[data-kl="report"][data-misto="Bazoš.cz"]')));
+  await page.click('#kontrolyOv button.kl-odkaz[data-misto="Bazoš.cz"]');
+  await page.waitForTimeout(200);
+  const st = await page.evaluate(() => {
+    var ov = document.getElementById('reportOv');
+    return { je: !!ov, text: ov ? ov.textContent.replace(/\s+/g, ' ') : '', zalozky: ov ? ov.querySelectorAll('.rp-zalozka').length : 0,
+      sekce: ov ? [].map.call(ov.querySelectorAll('.rp-sek-nadpis'), e => e.textContent) : [],
+      b: !!(ov && ov.querySelector('.rp-jmeno b')), obr: ov ? [].map.call(ov.querySelectorAll('img.rp-nahled'), i => i.getAttribute('src')) : [] };
+  });
+  ok('report se otevře se záložkami Bazoš.cz / .sk', st.je && st.zalozky === 2, JSON.stringify(st).slice(0, 300));
+  ok('sekce jako v artifactu', st.sekce.join('|') === 'Smazat|Opravit|Zaškrtnutí ve SKLADu|Není ve SKLADu|Ověřit ručně', st.sekce.join('|'));
+  ok('limit a kolik ještě přidat', /4 \/ 50 inzerátů/.test(st.text) && /ještě můžeš přidat 46/.test(st.text), st.text.slice(0, 300));
+  ok('text z webu se neprovede jako HTML', !st.b && /Supreme Box Logo Hoodie <b>x<\/b>/.test(st.text));
+  ok('obrázek inzerátu u Není ve SKLADu', st.obr.indexOf('https://www.bazos.cz/img/1/3.jpg') !== -1, JSON.stringify(st.obr));
+  if (process.env.SNIMEK) await page.screenshot({ path: process.env.SNIMEK + '/report.png', fullPage: false });
+  await page.click('#reportOv .rp-tick');
+  ok('odškrtnutí hotovo se počítá', /Celkem 1 \/ \d+ vyřízeno/.test(await page.evaluate(() => document.getElementById('reportOv').textContent)));
+  await page.click('#reportOv .rp-zalozka:not(.active)');
+  ok('záložka přepne na Bazoš.sk', await page.evaluate(() => document.querySelector('#reportOv .rp-zalozka.active').textContent === 'Bazoš.sk'));
+  await page.keyboard.press('Escape');
+  ok('Escape zavře jen report, okno Kontroly zůstane', await page.evaluate(() => !document.getElementById('reportOv')
+    && !!document.getElementById('kontrolyOv')));
+  // Novější kontrola ze skillu (artifact) — Report vede tam, ne na starší report z PC
+  await page.evaluate(() => {
+    var v = getKontroly(); var n = JSON.parse(JSON.stringify(v));
+    n['Bazoš.cz'].datum = new Date(Date.now() + 3600000).toISOString(); n['Bazoš.cz'].report = 'https://claude.ai/artifact/x';
+    localStorage.setItem('sklad_kontroly_v1', JSON.stringify(n)); _klPrekresli();
+  });
+  ok('novější kontrola ze skillu: Report vede na artifact', await page.evaluate(() =>
+    !!document.querySelector('#kontrolyOv a.kl-odkaz[href="https://claude.ai/artifact/x"]')
+    && !document.querySelector('#kontrolyOv button.kl-odkaz[data-misto="Bazoš.cz"]')));
   ok('bez chyb na stránce', errs.length === 0, errs.join('\n'));
   await browser.close();
 

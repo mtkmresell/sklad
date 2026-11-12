@@ -279,7 +279,7 @@ def nacti_sklad(token, uid=MAJITEL_UID):
         stranka = (j or {}).get('nextPageToken')
         if not stranka:
             break
-    chtene = [n for n in jmena if not n.rsplit('/', 1)[-1].startswith('photo_')]
+    chtene = [n for n in jmena if not n.rsplit('/', 1)[-1].startswith(('photo_', POZADAVEK_PREFIX))]
     if not chtene:
         raise ChybaSkladu('Ve skladu nejsou žádná data.')
     status, davka = _http(FS_BASE + ':batchGet', {'documents': chtene}, token=token)
@@ -360,16 +360,22 @@ def _iso_ted():
     return datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
 
 
-def _zapis_listecek(token, uid, obsah):
-    jmeno = _jmeno_listecku()
-    telo = {'fields': zabal(dict({'kdy': _iso_ted()}, **obsah))['mapValue']['fields']}
+def _zapis_dokument(token, uid, jmeno, obsah):
+    """Jediné místo, které do Firestore zapisuje — a jen pod pozadavek_…"""
+    if not jmeno.startswith(POZADAVEK_PREFIX):
+        raise ChybaSkladu('Zapisovat se smí jen pod %s…' % POZADAVEK_PREFIX)
+    telo = {'fields': zabal(obsah)['mapValue']['fields']}
     status, j = _http(FS_BASE + '/users/' + uid + '/sklad/' + jmeno, telo, token=token, metoda='PATCH')
     if status == 403:
         raise ChybaSkladu('Firestore zápis odmítl (403). Buď je přihlášený jiný účet než čtečka, '
                           'nebo v konzoli Firebase leží stará pravidla (chybí jePozadavekCtecky).')
     if status != 200:
-        raise ChybaSkladu('Zápis lístečku selhal (%s).' % status)
+        raise ChybaSkladu('Zápis do cloudu selhal (%s).' % status)
     return jmeno
+
+
+def _zapis_listecek(token, uid, obsah):
+    return _zapis_dokument(token, uid, _jmeno_listecku(), dict({'kdy': _iso_ted()}, **obsah))
 
 
 def posli_fajfky(token, data, polozky, zmeny, odeslat=False, uid=MAJITEL_UID):
@@ -516,6 +522,91 @@ def posli_kontrolu(token, data, polozky, misto, chybi=(), smazat=(), nejde=(), r
         vysledek['stav'] = 'nahled'
         return vysledek
     vysledek['dokument'] = _zapis_listecek(token, uid, {'kontrola': kontrola})
+    vysledek['stav'] = 'zadano'
+    return vysledek
+
+
+# ── Report kontroly ─────────────────────────────────────────────────────
+#
+# Skript artifact v Claudovi vyrobit nemůže, a tak posílá report aplikaci:
+# do dokumentu pozadavek_report_<místo> (pravidla čtečku pustí jen pod
+# pozadavek_…). Aplikace ho na rozdíl od lístečku neprovádí ani nemaže —
+# ukáže ho odkazem Report v okně Kontroly listingů (index.html, REPORT
+# KONTROLY). Tvar je obecný: sekce si určuje kontrola, stránka vykreslí
+# jakékoli.
+
+REPORT_PREFIX = 'pozadavek_report_'
+REPORT_BARVY = ('smazat', 'opravit', 'pridat', 'fajfky', 'neni', 'overit', 'info')
+
+
+def klic_reportu(misto):
+    """„Bazoš.cz" → „bazos-cz" — jméno dokumentu musí projít vzorkem v pravidlech."""
+    import unicodedata
+    t = unicodedata.normalize('NFKD', str(misto or '')).encode('ascii', 'ignore').decode('ascii').lower()
+    t = ''.join(c if c.isalnum() else '-' for c in t).strip('-')
+    while '--' in t:
+        t = t.replace('--', '-')
+    return (t or 'misto')[:40]
+
+
+def _txt(v, n):
+    return str(v).strip()[:n] if isinstance(v, (str, int, float)) and not isinstance(v, bool) else ''
+
+
+def _http_odkaz(u, n=500):
+    u = (u or '').strip() if isinstance(u, str) else ''
+    return u if u.lower().startswith(('https://', 'http://')) and len(u) <= n else ''
+
+
+def _report_radky(radky, podle_id):
+    out = []
+    for r in list(radky or [])[:KONTROLA_NEJVIC]:
+        if not isinstance(r, dict):
+            continue
+        o = {'nazev': _txt(r.get('nazev'), 200), 'velikost': _txt(r.get('velikost'), 100),
+             'sku': _txt(r.get('sku'), 80), 'duvod': _txt(r.get('duvod'), 400),
+             'odkaz': _http_odkaz(r.get('odkaz')), 'obrazek': _http_odkaz(r.get('obrazek'), 800),
+             'ids': [i for i in (r.get('ids') or []) if isinstance(i, str) and i in podle_id][:50],
+             'udaje': [{'popis': _txt(u.get('popis'), 60), 'hodnota': _txt(u.get('hodnota'), 120)}
+                       for u in (r.get('udaje') or [])[:8] if isinstance(u, dict)]}
+        if o['nazev'] or o['odkaz']:
+            out.append(o)
+    return out
+
+
+def posli_report(token, data, polozky, report, odeslat=False, uid=MAJITEL_UID):
+    """report = {misto, skupina, nadpis, datum, limit: {pocet, max}, souhrn: [text],
+                 sekce: [{nazev, barva, poznamka, hromadne, radky: [{nazev, velikost, sku,
+                 duvod, odkaz, obrazek, ids, udaje: [{popis, hodnota}]}]}]}
+    Bez odeslat=True jen náhled."""
+    mista = mista_prodeje(data)
+    misto = (report or {}).get('misto')
+    if not mista:
+        return {'stav': 'nezname_mista', 'poznamka': 'V cloudu chybí nastavení míst prodeje — otevři aplikaci.'}
+    if misto not in mista:
+        return {'stav': 'nezname_misto', 'poznamka': 'Takové místo prodeje v nastavení není: %s' % misto}
+    podle_id = {it.get('id') for it in polozky if it}
+    lim = report.get('limit') if isinstance(report.get('limit'), dict) else None
+    ven = {
+        'misto': misto,
+        'skupina': _txt(report.get('skupina'), 60) or misto,
+        'nadpis': _txt(report.get('nadpis'), 120) or misto,
+        'datum': report.get('datum') or _iso_ted(),
+        'limit': {'pocet': int(lim['pocet']), 'max': int(lim['max'])}
+                 if lim and isinstance(lim.get('pocet'), int) and isinstance(lim.get('max'), int) and lim['max'] > 0 else None,
+        'souhrn': [_txt(t, 200) for t in (report.get('souhrn') or [])[:12] if _txt(t, 200)],
+        'sekce': [{'nazev': _txt(s.get('nazev'), 120) or 'Sekce',
+                   'barva': s.get('barva') if s.get('barva') in REPORT_BARVY else 'info',
+                   'poznamka': _txt(s.get('poznamka'), 300), 'hromadne': s.get('hromadne') is True,
+                   'radky': _report_radky(s.get('radky'), podle_id)}
+                  for s in (report.get('sekce') or [])[:20] if isinstance(s, dict)],
+    }
+    jmeno = REPORT_PREFIX + klic_reportu(misto)
+    vysledek = {'report': ven, 'dokument': jmeno}
+    if not odeslat:
+        vysledek['stav'] = 'nahled'
+        return vysledek
+    _zapis_dokument(token, uid, jmeno, ven)
     vysledek['stav'] = 'zadano'
     return vysledek
 
