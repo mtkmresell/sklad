@@ -1432,7 +1432,25 @@ stránkou skládanou na serveru: přihlášení přes Supabase, cookie ve tvaru
 do `debug/`. Hlídá to `test-sneakersnow.js`, `test-stuffsell.js`
 a `test-adonio.js`.
 
-Dál: **WTB Market** (bez přihlášení), další weby s přihlášením.
+**Tnsky, Sneakerstore, Hypeboost, KLEKT, Released, Facebook a WTB**
+(12. 11. 2026, čekají na první ostrý běh) — tím jsou přepsané všechny
+kontrolní skilly. Prvních šest se skriptem přihlásit nejde (Facebook
+ověřování, Hypeboost Cloudflare, Tnsky má ve skillu „jen z tabulky,
+žádné tokeny ani API"), takže jedou přes **`nastroje/prohlizec.py`**:
+skutečný Chrome/Edge přes Playwright s **vlastním profilem kontrol
+v `%LOCALAPPDATA%\MTKM-kontroly\prohlizec`** — schválně ne na Google
+Disku, jsou v něm přihlášené relace. Na weby se majitel přihlásí jednou
+rukou (`PRIHLASIT_WEBY.bat`), hesla skript nevidí. Data se čtou **stejným
+JS jako ve skillech** (`page.evaluate`), porovnání je v Pythonu podle
+`kontrola.py` skillů. Zápisy na cizí weby jen po „a" (`pred_odeslanim`):
+Hypeboost prodlouží almost expired, KLEKT expiraci na 60 dní (bez IE5836).
+Released si pamatuje katalog v `katalog_released.json`. WTB bere text
+pingeru ze schránky (nebo `pinger.txt`); do aplikace pošle report jen
+když je „WTB Market" v nastavení míst prodeje — **aplikace i
+`posli_report` berou jen místa z nastavení**. Hlídá to
+`test-kontrolyprohlizec.js` (prohlížeč nahrazený podvrhem).
+
+Dál: malá aplikace na spouštění všech kontrol.
 Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,
 nebo se budit (Wake on LAN rozdělaný)?
 
@@ -1950,7 +1968,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 85 souborů
+node test/run.js              # kontrola syntaxe + všech 86 souborů
 node test/run.js archive      # jen vybrané
 ```
 

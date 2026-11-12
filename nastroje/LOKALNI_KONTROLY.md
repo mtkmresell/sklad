@@ -146,6 +146,24 @@ spouštěče dopsat), nebo ho program při odmítnutí zapomene sám.
 - **Adonio** (`adonio/`) jen čte stránku Moje nabídky. Payout cena −
   max(25 %, 700 Kč), doporučená = nejnižší − 1 Kč.
 
+### Kontroly přes prohlížeč (Tnsky, Sneakerstore, Hypeboost, KLEKT, Released, Facebook)
+
+Na tyhle weby se skript přihlásit nemůže (Facebook ověřování, Hypeboost
+Cloudflare…), takže otevře **skutečný Chrome** s vlastním profilem kontrol
+(`%LOCALAPPDATA%\MTKM-kontroly\prohlizec`, ne na Disku). Poprvé:
+
+1. Spusť `PRIHLASIT_WEBY.bat` (v hlavní složce). Nainstaluje Playwright
+   a otevře všech šest webů — v každé záložce se přihlas, pak Enter.
+2. Pak už stačí `SPUSTIT_<místo>.bat`. Když přihlášení vyprší, kontrola
+   řekne „přihlas se v okně" a počká na Enter.
+
+- **Hypeboost** po „a" prodlouží almost expired (+14 dní).
+- **KLEKT** po „a" prodlouží expiraci na 60 dní (kromě IE5836).
+- **Released** si pamatuje katalog v `released/katalog_released.json`.
+- **WTB**: zkopíruj text pingeru (Ctrl+C) a spusť `SPUSTIT_wtb.bat`.
+  Do aplikace pošle report, až bude „WTB Market" v Nastavení → místa
+  prodeje; do té doby jen vypíše výsledek.
+
 Když web vrátí něco nečekaného, leží to v `<místo>/debug/` — pošli to
 Claudovi (umí si to přečíst z Disku).
 
