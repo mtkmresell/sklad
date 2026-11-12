@@ -123,6 +123,24 @@ veřejný profil, Section tabulku sdílenou odkazem (CSV export) a veřejný
 e-shop. Nic se nikam nepřihlašuje. Section zatím nečte záložky INSTORE
 a Poslední kusy.
 
+### TheBeast, Sellect a Tuzex (s přihlášením)
+
+`thebeast/SPUSTIT_thebeast.bat`, `sellect/SPUSTIT_sellect.bat`,
+`tuzex/SPUSTIT_tuzex.bat`. **Poprvé se každá zeptá na e-mail a heslo
+k tomu webu** — heslo zkopíruj (Ctrl+C) a dej jen Enter. Po povedeném
+přihlášení se uloží do Správce pověření Windows (`SKLAD-web-TheBeast` …)
+a příště se neptá. Změněné heslo: spusť s `--nove-heslo` (stačí do
+spouštěče dopsat), nebo ho program při odmítnutí zapomene sám.
+
+- **TheBeast** jen čte (nabídky, katalog). Payout 77 % − 50 Kč.
+- **Sellect** čte Aktuální nabídky a katalog; **po „a" prodlouží nabídky,
+  které jsou skladem** (jako skill). Payout 80 % − 50 Kč.
+- **Tuzex** jen čte (Inventory, ceny z tuzexstore.com). Ceny v €,
+  payout 74 % − 2 €, Nejsi nejlevnější s doporučenou cenou končící 9.
+
+Když web vrátí něco nečekaného, leží to v `<místo>/debug/` — pošli to
+Claudovi (umí si to přečíst z Disku).
+
 ### Report pro další kontroly
 
 `S.posli_report(token, data, polozky, report, odeslat=True)` — sekce si

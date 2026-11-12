@@ -123,8 +123,8 @@ def _poverovani():
     return ctypes, CREDENTIAL, advapi
 
 
-def uloz_pristup(email, heslo):
-    """Uloží e-mail a heslo čtečky do Správce pověření Windows."""
+def uloz_pristup(email, heslo, jmeno=None, popis='Účet čtečky pro lokální kontroly SKLADu'):
+    """Uloží e-mail a heslo do Správce pověření Windows (výchozí: účet čtečky)."""
     w = _poverovani()
     if not w:
         raise ChybaSkladu('Správce pověření je jen ve Windows. Jinde nastav proměnné '
@@ -134,8 +134,8 @@ def uloz_pristup(email, heslo):
     blob = (ctypes.c_ubyte * len(data)).from_buffer_copy(data)
     c = CREDENTIAL()
     c.Type = 1                 # CRED_TYPE_GENERIC
-    c.TargetName = POVERENI_JMENO
-    c.Comment = 'Účet čtečky pro lokální kontroly SKLADu'
+    c.TargetName = jmeno or POVERENI_JMENO
+    c.Comment = popis
     c.CredentialBlobSize = len(data)
     c.CredentialBlob = ctypes.cast(blob, ctypes.POINTER(ctypes.c_ubyte))
     c.Persist = 2              # CRED_PERSIST_LOCAL_MACHINE — přežije restart
@@ -144,13 +144,13 @@ def uloz_pristup(email, heslo):
         raise ChybaSkladu('Windows přihlášení neuložily (chyba %d).' % ctypes.get_last_error())
 
 
-def _cti_pristup_windows():
+def _cti_pristup_windows(jmeno=None):
     w = _poverovani()
     if not w:
         return None
     ctypes, CREDENTIAL, advapi = w
     p = ctypes.POINTER(CREDENTIAL)()
-    if not advapi.CredReadW(POVERENI_JMENO, 1, 0, ctypes.byref(p)):
+    if not advapi.CredReadW(jmeno or POVERENI_JMENO, 1, 0, ctypes.byref(p)):
         return None
     try:
         c = p.contents
@@ -173,6 +173,68 @@ def nacti_pristup():
     if z and z[0] and z[1]:
         return z
     raise ChybaSkladu('Chybí přihlášení. Spusť jednou:  python sklad_firestore.py nastavit')
+
+
+# ── Přihlášení k webům míst prodeje (TheBeast, Sellect, Tuzex…) ─────────
+#
+# Majitel souhlasil (12. 11. 2026), ať si kontroly hesla k webům pamatují
+# a přihlašují se samy. Leží ve stejném trezoru jako účet čtečky, každé
+# místo pod vlastním jménem „SKLAD-web-<místo>". Nikdy v souboru na Disku.
+
+def _jmeno_webu(misto):
+    return 'SKLAD-web-' + ''.join(c for c in str(misto) if c.isalnum())
+
+
+def prihlaseni_webu(misto, zeptat=True):
+    """(email, heslo, nove) — z prostředí, ze Správce pověření, jinak se zeptá.
+
+    nove=True znamená, že se právě zadalo: volající ho po úspěšném
+    přihlášení uloží (uloz_prihlaseni_webu), ať se špatné heslo neuloží."""
+    klic = ''.join(c for c in str(misto) if c.isalnum()).upper()
+    email = (os.environ.get('SKLAD_%s_EMAIL' % klic) or '').strip()
+    heslo = os.environ.get('SKLAD_%s_HESLO' % klic) or ''
+    if email and heslo:
+        return email, heslo, False
+    try:
+        z = _cti_pristup_windows(_jmeno_webu(misto))
+    except Exception:
+        z = None
+    if z and z[0] and z[1]:
+        return z[0], z[1], False
+    if not zeptat:
+        raise ChybaSkladu('Chybí přihlášení k %s.' % misto)
+    import getpass
+    print('Přihlášení k %s (uloží se do Správce pověření Windows, příště se neptá).' % misto)
+    email = input('E-mail na %s: ' % misto).strip()
+    print('Heslo zkopíruj (Ctrl+C) a tady dej jen Enter. Nebo ho napiš — při psaní se nic neukazuje.')
+    heslo = getpass.getpass('Heslo: ')
+    if not heslo:
+        heslo = heslo_ze_schranky()
+        vymaz_schranku()
+    if not email or not heslo:
+        raise ChybaSkladu('Přihlášení k %s nevyplněné.' % misto)
+    return email, heslo, True
+
+
+def uloz_prihlaseni_webu(misto, email, heslo):
+    try:
+        uloz_pristup(email, heslo, _jmeno_webu(misto), 'Přihlášení k %s pro kontrolu SKLADu' % misto)
+        print('Přihlášení k %s uloženo do Správce pověření Windows.' % misto)
+    except ChybaSkladu as e:
+        print('(Přihlášení se neuložilo: %s)' % e)
+
+
+def zapomen_prihlaseni_webu(misto):
+    """Smaže uložené heslo (špatné nebo změněné) — příště se program zeptá znovu."""
+    w = _poverovani()
+    if not w:
+        return
+    ctypes, CREDENTIAL, advapi = w
+    try:
+        advapi.CredDeleteW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32]
+        advapi.CredDeleteW(_jmeno_webu(misto), 1, 0)
+    except Exception:
+        pass
 
 
 # ── HTTP a Firestore ────────────────────────────────────────────────────
@@ -609,6 +671,53 @@ def posli_report(token, data, polozky, report, odeslat=False, uid=MAJITEL_UID):
     _zapis_dokument(token, uid, jmeno, ven)
     vysledek['stav'] = 'zadano'
     return vysledek
+
+
+# ── Společný závěr kontroly ─────────────────────────────────────────────
+
+def dokonci_kontrolu(token, data, polozky, zmeny, report, kontrola, argv, pred_odeslanim=None):
+    """Náhled → „Odeslat? (a/n)" → fajfky, report a kontrola (v tomhle pořadí).
+
+    kontrola = argumenty pro posli_kontrolu (misto, chybi, smazat, …).
+    pred_odeslanim = co se má udělat na webu až po souhlasu (Sellect
+    prodlužuje nabídky) — v náhledu se nevolá nikdy.
+    Vrací True, když se poslalo."""
+    def posli(tok, odeslat):
+        return {'fajfky': posli_fajfky(tok, data, polozky, zmeny, odeslat=odeslat),
+                'report': posli_report(tok, data, polozky, report, odeslat=odeslat),
+                'kontrola': posli_kontrolu(tok, data, polozky, odeslat=odeslat, **kontrola)}
+    nahled = posli(token, False)
+    for co in nahled.values():
+        for x in co.get('nelze') or []:
+            print('  (neodešle se:', x.get('nazev') or x.get('id'), '—', x.get('duvod'), ')')
+        if co.get('stav') in ('nezname_mista', 'nezname_misto'):
+            raise ChybaSkladu(co.get('poznamka'))
+    if '--nahled' in argv:
+        print('\nJen náhled, nic se neposlalo.')
+        return False
+    if '--odeslat' not in argv:
+        try:
+            odp = input('\nOdeslat do SKLADu? (a/n): ').strip().lower()
+        except EOFError:
+            odp = ''
+        if odp not in ('a', 'ano', 'y'):
+            print('Nic se neposlalo.')
+            return False
+    if pred_odeslanim:
+        pred_odeslanim()
+    posli(prihlas(), True)     # nový token — nad otázkou se mohlo čekat přes hodinu
+    print('Posláno. Aplikace to převezme, až bude otevřená (okno Kontroly listingů, odkaz Report).')
+    return True
+
+
+def uloz_ladici(slozka, nazev, obsah):
+    """Uloží, co web vrátil, do <kontrola>/debug — když se změní tvar dat,
+    pošle majitel soubor a oprava se dělá z faktů, ne z dohadů."""
+    d = os.path.join(slozka, 'debug')
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, nazev), 'w', encoding='utf-8') as f:
+        f.write(obsah if isinstance(obsah, str) else json.dumps(obsah, ensure_ascii=False, indent=1))
+    return os.path.join(d, nazev)
 
 
 # ── Příkazová řádka ─────────────────────────────────────────────────────

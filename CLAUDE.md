@@ -1401,8 +1401,24 @@ nová složka, nikdy kopie `sklad_firestore.py`. Staré verze na Disku
 majitel chce přejmenované na „MUZES SMAZAT - …" a ve složce
 `_MUZES SMAZAT`.
 
-Dál: **WTB Market** (bez přihlášení), pak weby s přihlášením — majitel
-souhlasí, ať si program heslo pamatuje a přihlašuje se sám.
+**TheBeast, Sellect a Tuzex** (12. 11. 2026, čekají na první ostrý běh):
+weby s přihlášením. Majitel souhlasí, ať si program heslo pamatuje
+a přihlašuje se sám — **heslo k webu leží ve Správci pověření Windows**
+(`prihlaseni_webu`, jméno `SKLAD-web-<místo>`), poprvé se zeptá (heslo
+přes schránku + Enter) a uloží ho **až po povedeném přihlášení**; špatné
+uložené heslo se zapomene. Společný konec (náhled → „a" → fajfky, report,
+kontrola) je `dokonci_kontrolu`; co web vrátí v nečekaném tvaru, uloží
+`uloz_ladici` do `<místo>/debug/` a majitel ho pošle. TheBeast: Contember
+GraphQL (přihlašovací token je veřejně ve stránce), pojistka víc než 10
+odškrtnutí → fajfky se nepošlou. Sellect: formulář + cookie, tabulka
+z HTML, katalog přes `find-product`; **prodlužuje nabídky skladem až po
+„a"** (`pred_odeslanim`) — jediný zápis na cizí web, majitel ho povolil.
+Tuzex: ConsignR API (`x-client-host`), ceny v €, Nejsi nejlevnější proti
+`tuzexstore.com/products.json`; podobný název jde **jen** do Ověřit ručně
+(nesmaže, nepřidá, fajfku nemění). Hlídá to `test-thebeast.js`,
+`test-sellect.js` a `test-tuzex.js`.
+
+Dál: **WTB Market** (bez přihlášení), další weby s přihlášením.
 Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,
 nebo se budit (Wake on LAN rozdělaný)?
 
@@ -1920,7 +1936,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 79 souborů
+node test/run.js              # kontrola syntaxe + všech 82 souborů
 node test/run.js archive      # jen vybrané
 ```
 
