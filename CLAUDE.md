@@ -1361,7 +1361,7 @@ pověření, `test` vidí sklad). **Heslo se při `nastavit` bere ze schránky**
 (jen Enter) — psát ho do příkazového řádku Windows naslepo a vkládat
 Ctrl+V majiteli nešlo vůbec.
 
-`nastroje/bazos_kontrola.py` (kopie skriptu z PC, upravená) už nečte
+`nastroje/bazos/bazos_kontrola.py` (kopie skriptu z PC, upravená) už nečte
 `sklad.json` a nepotřebuje Clauda v chatu: sklad načte z cloudu, sám
 rozhodne **Smazat** (inzerát bez kusu skladem, jistě spárovaný s prodaným
 modelem → nejčerstvější prodaný kus na velikost), **Opravit**, **Není ve
@@ -1380,19 +1380,26 @@ Drive): obsah existujícího souboru přepsat nejde, starý se přejmenuje
 na `…_stary.py` a nový vznikne vedle.
 
 **Refresher a Section (12. 11. 2026, čekají na první ostrý běh u
-majitele):** `nastroje/refresher_kontrola.py` čte profil
+majitele):** `nastroje/refresher/refresher_kontrola.py` čte profil
 (`/ajx/profil/market?seller=…&page=N`) a detaily inzerátů, pravidla ze
 skillu — jen **velikosti modelu se sčítají přes všechny jeho inzeráty**
 (skill porovnával každý inzerát zvlášť a u modelu rozděleného do dvou
 inzerátů by odškrtl fajfku visícímu kusu). Náhled na ostrých datech:
 63 inzerátů, 10 smazat, 6 opravit, 2 není ve SKLADu, 3 fajfky.
-`nastroje/section_kontrola.py` čte list ONLINE KOMISE jako veřejný CSV
+`nastroje/section/section_kontrola.py` čte list ONLINE KOMISE jako veřejný CSV
 export (tabulka je sdílená odkazem) a e-shop z `products.json`; Přidat,
 Smazat (prodané, duplicitní, neznámé), cena e-shop ≠ tabulka, nahozeno
 a na e-shopu není, jediný na e-shopu, fajfky a Payouty. **Záložky
 INSTORE a Poslední kusy zatím nečte.** Hlídá to `test-refresher.js`
 a `test-section.js`. Spouštěče `SPUSTIT_refresher.bat`, `SPUSTIT_section.bat`.
-Staré verze na Disku majitel chce přejmenované na „MUZES SMAZAT - …".
+**Každá kontrola má vlastní složku** (majitel, 12. 11. 2026 — kontrol bude
+kolem dvaceti a všechno v jedné složce byl „hroznej bordel"): na PC
+`MTKM-kontroly/<místo>/` se skriptem, spouštěčem a výsledky, v repozitáři
+stejně `nastroje/<místo>/`. **`sklad_firestore.py` je jen jeden, o patro
+výš** — skripty ho hledají ve své složce i v nadřazené. Nová kontrola =
+nová složka, nikdy kopie `sklad_firestore.py`. Staré verze na Disku
+majitel chce přejmenované na „MUZES SMAZAT - …" a ve složce
+`_MUZES SMAZAT`.
 
 Dál: **WTB Market** (bez přihlášení), pak weby s přihlášením — majitel
 souhlasí, ať si program heslo pamatuje a přihlašuje se sám.

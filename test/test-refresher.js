@@ -19,7 +19,7 @@ function ok(popis, podminka, detail) {
 }
 function sekce(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 56 - t.length))); }
 
-const NASTROJE = path.resolve(__dirname, '..', 'nastroje');
+const NASTROJE = path.resolve(__dirname, '..', 'nastroje', 'refresher');   // vlastní složka, sklad_firestore.py je o patro výš
 const MISTA = { platforms: ['StockX'], eshopy: [], local: ['Refresher', 'Vinted'] };
 const SKLAD = [
   { id: 'a', name: 'Jordan 4 Black Cat', size: '44', saleState: 'stock', location: 'Doma', platforms: ['Refresher'] },

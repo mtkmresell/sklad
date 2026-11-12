@@ -16,7 +16,7 @@ Spuštění: python section_kontrola.py   (nebo SPUSTIT_section.bat)
   --odeslat   pošle bez ptaní
   --nahled    jen ukáže, nic nepošle
 
-V repozitáři: nastroje/section_kontrola.py, hlídá to test/test-section.js.
+V repozitáři: nastroje/section/section_kontrola.py, hlídá to test/test-section.js.
 """
 import sys, os, re, csv, io, json, time, unicodedata, traceback, collections
 import urllib.request
@@ -28,7 +28,10 @@ except Exception:
     pass
 
 SLOZKA = os.path.dirname(os.path.abspath(__file__))
+# Společný modul leží o složku výš (MTKM-kontroly/sklad_firestore.py), každá
+# kontrola má vlastní složku se svými soubory a výsledky.
 sys.path.insert(0, SLOZKA)
+sys.path.insert(0, os.path.dirname(SLOZKA))
 import sklad_firestore as S  # noqa: E402
 
 MISTO = "Section"

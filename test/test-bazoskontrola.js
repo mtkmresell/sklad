@@ -23,7 +23,7 @@ function ok(popis, podminka, detail) {
 }
 function sekce(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 56 - t.length))); }
 
-const NASTROJE = path.resolve(__dirname, '..', 'nastroje');
+const NASTROJE = path.resolve(__dirname, '..', 'nastroje', 'bazos');   // vlastní složka, sklad_firestore.py je o patro výš
 const MISTA = { platforms: ['StockX'], eshopy: [], local: ['Bazoš.cz', 'Bazoš.sk', 'Vinted'] };
 const DEN = 86400000;
 const datum = (dni) => new Date(Date.now() - dni * DEN).toISOString().slice(0, 10);

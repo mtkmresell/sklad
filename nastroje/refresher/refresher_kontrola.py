@@ -15,7 +15,7 @@ Nejdřív se vypíše, co by se poslalo, a pak se zeptá „Odeslat? (a/n)".
   --odeslat   pošle bez ptaní
   --nahled    jen ukáže, nic nepošle
 
-V repozitáři: nastroje/refresher_kontrola.py, hlídá to test/test-refresher.js.
+V repozitáři: nastroje/refresher/refresher_kontrola.py, hlídá to test/test-refresher.js.
 """
 import sys, os, re, json, time, html, unicodedata, traceback, collections
 import urllib.request
@@ -27,8 +27,11 @@ except Exception:
     pass
 
 SLOZKA = os.path.dirname(os.path.abspath(__file__))
+# Společný modul leží o složku výš (MTKM-kontroly/sklad_firestore.py), každá
+# kontrola má vlastní složku se svými soubory a výsledky.
 sys.path.insert(0, SLOZKA)
-import sklad_firestore as S  # noqa: E402  (leží ve stejné složce)
+sys.path.insert(0, os.path.dirname(SLOZKA))
+import sklad_firestore as S  # noqa: E402
 
 MISTO = "Refresher"
 PROFIL = "https://refresher.cz/profil/mtkm-store"

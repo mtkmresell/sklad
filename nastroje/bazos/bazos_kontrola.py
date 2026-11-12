@@ -15,7 +15,7 @@ Nejdřív se vypíše, co by se poslalo, a pak se zeptá „Odeslat? (a/n)".
   --odeslat   pošle bez ptaní
   --nahled    jen ukáže, nic nepošle
 
-V repozitáři: nastroje/bazos_kontrola.py, hlídá to test/test-bazoskontrola.js.
+V repozitáři: nastroje/bazos/bazos_kontrola.py, hlídá to test/test-bazoskontrola.js.
 """
 import sys, os, re, json, time, html, unicodedata, traceback, datetime
 import urllib.request
@@ -27,8 +27,11 @@ except Exception:
     pass
 
 SLOZKA = os.path.dirname(os.path.abspath(__file__))
+# Společný modul leží o složku výš (MTKM-kontroly/sklad_firestore.py), každá
+# kontrola má vlastní složku se svými soubory a výsledky.
 sys.path.insert(0, SLOZKA)
-import sklad_firestore as S  # noqa: E402  (leží ve stejné složce)
+sys.path.insert(0, os.path.dirname(SLOZKA))
+import sklad_firestore as S  # noqa: E402
 
 VYSTUP = os.path.join(SLOZKA, "vysledek_bazos.json")
 DEBUG = os.path.join(SLOZKA, "debug")

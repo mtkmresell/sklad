@@ -19,7 +19,7 @@ function ok(popis, podminka, detail) {
 }
 function sekce(t) { console.log('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 56 - t.length))); }
 
-const NASTROJE = path.resolve(__dirname, '..', 'nastroje');
+const NASTROJE = path.resolve(__dirname, '..', 'nastroje', 'section');   // vlastní složka, sklad_firestore.py je o patro výš
 const MISTA = { platforms: ['StockX'], eshopy: ['Section'], local: [] };
 const s = (id, name, size, extra) => Object.assign({ id, name, size, category: 'sneakers', saleState: 'stock', location: 'Doma', platforms: [], condition: 'DS' }, extra || {});
 const SKLAD = [

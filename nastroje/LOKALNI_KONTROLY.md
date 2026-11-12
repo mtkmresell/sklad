@@ -6,7 +6,7 @@ Kontroly listingů (zatím Bazoš) běží na domácím PC ve složce
 „Lokální kontroly SKLAD." z 11. 11. 2026.
 
 Obojí dělá jeden soubor: **`sklad_firestore.py`** (je tady v `nastroje/`).
-Patří do složky MTKM-kontroly vedle `bazos_kontrola.py`. Jen standardní
+Patří do složky MTKM-kontroly — jeden pro všechny kontroly. Jen standardní
 knihovna Pythonu, nic se neinstaluje.
 
 ## Jak to funguje (zjednodušeně)
@@ -82,11 +82,27 @@ Ze skladu se do kontroly berou kusy **na skladě**, bez balíků a bez
 míst *Zrušeno*, *Vráceno*, *Poškozené* (`VYRADIT_MISTA`). *Na cestě*
 a *Bude vráceno* skladem jsou — podle pravidel kontroly.
 
-## Bazoš kontrola — hotová (`bazos_kontrola.py`)
+## Uspořádání složky
 
-Tady v `nastroje/` je upravená `bazos_kontrola.py`. Patří do složky
-MTKM-kontroly místo té staré (vedle `sklad_firestore.py`). Spouští se
-stejně (`SPUSTIT_bazos.bat` nebo `python bazos_kontrola.py`):
+```
+MTKM-kontroly/
+  sklad_firestore.py      společné pro všechny kontroly (jen jednou!)
+  LOKALNI_KONTROLY.md     tenhle návod
+  bazos/                  bazos_kontrola.py, SPUSTIT_bazos.bat, výsledky, debug
+  refresher/              refresher_kontrola.py, SPUSTIT_refresher.bat, výsledky
+  section/                section_kontrola.py, SPUSTIT_section.bat, výsledky
+  _MUZES SMAZAT/          staré verze
+```
+
+Každá kontrola má vlastní složku a výsledky (`vysledek_….json`,
+`chyba_….txt`, `debug/`) zapisuje do ní. `sklad_firestore.py` hledá
+ve své složce a o patro výš — **nekopíruj ho do složek kontrol**, oprava
+by se pak musela dělat dvacetkrát. V repozitáři je to stejně:
+`nastroje/<místo>/`.
+
+## Bazoš kontrola (`bazos/`)
+
+Spouští se `bazos/SPUSTIT_bazos.bat` (nebo `python bazos_kontrola.py`):
 
 1. Načte sklad z cloudu a projde Bazoš.cz a Bazoš.sk jako dřív.
 2. Vypíše nálezy: SMAZAT, OPRAVIT, NENÍ VE SKLAD, FAJFKA +/− a OVĚŘIT
@@ -101,8 +117,8 @@ náhledy a limit. Claude v chatu už potřeba není.
 
 ### Refresher a Section
 
-Stejně jako Bazoš: `SPUSTIT_refresher.bat` (`refresher_kontrola.py`)
-a `SPUSTIT_section.bat` (`section_kontrola.py`). Obě jen čtou — Refresher
+Stejně jako Bazoš: `refresher/SPUSTIT_refresher.bat` a
+`section/SPUSTIT_section.bat`. Obě jen čtou — Refresher
 veřejný profil, Section tabulku sdílenou odkazem (CSV export) a veřejný
 e-shop. Nic se nikam nepřihlašuje. Section zatím nečte záložky INSTORE
 a Poslední kusy.
