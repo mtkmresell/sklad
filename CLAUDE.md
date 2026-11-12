@@ -1455,6 +1455,20 @@ Hlídá to `test-kontrolyprohlizec.js` (prohlížeč nahrazený podvrhem)
 a skutečné přihlášení do formuláře `test-prihlasenisam.js` (bez
 Playwrightu pro Python se přeskočí).
 
+**První ostrý běh u majitele (12. 11. 2026) a co z něj vzešlo:**
+**Kontrola, která nepřečte žádnou nabídku, nesmí nic poslat** — Sellect
+tabulku nepřečetl a poslal kontrolu, podle které nebyl nalistovaný celý
+sklad. Teď končí chybou a stránku uloží do `debug/`. Sellect skládá
+tabulku až v prohlížeči (DataTables): řádky se berou z `POST
+/nabidky/ajax-load/ACTUAL` a prodlužuje se hromadnou akcí `EXTEND_30`
+jen u vybraných id. Adonio ukazuje „Načítám…" a nabídky dočte Chrome se
+stejnou přihlašovací cookie (`nacti_prohlizecem`). Prohlížeč běží
+s `locale="en-US"` — čtecí JS ze skillů počítá s „1,234 Kč" (Released);
+přesměrování během `goto` neshodí kontrolu (`P.jdi`). Tnsky listuje
+tabulkou i tlačítkem bez popisku; Klekt pozná přihlášení podle dat, ne
+podle stavu odpovědi (Remix vrací 200 i s přesměrováním). Prázdná
+schránka při zadávání hesla se zeptá znovu.
+
 Dál: malá aplikace na spouštění všech kontrol.
 Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,
 nebo se budit (Wake on LAN rozdělaný)?

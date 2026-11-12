@@ -38,7 +38,10 @@ EXC = ("Zrušeno", "Vráceno", "Poškozené")
 JS_LIB = r"""window.__k={dec(t){const G=JSON.parse(t.split('\n')[0]);const memo=new Map();const r=i=>{if(typeof i!=='number')return i;if(i<0)return null;if(memo.has(i))return memo.get(i);const v=G[i];let o=v;if(Array.isArray(v)){o=[];memo.set(i,o);v.forEach(x=>o.push(r(x)));}else if(v&&typeof v==='object'){o={};memo.set(i,o);for(const k in v){const n=k[0]==='_'?G[+k.slice(1)]:k;o[n]=r(v[k]);}}return o;};return r(0);},
 najdi(o,re,h=0){if(!o||typeof o!=='object'||h>6)return null;for(const k in o){if(re.test(k))return o[k];const x=this.najdi(o[k],re,h+1);if(x)return x;}return null;},
 async get(u){for(let a=0;a<4;a++){const r=await fetch(u,{credentials:'include'});if(r.status===429){await new Promise(s=>setTimeout(s,5000));continue;}return r.ok?await r.text():null;}return null;}};true"""
-JS_TEST = "fetch('/profile/seller/listings.data?page=1',{credentials:'include'}).then(r=>r.ok&&!/login/.test(r.url)).catch(()=>false)"
+# Přihlášeno = listings.data opravdu nese seznam nabídek (Remix vrací 200 i s přesměrováním na login)
+JS_TEST = "(async()=>{" + JS_LIB[:-len(";true")] + ";try{const t=await __k.get('/profile/seller/listings.data?page=1');if(!t)return false;" \
+    "const sl=__k.najdi(__k.dec(t),/seller-listings$/);return !!(sl&&sl.data&&Array.isArray(sl.data.listings))}catch(e){return false}})()"
+
 JS_NABIDKY = r"""async()=>{const out=[];for(let p=1;p<=20;p++){const t=await __k.get('/profile/seller/listings.data?page='+p);if(!t)break;const m=__k.dec(t);const sl=__k.najdi(m,/seller-listings$/);const L=(sl&&sl.data&&sl.data.listings)||[];if(!L.length)break;
 for(const l of L){const a=l.attributes||l;out.push({id:String(l.id||a.id),name:a.name,sku:a.sku,size:a.formatted_size,price:(a.sale_price_cents||0)/100,qty:a.quantity,exp:a.expired_at,status:a.status,img:a.image_url||a.thumbnail_url||''});}
 if(L.length<25)break;}return out;}"""
@@ -202,7 +205,9 @@ def main(argv):
         s.evaluate(JS_LIB)
         nabidky = s.evaluate(JS_NABIDKY)
         if not nabidky:
-            raise RuntimeError("KLEKT nevrátil žádnou nabídku — změnil se tvar dat? Řekni Claudovi.")
+            surove = s.evaluate("fetch('/profile/seller/listings.data?page=1',{credentials:'include'}).then(async r=>r.status+' '+r.url+'\\n\\n'+await r.text()).catch(e=>String(e))")
+            cesta = S.uloz_ladici(SLOZKA, "klekt_listings.txt", surove)
+            raise RuntimeError("KLEKT nevrátil žádnou nabídku. Odpověď webu je v %s — pošli ji Claudovi. Nic jsem neposlal." % cesta)
         print(f"KLEKT: {len(nabidky)} nabídek, dohledávám EU velikosti a ceny v katalogu…")
         skus_sklad = sorted({x.get("sku") for x in k_vystaveni(polozky) if x.get("sku")})
         skus_nabidek = {n["sku"] for n in nabidky if n["sku"] and n["sku"] != "TBC"}

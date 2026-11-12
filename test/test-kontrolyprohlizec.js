@@ -100,6 +100,7 @@ fake = types.ModuleType('prohlizec'); fake.Prohlizec = Prohlizec
 def prihlas_sam(b, s, test, misto, url, login=None):
     volano.append('prihlas_sam ' + misto + ' ' + str(login)); return True
 fake.prihlas_sam = prihlas_sam
+fake.jdi = lambda s, url, *a: s.goto(url)
 sys.modules['prohlizec'] = fake
 R = __import__(misto + '_kontrola')
 R.VYSTUP = tmp + '/vysledek.json'

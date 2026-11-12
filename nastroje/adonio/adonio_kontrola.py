@@ -107,6 +107,27 @@ def text_stranky(stranka):
     return [re.sub(r"\s+", " ", x).strip() for x in t.split("\n") if x.strip()]
 
 
+def nacti_prohlizecem(cookie):
+    """Moje nabídky se dnes načítají až v prohlížeči („Načítám…"). Otevře je ve
+    skutečném Chromu se stejnou přihlašovací cookie a vrátí řádky innerText
+    (přesně to, co četl skill)."""
+    import prohlizec as P
+    with P.Prohlizec() as b:
+        b._ctx.add_cookies([{"name": k.strip(), "value": v.strip(), "domain": "consign-adonio.eu", "path": "/",
+                             "secure": True, "sameSite": "Lax"}
+                            for k, v in (c.split("=", 1) for c in cookie.split(";") if "=" in c)])
+        s = b.otevri(WEB, 2000)
+        text = ""
+        for _ in range(30):   # nejvýš ~45 s, než se nabídky dotáhnou
+            text = s.evaluate("document.body.innerText")
+            if "Načítám" not in text and re.search(r"\d+\s*nab\.|Přidat|Margin", text):
+                break
+            s.wait_for_timeout(1500)
+        s.wait_for_timeout(800)
+        text = s.evaluate("document.body.innerText")
+    return [re.sub(r"\s+", " ", x).strip() for x in text.split("\n") if x.strip()]
+
+
 def _kc(s):
     d = re.sub(r"\D", "", s or "")
     return int(d) if d else 0
@@ -267,6 +288,10 @@ def main(argv):
     kam, stranka = _get(PORTAL + "/listings", cookie)
     radky = text_stranky(stranka)
     nabidky = rozeber(radky)
+    if not nabidky and "/login" not in kam:
+        print("Nabídky se na stránce načítají až v prohlížeči — otevírám je v Chromu…")
+        radky = nacti_prohlizecem(cookie)
+        nabidky = rozeber(radky)
     pocet = next((int(m.group(1)) for x in radky for m in [re.match(r"^(\d+) nab\.?$", x)] if m), None)
     print(f"Adonio: {len(nabidky)} nabídek" + (f" (stránka říká {pocet})" if pocet is not None else ""))
     if not nabidky or "/login" in kam or (pocet is not None and pocet != len(nabidky)):

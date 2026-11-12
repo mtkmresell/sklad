@@ -39,7 +39,7 @@ STROP_ODSKRTNUTI = 10
 
 JS_TEST = "!/login/.test(location.pathname) && /Velikost\\tMnožství/.test(document.body.innerText)"
 # Ze skillu: obě stránky nabídek → řádky „název|SKU|vel~cena~dražší_o~payout;…“
-JS_NABIDKY = r"""async()=>{await new Promise(r=>setTimeout(r,1500));const P=()=>{const L=document.body.innerText.split('\n'),idx=[],out=[];L.forEach((l,i)=>{if(/^Velikost\tMnožství/.test(l))idx.push(i)});idx.forEach((h,k)=>{const a=L[h-1].trim(),b=(L[h-2]||'').trim();let name=a,sku='';if(/^[A-Z0-9][A-Z0-9\-\/ ]*$/.test(a)&&/\d/.test(a)&&!/[a-z]/.test(a)&&b){sku=a;name=b}const blk=L.slice(h+1,k+1<idx.length?idx[k+1]:L.length).join('\n'),re=/([^\t\n]+)\t(\d+)\t\n([\d,]+) Kč\n\s*(Nejnižší cena|Dražší o ([\d,]+) Kč)\n\t([\d,]+) Kč/g,rows=[];let m;while(m=re.exec(blk)){const p=+m[3].replace(/,/g,''),po=+m[6].replace(/,/g,'');rows.push([m[1],p,m[5]?+m[5].replace(/,/g,''):0,po==Math.floor(p*.77)-50?'':po].join('~'))}out.push(name+'|'+sku+'|'+rows.join(';'))});return out};const n=document.querySelectorAll('button.p-paginator-page').length,pg=[];if(!n)return P();for(let i=n-1;i>=0;i--){document.querySelectorAll('button.p-paginator-page')[i].click();await new Promise(r=>setTimeout(r,1200));pg[i]=P()}return [].concat(...pg)}"""
+JS_NABIDKY = r"""async()=>{await new Promise(r=>setTimeout(r,1500));const P=()=>{const L=document.body.innerText.split('\n'),idx=[],out=[];L.forEach((l,i)=>{if(/^Velikost\tMnožství/.test(l))idx.push(i)});idx.forEach((h,k)=>{const a=L[h-1].trim(),b=(L[h-2]||'').trim();let name=a,sku='';if(/^[A-Z0-9][A-Z0-9\-\/ ]*$/.test(a)&&/\d/.test(a)&&!/[a-z]/.test(a)&&b){sku=a;name=b}const blk=L.slice(h+1,k+1<idx.length?idx[k+1]:L.length).join('\n'),C='([\\d][\\d,.\\u00a0\\u202f ]*) Kč',re=new RegExp('([^\\t\\n]+)\\t(\\d+)\\t\\n'+C+'\\n\\s*(Nejnižší cena|Dražší o '+C+')\\n\\t'+C,'g'),D=x=>+String(x).replace(/\D/g,''),rows=[];let m;while(m=re.exec(blk)){const p=D(m[3]),po=D(m[6]);rows.push([m[1],p,m[5]?D(m[5]):0,po==Math.floor(p*.77)-50?'':po].join('~'))}out.push(name+'|'+sku+'|'+rows.join(';'))});return out};const n=document.querySelectorAll('button.p-paginator-page').length,pg=[];if(!n)return P();for(let i=n-1;i>=0;i--){document.querySelectorAll('button.p-paginator-page')[i].click();await new Promise(r=>setTimeout(r,1200));pg[i]=P()}return [].concat(...pg)}"""
 # Ze skillu: katalog na /sell — jen hledání a nabídka velikostí, nic se nevybere ani neodešle
 JS_KATALOG = r"""async(Q)=>{const sleep=ms=>new Promise(r=>setTimeout(r,ms));const N=s=>s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/\(women's\)|\(w\)/g,'w').replace(/[^a-z0-9]/g,'');const back=()=>{const b=[...document.querySelectorAll('button')].find(b=>/Zpátky na výběr produktu/.test(b.innerText));if(b)b.click()};const res={};for(const it of Q){if(res[it.n]!==undefined)continue;back();await sleep(800);const inp=document.querySelector('input[placeholder="Vyhledat název nebo SKU"]');if(!inp){res[it.n]='NENI VYHLEDAVANI';continue}const w=it.n.split(' ');const qs=[it.sku,it.n,w.slice(1).join(' '),w.slice(-3).join(' ')].filter(Boolean);let found=null;for(const q of qs){inp.value=q;inp.dispatchEvent(new Event('input',{bubbles:true}));await sleep(1100);const rows=[...document.querySelectorAll('span.font-bold')].filter(e=>e.closest('div.flex-row'));const hit=rows.find(e=>{const r=e.closest('div.flex-row');const sk=(r.querySelector('span.text-gray-400')||{}).textContent||'';return N(e.textContent)===N(it.n)||(it.sku&&N(sk)===N(it.sku))});if(hit){found=hit;break}}if(!found){res[it.n]=null;continue}found.closest('div.flex-row').click();await sleep(1200);const ms=document.querySelector('.p-multiselect');if(!ms){res[it.n]=[];continue}ms.click();await sleep(600);res[it.n]=[...document.querySelectorAll('.p-multiselect-option,[role=option]')].map(e=>e.innerText.trim());document.body.click();await sleep(200)}back();return res}"""
 
@@ -234,12 +234,13 @@ def main(argv):
         P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, ZAKLAD + "/login")
         R = rozeber(s.evaluate(JS_NABIDKY))
         if not R:
-            raise RuntimeError("Released nevrátil žádnou nabídku. Zkontroluj okno prohlížeče, případně pošli Claudovi screenshot.")
+            cesta = S.uloz_ladici(SLOZKA, "released_text.txt", s.evaluate("document.body.innerText"))
+            raise RuntimeError("Released nevrátil žádnou nabídku. Text stránky je v %s — pošli ho Claudovi. Nic jsem neposlal." % cesta)
         print(f"Released: {len(R)} nabídek")
         Q = k_overeni(R, polozky, KC, dnes)
         if Q:
             print(f"Ověřuji v katalogu {len(Q)} kusů…")
-            s.goto(ZAKLAD + "/sell", wait_until="domcontentloaded")
+            P.jdi(s, ZAKLAD + "/sell")
             s.wait_for_timeout(2500)
             nove = s.evaluate(JS_KATALOG, Q)
             for k, v in nove.items():

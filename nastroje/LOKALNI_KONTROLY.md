@@ -168,6 +168,13 @@ Dvě kontroly přes prohlížeč naráz nepojedou (sdílí jeden profil) — dru
   Do aplikace pošle report, až bude „WTB Market" v Nastavení → místa
   prodeje; do té doby jen vypíše výsledek.
 
+Když kontrola spadne uprostřed, může po ní zůstat otevřené okno Chromu
+kontrol — **zavři ho**, jinak se další kontrola přes prohlížeč nespustí
+(řekne „Prohlížeč kontrol už je otevřený").
+
+Kontrola, která nenačte žádnou nabídku, **nic nepošle** — skončí chybou
+a stránku uloží do `debug/`.
+
 Když web vrátí něco nečekaného, leží to v `<místo>/debug/` — pošli to
 Claudovi (umí si to přečíst z Disku).
 

@@ -68,6 +68,10 @@ def get(url, cookie=None):
     volano.append({'url': url, 'cookie': cookie})
     return url, vstup['stranka']
 R._get = get
+def prohlizec(cookie):
+    volano.append({'prohlizec': cookie})
+    return R.text_stranky(vstup.get('prohlizec', vstup['stranka']))
+R.nacti_prohlizecem = prohlizec
 import builtins
 builtins.input = lambda *a: vstup.get('odpoved', '')
 try:
@@ -102,6 +106,12 @@ const naz = (a) => (a || []).map(x => x.nazev + '|' + x.velikost).sort().join(' 
   ok('dlouhá cookie se dělí na .0, .1', r.j && /^sb-abc123-auth-token\.0=base64-.*; sb-abc123-auth-token\.1=/.test(r.j.cookie_dlouha));
   ok('7 nabídek (sedí s „7 nab.") a 6 aktivních, skript stránky se nečte', v.nabidek === 7 && v.aktivnich === 6 && r.j.ladici.length === 0, JSON.stringify([v.nabidek, v.aktivnich, r.j && r.j.ladici]));
   ok('náhled nic nezapíše', r.j && r.j.zapisy.length === 0);
+
+  r = await spust(['--nahled'], '', { stranka: '<main><h1>Moje nabídky</h1><p>Načítám…</p></main>', prohlizec: LISTINGS });
+  ok('stránka jen „Načítám…" → nabídky z prohlížeče se stejnou cookie', r.j && !r.j.chyba && r.j.vysledek.nabidek === 7
+    && r.j.volano.some(x => x.prohlizec && /^sb-abc123-auth-token=/.test(x.prohlizec)), r.out.slice(-400));
+  r = await spust(['--nahled'], '', { stranka: '<main>Načítám…</main>', prohlizec: '<main>Načítám…</main>' });
+  ok('ani prohlížeč nic → chyba a text do debug, nic se nepošle', r.j && /nenašla/.test(r.j.chyba) && r.j.zapisy.length === 0 && r.j.ladici.includes('adonio_listings.txt'));
 
   sekce('2) Pravidla ze skillu');
   const pl = (re) => (v.platby || []).find(x => re.test(x.nazev)) || {};

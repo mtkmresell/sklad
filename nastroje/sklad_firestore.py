@@ -205,12 +205,23 @@ def prihlaseni_webu(misto, zeptat=True):
         raise ChybaSkladu('Chybí přihlášení k %s.' % misto)
     import getpass
     print('Přihlášení k %s (uloží se do Správce pověření Windows, příště se neptá).' % misto)
-    email = input('E-mail na %s: ' % misto).strip()
+    email = ''
+    for _ in range(3):
+        email = input('E-mail na %s: ' % misto).strip()
+        if email:
+            break
     print('Heslo zkopíruj (Ctrl+C) a tady dej jen Enter. Nebo ho napiš — při psaní se nic neukazuje.')
-    heslo = getpass.getpass('Heslo: ')
-    if not heslo:
-        heslo = heslo_ze_schranky()
-        vymaz_schranku()
+    heslo = ''
+    for pokus in range(3):
+        heslo = getpass.getpass('Heslo: ')
+        if not heslo:
+            heslo = heslo_ze_schranky()
+            if heslo:
+                vymaz_schranku()
+        if heslo:
+            break
+        if pokus < 2:   # prázdná schránka → zeptat se znovu, ne spadnout
+            print('Ve schránce žádné heslo není. Zkopíruj ho znovu (Ctrl+C) a dej Enter.')
     if not email or not heslo:
         raise ChybaSkladu('Přihlášení k %s nevyplněné.' % misto)
     return email, heslo, True
@@ -769,7 +780,9 @@ def heslo_ze_schranky():
     """Přečte schránku Windows (PowerShell), jinde přes tkinter."""
     import subprocess
     try:
-        r = subprocess.run(['powershell', '-NoProfile', '-Command', 'Get-Clipboard -Raw'],
+        # výstup PowerShellu v UTF-8 — jinak by heslo s diakritikou přišlo zkomolené
+        r = subprocess.run(['powershell', '-NoProfile', '-Command',
+                            '[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-Clipboard -Raw'],
                            capture_output=True, timeout=15)
         if r.returncode == 0:
             for kod in ('utf-8', 'cp1250', 'cp852'):

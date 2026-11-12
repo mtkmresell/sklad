@@ -133,6 +133,79 @@ def rozeber_nabidky(stranka):
     return out
 
 
+# Tabulka se dnes skládá až v prohlížeči (DataTables, serverSide): řádky chodí
+# z POST /nabidky/ajax-load/ACTUAL jako JSON. Sloupce podle jejich stránky.
+SLOUPCE = [("", ""), ("", ""), ("", "o.id"), ("publicts", ""), ("image", ""), ("code", "p.code"),
+           ("name", "p.name"), ("variant", "v.name"), ("amount", ""), ("price", ""), ("status", ""),
+           ("money", ""), ("validTo", ""), ("", "")]
+
+
+def _text(v):
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", str(v if v is not None else "")))).strip()
+
+
+def _dotaz_tabulky(start, delka):
+    pole = [("draw", "1"), ("start", str(start)), ("length", str(delka)), ("search[value]", ""), ("search[regex]", "false"),
+            ("order[0][column]", "3"), ("order[0][dir]", "desc")]
+    for i, (d, n) in enumerate(SLOUPCE):
+        pole += [("columns[%d][data]" % i, d), ("columns[%d][name]" % i, n), ("columns[%d][searchable]" % i, "true"),
+                 ("columns[%d][orderable]" % i, "true" if d or n else "false"),
+                 ("columns[%d][search][value]" % i, ""), ("columns[%d][search][regex]" % i, "false")]
+    return pole
+
+
+def rozeber_json(odpoved):
+    """(nabídky, celkem) z JSON odpovědi ajax-load. Vyhodí ValueError u nečekaného tvaru."""
+    j = json.loads(odpoved)
+    if not isinstance(j, dict) or not isinstance(j.get("data"), list):
+        raise ValueError("odpověď nemá pole data")
+    out = []
+    for r in j["data"]:
+        if isinstance(r, dict):
+            c = [_text(r.get(d)) if d else "" for d, _ in SLOUPCE]
+            surove = json.dumps(r, ensure_ascii=False)
+            ident, obrazek = r.get("id"), r.get("image") or ""
+        elif isinstance(r, list):
+            c = [_text(x) for x in r] + [""] * 14
+            surove, ident, obrazek = json.dumps(r, ensure_ascii=False), None, ""
+            m = re.search(r'src=\\?"(https?://[^"\\]+)', surove)
+            obrazek = m.group(1) if m else ""
+        else:
+            continue
+        m = re.search(r"(\d+)Kč\(?(?:\+(\d+)Kč)?", re.sub(r"\s", "", c[9]))
+        if not m:
+            continue
+        ext = re.search(r"/nabidky/extend/[^\"'\\ <>]+", surove)
+        out.append({"sku": c[5], "nazev": c[6], "velikost": ns(c[7]), "cena": int(m.group(1)), "navic": int(m.group(2) or 0),
+                    "payout": int(re.sub(r"\D", "", c[11]) or 0), "info": c[12],
+                    "extend": ext.group(0) if ext else None, "id": str(ident) if ident else None,
+                    "obrazek": obrazek if str(obrazek).startswith("http") else ""})
+    celkem = j.get("recordsFiltered", j.get("recordsTotal"))
+    return out, (int(celkem) if str(celkem).isdigit() else None)
+
+
+def nacti_nabidky(w, stranka):
+    """Nabídky z tabulky v HTML (starší stránka), jinak z ajax-load (dnešní)."""
+    nabidky = rozeber_nabidky(stranka)
+    if nabidky or "ajax-load/ACTUAL" not in stranka:
+        return nabidky, None
+    vse, start, celkem = [], 0, None
+    while start < 5000:
+        _, t = w.post("/nabidky/ajax-load/ACTUAL", _dotaz_tabulky(start, 500),
+                      {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json", "Referer": WEB})
+        try:
+            davka, celkem = rozeber_json(t)
+        except ValueError:
+            return vse, t
+        vse += davka
+        if len(davka) < 500 or (celkem is not None and len(vse) >= celkem):
+            break
+        start += 500
+    if celkem and not vse:
+        return vse, t    # Sellect hlásí nabídky, ale žádná se nepřečetla
+    return vse, None
+
+
 def v_katalogu(w, sku):
     _, t = w.post("/produkty/find-product/", {"search": sku},
                   {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json", "Referer": WEB})
@@ -230,7 +303,8 @@ def vyhodnot(nabidky, katalog, skladem, polozky):
         ids = [x["id"] for x in ps if (MISTO in (x.get("platforms") or [])) != visi]
         if ids:
             zmeny.append({"id": ids[0], "platforma": MISTO, "zaskrtnout": visi})
-    prodlouzit = [n["extend"] for n in nabidky if n.get("extend") and klic_nabidky(n, G) in klice_skladu(G)]
+    prodlouzit = [n.get("extend") or "id:" + n["id"] for n in nabidky
+                  if (n.get("extend") or n.get("id")) and klic_nabidky(n, G) in klice_skladu(G)]
     for n in nabidky:   # u nabídky skladem doplnit název ze skladu (Sellect ho má jinak)
         ps = G.get(klic_nabidky(n, G))
         n["ids"] = [ps[0]["id"]] if ps else []
@@ -289,11 +363,14 @@ def main(argv):
         raise RuntimeError("Sellect po přihlášení neukázal Aktuální nabídky. Stránka je v debug/sellect_aktualni.html — řekni Claudovi.")
     if nove:
         S.uloz_prihlaseni_webu(MISTO, email, heslo)
-    nabidky = rozeber_nabidky(stranka)
+    nabidky, divne = nacti_nabidky(w, stranka)
     print(f"Sellect: {len(nabidky)} aktivních nabídek")
-    if not nabidky:
+    if divne is not None or (not nabidky and "ajax-load/ACTUAL" not in stranka):
+        # bez nabídek by kontrola označila celý sklad jako nenalistovaný — radši nic neposlat
         cesta = S.uloz_ladici(SLOZKA, "sellect_aktualni.html", stranka)
-        print(f"  Žádná nabídka — stránka je uložená v {cesta}. Jestli nějaké máš, řekni Claudovi.")
+        if divne:
+            S.uloz_ladici(SLOZKA, "sellect_tabulka.txt", divne)
+        raise RuntimeError(f"Sellect: nabídky se nepodařilo přečíst (stránka je v {cesta}). Nic jsem neposlal — řekni Claudovi.")
     G = skupiny(skladem)
     listed = {klic_nabidky(n, G) for n in nabidky}
     katalog = {}
@@ -319,7 +396,18 @@ def main(argv):
 
     def prodluz():
         ok = 0
+        idcka = [h[3:] for h in r["prodlouzit"] if h.startswith("id:")]
+        if idcka:   # dnešní stránka: hromadná akce „Prodloužit o 30 dní“ jen pro vybrané nabídky
+            try:
+                w.post("/nabidky/multiple-actions/ACTUAL/EXTEND_30",
+                       [("filter[allPages]", "false")] + [("filter[ids][]", i) for i in idcka] + [("search[value]", "")],
+                       {"X-Requested-With": "XMLHttpRequest", "Referer": WEB})
+                ok += len(idcka)
+            except Exception as e:
+                print("  (prodloužení neprošlo:", e, ")")
         for h in r["prodlouzit"]:
+            if h.startswith("id:"):
+                continue
             try:
                 w.get(h if h.startswith("/") else urllib.parse.urlparse(h).path)
                 ok += 1

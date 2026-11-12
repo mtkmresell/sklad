@@ -46,12 +46,20 @@ if(btn(/^All Statuses$/)){k(btn(/^All Statuses$/));await w(500);const o=[...docu
 const rp=btn(/^10$|^25$|^50$/);if(rp){k(rp);await w(500);const o=[...document.querySelectorAll('[role=option]')].find(e=>e.innerText.trim()==='100');if(o){k(o);}await w(1800);}
 const radky=()=>[...document.querySelectorAll('tbody tr')].map(tr=>{const td=[...tr.querySelectorAll('td')];const c=td.map(x=>x.innerText.replace(/\s+/g,' ').trim());if(c[3]!=='Active')return null;const L=td[0].innerText.split('\n').map(s=>s.trim()).filter(Boolean);const inp=tr.querySelector('input');const ml=((c[5]||'').match(/Market Low:\s*(\d+)/)||[])[1]||'';const sku=(L[1]||'—').split(' / ')[0].replace(/\.\.\.$/,'');const img=tr.querySelector('img');return [L[0],sku,c[1],inp?inp.placeholder:'',ml,img?img.src:'']}).filter(Boolean);
 const pata=()=>(document.body.innerText.match(/(\d+)–(\d+) of (\d+)/)||[]);
+// tlačítko „další stránka“: podle popisku, podle znaku, jinak poslední povolené tlačítko u patičky „1–100 of 111“
+const vypnute=b=>b.disabled||b.getAttribute('aria-disabled')==='true'||/disabled/.test(b.className||'');
+const patka=()=>{let e=[...document.querySelectorAll('p,span,div')].find(x=>x.children.length===0&&/\d+–\d+ of \d+/.test(x.textContent));for(let i=0;e&&i<4&&e.querySelectorAll('button').length<2;i++)e=e.parentElement;return e;};
+const dalsi=()=>{const B=[...document.querySelectorAll('button,a[role=button]')];
+  let b=B.find(b=>/next|další|dalsi/i.test((b.getAttribute('aria-label')||'')+' '+(b.getAttribute('title')||'')+' '+b.textContent.trim())&&!vypnute(b));
+  if(!b)b=B.find(b=>/^[›»>→]$/.test(b.textContent.trim())&&!vypnute(b));
+  if(!b){const p=patka();if(p){const T=[...p.querySelectorAll('button')].filter(b=>!/^\d+$/.test(b.textContent.trim()));const z=T[T.length-1];if(z&&!vypnute(z))b=z;}}
+  return b;};
 const out=radky();
 // víc než 100 aktivních → další stránky tabulky (tlačítko „další“ v patičce)
 for(let st=0;st<10;st++){const f=pata();if(!f[3]||+f[2]>=+f[3])break;
-  const dal=[...document.querySelectorAll('button')].find(b=>/next/i.test(b.getAttribute('aria-label')||'')&&!b.disabled);if(!dal)break;
+  const dal=dalsi();if(!dal)break;
   const pred=f[1];k(dal);for(let i=0;i<20&&pata()[1]===pred;i++)await w(300);await w(600);out.push(...radky());}
-const foot=pata();return {radky:out,celkem:foot[3]?+foot[3]:null}}"""
+const foot=pata();const p=patka();return {radky:out,celkem:foot[3]?+foot[3]:null,pata:p?p.outerHTML.slice(0,6000):''}}"""
 
 
 def payout(cena):
@@ -87,12 +95,13 @@ def nacti_nabidky():
             r = s.evaluate(JS_NABIDKY)
             if r and not r.get("chyba") and (r.get("celkem") is None or r["celkem"] == len(r["radky"])):
                 break
-            s.goto(WEB, wait_until="domcontentloaded")
+            P.jdi(s, WEB)
             s.wait_for_timeout(3000)
     if not r or r.get("chyba"):
         raise RuntimeError("Tnsky: %s" % ((r or {}).get("chyba") or "tabulka se nenačetla"))
     if r.get("celkem") is not None and r["celkem"] != len(r["radky"]):
-        raise RuntimeError("Tnsky: aktivních je %s, načetlo se %d (stránka se nedonačetla). Spusť znovu."
+        S.uloz_ladici(SLOZKA, "tnsky_paticka.html", r.get("pata") or "")
+        raise RuntimeError("Tnsky: aktivních je %s, načetlo se %d (další stránku tabulky se nepodařilo otevřít). Patička je v debug/tnsky_paticka.html — pošli ji Claudovi."
                            % (r["celkem"], len(r["radky"])))
     return [{"nazev": x[0], "sku": "" if x[1] == "—" else x[1], "velikost": x[2],
              "cena": int(re.sub(r"\D", "", x[3]) or 0), "ml": int(x[4]) if x[4] else None, "obrazek": x[5]}

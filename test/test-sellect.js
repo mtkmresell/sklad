@@ -77,6 +77,10 @@ class W:
             if pole['password'] != 'tajne' or pole['_csrf_token'] != 'abc':
                 return cesta, '<div>Neplatné přihlašovací údaje.</div><input name="password">'
             return '/nabidky/aktualni', vstup['stranka']
+        if cesta == '/nabidky/ajax-load/ACTUAL':
+            return cesta, vstup.get('ajax', '{}')
+        if cesta == '/nabidky/multiple-actions/ACTUAL/EXTEND_30':
+            return cesta, '{"ok":true}'
         if cesta == '/produkty/find-product/':
             return cesta, json.dumps([{'code': pole['search']}] if pole['search'] != 'ZZ-1' else [{'code': 'ZZ-10'}])
         raise AssertionError(cesta)
@@ -153,13 +157,39 @@ const naz = (a) => (a || []).map(x => (x.sku || x.nazev) + '|' + x.velikost).sor
   r = await spust(['--nahled'], '', { heslo: 'spatne' });
   ok('špatné heslo → hláška, nic neuloženo', r.j && /Neplatné/.test(r.j.chyba) && r.j.ulozeno.length === 0, r.out.slice(-300));
   r = await spust(['--nahled'], '', { stranka: '<html><a href="/security/logout">x</a><table id="table"><tbody></tbody></table></html>' });
-  ok('prázdná tabulka → stránka do debug', r.j && r.j.ladici.includes('sellect_aktualni.html'), r.out.slice(-300));
+  ok('prázdná tabulka → stránka do debug a nic se nepošle', r.j && r.j.ladici.includes('sellect_aktualni.html') && r.j.zapisy.length === 0 && r.j.chyba, r.out.slice(-300));
+
+  sekce('4b) Dnešní stránka: řádky z ajax-load (DataTables)');
+  const AJ = (id, code, name, variant, price, money, img) => ({ id, id_sort: id, publicts: '1. 11. 2026', image: img ? 'https://cdn.sellect.cz/' + img + '.jpg' : null,
+    code, name, variant, amount: 1, price, status: 'V prodeji', money, validTo: '<span>20. 11. 2026</span>', url: 'https://sellect.cz/x', active: true, owner: true });
+  const AJAX = JSON.stringify({ draw: 1, recordsTotal: 8, recordsFiltered: 8, data: [
+    AJ('u101', 'CU1110-010', 'Air Jordan 4 Retro Black Cat', '44.0', '5 000 Kč', '3 950 Kč', 'aj4'),
+    AJ('u102', '1181910-CHE', 'UGG Tasman', '9', '3 000 Kč (+200 Kč)', '2 350 Kč'),
+    AJ('u103', '', 'Labubu Big Into Energy', 'OS', '900 Kč', '670 Kč'),
+    AJ('u104', 'DD1391-100', 'Nike Dunk Low', '42', '2 500 Kč', '1 950 Kč'),
+    AJ('u105', 'HQ6448', 'Yeezy Slide', '42', '2 000 Kč', '1 550 Kč'),
+    AJ('u106', 'AM1', 'Air Max 1', '40', '2 000 Kč', '1 550 Kč'),
+    AJ('u107', 'B75806', 'Samba', '44', '2 000 Kč', '1 550 Kč'),
+    AJ('u108', 'QQ-5', 'Něco', '40', '1 000 Kč', '750 Kč')] });
+  const DNESNI = '<html><a href="/security/logout">x</a><table id="table"><tfoot><tr><th></th></tr></tfoot></table><script>ajax:{url:"/nabidky/ajax-load/ACTUAL"}</script></html>';
+  r = await spust([], '', { stranka: DNESNI, ajax: AJAX });
+  const v2 = r.j && r.j.vysledek;
+  ok('8 nabídek z JSON', v2 && v2.nabidek === 8, r.out.slice(-400));
+  ok('stejný výsledek jako z HTML tabulky', v2 && v.smazat && JSON.stringify(v2.smazat.map(x => x.sku)) === JSON.stringify(v.smazat.map(x => x.sku))
+    && JSON.stringify(v2.pridat.map(x => x.nazev)) === JSON.stringify(v.pridat.map(x => x.nazev)) && JSON.stringify(v2.zmeny) === JSON.stringify(v.zmeny));
+  ok('prodloužení hromadnou akcí jen u nabídek skladem', r.j && r.j.volano.some(x => x.startsWith('POST /nabidky/multiple-actions/ACTUAL/EXTEND_30')
+    && /u101/.test(x) && /u102/.test(x) && /u103/.test(x) && !/u104|u105|u108/.test(x)), r.j && r.j.volano.join('\n'));
+  ok('obrázek z JSON', v2 && v2.nabidky.some(n => n.obrazek === 'https://cdn.sellect.cz/aj4.jpg'));
+  r = await spust([], '', { stranka: DNESNI, ajax: '<html>chyba</html>' });
+  ok('nečitelná odpověď → chyba, NIC se nepošle', r.j && /nepodařilo přečíst/.test(r.j.chyba) && r.j.zapisy.length === 0 && r.j.ladici.includes('sellect_tabulka.txt'), r.out.slice(-300));
+  r = await spust([], '', { stranka: DNESNI, ajax: JSON.stringify({ recordsTotal: 5, recordsFiltered: 5, data: [{ nic: 1 }] }) });
+  ok('Sellect hlásí nabídky, nic se nepřečetlo → nic se nepošle', r.j && r.j.chyba && r.j.zapisy.length === 0, r.out.slice(-300));
 
   sekce('5) Zdroj');
   const zdroj = fs.readFileSync(path.join(NASTROJE, 'sellect_kontrola.py'), 'utf8');
   ok('do cloudu jen přes sklad_firestore', !/PATCH|DELETE/.test(zdroj));
-  ok('na Sellectu jen přihlášení, katalog a prodloužení', (zdroj.match(/w\.post\(|self\.post|\.post\(/g) || []).length <= 3
-    && !/\/nabidky\/(?!aktualni|extend)/.test(zdroj.replace(/"\/nabidky\/extend\/"/g, '')), '');
+  ok('na Sellectu jen přihlášení, katalog a prodloužení', (zdroj.match(/w\.post\(|self\.post|\.post\(/g) || []).length <= 5
+    && !/\/nabidky\/(?!aktualni|extend|ajax-load\/ACTUAL|multiple-actions\/ACTUAL\/EXTEND_30)/.test(zdroj.replace(/"\/nabidky\/extend\/"/g, '')), '');
   ok('prodlužuje se až v pred_odeslanim', /pred_odeslanim=prodluz/.test(zdroj));
 
   console.log('\n' + (selhalo ? 'SELHALO ' + selhalo + ' z ' + (selhalo + proslo) : 'OK (' + proslo + ' kontrol)'));

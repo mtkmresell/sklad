@@ -28,6 +28,21 @@ class ChybaProhlizece(Exception):
     pass
 
 
+def jdi(stranka, url, cekat_ms=0):
+    """goto, které nespadne, když web cestou přesměruje (třeba na přihlášení)."""
+    try:
+        stranka.goto(url, wait_until="domcontentloaded", timeout=90000)
+    except Exception as e:
+        if "interrupted by another navigation" not in str(e) and "net::ERR_ABORTED" not in str(e):
+            raise
+        try:
+            stranka.wait_for_load_state("domcontentloaded", timeout=30000)
+        except Exception:
+            pass
+    if cekat_ms:
+        stranka.wait_for_timeout(cekat_ms)
+
+
 class Prohlizec:
     """with Prohlizec() as b: s = b.otevri(url); b.prihlaseni(s, test_js, 'Tnsky'); s.evaluate(js)"""
 
@@ -42,18 +57,22 @@ class Prohlizec:
             raise ChybaProhlizece("Chybí Playwright. Spusť jednou v příkazovém řádku:  py -m pip install playwright")
         os.makedirs(PROFIL, exist_ok=True)
         self._pw = sync_playwright().start()
-        posledni = None
+        posledni, chyby = None, []
         for kanal in ("chrome", "msedge", None):
             try:
+                # en-US: čísla a data ve stránkách stejně jako ve vestavěném prohlížeči skillů
+                # („1,234 Kč“), podle toho jsou psané čtecí skripty
                 self._ctx = self._pw.chromium.launch_persistent_context(
                     PROFIL, channel=kanal, headless=not self.viditelny, viewport={"width": 1280, "height": 900},
-                    args=["--disable-blink-features=AutomationControlled"])
+                    locale="en-US", args=["--disable-blink-features=AutomationControlled"])
                 break
             except Exception as e:
                 posledni = e
+                chyby.append(str(e).lower())
         if not self._ctx:
             self._pw.stop()
-            if any(t in str(posledni).lower() for t in ("already in use", "processsingleton", "lock", "being used")):
+            if any(t in c for c in chyby for t in ("already in use", "processsingleton", "lock", "being used", "exitcode=21",
+                                                     "target page, context or browser has been closed")):
                 raise ChybaProhlizece("Prohlížeč kontrol už je otevřený — běží jiná kontrola (Tnsky, KLEKT…) "
                                       "nebo PRIHLASIT_WEBY. Počkej, až doběhne a okno se zavře, pak spusť znovu.")
             raise ChybaProhlizece("Nepodařilo se otevřít Chrome ani Edge: %s" % posledni)
@@ -69,8 +88,7 @@ class Prohlizec:
 
     def otevri(self, url, cekat_ms=1500):
         s = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
-        s.goto(url, wait_until="domcontentloaded", timeout=90000)
-        s.wait_for_timeout(cekat_ms)
+        jdi(s, url, cekat_ms)
         return s
 
     def prihlaseni(self, stranka, test_js, misto, url=None, pokusu=3):
@@ -89,8 +107,7 @@ class Prohlizec:
             except EOFError:
                 pass
             if url:
-                stranka.goto(url, wait_until="domcontentloaded", timeout=90000)
-                stranka.wait_for_timeout(2000)
+                jdi(stranka, url, 2000)
         raise ChybaProhlizece("Na %s se nepodařilo přihlásit — stránka pořád nic neukazuje." % misto)
 
 
@@ -165,11 +182,9 @@ def prihlas_sam(b, stranka, test_js, misto, url, login_url=None):
     for pokus in range(2):
         email, heslo, nove = S.prihlaseni_webu(misto)
         if login_url:
-            stranka.goto(login_url, wait_until="domcontentloaded", timeout=90000)
-            stranka.wait_for_timeout(2000)
+            jdi(stranka, login_url, 2000)
         vyplneno = vypln_prihlaseni(stranka, email, heslo)
-        stranka.goto(url, wait_until="domcontentloaded", timeout=90000)
-        stranka.wait_for_timeout(2500)
+        jdi(stranka, url, 2500)
         if _ok(stranka, test_js):
             if nove:
                 S.uloz_prihlaseni_webu(misto, email, heslo)
