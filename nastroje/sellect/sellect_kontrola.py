@@ -357,13 +357,15 @@ def main(argv):
         if not nove:
             S.zapomen_prihlaseni_webu(MISTO)
         raise RuntimeError(f"{e} Spusť znovu, zeptá se na heslo.")
-    _, stranka = w.get("/nabidky/aktualni")
+    with S.pracuji("Otevírám Aktuální nabídky na Sellectu"):
+        _, stranka = w.get("/nabidky/aktualni")
     if not prihlasena(stranka):
         S.uloz_ladici(SLOZKA, "sellect_aktualni.html", stranka)
         raise RuntimeError("Sellect po přihlášení neukázal Aktuální nabídky. Stránka je v debug/sellect_aktualni.html — řekni Claudovi.")
     if nove:
         S.uloz_prihlaseni_webu(MISTO, email, heslo)
-    nabidky, divne = nacti_nabidky(w, stranka)
+    with S.pracuji("Čtu nabídky na Sellectu"):
+        nabidky, divne = nacti_nabidky(w, stranka)
     print(f"Sellect: {len(nabidky)} aktivních nabídek")
     if divne is not None or (not nabidky and "ajax-load/ACTUAL" not in stranka):
         # bez nabídek by kontrola označila celý sklad jako nenalistovaný — radši nic neposlat
@@ -374,12 +376,13 @@ def main(argv):
     G = skupiny(skladem)
     listed = {klic_nabidky(n, G) for n in nabidky}
     katalog = {}
-    for k in sorted(klice_skladu(G)):
-        if k in listed or k.startswith("N:"):
-            continue
-        sku = k.split("|")[0]
-        if sku not in katalog:
-            katalog[sku] = v_katalogu(w, sku)
+    with S.pracuji("Ověřuji chybějící SKU v katalogu Sellect"):
+        for k in sorted(klice_skladu(G)):
+            if k in listed or k.startswith("N:"):
+                continue
+            sku = k.split("|")[0]
+            if sku not in katalog:
+                katalog[sku] = v_katalogu(w, sku)
     r = vyhodnot(nabidky, katalog, skladem, polozky)
     datum = S._iso_ted()
     with open(VYSTUP, "w", encoding="utf-8") as f:
@@ -395,6 +398,7 @@ def main(argv):
     print(f"Trvalo {int(time.time() - start)} s.")
 
     def prodluz():
+        print("  Prodlužuji nabídky skladem na Sellectu…", flush=True)
         ok = 0
         idcka = [h[3:] for h in r["prodlouzit"] if h.startswith("id:")]
         if idcka:   # dnešní stránka: hromadná akce „Prodloužit o 30 dní“ jen pro vybrané nabídky

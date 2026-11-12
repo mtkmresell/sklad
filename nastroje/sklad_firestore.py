@@ -337,6 +337,11 @@ def zabal(v):
 # dorazí ze stejného okamžiku a nerozejdou se. Fotky se nestahují.
 
 def nacti_sklad(token, uid=MAJITEL_UID):
+    with pracuji("Načítám sklad z cloudu"):
+        return _nacti_sklad(token, uid)
+
+
+def _nacti_sklad(token, uid=MAJITEL_UID):
     """Vrátí (data, polozky): hlavní dokument a všechny kusy (sklad + archivy prodejů)."""
     jmena, stranka = [], None
     while True:
@@ -709,14 +714,15 @@ def dokonci_kontrolu(token, data, polozky, zmeny, report, kontrola, argv, pred_o
         return False
     if pred_odeslanim:
         pred_odeslanim()
-    posli(prihlas(), True)     # nový token — prodlužování mohlo trvat
+    with pracuji("Posílám výsledek do SKLADu"):
+        posli(prihlas(), True)     # nový token — prodlužování mohlo trvat
     print('Posláno. Aplikace to převezme, až bude otevřená (okno Kontroly listingů, odkaz Report).')
     return True
 
 
 class pracuji:
     """with S.pracuji("Prodlužuji nabídky"): … — dokud krok běží, ukazuje
-    v okně točící se značku a uběhlé vteřiny, ať to nevypadá, že se kontrola
+    v okně (do stderr — stdout nese u příkazů JSON) točící se značku a uběhlé vteřiny, ať to nevypadá, že se kontrola
     sekla. Na konci napíše, jak dlouho to trvalo."""
     def __init__(self, text):
         self.text = text
@@ -724,16 +730,16 @@ class pracuji:
     def __enter__(self):
         import threading
         self.start, self.konec = time.time(), threading.Event()
-        self.tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+        self.tty = hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
         if not self.tty:
-            print("  %s…" % self.text, flush=True)
+            print("  %s…" % self.text, file=sys.stderr, flush=True)
             return self
 
         def tocit():
             znaky, i = "|/-\\", 0
             while not self.konec.wait(0.5):
                 i += 1
-                print("\r  %s %s… %d s   " % (znaky[i % 4], self.text, time.time() - self.start), end="", flush=True)
+                print("\r  %s %s… %d s   " % (znaky[i % 4], self.text, time.time() - self.start), end="", file=sys.stderr, flush=True)
         self.vlakno = threading.Thread(target=tocit, daemon=True)
         self.vlakno.start()
         return self
@@ -742,7 +748,7 @@ class pracuji:
         if self.tty:
             self.konec.set()
             self.vlakno.join(1)
-            print("\r  %s %s — %d s            " % ("x" if typ else "OK", self.text, time.time() - self.start), flush=True)
+            print("\r  %s %s — %d s            " % ("x" if typ else "OK", self.text, time.time() - self.start), file=sys.stderr, flush=True)
         return False
 
 

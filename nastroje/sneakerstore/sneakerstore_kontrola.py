@@ -221,7 +221,8 @@ def main(argv):
     data, polozky = S.nacti_sklad(token)
     stock = sklad_mapa(polozky)
     print(f"Sklad z cloudu: {len(S.skladem(polozky))} kusů skladem")
-    live, cat, forms = nacti(lambda l, c: potrebne(l, c, stock))
+    with S.pracuji("Otevírám Sneakerstore a čtu nabídky"):
+        live, cat, forms = nacti(lambda l, c: potrebne(l, c, stock))
     print(f"Sneakerstore: {len(live)} živých nabídek, katalog {len(cat)} produktů")
     if not cat:
         S.uloz_ladici(SLOZKA, "sneakerstore_prazdny_katalog.txt", "katalog se nenačetl")

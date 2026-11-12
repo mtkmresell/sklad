@@ -103,7 +103,7 @@ function spust(argv, odpoved, jine) {
     (err, so, se) => {
       const out = String(so) + String(se);
       const i = out.lastIndexOf('###');
-      let j = null; try { j = i >= 0 ? JSON.parse(out.slice(i + 3)) : null; } catch (e) {}
+      let j = null; try { j = i >= 0 ? JSON.parse(out.slice(i + 3).split('\n')[0]) : null; } catch (e) {}
       res({ kod: err ? err.code : 0, out, j });
     }));
 }

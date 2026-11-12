@@ -133,7 +133,7 @@ function spust(misto, argv, odpoved, jine) {
     (err, so, se) => {
       const out = String(so) + String(se);
       const i = out.lastIndexOf('###');
-      let j = null; try { j = i >= 0 ? JSON.parse(out.slice(i + 3)) : null; } catch (e) {}
+      let j = null; try { j = i >= 0 ? JSON.parse(out.slice(i + 3).split('\n')[0]) : null; } catch (e) {}
       res({ out, j, v: j ? j.vysledek : {} });
     }));
 }
@@ -230,6 +230,14 @@ const odeslano = (r, misto) => {
     && /1, 3/.test(JSON.stringify(o.rep.obsah)), JSON.stringify(o.z.map(x => x.jmeno)) + r.out.slice(-300));
 
   sekce('8) Prohlížeč a zdroj');
+  /* Majitel 12. 11. 2026: u některých kontrol to vypadalo, že se sekly.
+     Každá kontrola, která čte web, ukazuje průběh (S.pracuji); sklad
+     z cloudu a odeslání ho mají společně v sklad_firestore.py. */
+  const slozky = fs.readdirSync(NASTROJE).filter(d => fs.existsSync(path.join(NASTROJE, d, d + '_kontrola.py')));
+  const bez = slozky.filter(d => d !== 'wtb' && !/S\.pracuji\(/.test(fs.readFileSync(path.join(NASTROJE, d, d + '_kontrola.py'), 'utf8')));
+  ok('každá kontrola s webem ukazuje průběh (' + slozky.length + ' kontrol)', slozky.length >= 15 && !bez.length, bez.join(', '));
+  const sf = fs.readFileSync(path.join(NASTROJE, 'sklad_firestore.py'), 'utf8');
+  ok('načtení skladu a odeslání ukazují průběh u všech', /with pracuji\("Načítám sklad z cloudu"\)/.test(sf) && /with pracuji\("Posílám výsledek do SKLADu"\)/.test(sf));
   for (const [m, misto, login] of [['tnsky', 'Tnsky', 'https://sell.tnsky.cz/login'], ['sneakerstore', 'Sneakerstore', 'https://sell.sneakerstore.cz/users/sign_in'],
     ['hypeboost', 'Hypeboost', 'https://hypeboost.com/en/login'], ['released', 'Released', 'https://sell-releasedcz-dev.web.app/login']]) {
     r = await spust(m, ['--nahled']);

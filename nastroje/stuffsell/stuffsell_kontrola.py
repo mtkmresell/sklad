@@ -339,9 +339,11 @@ def main(argv):
         raise RuntimeError(f"{e} Spusť znovu, zeptá se na heslo.")
     if nove:
         S.uloz_prihlaseni_webu(MISTO, email, heslo)
-    inzeraty = rozeber(nacti_inventar(web))
+    with S.pracuji("Čtu Inventory na Stuffsellu"):
+        inzeraty = rozeber(nacti_inventar(web))
     print(f"Stuffsell: {len(inzeraty)} kusů v Inventory, z toho ACTIVE {sum(1 for n in inzeraty if n['stav'] == 'ACTIVE')}")
-    eshop = nacti_eshop()
+    with S.pracuji("Čtu ceny z e-shopu"):
+        eshop = nacti_eshop()
     print(f"stuffsell.cz: {len(eshop)} variant s cenou")
     r = vyhodnot(inzeraty, eshop, skladem, prodane)
     datum = S._iso_ted()

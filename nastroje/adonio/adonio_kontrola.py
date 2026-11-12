@@ -306,12 +306,14 @@ def main(argv):
         raise RuntimeError(f"{e} Spusť znovu, zeptá se na heslo.")
     if nove:
         S.uloz_prihlaseni_webu(MISTO, email, heslo)
-    kam, stranka = _get(PORTAL + "/listings", cookie)
+    with S.pracuji("Načítám Moje nabídky na Adoniu"):
+        kam, stranka = _get(PORTAL + "/listings", cookie)
     radky = text_stranky(stranka)
     nabidky = rozeber(radky)
     if not nabidky and "/login" not in kam:
         print("Nabídky se na stránce načítají až v prohlížeči — otevírám je v Chromu…")
-        radky = nacti_prohlizecem(cookie)
+        with S.pracuji("Čtu nabídky v Chromu"):
+            radky = nacti_prohlizecem(cookie)
         nabidky = rozeber(radky)
     pocet = next((int(m.group(1)) for x in radky for m in [re.match(r"^(\d+) nab\.?$", x)] if m), None)
     prodano = prodanych(radky)   # prodané řádky stránka do „N nab.“ počítá, kontrola je přeskakuje

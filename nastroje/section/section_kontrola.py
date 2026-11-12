@@ -291,9 +291,11 @@ def main(argv):
     data, polozky = S.nacti_sklad(token)
     skladem, prodane = S.skladem(polozky), S.prodane(polozky)
     print(f"Sklad z cloudu: {len(skladem)} kusů skladem")
-    radky = nacti_radky(nacti_tabulku())
+    with S.pracuji("Čtu tabulku ONLINE KOMISE"):
+        radky = nacti_radky(nacti_tabulku())
     print(f"Tabulka ONLINE KOMISE: {len(radky)} řádků")
-    produkty = nacti_eshop()
+    with S.pracuji("Čtu e-shop Section"):
+        produkty = nacti_eshop()
     print(f"E-shop: {len(produkty)} produktů")
     r = vyhodnot(radky, produkty, skladem, prodane)
     datum = S._iso_ted()

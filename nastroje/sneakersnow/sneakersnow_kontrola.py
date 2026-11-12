@@ -304,7 +304,8 @@ def main(argv):
         raise RuntimeError(f"{e} Spusť znovu, zeptá se na heslo.")
     if nove:
         S.uloz_prihlaseni_webu(MISTO, email, heslo)
-    surove = p.nabidky()
+    with S.pracuji("Čtu nabídky na SneakersNow"):
+        surove = p.nabidky()
     if surove:
         S.uloz_ladici(SLOZKA, "sneakersnow_ukazka.json", [{k: v for k, v in surove[0].items() if k != "user_id"}])
     nabidky = rozeber(surove)
@@ -312,8 +313,9 @@ def main(argv):
     katalog = [x for m in p.katalog() for x in (m.get("name") or "", ((m.get("brand") or "") + " " + (m.get("name") or "")).strip())]
     print(f"SneakersNow: {len(nabidky)} nabídek, katalog {len(katalog) // 2} modelů")
     schvalene = [n for n in nabidky if n["stav"] == "approved"]   # tržní minimum 6 nabídek naráz
-    minima = dict(zip([n["id"] for n in schvalene],
-                      S.paralelne(lambda n: p.nejnizsi(n["brand"], n["model"], n["velikost"]), schvalene, 6)))
+    with S.pracuji("Zjišťuji nejnižší ceny na trhu"):
+        minima = dict(zip([n["id"] for n in schvalene],
+                          S.paralelne(lambda n: p.nejnizsi(n["brand"], n["model"], n["velikost"]), schvalene, 6)))
     r = vyhodnot(nabidky, katalog, polozky, minima)
     datum = S._iso_ted()
     with open(VYSTUP, "w", encoding="utf-8") as f:

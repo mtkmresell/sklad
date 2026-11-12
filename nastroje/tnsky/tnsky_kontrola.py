@@ -214,7 +214,8 @@ def main(argv):
     token = S.prihlas()
     data, polozky = S.nacti_sklad(token)
     print(f"Sklad z cloudu: {len(S.skladem(polozky))} kusů skladem")
-    nabidky = nacti_nabidky()
+    with S.pracuji("Otevírám Tnsky a čtu nabídky"):
+        nabidky = nacti_nabidky()
     print(f"Tnsky: {len(nabidky)} aktivních nabídek")
     r = vyhodnot(nabidky, polozky)
     datum = S._iso_ted()

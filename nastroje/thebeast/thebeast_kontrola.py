@@ -253,7 +253,8 @@ def main(argv):
         raise RuntimeError(f"{e} Spusť znovu, zeptá se na heslo.")
     if nove:
         S.uloz_prihlaseni_webu(MISTO, email, heslo)
-    nabidky, katalog, katalog_nazvy = nacti_nabidky(web)
+    with S.pracuji("Čtu nabídky a katalog TheBeast"):
+        nabidky, katalog, katalog_nazvy = nacti_nabidky(web)
     print(f"TheBeast: {len(nabidky)} aktivních nabídek, katalog {len(katalog)} SKU")
     if not nabidky:
         S.uloz_ladici(SLOZKA, "thebeast_prazdne.json", {"nabidky": nabidky})

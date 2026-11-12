@@ -1482,7 +1482,11 @@ v prohlížeči se dotahují, takže „nepřihlášeno" se řekne až po chvíl
 čekání (`_ok_pockej`). **KLEKT se přihlašuje kódem z e-mailu** — heslo
 nestačí, takže jen přihlášení v okně, žádné `prihlas_sam`. Dlouhé kroky
 ukazují průběh (`S.pracuji`, u KLEKT prodlužování po pěti s počtem) —
-majiteli kontrola vypadala, že se sekla.
+majiteli kontrola vypadala, že se sekla. **Průběh mají všechny kontroly**
+(majitel, 12. 11. 2026: viděl ho jen u Released a KLEKT) — čtení webu
+v každém skriptu, načtení skladu a odeslání společně v
+`sklad_firestore.py`. Píše se do **stderr**: stdout nese u příkazů
+`sklad_firestore.py` JSON. Hlídá to `test-kontrolyprohlizec.js`, sekce 8.
 
 Dál: malá aplikace na spouštění všech kontrol.
 Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,

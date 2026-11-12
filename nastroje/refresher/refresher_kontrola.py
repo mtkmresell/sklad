@@ -307,7 +307,8 @@ def main(argv):
     data, polozky = S.nacti_sklad(token)
     skladem, prodane = S.skladem(polozky), S.prodane(polozky)
     print(f"Sklad z cloudu: {len(skladem)} kusů skladem, {len(prodane)} prodaných")
-    inzeraty = nacti_profil()
+    with S.pracuji("Čtu inzeráty na profilu Refresher"):
+        inzeraty = nacti_profil()
     print(f"Aktivních inzerátů na profilu: {len(inzeraty)}")
     print(f"  Čtu detaily {len(inzeraty)} inzerátů (po třech naráz)…", flush=True)
     with S.pracuji("Čtu detaily inzerátů"):
