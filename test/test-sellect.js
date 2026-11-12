@@ -6,7 +6,7 @@
 // místa) → Smazat s Ověř, fajfka beze změny, neprodlužuje se; důvody
 // Čeká / Prodáno / špatná velikost / není; Přidat jen sneakers +
 // oblečení, mimo katalog štítek; prodlužuje se jen to, co je skladem,
-// a teprve po „a". Stránka se nestahuje — HTML se podstrčí.
+// vždy, bez ptaní. Stránka se nestahuje — HTML se podstrčí.
 
 const path = require('path');
 const fs = require('fs');
@@ -139,11 +139,11 @@ const naz = (a) => (a || []).map(x => (x.sku || x.nazev) + '|' + x.velikost).sor
 
   sekce('3) Odeslání');
   r = await spust([], 'n');
-  ok('bez „a" nic a nic se neprodlouží', r.j && r.j.zapisy.length === 0 && !r.j.volano.some(x => /extend/.test(x)));
+  ok('neptá se „a/n": pošle a prodlouží vždy', r.j && r.j.zapisy.length === 3 && r.j.volano.some(x => /extend/.test(x)) && !/\(a\/n\)/.test(r.out), r.out.slice(-400));
   r = await spust([], 'a');
   const z = r.j ? r.j.zapisy : [];
   ok('fajfky, report a kontrola', z.length === 3 && z[1].jmeno === 'pozadavek_report_sellect' && z[2].obsah.kontrola, z.map(x => x.jmeno).join() + r.out.slice(-300));
-  ok('po „a" prodlouženo 3', r.j && r.j.volano.filter(x => /GET \/nabidky\/extend/.test(x)).length === 3);
+  ok('prodlouženo 3', r.j && r.j.volano.filter(x => /GET \/nabidky\/extend/.test(x)).length === 3);
   const k = z[2] ? z[2].obsah.kontrola : {};
   ok('kontrola: smazat jen prodané (ne Ověř), chybí v katalogu, nejde mimo katalog, není ve skladu', JSON.stringify(k.smazat) === '["s1","s2"]'
     && JSON.stringify(k.chybi) === '["k"]' && (k.nejde || []).map(x => x.id).sort().join() === 'm,p'

@@ -10,10 +10,10 @@ ze skillu „sellect-kontrola" (ten zůstává jako záloha, když nejsi u PC).
 
 Na Sellectu chodí JEN do Aktuálních nabídek a do vyhledání v katalogu.
 Jediný zápis: prodloužení nabídek, které jsou ve SKLADu skladem
-(Gabro povolil u každé kontroly) — a to až po „a" na otázku Odeslat.
+(Gabro povolil u každé kontroly) — vždy, bez ptaní.
 
 Spuštění: SPUSTIT_sellect.bat (nebo python sellect_kontrola.py)
-  --odeslat   pošle bez ptaní      --nahled   jen ukáže (nic neprodlouží)
+  Vše pošle do SKLADu samo, bez ptaní.  --nahled  jen ukáže, nic nepošle ani neprodlouží
   --nove-heslo  zapomene uložené heslo a zeptá se znovu
 
 V repozitáři: nastroje/sellect/sellect_kontrola.py, hlídá to test/test-sellect.js.

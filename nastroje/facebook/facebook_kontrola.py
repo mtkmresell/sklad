@@ -13,7 +13,7 @@ Chodí se JEN na stránku tvých prodejních inzerátů, nikam jinam. Na
 Facebooku nic nemění. 1 inzerát = 1 model, velikosti jsou v popisu —
 porovnává se jen model.
 
-Spuštění: SPUSTIT_facebook.bat   (--odeslat / --nahled)
+Spuštění: SPUSTIT_facebook.bat   (pošle samo; --nahled jen ukáže)
 V repozitáři: nastroje/facebook/facebook_kontrola.py, hlídá to test/test-kontrolyprohlizec.js.
 """
 import sys, os, re, json, time, traceback, unicodedata

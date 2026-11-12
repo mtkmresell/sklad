@@ -3,17 +3,17 @@
 KLEKT kontrola pro MTKM.Store (Gabro).
 
 Otevře klekt.com/profile/seller/listings v prohlížeči kontrol
-(prohlizec.py — přihlásíš se v okně sám, jednou), přečte nabídky přes
+(prohlizec.py) a přihlásí se sám heslem ze Správce pověření Windows (poprvé se zeptá, jako Sellect), přečte nabídky přes
 jejich .data endpointy (stejný dekodér jako skill), z katalogu doplní EU
 velikosti a nejnižší ceny ostatních a porovná to se skladem z cloudu.
 Výsledek pošle do aplikace SKLAD. — fajfky, okno Kontroly listingů
 a Report. Pravidla jsou ze skillu „klekt-kontrola" (zůstává jako záloha).
 
-Na KLEKT jediná změna: po tvém „a" prodlouží expiraci všech nabídek na
+Na KLEKT jediná změna: vždy, bez ptaní, prodlouží expiraci všech nabídek na
 60 dní (kromě IE5836), sekvenčně, cena a množství beze změny.
 Osobní údaje účtu z .data odpovědí se nikam nevypisují ani neukládají.
 
-Spuštění: SPUSTIT_klekt.bat   (--odeslat / --nahled)
+Spuštění: SPUSTIT_klekt.bat   (pošle samo; --nahled jen ukáže)
 V repozitáři: nastroje/klekt/klekt_kontrola.py, hlídá to test/test-kontrolyprohlizec.js.
 """
 import sys, os, re, json, time, traceback, unicodedata
@@ -42,8 +42,8 @@ JS_TEST = "fetch('/profile/seller/listings.data?page=1',{credentials:'include'})
 JS_NABIDKY = r"""async()=>{const out=[];for(let p=1;p<=20;p++){const t=await __k.get('/profile/seller/listings.data?page='+p);if(!t)break;const m=__k.dec(t);const sl=__k.najdi(m,/seller-listings$/);const L=(sl&&sl.data&&sl.data.listings)||[];if(!L.length)break;
 for(const l of L){const a=l.attributes||l;out.push({id:String(l.id||a.id),name:a.name,sku:a.sku,size:a.formatted_size,price:(a.sale_price_cents||0)/100,qty:a.quantity,exp:a.expired_at,status:a.status,img:a.image_url||a.thumbnail_url||''});}
 if(L.length<25)break;}return out;}"""
-JS_FEED = r"""async(skus)=>{const res={};for(const sku of skus){const seen=new Map();for(let p=1;p<=14;p++){const t=await __k.get('/catalog.data?search='+encodeURIComponent(sku)+'&page='+p);if(!t)break;const m=__k.dec(t);const cb=__k.najdi(m,/catalog-bare$/);const fr=cb&&cb.data&&cb.data.feedResponse;const D=(fr&&fr.data)||[];D.forEach(d=>{const a=d.attributes||{};seen.set(String(d.id),{id:String(d.id),name:a.name,price:+a.sale_price,size:a.size||[],fs:a.formatted_size,type:a.listing_type,img:a.image_url||''});});const pg=fr&&fr.meta&&fr.meta.pagy;if(!D.length||(pg&&pg.page>=pg.pages))break;}res[sku]=[...seen.values()];}return res;}"""
-JS_AUTO = r"""async(skus)=>{const res={};for(const sku of skus){try{const r=await fetch('https://api.k-v3.com/api/v2/catalogs/autocomplete?search='+encodeURIComponent(sku)+'&page[number]=1&page[size]=40');const j=await r.json();res[sku]=(j.data||[]).map(d=>({name:d.attributes.name,sku:d.attributes.sku}));}catch(e){res[sku]=null;}}return res;}"""
+JS_FEED = r"""async(skus)=>{const res={};const fr0=[...skus];await Promise.all([0,1,2].map(async()=>{while(fr0.length){const sku=fr0.shift();const seen=new Map();for(let p=1;p<=14;p++){const t=await __k.get('/catalog.data?search='+encodeURIComponent(sku)+'&page='+p);if(!t)break;const m=__k.dec(t);const cb=__k.najdi(m,/catalog-bare$/);const fr=cb&&cb.data&&cb.data.feedResponse;const D=(fr&&fr.data)||[];D.forEach(d=>{const a=d.attributes||{};seen.set(String(d.id),{id:String(d.id),name:a.name,price:+a.sale_price,size:a.size||[],fs:a.formatted_size,type:a.listing_type,img:a.image_url||''});});const pg=fr&&fr.meta&&fr.meta.pagy;if(!D.length||(pg&&pg.page>=pg.pages))break;}res[sku]=[...seen.values()];}}));return res;}"""
+JS_AUTO = r"""async(skus)=>{const res={};const fr0=[...skus];await Promise.all([0,1,2].map(async()=>{while(fr0.length){const sku=fr0.shift();try{const r=await fetch('https://api.k-v3.com/api/v2/catalogs/autocomplete?search='+encodeURIComponent(sku)+'&page[number]=1&page[size]=40');const j=await r.json();res[sku]=(j.data||[]).map(d=>({name:d.attributes.name,sku:d.attributes.sku}));}catch(e){res[sku]=null;}}}));return res;}"""
 JS_PRODLOUZIT = r"""async(ids)=>{let ok=0,fail=[];for(const id of ids){let hotovo=false;for(let a=0;a<4&&!hotovo;a++){try{const t=await __k.get('/profile/seller/listings/'+id+'/edit.data');if(!t)continue;const m=__k.dec(t);const e=__k.najdi(m,/seller-listing-edit$/);const l=e&&e.data&&e.data.listing;if(!l)continue;
 const f=new URLSearchParams({quantity:String(l.quantity),salePriceCents:String(l.salePriceCents),expiration:'60'});if(l.acceptBids){f.set('acceptBids','true');if(l.bidRange!=null)f.set('bidRange',String(l.bidRange));}
 const r=await fetch('/profile/seller/listings/'+id+'/edit',{method:'POST',body:f,credentials:'include',headers:{'Content-Type':'application/x-www-form-urlencoded'}});hotovo=r.ok;}catch(e){}}hotovo?ok++:fail.push(id);}return {ok,fail};}"""
@@ -87,10 +87,15 @@ def payout(cena):
     return round(cena * 0.92 - 16.58, 2)
 
 
+def k_vystaveni(polozky):
+    """Kusy skladem, které na KLEKT patří (jen pro ně se má smysl ptát katalogu)."""
+    return [x for x in polozky if x and x.get("type") != "bulk" and S.stav(x) == "stock"
+            and x.get("category") in ("sneakers", "obleceni") and x.get("condition") != "poskozene" and x.get("location") not in EXC]
+
+
 def vyhodnot(nabidky, feed, auto, polozky):
     vse = [x for x in polozky if x and x.get("type") != "bulk"]
-    sklad = [x for x in vse if S.stav(x) == "stock" and x.get("category") in ("sneakers", "obleceni")
-             and x.get("condition") != "poskozene" and x.get("location") not in EXC]
+    sklad = k_vystaveni(polozky)
     klic = lambda sku, nazev, vel: ((nsku(sku) if sku and sku != "TBC" else "N" + nnaz(nazev)), nvel(vel))
     skup = {}
     for x in sklad:
@@ -193,16 +198,17 @@ def main(argv):
     print(f"Sklad z cloudu: {len(S.skladem(polozky))} kusů skladem")
     with P.Prohlizec() as b:
         s = b.otevri(WEB, 2500)
-        b.prihlaseni(s, JS_TEST, "klekt.com", WEB)
+        P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, "https://klekt.com/login")
         s.evaluate(JS_LIB)
         nabidky = s.evaluate(JS_NABIDKY)
         if not nabidky:
             raise RuntimeError("KLEKT nevrátil žádnou nabídku — změnil se tvar dat? Řekni Claudovi.")
         print(f"KLEKT: {len(nabidky)} nabídek, dohledávám EU velikosti a ceny v katalogu…")
-        skus_sklad = sorted({x.get("sku") for x in polozky if x and S.stav(x) == "stock" and x.get("sku")})
-        skus = sorted({n["sku"] for n in nabidky if n["sku"] and n["sku"] != "TBC"} | set(skus_sklad))
-        feed = s.evaluate(JS_FEED, skus)
-        auto = s.evaluate(JS_AUTO, skus_sklad)
+        skus_sklad = sorted({x.get("sku") for x in k_vystaveni(polozky) if x.get("sku")})
+        skus_nabidek = {n["sku"] for n in nabidky if n["sku"] and n["sku"] != "TBC"}
+        feed = s.evaluate(JS_FEED, sorted(skus_nabidek | set(skus_sklad)))   # 3 dotazy naráz
+        # katalog stačí u SKU, které na KLEKT ještě nevisí v žádné velikosti (visící katalog zná)
+        auto = s.evaluate(JS_AUTO, [k for k in skus_sklad if k not in skus_nabidek])
         r = vyhodnot(nabidky, feed, auto, polozky)
         datum = S._iso_ted()
         for x in r["smazat"]:
@@ -212,7 +218,7 @@ def main(argv):
         print("\n================ HOTOVO ================")
         print(f"KLEKT: přidat {sum(1 for x in r['pridat'] if x['kat'])} | nejde {sum(1 for x in r['pridat'] if not x['kat'])} "
               f"| smazat {len(r['smazat'])} | fajfky {len(r['zmeny'])}")
-        print(f"Trvalo {int(time.time() - start)} s. Po „a“ se ještě prodlouží expirace na 60 dní.")
+        print(f"Trvalo {int(time.time() - start)} s. Teď se ještě prodlouží expirace na 60 dní.")
         ids = [n["id"] for n in nabidky if nsku(n["sku"]) not in IGNOROVAT]
 
         def prodluz():

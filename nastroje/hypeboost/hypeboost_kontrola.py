@@ -3,15 +3,16 @@
 Hypeboost kontrola pro MTKM.Store (Gabro).
 
 Otevře My sales → Current na hypeboost.com v prohlížeči kontrol
-(prohlizec.py — přihlásíš se a Cloudflare odklikneš v okně sám), přečte
+(prohlizec.py) a přihlásí se sám heslem ze Správce pověření (ověření Cloudflare
+možná občas odklikneš v okně), přečte
 všechny listingy a porovná je se skladem z cloudu (jen sneakers). Výsledek
 pošle do aplikace SKLAD. — fajfky, okno Kontroly listingů a Report.
 Pravidla jsou ze skillu „hypeboost-kontrola" (zůstává jako záloha).
 
-Na Hypeboostu jediná změna: po tvém „a" prodlouží listingy z „almost
+Na Hypeboostu jediná změna: vždy, bez ptaní, prodlouží listingy z „almost
 expired" (+14 dní) — Gabro to chce u každé kontroly (1. 10. 2026).
 
-Spuštění: SPUSTIT_hypeboost.bat   (--odeslat / --nahled)
+Spuštění: SPUSTIT_hypeboost.bat   (pošle samo; --nahled jen ukáže)
 V repozitáři: nastroje/hypeboost/hypeboost_kontrola.py, hlídá to test/test-kontrolyprohlizec.js.
 """
 import sys, os, re, json, time, traceback, unicodedata
@@ -149,7 +150,7 @@ def main(argv):
     print(f"Sklad z cloudu: {len(S.skladem(polozky))} kusů skladem")
     with P.Prohlizec() as b:
         s = b.otevri(WEB, 3000)
-        b.prihlaseni(s, JS_TEST, "hypeboost.com", WEB)
+        P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, "https://hypeboost.com/en/login")
         d = s.evaluate(JS_NABIDKY)
         if d["bad"]:
             raise RuntimeError("Hypeboost: %d stránek se nenačetlo (429). Spusť znovu — výsledek by nebyl spolehlivý." % d["bad"])
@@ -167,7 +168,7 @@ def main(argv):
             print(f"  OVĚŘIT   {x['nazev']} {x['velikost']}")
         print("\n================ HOTOVO ================")
         print(f"Hypeboost: přidat {len(r['pridat'])} | smazat {len(r['smazat'])} | ověřit {len(r['overit'])} | fajfky {len(r['zmeny'])}")
-        print(f"Trvalo {int(time.time() - start)} s. Po „a“ se ještě prodlouží almost expired (asi 2,5 s na listing).")
+        print(f"Trvalo {int(time.time() - start)} s. Teď se ještě prodlouží almost expired (asi 2,5 s na listing).")
 
         def prodluz():
             r["prodlouzeno"] = s.evaluate(JS_PRODLOUZIT)

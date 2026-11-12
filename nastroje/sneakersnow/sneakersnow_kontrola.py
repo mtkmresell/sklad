@@ -14,7 +14,7 @@ a čtení jdou stejnou cestou jako z jejich stránky (adresa a veřejný klíč
 se berou z jejich stránky při každém spuštění).
 
 Spuštění: SPUSTIT_sneakersnow.bat (nebo python sneakersnow_kontrola.py)
-  --odeslat   pošle bez ptaní      --nahled   jen ukáže
+  Vše pošle do SKLADu samo, bez ptaní.  --nahled  jen ukáže, nic nepošle ani neprodlouží
   --nove-heslo  zapomene uložené heslo a zeptá se znovu
 
 V repozitáři: nastroje/sneakersnow/sneakersnow_kontrola.py, hlídá to test/test-sneakersnow.js.
@@ -311,10 +311,9 @@ def main(argv):
     # Shoda s názvem modelu (jako skill) i se značkou + modelem (Corteiz, New Balance…)
     katalog = [x for m in p.katalog() for x in (m.get("name") or "", ((m.get("brand") or "") + " " + (m.get("name") or "")).strip())]
     print(f"SneakersNow: {len(nabidky)} nabídek, katalog {len(katalog) // 2} modelů")
-    minima = {}
-    for n in nabidky:
-        if n["stav"] == "approved":
-            minima[n["id"]] = p.nejnizsi(n["brand"], n["model"], n["velikost"])
+    schvalene = [n for n in nabidky if n["stav"] == "approved"]   # tržní minimum 6 nabídek naráz
+    minima = dict(zip([n["id"] for n in schvalene],
+                      S.paralelne(lambda n: p.nejnizsi(n["brand"], n["model"], n["velikost"]), schvalene, 6)))
     r = vyhodnot(nabidky, katalog, polozky, minima)
     datum = S._iso_ted()
     with open(VYSTUP, "w", encoding="utf-8") as f:

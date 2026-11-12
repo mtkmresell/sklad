@@ -117,11 +117,9 @@ function spust(argv, odpoved) {
   ok('výpis říká, co by se poslalo', /SMAZAT\s+Dunk Low Panda 42/.test(r.out) && /OVĚŘIT RUČNĚ\s+Adidas Samba Black Gum/.test(r.out)
     && /Jen náhled, nic se neposlalo/.test(r.out), r.out);
 
-  sekce('2) Bez souhlasu se nic neodešle');
+  sekce('2) Pošle se samo, bez ptaní (Gabro, 12. 11. 2026)');
   r = await spust([], 'n');
-  ok('odpověď „n": nic', r.j && r.j.zapisy.length === 0 && /Nic se neposlalo/.test(r.out), r.out);
-  r = await spust([], '');
-  ok('jen Enter: nic', r.j && r.j.zapisy.length === 0, r.out);
+  ok('neptá se „a/n" a pošle i tak', r.j && r.j.zapisy.length > 0 && !/\(a\/n\)/.test(r.out), r.out.slice(-400));
 
   sekce('3) Odeslání');
   r = await spust([], 'a');

@@ -7,7 +7,7 @@
 // nahradí podvrhem: každý JS dostane odpověď ve tvaru, jaký vrací stránka,
 // a kontroluje se, co z toho skript vyvodí a co pošle do SKLADu.
 // Pravidla ze skillů: jeden kus na model + velikost, vyřazené kusy,
-// důvody ke smazání, katalog, payouty, prodloužení až po „a".
+// důvody ke smazání, katalog, payouty, prodloužení vždy, bez ptaní.
 
 const path = require('path');
 const fs = require('fs');
@@ -97,6 +97,9 @@ class Prohlizec:
     def otevri(self, url, *a): volano.append('otevri ' + url); return Stranka()
     def prihlaseni(self, *a, **k): return True
 fake = types.ModuleType('prohlizec'); fake.Prohlizec = Prohlizec
+def prihlas_sam(b, s, test, misto, url, login=None):
+    volano.append('prihlas_sam ' + misto + ' ' + str(login)); return True
+fake.prihlas_sam = prihlas_sam
 sys.modules['prohlizec'] = fake
 R = __import__(misto + '_kontrola')
 R.VYSTUP = tmp + '/vysledek.json'
@@ -152,7 +155,7 @@ const odeslano = (r, misto) => {
   ok('fajfky: Black Cat +, Dunk −, vrácený −', fajfky(r.v) === 'a+,d-,v-', fajfky(r.v));
   r = await spust('tnsky', [], 'a');
   let o = odeslano(r);
-  ok('po „a" report a kontrola Tnsky', o.rep && o.k && o.k.misto === 'Tnsky' && JSON.stringify(o.k.smazat) === '["s1"]', JSON.stringify(o.z.map(x => x.jmeno)) + r.out.slice(-400));
+  ok('report a kontrola Tnsky', o.rep && o.k && o.k.misto === 'Tnsky' && JSON.stringify(o.k.smazat) === '["s1"]', JSON.stringify(o.z.map(x => x.jmeno)) + r.out.slice(-400));
   const zdrojT = fs.readFileSync(path.join(NASTROJE, 'tnsky', 'tnsky_kontrola.py'), 'utf8');
   ok('Tnsky: žádné tokeny ani API stránky (jen tabulka)', !/fetch\(|localStorage|sessionStorage|cookie/i.test(zdrojT.split('JS_NABIDKY')[1].split('"""')[1]));
 
@@ -177,7 +180,7 @@ const odeslano = (r, misto) => {
   ok('náhled neprodlužuje', !r.j.volano.includes('almost-expired'));
   r = await spust('hypeboost', [], 'a');
   o = odeslano(r);
-  ok('po „a" prodlouží a pak pošle (prodlouženo v reportu)', r.j.volano.includes('almost-expired') && o.rep && /Prodlouženo: 3 z 3/.test(JSON.stringify(o.rep.obsah.souhrn)), JSON.stringify(o.rep && o.rep.obsah.souhrn) + r.out.slice(-300));
+  ok('prodlouží vždy a pak pošle (prodlouženo v reportu)', r.j.volano.includes('almost-expired') && o.rep && /Prodlouženo: 3 z 3/.test(JSON.stringify(o.rep.obsah.souhrn)), JSON.stringify(o.rep && o.rep.obsah.souhrn) + r.out.slice(-300));
 
   sekce('4) KLEKT');
   r = await spust('klekt', ['--nahled']);
@@ -191,7 +194,7 @@ const odeslano = (r, misto) => {
   ok('Dunk: nejnižší 110 € s payoutem a dva záznamy v katalogu', kd.kat === 1 && /nejnižší 110 €/.test(kd.duvod) && /2 záznamy/.test(kd.duvod), kd.duvod);
   r = await spust('klekt', [], 'a');
   const prodl = (r.j.args.find(a => a[0] === 'edit.data') || [])[1] || [];
-  ok('po „a" prodlužuje všechny kromě IE5836', JSON.stringify(prodl) === '["L1","L2"]', JSON.stringify(prodl) + r.out.slice(-300));
+  ok('prodlužuje všechny kromě IE5836', JSON.stringify(prodl) === '["L1","L2"]', JSON.stringify(prodl) + r.out.slice(-300));
 
   sekce('5) Released');
   r = await spust('released', ['--nahled']);
@@ -226,9 +229,21 @@ const odeslano = (r, misto) => {
     && /1, 3/.test(JSON.stringify(o.rep.obsah)), JSON.stringify(o.z.map(x => x.jmeno)) + r.out.slice(-300));
 
   sekce('8) Prohlížeč a zdroj');
+  for (const [m, misto, login] of [['tnsky', 'Tnsky', 'https://sell.tnsky.cz/login'], ['sneakerstore', 'Sneakerstore', 'https://sell.sneakerstore.cz/users/sign_in'],
+    ['hypeboost', 'Hypeboost', 'https://hypeboost.com/en/login'], ['klekt', 'Klekt', 'https://klekt.com/login'], ['released', 'Released', 'https://sell-releasedcz-dev.web.app/login']]) {
+    r = await spust(m, ['--nahled']);
+    ok(m + ': přihlásí se sám heslem ze Správce pověření (jejich formulář)', r.j && r.j.volano.includes('prihlas_sam ' + misto + ' ' + login), JSON.stringify(r.j && r.j.volano.slice(0, 3)));
+  }
+  r = await spust('facebook', ['--nahled']);
+  ok('Facebook: jen ruční přihlášení (samostatné by mohlo účet zablokovat)', r.j && !r.j.volano.some(x => /prihlas_sam/.test(x)));
+  for (const m of ['hypeboost', 'klekt']) {
+    r = await spust(m, ['--nahled']);
+    ok(m + ': náhled neprodlužuje ani nic nepošle', r.j && r.j.zapisy.length === 0 && !r.j.volano.includes('almost-expired') && !r.j.volano.includes('edit.data'));
+  }
   const prohl = fs.readFileSync(path.join(NASTROJE, 'prohlizec.py'), 'utf8');
   ok('profil prohlížeče mimo Google Disk (LOCALAPPDATA)', /LOCALAPPDATA/.test(prohl) && /MTKM-kontroly/.test(prohl));
-  ok('prohlížeč neukládá hesla (přihlášení rukou)', !/password|heslo\s*=/.test(prohl.replace(/Hesla skript nikdy/g, '')));
+  ok('heslo jen přes Správce pověření (sklad_firestore), nikdy do souboru ani na výpis',
+    /S\.prihlaseni_webu\(misto\)/.test(prohl) && /S\.uloz_prihlaseni_webu/.test(prohl) && !/print\([^)]*[,%(]\s*heslo\b/.test(prohl) && !/open\(/.test(prohl));
   for (const m of ['tnsky', 'sneakerstore', 'hypeboost', 'klekt', 'released', 'facebook', 'wtb']) {
     const z = fs.readFileSync(path.join(NASTROJE, m, m + '_kontrola.py'), 'utf8');
     ok(m + ': do cloudu jen přes sklad_firestore', !/"PATCH"|urllib\.request\.Request\(.*firestore/.test(z));

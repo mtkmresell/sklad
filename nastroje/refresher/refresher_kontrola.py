@@ -11,9 +11,8 @@ Na Refresheru nic nemění, jen čte (bez přihlášení). Do skladu nezapisuje:
 položí lísteček a provede ho aplikace (stejně jako konektor).
 
 Spuštění: python refresher_kontrola.py   (nebo SPUSTIT_refresher.bat)
-Nejdřív se vypíše, co by se poslalo, a pak se zeptá „Odeslat? (a/n)".
-  --odeslat   pošle bez ptaní
-  --nahled    jen ukáže, nic nepošle
+Vypíše výsledek a rovnou ho pošle do SKLADu (bez ptaní; --nahled jen ukáže).
+  Vše pošle do SKLADu samo, bez ptaní.  --nahled  jen ukáže, nic nepošle
 
 V repozitáři: nastroje/refresher/refresher_kontrola.py, hlídá to test/test-refresher.js.
 """
@@ -310,9 +309,8 @@ def main(argv):
     print(f"Sklad z cloudu: {len(skladem)} kusů skladem, {len(prodane)} prodaných")
     inzeraty = nacti_profil()
     print(f"Aktivních inzerátů na profilu: {len(inzeraty)}")
-    for n, inz in enumerate(inzeraty, 1):
-        print(f"  [{n}/{len(inzeraty)}] {inz['nazev'][:60]}", flush=True)
-        nacti_detail(inz)
+    print(f"  Čtu detaily {len(inzeraty)} inzerátů (po třech naráz)…", flush=True)
+    S.paralelne(nacti_detail, inzeraty, 3)
     r = vyhodnot(inzeraty, skladem, prodane)
     datum = S._iso_ted()
     with open(VYSTUP, "w", encoding="utf-8") as f:
@@ -332,15 +330,7 @@ def main(argv):
     if "--nahled" in argv:
         print("\nJen náhled, nic se neposlalo.")
         return
-    if "--odeslat" not in argv:
-        try:
-            odp = input("\nOdeslat do SKLADu? (a/n): ").strip().lower()
-        except EOFError:
-            odp = ""
-        if odp not in ("a", "ano", "y"):
-            print("Nic se neposlalo.")
-            return
-    token = S.prihlas()   # kdyby se nad otázkou čekalo přes hodinu
+    token = S.prihlas()   # čerstvý token (stahování mohlo trvat)
     posli(token, data, polozky, r, datum, odeslat=True)
     print("Posláno. Aplikace to převezme, až bude otevřená (okno Kontroly listingů, odkaz Report).")
 

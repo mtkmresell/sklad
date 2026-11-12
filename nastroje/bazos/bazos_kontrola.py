@@ -11,9 +11,8 @@ Na Bazoši nic nemění, jen čte. Do skladu taky nezapisuje: položí lísteče
 a provede ho aplikace (stejně jako konektor).
 
 Spuštění: dvojklik na SPUSTIT_bazos.bat (nebo python bazos_kontrola.py).
-Nejdřív se vypíše, co by se poslalo, a pak se zeptá „Odeslat? (a/n)".
-  --odeslat   pošle bez ptaní
-  --nahled    jen ukáže, nic nepošle
+Vypíše výsledek a rovnou ho pošle do SKLADu (bez ptaní; --nahled jen ukáže).
+  Vše pošle do SKLADu samo, bez ptaní.  --nahled  jen ukáže, nic nepošle
 
 V repozitáři: nastroje/bazos/bazos_kontrola.py, hlídá to test/test-bazoskontrola.js.
 """
@@ -275,9 +274,8 @@ def zkontroluj(kod, misto, modely, prodane):
     print(f"\n== {plat} ==")
     inzeraty, pocet, web = nacti_profil(misto, kod)
     print(f"Inzerátů na profilu: {pocet if pocet is not None else len(inzeraty)} (načteno {len(inzeraty)})")
-    for n, inz in enumerate(inzeraty, 1):
-        print(f"  [{n}/{len(inzeraty)}] {inz['nazev'][:60]}", flush=True)
-        nacti_velikosti(inz)
+    print(f"  Čtu detaily {len(inzeraty)} inzerátů (po dvou naráz)…", flush=True)
+    S.paralelne(nacti_velikosti, inzeraty, 2)   # Bazoš je citlivý — víc najednou ne
     return vyhodnot(kod, plat, inzeraty, pocet, web, modely, prodane)
 
 
@@ -530,15 +528,7 @@ def main(argv):
     if "--nahled" in argv:
         print("\nJen náhled, nic se neposlalo.")
         return
-    if "--odeslat" not in argv:
-        try:
-            odp = input("\nOdeslat do SKLADu? (a/n): ").strip().lower()
-        except EOFError:
-            odp = ""
-        if odp not in ("a", "ano", "y"):
-            print("Nic se neposlalo.")
-            return
-    token = S.prihlas()   # kdyby se nad otázkou čekalo přes hodinu
+    token = S.prihlas()   # čerstvý token (stahování mohlo trvat)
     hotovo = posli(token, data, polozky, vysledek, True, modely, prodane)
     print("Posláno. Aplikace to převezme, až bude otevřená (okno Kontroly listingů, odkaz Report).")
     if hotovo["fajfky"].get("stav") == "zadano":

@@ -4,10 +4,13 @@ Prohlížeč pro kontroly, které se skriptem přihlásit nejdou (Facebook,
 Hypeboost za Cloudflare, Klekt, Tnsky, Sneakerstore, Released).
 
 Otevře skutečný Chrome (nebo Edge) s VLASTNÍM profilem kontrol — ne tvým
-běžným. Na každý web se v něm přihlásíš jednou sám, rukou; profil si
-přihlášení pamatuje, takže příště už to jede samo. Hesla skript nikdy
-nevidí ani neukládá. Data se pak čtou ze stránky stejným JavaScriptem,
-jaký používaly skilly ve vestavěném prohlížeči.
+běžným. Do přihlašovacího formuláře webu se skript přihlásí sám heslem ze
+Správce pověření Windows, stejně jako ostatní kontroly (prihlas_sam;
+poprvé se zeptá). Profil si přihlášení navíc pamatuje, takže většinou
+není potřeba ani to. Jen Facebook se přihlašuje rukou v okně — jeho
+ověřování by samostatné přihlašování mohlo vyhodnotit jako útok a účet
+zablokovat. Data se čtou ze stránky stejným JavaScriptem, jaký používaly
+skilly ve vestavěném prohlížeči.
 
 Profil leží v %LOCALAPPDATA%\\MTKM-kontroly\\prohlizec — schválně NE ve
 složce na Google Disku: jsou v něm přihlášené relace a ty se do cloudu
@@ -50,6 +53,9 @@ class Prohlizec:
                 posledni = e
         if not self._ctx:
             self._pw.stop()
+            if any(t in str(posledni).lower() for t in ("already in use", "processsingleton", "lock", "being used")):
+                raise ChybaProhlizece("Prohlížeč kontrol už je otevřený — běží jiná kontrola (Tnsky, KLEKT…) "
+                                      "nebo PRIHLASIT_WEBY. Počkej, až doběhne a okno se zavře, pak spusť znovu.")
             raise ChybaProhlizece("Nepodařilo se otevřít Chrome ani Edge: %s" % posledni)
         return self
 
@@ -88,6 +94,97 @@ class Prohlizec:
         raise ChybaProhlizece("Na %s se nepodařilo přihlásit — stránka pořád nic neukazuje." % misto)
 
 
+E_POLE = ('input[type=email], input[autocomplete=email], input[autocomplete=username], '
+          'input[name*="email" i], input[id*="email" i], input[name*="login" i][type=text], input[name*="user" i][type=text]')
+H_POLE = 'input[type=password]'
+
+
+def _viditelne(stranka, vyber):
+    for i in range(stranka.locator(vyber).count()):
+        p = stranka.locator(vyber).nth(i)
+        try:
+            if p.is_visible():
+                return p
+        except Exception:
+            pass
+    return None
+
+
+def _ok(stranka, test_js):
+    try:
+        return bool(stranka.evaluate(test_js))
+    except Exception:
+        return False
+
+
+def vypln_prihlaseni(stranka, email, heslo, cekat_s=25):
+    """Vyplní přihlašovací formulář stránky (i dvoukrokový: e-mail → Enter →
+    heslo). Vrací False, když na stránce formulář není (třeba ověření Cloudflare)."""
+    konec = time.time() + cekat_s
+    e = h = None
+    while time.time() < konec and not (e or h):
+        e, h = _viditelne(stranka, E_POLE), _viditelne(stranka, H_POLE)
+        if not (e or h):
+            stranka.wait_for_timeout(1000)
+    if not (e or h):
+        return False
+    if e:
+        e.fill(email)
+        if not h:   # heslo až na druhé obrazovce
+            e.press("Enter")
+            for _ in range(15):
+                stranka.wait_for_timeout(1000)
+                h = _viditelne(stranka, H_POLE)
+                if h:
+                    break
+    if not h:
+        return False
+    h.fill(heslo)
+    h.press("Enter")
+    stranka.wait_for_timeout(1500)
+    try:   # Enter formulář bez tlačítka neodešle → tlačítko, jinak odeslat formulář přímo
+        if h.is_visible():
+            tl = _viditelne(stranka, 'button[type=submit], input[type=submit], form button:not([type=button])')
+            if tl:
+                tl.click()
+            else:
+                h.evaluate("e => e.form && (e.form.requestSubmit ? e.form.requestSubmit() : e.form.submit())")
+    except Exception:
+        pass       # stránka mezitím odešla — přihlášení běží
+    stranka.wait_for_timeout(3000)
+    return True
+
+
+def prihlas_sam(b, stranka, test_js, misto, url, login_url=None):
+    """Přihlásí se sám heslem ze Správce pověření Windows (jako Sellect, Tuzex…).
+    Poprvé se zeptá na e-mail a heslo, uloží je až po povedeném přihlášení.
+    Když to nepůjde (ověření „nejsem robot“…), požádá o přihlášení v okně."""
+    if _ok(stranka, test_js):
+        return True
+    import sklad_firestore as S
+    for pokus in range(2):
+        email, heslo, nove = S.prihlaseni_webu(misto)
+        if login_url:
+            stranka.goto(login_url, wait_until="domcontentloaded", timeout=90000)
+            stranka.wait_for_timeout(2000)
+        vyplneno = vypln_prihlaseni(stranka, email, heslo)
+        stranka.goto(url, wait_until="domcontentloaded", timeout=90000)
+        stranka.wait_for_timeout(2500)
+        if _ok(stranka, test_js):
+            if nove:
+                S.uloz_prihlaseni_webu(misto, email, heslo)
+            print("Přihlášeno na %s." % misto)
+            return True
+        if not vyplneno:
+            break          # formulář se neukázal (Cloudflare…) → ručně v okně
+        if not nove:       # uložené heslo nefunguje → zapomenout a zeptat se znovu
+            print("Uložené heslo k %s nefunguje, zeptám se znovu." % misto)
+            S.zapomen_prihlaseni_webu(misto)
+        else:
+            print("Přihlášení na %s neprošlo — zkus e-mail a heslo znovu." % misto)
+    return b.prihlaseni(stranka, test_js, misto, url)
+
+
 def js_cekej(stranka, vyraz, sekund=40):
     """Čeká, až výraz v okně stránky vrátí něco jiného než null (běh na pozadí)."""
     konec = time.time() + sekund
@@ -99,18 +196,14 @@ def js_cekej(stranka, vyraz, sekund=40):
     return None
 
 
+# Ruční přihlášení jen tam, kde samostatné nejde (ostatní weby se přihlásí samy)
 WEBY = {
-    "Tnsky": "https://sell.tnsky.cz/inventory",
-    "Sneakerstore": "https://sell.sneakerstore.cz/inventory",
-    "Hypeboost": "https://hypeboost.com/en/account/sales/current",
-    "KLEKT": "https://klekt.com/profile/seller/listings",
-    "Released": "https://sell-releasedcz-dev.web.app/my-offers",
     "Facebook": "https://www.facebook.com/marketplace/you/selling",
 }
 
 
 if __name__ == "__main__":
-    # PRIHLASIT_WEBY.bat: otevře všechny weby v profilu kontrol, ať se přihlásíš jednou všude
+    # PRIHLASIT_WEBY.bat: nainstaluje Playwright a otevře Facebook, ať se na něj jednou přihlásíš
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
@@ -124,8 +217,8 @@ if __name__ == "__main__":
                 s.goto(url, wait_until="domcontentloaded", timeout=90000)
             except Exception as e:
                 print("  %s se nenačetl: %s" % (jmeno, e))
-        print("Otevřel jsem %d záložek. V každé se přihlas (Hypeboost: odklikni i ověření)." % len(WEBY))
-        print("Až budeš všude vidět svoje nabídky, zmáčkni tady Enter — prohlížeč se zavře a přihlášení si pamatuje.")
+        print("Otevřel jsem Facebook. Přihlas se na něj (ostatní weby se přihlásí samy při kontrole).")
+        print("Až uvidíš svoje inzeráty, zmáčkni tady Enter — prohlížeč se zavře a přihlášení si pamatuje.")
         try:
             input()
         except EOFError:

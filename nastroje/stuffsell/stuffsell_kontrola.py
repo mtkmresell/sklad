@@ -12,7 +12,7 @@ a Report. Pravidla jsou ze skillu „stuffsell-kontrola" (zůstává jako záloh
 Na Stuffsellu nic nemění — jen čte.
 
 Spuštění: SPUSTIT_stuffsell.bat (nebo python stuffsell_kontrola.py)
-  --odeslat   pošle bez ptaní      --nahled   jen ukáže
+  Vše pošle do SKLADu samo, bez ptaní.  --nahled  jen ukáže, nic nepošle ani neprodlouží
   --nove-heslo  zapomene uložené heslo a zeptá se znovu
 
 V repozitáři: nastroje/stuffsell/stuffsell_kontrola.py, hlídá to test/test-stuffsell.js.
@@ -142,23 +142,19 @@ def nacti_eshop():
     """{(SKU, velikost) → nejnižší cena} z dostupných variant stuffsell.cz/products.json
     (stejné SKU může být u víc produktů; SKU „A / B" se rozdělí)."""
     nej = {}
-    for strana in range(1, 200):
-        o, _ = _json(ESHOP + "/products.json?limit=250&page=%d" % strana)
-        produkty = (o or {}).get("products") or []
-        if not produkty:
-            break
-        for pr in produkty:
-            for v in pr.get("variants") or []:
-                if not v.get("sku") or v.get("available") is False:
-                    continue
-                try:
-                    c = float(v.get("price"))
-                except (TypeError, ValueError):
-                    continue
-                for sku in str(v["sku"]).split("/"):
-                    k = (sku.strip().upper(), vel(v.get("option1")))
-                    if k not in nej or c < nej[k]:
-                        nej[k] = c
+    stranka = lambda n: ((_json(ESHOP + "/products.json?limit=250&page=%d" % n)[0] or {}).get("products") or [])
+    for pr in S.stranky(stranka, vlaken=6):   # 6 stránek naráz (dřív ~18 s po jedné)
+        for v in pr.get("variants") or []:
+            if not v.get("sku") or v.get("available") is False:
+                continue
+            try:
+                c = float(v.get("price"))
+            except (TypeError, ValueError):
+                continue
+            for sku in str(v["sku"]).split("/"):
+                k = (sku.strip().upper(), vel(v.get("option1")))
+                if k not in nej or c < nej[k]:
+                    nej[k] = c
     return nej
 
 

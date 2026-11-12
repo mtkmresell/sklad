@@ -2,8 +2,8 @@
 """
 Sneakerstore kontrola pro MTKM.Store (Gabro).
 
-Otevře sell.sneakerstore.cz v prohlížeči kontrol (prohlizec.py — přihlásíš
-se v okně sám, jednou), přečte Inventory a katalog (/products) a porovná
+Otevře sell.sneakerstore.cz v prohlížeči kontrol (prohlizec.py),
+přihlásí se sám heslem ze Správce pověření Windows (poprvé se zeptá), přečte Inventory a katalog (/products) a porovná
 je se skladem z cloudu. Výsledek pošle do aplikace SKLAD. — fajfky, okno
 Kontroly listingů a Report. Pravidla jsou ze skillu „sneakerstore-kontrola"
 (jeho skript pro portál; skill zůstává jako záloha). Ceny v €.
@@ -11,7 +11,7 @@ Kontroly listingů a Report. Pravidla jsou ze skillu „sneakerstore-kontrola"
 Na Sneakerstore nic nemění — jen čte (GET stránek inventory a products,
 formulář nového kusu se jen otevře kvůli cenám, nic se neodesílá).
 
-Spuštění: SPUSTIT_sneakerstore.bat   (--odeslat / --nahled)
+Spuštění: SPUSTIT_sneakerstore.bat   (pošle samo; --nahled jen ukáže)
 V repozitáři: nastroje/sneakerstore/sneakerstore_kontrola.py, hlídá to test/test-kontrolyprohlizec.js.
 """
 import sys, os, re, json, time, traceback
@@ -45,11 +45,13 @@ for(let p=1;p<=8;p++){const rows=[...D(await G(`/inventory?page=${p}&limit=100`)
     if(t[5]==='Accepted'||t[5]==='Active')live.push({id:t[0],pn:t[2],size:t[3]==='One Size'?'OS':t[3],sku:t[4].replace(/;+$/,'').trim(),st:t[5],price:num(t[6])});}
   if(rows.length<100)break;}
 const cat=[];
-for(let i=1;i<=40;i++){const d=D(await G(`/products?page=${i}&limit=100`));const cards=[...d.querySelectorAll('.card-body')];
+let konec=false;
+for(let i0=1;i0<=40&&!konec;i0+=5){const davka=await Promise.all([0,1,2,3,4].map(j=>G(`/products?page=${i0+j}&limit=100`)));  // 5 stránek katalogu naráz
+ for(const h of davka){if(konec)break;const d=D(h);const cards=[...d.querySelectorAll('.card-body')];
   for(const c of cards){const root=c.parentElement||c;const a=root.querySelector('a[href*="inventories_variants"]')||c.querySelector('a[href*="/products/"]');const m=a&&a.getAttribute('href').match(/products\/(\d+)/);if(!m)continue;
     const img=root.querySelector('img');
     cat.push({id:m[1],title:(c.querySelector('.card-title')||{textContent:''}).textContent.trim(),skus:((c.querySelector('p')||{textContent:''}).textContent.trim()).split('/').map(N).filter(Boolean),img:img?img.src:''});}
-  if(cards.length<100)break;}
+  if(cards.length<100)konec=true;}}
 return {live,cat};}"""
 # Ceny podle velikostí z formuláře nového kusu (jen se načte, nic se neodesílá)
 JS_FORMY = r"""async(ids)=>{const D=h=>new DOMParser().parseFromString(h,'text/html');const num=s=>parseFloat(String(s).replace(/[^\d.,]/g,'').replace(',','.'));const forms={};
@@ -67,7 +69,7 @@ def nacti(potrebne_fn):
     import prohlizec as P
     with P.Prohlizec() as b:
         s = b.otevri(WEB, 2500)
-        b.prihlaseni(s, JS_TEST, "sell.sneakerstore.cz", WEB)
+        P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, "https://sell.sneakerstore.cz/users/sign_in")
         d = s.evaluate(JS_DATA)
         forms = s.evaluate(JS_FORMY, list(potrebne_fn(d["live"], d["cat"]))) if d["live"] or d["cat"] else {}
     return d["live"], d["cat"], forms

@@ -13,8 +13,7 @@ stáhnout jako CSV bez přihlášení; e-shop má veřejný products.json.
 Do skladu nezapisuje: položí lísteček a provede ho aplikace.
 
 Spuštění: python section_kontrola.py   (nebo SPUSTIT_section.bat)
-  --odeslat   pošle bez ptaní
-  --nahled    jen ukáže, nic nepošle
+  Vše pošle do SKLADu samo, bez ptaní.  --nahled  jen ukáže, nic nepošle
 
 V repozitáři: nastroje/section/section_kontrola.py, hlídá to test/test-section.js.
 """
@@ -68,17 +67,12 @@ def nacti_tabulku(gid=LIST_ONLINE):
 
 
 def nacti_eshop():
-    produkty = []
-    for strana in range(1, 60):
-        st, t = stahni(f"{ESHOP}/products.json?limit=250&page={strana}")
+    def stranka(n):
+        st, t = stahni(f"{ESHOP}/products.json?limit=250&page={n}")
         if st != 200:
             raise RuntimeError(f"E-shop Section neodpovídá ({st}).")
-        dav = json.loads(t).get("products") or []
-        if not dav:
-            break
-        produkty += dav
-        time.sleep(0.3)
-    return produkty
+        return json.loads(t).get("products") or []
+    return S.stranky(stranka, vlaken=4)   # 4 stránky naráz (dřív po jedné s pauzou)
 
 
 # ---------- srovnání ----------
@@ -328,14 +322,6 @@ def main(argv):
     if "--nahled" in argv:
         print("\nJen náhled, nic se neposlalo.")
         return
-    if "--odeslat" not in argv:
-        try:
-            odp = input("\nOdeslat do SKLADu? (a/n): ").strip().lower()
-        except EOFError:
-            odp = ""
-        if odp not in ("a", "ano", "y"):
-            print("Nic se neposlalo.")
-            return
     token = S.prihlas()
     posli(token, data, polozky, r, datum, odeslat=True)
     print("Posláno. Aplikace to převezme, až bude otevřená (okno Kontroly listingů, odkaz Report).")

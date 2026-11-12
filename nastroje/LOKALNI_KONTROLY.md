@@ -107,8 +107,8 @@ Spouští se `bazos/SPUSTIT_bazos.bat` (nebo `python bazos_kontrola.py`):
 1. Načte sklad z cloudu a projde Bazoš.cz a Bazoš.sk jako dřív.
 2. Vypíše nálezy: SMAZAT, OPRAVIT, NENÍ VE SKLAD, FAJFKA +/− a OVĚŘIT
    RUČNĚ (párování nejisté — tyhle se nikam neposílají).
-3. Zeptá se **„Odeslat do SKLADu? (a/n)"**. Až po „a" pošle fajfky
-   a kontrolu obou míst. `--nahled` jen ukáže, `--odeslat` neptá se.
+3. **Bez ptaní** pošle fajfky a kontrolu obou míst (i report do
+   aplikace). `--nahled` jen ukáže a nepošle nic.
 
 Výsledek je pak v aplikaci v okně Kontroly listingů a odkaz **Report**
 u místa otevře podrobný report (jako dřív artifact): Smazat, Opravit
@@ -133,7 +133,7 @@ a příště se neptá. Změněné heslo: spusť s `--nove-heslo` (stačí do
 spouštěče dopsat), nebo ho program při odmítnutí zapomene sám.
 
 - **TheBeast** jen čte (nabídky, katalog). Payout 77 % − 50 Kč.
-- **Sellect** čte Aktuální nabídky a katalog; **po „a" prodlouží nabídky,
+- **Sellect** čte Aktuální nabídky a katalog; **vždy prodlouží nabídky,
   které jsou skladem** (jako skill). Payout 80 % − 50 Kč.
 - **Tuzex** jen čte (Inventory, ceny z tuzexstore.com). Ceny v €,
   payout 74 % − 2 €, Nejsi nejlevnější s doporučenou cenou končící 9.
@@ -148,17 +148,21 @@ spouštěče dopsat), nebo ho program při odmítnutí zapomene sám.
 
 ### Kontroly přes prohlížeč (Tnsky, Sneakerstore, Hypeboost, KLEKT, Released, Facebook)
 
-Na tyhle weby se skript přihlásit nemůže (Facebook ověřování, Hypeboost
-Cloudflare…), takže otevře **skutečný Chrome** s vlastním profilem kontrol
-(`%LOCALAPPDATA%\MTKM-kontroly\prohlizec`, ne na Disku). Poprvé:
+Tyhle weby se čtou přes **skutečný Chrome** s vlastním profilem kontrol
+(`%LOCALAPPDATA%\MTKM-kontroly\prohlizec`, ne na Disku). **Přihlašují se
+samy** — e-mail a heslo se zeptají poprvé (heslo přes schránku + Enter),
+uloží se do Správce pověření až po povedeném přihlášení. Rukou jen:
 
-1. Spusť `PRIHLASIT_WEBY.bat` (v hlavní složce). Nainstaluje Playwright
-   a otevře všech šest webů — v každé záložce se přihlas, pak Enter.
-2. Pak už stačí `SPUSTIT_<místo>.bat`. Když přihlášení vyprší, kontrola
-   řekne „přihlas se v okně" a počká na Enter.
+1. **Facebook** — spusť jednou `PRIHLASIT_WEBY.bat` (v hlavní složce),
+   nainstaluje Playwright a otevře Facebook; přihlas se, pak Enter.
+2. **Hypeboost**, když ukáže ověření „nejsem robot" — odklikni ho v okně
+   a zmáčkni Enter.
 
-- **Hypeboost** po „a" prodlouží almost expired (+14 dní).
-- **KLEKT** po „a" prodlouží expiraci na 60 dní (kromě IE5836).
+Dvě kontroly přes prohlížeč naráz nepojedou (sdílí jeden profil) — druhá
+řekne, ať počkáš.
+
+- **Hypeboost** vždy prodlouží almost expired (+14 dní).
+- **KLEKT** vždy prodlouží expiraci na 60 dní (kromě IE5836).
 - **Released** si pamatuje katalog v `released/katalog_released.json`.
 - **WTB**: zkopíruj text pingeru (Ctrl+C) a spusť `SPUSTIT_wtb.bat`.
   Do aplikace pošle report, až bude „WTB Market" v Nastavení → místa

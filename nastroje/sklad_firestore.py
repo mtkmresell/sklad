@@ -676,11 +676,12 @@ def posli_report(token, data, polozky, report, odeslat=False, uid=MAJITEL_UID):
 # ── Společný závěr kontroly ─────────────────────────────────────────────
 
 def dokonci_kontrolu(token, data, polozky, zmeny, report, kontrola, argv, pred_odeslanim=None):
-    """Náhled → „Odeslat? (a/n)" → fajfky, report a kontrola (v tomhle pořadí).
+    """Náhled → (prodloužení na webu) → fajfky, report a kontrola (v tomhle pořadí).
+    Posílá se vždy, bez ptaní (Gabro, 12. 11. 2026) — jen --nahled nic nepošle.
 
     kontrola = argumenty pro posli_kontrolu (misto, chybi, smazat, …).
-    pred_odeslanim = co se má udělat na webu až po souhlasu (Sellect
-    prodlužuje nabídky) — v náhledu se nevolá nikdy.
+    pred_odeslanim = co se má udělat na webu (Sellect, Hypeboost, KLEKT
+    prodlužují nabídky) — vždy, jen v --nahled ne.
     Vrací True, když se poslalo."""
     def posli(tok, odeslat):
         return {'fajfky': posli_fajfky(tok, data, polozky, zmeny, odeslat=odeslat),
@@ -695,19 +696,36 @@ def dokonci_kontrolu(token, data, polozky, zmeny, report, kontrola, argv, pred_o
     if '--nahled' in argv:
         print('\nJen náhled, nic se neposlalo.')
         return False
-    if '--odeslat' not in argv:
-        try:
-            odp = input('\nOdeslat do SKLADu? (a/n): ').strip().lower()
-        except EOFError:
-            odp = ''
-        if odp not in ('a', 'ano', 'y'):
-            print('Nic se neposlalo.')
-            return False
     if pred_odeslanim:
         pred_odeslanim()
-    posli(prihlas(), True)     # nový token — nad otázkou se mohlo čekat přes hodinu
+    posli(prihlas(), True)     # nový token — prodlužování mohlo trvat
     print('Posláno. Aplikace to převezme, až bude otevřená (okno Kontroly listingů, odkaz Report).')
     return True
+
+
+def paralelne(fn, seznam, vlaken=4):
+    """fn pro každou položku, víc najednou; výsledky ve stejném pořadí.
+    U citlivých webů (Bazoš, Refresher) jen 2–3 vlákna, ať nás neberou jako útok."""
+    from concurrent.futures import ThreadPoolExecutor
+    seznam = list(seznam)
+    if vlaken <= 1 or len(seznam) <= 1:
+        return [fn(x) for x in seznam]
+    with ThreadPoolExecutor(max_workers=vlaken) as ex:
+        return list(ex.map(fn, seznam))
+
+
+def stranky(nacti_stranku, vlaken=6, nejvic=200):
+    """Stránkovaný katalog (products.json…) po dávkách několika stránek naráz,
+    dokud nepřijde prázdná. nacti_stranku(n) vrací seznam (prázdný = konec)."""
+    vse, od = [], 1
+    while od <= nejvic:
+        davka = paralelne(nacti_stranku, range(od, min(od + vlaken, nejvic + 1)), vlaken)
+        for d in davka:
+            if not d:
+                return vse
+            vse.extend(d)
+        od += vlaken
+    return vse
 
 
 def uloz_ladici(slozka, nazev, obsah):

@@ -3,7 +3,7 @@
 Released kontrola pro MTKM.Store (Gabro).
 
 Otevře „Moje nabídky" na sell-releasedcz-dev.web.app v prohlížeči kontrol
-(prohlizec.py — přihlásíš se v okně sám, jednou), přečte nabídky, pro
+(prohlizec.py) a přihlásí se sám heslem ze Správce pověření Windows (poprvé se zeptá, jako Sellect), přečte nabídky, pro
 nové kusy ověří katalog a velikosti na stránce /sell a porovná to se
 skladem z cloudu. Výsledek pošle do aplikace SKLAD. — fajfky, okno
 Kontroly listingů a Report. Pravidla i párování jsou ze skillu
@@ -14,7 +14,7 @@ velikostí — nic nezvolí ani neodešle. Paměť katalogu je v
 katalog_released.json vedle skriptu (co jde nalistovat s tvou velikostí,
 se už znovu neověřuje).
 
-Spuštění: SPUSTIT_released.bat   (--odeslat / --nahled)
+Spuštění: SPUSTIT_released.bat   (pošle samo; --nahled jen ukáže)
 V repozitáři: nastroje/released/released_kontrola.py, hlídá to test/test-kontrolyprohlizec.js.
 """
 import sys, os, re, json, time, datetime, traceback, unicodedata, collections
@@ -231,7 +231,7 @@ def main(argv):
     KC = json.load(open(KATALOG, encoding="utf-8")) if os.path.exists(KATALOG) else {}
     with P.Prohlizec() as b:
         s = b.otevri(WEB, 2500)
-        b.prihlaseni(s, JS_TEST, "Released (sell-releasedcz-dev.web.app)", WEB)
+        P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, ZAKLAD + "/login")
         R = rozeber(s.evaluate(JS_NABIDKY))
         if not R:
             raise RuntimeError("Released nevrátil žádnou nabídku. Zkontroluj okno prohlížeče, případně pošli Claudovi screenshot.")

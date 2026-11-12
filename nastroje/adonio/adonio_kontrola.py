@@ -12,7 +12,7 @@ záloha).
 Na Adoniu nic nemění — jen čte stránku Moje nabídky.
 
 Spuštění: SPUSTIT_adonio.bat (nebo python adonio_kontrola.py)
-  --odeslat   pošle bez ptaní      --nahled   jen ukáže
+  Vše pošle do SKLADu samo, bez ptaní.  --nahled  jen ukáže, nic nepošle ani neprodlouží
   --nove-heslo  zapomene uložené heslo a zeptá se znovu
 
 V repozitáři: nastroje/adonio/adonio_kontrola.py, hlídá to test/test-adonio.js.

@@ -1365,7 +1365,7 @@ Ctrl+V majiteli nešlo vůbec.
 `sklad.json` a nepotřebuje Clauda v chatu: sklad načte z cloudu, sám
 rozhodne **Smazat** (inzerát bez kusu skladem, jistě spárovaný s prodaným
 modelem → nejčerstvější prodaný kus na velikost), **Opravit**, **Není ve
-SKLADu** a fajfky, vypíše náhled a po „a" pošle lístečky (fajfky, pak
+SKLADu** a fajfky, vypíše náhled a **sám, bez ptaní** pošle lístečky (fajfky, pak
 kontrola Bazoš.cz a Bazoš.sk s počtem inzerátů a limitem 50). Report
 v artifactu nahradil report v aplikaci (`REPORT KONTROLY`). Pravidla
 ze skillu `bazos-kontrola` platí dál; **skill majitel nechává jako
@@ -1406,13 +1406,13 @@ weby s přihlášením. Majitel souhlasí, ať si program heslo pamatuje
 a přihlašuje se sám — **heslo k webu leží ve Správci pověření Windows**
 (`prihlaseni_webu`, jméno `SKLAD-web-<místo>`), poprvé se zeptá (heslo
 přes schránku + Enter) a uloží ho **až po povedeném přihlášení**; špatné
-uložené heslo se zapomene. Společný konec (náhled → „a" → fajfky, report,
+uložené heslo se zapomene. Společný konec (náhled → fajfky, report,
 kontrola) je `dokonci_kontrolu`; co web vrátí v nečekaném tvaru, uloží
 `uloz_ladici` do `<místo>/debug/` a majitel ho pošle. TheBeast: Contember
 GraphQL (přihlašovací token je veřejně ve stránce), pojistka víc než 10
 odškrtnutí → fajfky se nepošlou. Sellect: formulář + cookie, tabulka
-z HTML, katalog přes `find-product`; **prodlužuje nabídky skladem až po
-„a"** (`pred_odeslanim`) — jediný zápis na cizí web, majitel ho povolil.
+z HTML, katalog přes `find-product`; **prodlužuje nabídky skladem vždy**
+(`pred_odeslanim`) — zápis na cizí web, majitel ho povolil.
 Tuzex: ConsignR API (`x-client-host`), ceny v €, Nejsi nejlevnější proti
 `tuzexstore.com/products.json`; podobný název jde **jen** do Ověřit ručně
 (nesmaže, nepřidá, fajfku nemění). Hlídá to `test-thebeast.js`,
@@ -1439,16 +1439,21 @@ ověřování, Hypeboost Cloudflare, Tnsky má ve skillu „jen z tabulky,
 žádné tokeny ani API"), takže jedou přes **`nastroje/prohlizec.py`**:
 skutečný Chrome/Edge přes Playwright s **vlastním profilem kontrol
 v `%LOCALAPPDATA%\MTKM-kontroly\prohlizec`** — schválně ne na Google
-Disku, jsou v něm přihlášené relace. Na weby se majitel přihlásí jednou
-rukou (`PRIHLASIT_WEBY.bat`), hesla skript nevidí. Data se čtou **stejným
+Disku, jsou v něm přihlášené relace. Přihlašuje se **sám** do formuláře webu heslem ze Správce pověření (`prihlas_sam`, jako Sellect a Tuzex; poprvé se zeptá) a profil si relaci pamatuje; když formulář nenajde (ověření Cloudflare), požádá o přihlášení v okně. **Rukou jen Facebook** (`PRIHLASIT_WEBY.bat`) — samostatné přihlašování by mu mohlo zablokovat účet. Dvě kontroly přes prohlížeč naráz nepojedou (jeden profil), to se řekne naplno. Data se čtou **stejným
 JS jako ve skillech** (`page.evaluate`), porovnání je v Pythonu podle
-`kontrola.py` skillů. Zápisy na cizí weby jen po „a" (`pred_odeslanim`):
+`kontrola.py` skillů. Zápisy na cizí weby vždy, bez ptaní (`pred_odeslanim`, jen `--nahled` nic):
 Hypeboost prodlouží almost expired, KLEKT expiraci na 60 dní (bez IE5836).
 Released si pamatuje katalog v `katalog_released.json`. WTB bere text
 pingeru ze schránky (nebo `pinger.txt`); do aplikace pošle report jen
 když je „WTB Market" v nastavení míst prodeje — **aplikace i
-`posli_report` berou jen místa z nastavení**. Hlídá to
-`test-kontrolyprohlizec.js` (prohlížeč nahrazený podvrhem).
+`posli_report` berou jen místa z nastavení**. **Žádná kontrola se neptá „a/n"** (majitel, 12. 11. 2026): náhled,
+prodloužení na webu a odeslání fajfek, kontroly i reportu proběhne samo
+(`dokonci_kontrolu`); `--nahled` jen ukáže. Zrychlení: stránky e-shopů
+a detaily inzerátů se čtou souběžně (`S.paralelne`, `S.stranky`; Bazoš
+jen po dvou), KLEKT se katalogu ptá jen na kusy, které tam patří.
+Hlídá to `test-kontrolyprohlizec.js` (prohlížeč nahrazený podvrhem)
+a skutečné přihlášení do formuláře `test-prihlasenisam.js` (bez
+Playwrightu pro Python se přeskočí).
 
 Dál: malá aplikace na spouštění všech kontrol.
 Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,
@@ -1968,7 +1973,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 86 souborů
+node test/run.js              # kontrola syntaxe + všech 87 souborů
 node test/run.js archive      # jen vybrané
 ```
 

@@ -122,7 +122,7 @@ function spust(argv, odpoved) {
 
   sekce('3) Odeslání');
   r = await spust([], 'n');
-  ok('bez „a" nic', r.j && r.j.zapisy.length === 0);
+  ok('neptá se „a/n" a pošle i tak', r.j && r.j.zapisy.length === 3 && !/\(a\/n\)/.test(r.out), r.out.slice(-400));
   r = await spust([], 'a');
   const z = r.j ? r.j.zapisy : [];
   ok('fajfky, report a kontrola', z.length === 3 && z[0].obsah.zmeny && z[1].jmeno === 'pozadavek_report_refresher'

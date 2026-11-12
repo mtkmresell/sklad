@@ -12,7 +12,7 @@ Na TheBeast nic nemění — jen čte (přihlášení, nabídky, katalog).
 Do skladu nezapisuje: položí lísteček a provede ho aplikace.
 
 Spuštění: SPUSTIT_thebeast.bat (nebo python thebeast_kontrola.py)
-  --odeslat   pošle bez ptaní      --nahled   jen ukáže
+  Vše pošle do SKLADu samo, bez ptaní.  --nahled  jen ukáže, nic nepošle ani neprodlouží
   --nove-heslo  zapomene uložené heslo a zeptá se znovu
 
 V repozitáři: nastroje/thebeast/thebeast_kontrola.py, hlídá to test/test-thebeast.js.

@@ -2,8 +2,8 @@
 """
 Tnsky kontrola pro MTKM.Store (Gabro).
 
-Otevře Inventory na sell.tnsky.cz v prohlížeči kontrol (prohlizec.py —
-přihlásíš se v okně sám, jednou), přečte z tabulky aktivní nabídky
+Otevře Inventory na sell.tnsky.cz v prohlížeči kontrol (prohlizec.py),
+přihlásí se sám heslem ze Správce pověření Windows (poprvé se zeptá), přečte z tabulky aktivní nabídky
 a porovná je se skladem z cloudu. Výsledek pošle do aplikace SKLAD. —
 fajfky, okno Kontroly listingů a Report. Pravidla i párování jsou ze
 skillu „tnsky-kontrola" (jeho kontrola.py; skill zůstává jako záloha).
@@ -11,7 +11,7 @@ skillu „tnsky-kontrola" (jeho kontrola.py; skill zůstává jako záloha).
 Na Tnsky nic nemění. Data jen z tabulky na stránce — žádné tokeny ani
 API stránky (pravidlo ze skillu). Do reportu nejdou údaje o účtu.
 
-Spuštění: SPUSTIT_tnsky.bat   (--odeslat / --nahled jako u ostatních)
+Spuštění: SPUSTIT_tnsky.bat   (pošle samo; --nahled jen ukáže)
 V repozitáři: nastroje/tnsky/tnsky_kontrola.py, hlídá to test/test-kontrolyprohlizec.js.
 """
 import sys, os, re, json, time, traceback, unicodedata, collections
@@ -44,7 +44,14 @@ JS_NABIDKY = r"""async()=>{const w=ms=>new Promise(r=>setTimeout(r,ms));const k=
 for(let i=0;i<20&&!btn(/^All Statuses$|^Active/);i++)await w(500);
 if(btn(/^All Statuses$/)){k(btn(/^All Statuses$/));await w(500);const o=[...document.querySelectorAll('[role=option],[cmdk-item],div')].find(e=>e.children.length<4&&e.innerText&&e.innerText.trim()==='Active');if(!o)return {chyba:'volba Active nenalezena'};k(o);await w(800);document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await w(300);}
 const rp=btn(/^10$|^25$|^50$/);if(rp){k(rp);await w(500);const o=[...document.querySelectorAll('[role=option]')].find(e=>e.innerText.trim()==='100');if(o){k(o);}await w(1800);}
-const rows=[...document.querySelectorAll('tbody tr')];const out=rows.map(tr=>{const td=[...tr.querySelectorAll('td')];const c=td.map(x=>x.innerText.replace(/\s+/g,' ').trim());if(c[3]!=='Active')return null;const L=td[0].innerText.split('\n').map(s=>s.trim()).filter(Boolean);const inp=tr.querySelector('input');const ml=((c[5]||'').match(/Market Low:\s*(\d+)/)||[])[1]||'';const sku=(L[1]||'—').split(' / ')[0].replace(/\.\.\.$/,'');const img=tr.querySelector('img');return [L[0],sku,c[1],inp?inp.placeholder:'',ml,img?img.src:'']}).filter(Boolean);const foot=(document.body.innerText.match(/(\d+)–(\d+) of (\d+)/)||[]);return {radky:out,celkem:foot[3]?+foot[3]:null}}"""
+const radky=()=>[...document.querySelectorAll('tbody tr')].map(tr=>{const td=[...tr.querySelectorAll('td')];const c=td.map(x=>x.innerText.replace(/\s+/g,' ').trim());if(c[3]!=='Active')return null;const L=td[0].innerText.split('\n').map(s=>s.trim()).filter(Boolean);const inp=tr.querySelector('input');const ml=((c[5]||'').match(/Market Low:\s*(\d+)/)||[])[1]||'';const sku=(L[1]||'—').split(' / ')[0].replace(/\.\.\.$/,'');const img=tr.querySelector('img');return [L[0],sku,c[1],inp?inp.placeholder:'',ml,img?img.src:'']}).filter(Boolean);
+const pata=()=>(document.body.innerText.match(/(\d+)–(\d+) of (\d+)/)||[]);
+const out=radky();
+// víc než 100 aktivních → další stránky tabulky (tlačítko „další“ v patičce)
+for(let st=0;st<10;st++){const f=pata();if(!f[3]||+f[2]>=+f[3])break;
+  const dal=[...document.querySelectorAll('button')].find(b=>/next/i.test(b.getAttribute('aria-label')||'')&&!b.disabled);if(!dal)break;
+  const pred=f[1];k(dal);for(let i=0;i<20&&pata()[1]===pred;i++)await w(300);await w(600);out.push(...radky());}
+const foot=pata();return {radky:out,celkem:foot[3]?+foot[3]:null}}"""
 
 
 def payout(cena):
@@ -75,7 +82,7 @@ def nacti_nabidky():
     import prohlizec as P
     with P.Prohlizec() as b:
         s = b.otevri(WEB, 3000)
-        b.prihlaseni(s, JS_TEST, "sell.tnsky.cz", WEB)
+        P.prihlas_sam(b, s, JS_TEST, MISTO, WEB, "https://sell.tnsky.cz/login")
         for pokus in range(2):
             r = s.evaluate(JS_NABIDKY)
             if r and not r.get("chyba") and (r.get("celkem") is None or r["celkem"] == len(r["radky"])):
@@ -85,7 +92,7 @@ def nacti_nabidky():
     if not r or r.get("chyba"):
         raise RuntimeError("Tnsky: %s" % ((r or {}).get("chyba") or "tabulka se nenačetla"))
     if r.get("celkem") is not None and r["celkem"] != len(r["radky"]):
-        raise RuntimeError("Tnsky: aktivních je %s, načetlo se %d (víc než 100 nebo se stránka nedonačetla). Spusť znovu."
+        raise RuntimeError("Tnsky: aktivních je %s, načetlo se %d (stránka se nedonačetla). Spusť znovu."
                            % (r["celkem"], len(r["radky"])))
     return [{"nazev": x[0], "sku": "" if x[1] == "—" else x[1], "velikost": x[2],
              "cena": int(re.sub(r"\D", "", x[3]) or 0), "ml": int(x[4]) if x[4] else None, "obrazek": x[5]}
