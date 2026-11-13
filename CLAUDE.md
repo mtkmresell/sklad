@@ -1356,8 +1356,10 @@ Na staré adrese jdou vytáhnout v konzoli:
 `localStorage.getItem('sklad_konektor_url_v1')`.
 
 **Zbývá (připomínej):**
-- Firebase → Authentication → Authorized domains: přidat novou doménu,
-- přístup pro účetního: One-time PIN + pravidlo Allow → Emails,
+- ~~Firebase → Authorized domains~~ — hotovo (majitel 13. 11.: doména tam je),
+- přístup pro účetního (13. 11. se majitel zasekl — v Zero Trust nenašel
+  Settings → Authentication; v novější podobě nástěnky je One-time PIN
+  pod Integrations → Identity providers, ověřit podle jeho screenshotu): One-time PIN + pravidlo Allow → Emails,
 - **až pak** repozitář na soukromý — pořadí je důležité, minule se tím
   majitel odstřihl od aplikace (Pages ze soukromého repozitáře chce
   GitHub Pro). Pak taky smazat zmínky o GitHub Pages odsud a ze skillu
