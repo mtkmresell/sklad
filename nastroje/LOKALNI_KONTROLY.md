@@ -259,8 +259,10 @@ otevřít detail kusu.
 ## Spouštěč — kontroly ovládané z aplikace SKLAD
 
 Na PC jednou dvojklik na **`KONTROLY.pyw`** (hlavní složka
-`MTKM-kontroly`, vedle `sklad_firestore.py`). Spouštěč poběží na pozadí
-bez okna, sám se nastaví na spuštění po zapnutí PC a otevře aplikaci
+`MTKM-kontroly`, vedle `sklad_firestore.py`). Spouštěč se spustí
+s tichým oknem — nevyskočí, je jen na liště; po kliknutí ukáže točící
+se kolečko a co právě dělá (křížek ho schová, vypíná se odkazem
+Ukončit). Sám se nastaví na spuštění po zapnutí PC a otevře aplikaci
 SKLAD na okně **Kontroly listingů**. Tam je nahoře panel **Kontroly na
 PC** — funguje i z mobilu, jen PC musí být zapnuté:
 

@@ -288,7 +288,32 @@ print('###' + json.dumps(out, ensure_ascii=False))
   ok('KONTROLY.pyw spouští spoustec.main', /spoustec\.main\(/.test(fs.readFileSync(path.join(NASTROJE, 'KONTROLY.pyw'), 'utf8')));
   ok('stav mimo Google Disk (LOCALAPPDATA)', /LOCALAPPDATA/.test(kod12));
   ok('spouštěč není na webu (.assetsignore)', /nastroje/.test(fs.readFileSync(path.join(__dirname, '..', '.assetsignore'), 'utf8')));
-  ok('spouštěč nemá vlastní okno (ovládá se z aplikace SKLAD)', !/import tkinter|from tkinter/.test(kod12));
+  /* Tiché okno (majitel, 13. 11. 2026): jen ukazuje, že program běží.
+     Nevyskočí (startuje na liště), křížek ho jen schová a ovládat se
+     v něm nedá nic — to je ve SKLADu. */
+  const okno = (kod12.match(/def okno_stavu[\s\S]*?\n\ndef /) || [''])[0];
+  ok('okno startuje schované na liště', /root\.iconify\(\)/.test(okno) && !/root\.deiconify\(\)\s*\n\s*root\.lift\(\)\s*\n\s*obnov\(\)/.test(okno));
+  ok('křížek okno jen schová, kontroly jedou dál', /WM_DELETE_WINDOW", root\.iconify/.test(okno));
+  ok('v okně se nic nespouští (ovládání je ve SKLADu)', !/\.spust\(|spust_vse\(|v_okne\(/.test(okno));
+  ok('bez tkinteru jede spouštěč bez okna', /except ImportError:\s*\n\s*ag\.bez_konce\(\)/.test(kod12));
+  const r12 = await python(['-I', '-c', `
+import sys, json, time
+sys.path.insert(0, ${JSON.stringify(NASTROJE)})
+import spoustec as S
+sp = S.Spoustec(${JSON.stringify(KOREN)}, ${JSON.stringify(path.join(tmp, 'stav12.json'))})
+class A: chyba = ''; posledni_zapis = 0
+out = {'klid': S.popis_stavu(sp, A())}
+sp.s('alfa').update(stav='bezi', radek='Čtu nabídky…'); sp.s('beta').update(stav='ceka')
+out['bezi'] = S.popis_stavu(sp, A())
+sp.s('alfa').update(stav='chyba'); sp.s('beta').update(stav='ok')
+a = A(); a.chyba = 'Nejde se spojit s Googlem'
+out['chyba'] = S.popis_stavu(sp, a)
+print('###' + json.dumps(out, ensure_ascii=False))
+`]);
+  const j12 = json(r12.out) || {};
+  ok('okno v klidu: čeká na pokyn ze SKLADu', /čekám na pokyn ze SKLADu/.test((j12.klid || [])[0]) && (j12.klid || [])[5] === false, JSON.stringify(j12.klid));
+  ok('okno při běhu: co běží a co dělá, kolečko se točí', /Běží Alfa · čeká 1/.test((j12.bezi || [])[0]) && /Alfa: Čtu nabídky/.test((j12.bezi || [])[1]) && (j12.bezi || [])[5] === true, JSON.stringify(j12.bezi));
+  ok('okno řekne, co chce pozornost i výpadek spojení', /Pozornost chce: Alfa/.test((j12.chyba || [])[1]) && /Googlem/.test((j12.chyba || [])[2]), JSON.stringify(j12.chyba));
 
   sekce('13) pokyny z aplikace');
   const r13 = await python(['-I', '-c', `

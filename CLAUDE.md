@@ -995,8 +995,8 @@ pro jeho program, automatické stahování výpisů.
   bránu `jeUctetni()`); pravidla mu čtení už dovolují, pohled pro něj
   přijde jako další krok.
 
-**Ruční krok:** blok `finance` ve `firestore.rules` se musí publikovat
-v konzoli Firebase, jinak cloud zápis odmítne (aplikace to řekne).
+Blok `finance` ve `firestore.rules` je v konzoli publikovaný (13. 11.);
+bez něj cloud zápis odmítne a aplikace to řekne.
 Hlídá to `test-finance.js`.
 
 ### Společný nákupní doklad (`SPOLEČNÝ NÁKUPNÍ DOKLAD`)
@@ -1314,8 +1314,8 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 
 | co | kde | stav |
 |---|---|---|
-| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **čeká** — nové bloky `spoustec` (13. 11., spouštění kontrol z aplikace) a `finance` (11. 11., Finance). Blok `zpravy` publikovaný 10. 11. (majitel); předtím ověřený lísteček `pozadavek_*` z příkazové řádky |
-| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (11. 11.: `sklad_kontrola` umí `opravit`, `neniVeSkladu`, `inzeratu`, `limit`; 10. 11. odpoledne: oprava mailu o zprávách — první běh, hlídání při každém cronu, `zkontrolovano` pro stopu v aplikaci). Předtím nasazeno 10. 11. dopoledne (zprávy od účetního). Dokud běží starší verze, ukazuje aplikace v okně Zpráv falešné „cron asi neběží“ — starší verze značku nepíše při každém běhu. Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — nasazovat od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
+| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **hotovo 13. 11.** — majitel publikoval celý soubor, tedy i bloky `spoustec` (spouštění kontrol z aplikace) a `finance`. Blok `zpravy` publikovaný 10. 11. |
+| `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **nasazeno 13. 11.** (majitel) — tedy i (11. 11.: `sklad_kontrola` umí `opravit`, `neniVeSkladu`, `inzeratu`, `limit`; 10. 11. odpoledne: oprava mailu o zprávách — první běh, hlídání při každém cronu, `zkontrolovano` pro stopu v aplikaci). Předtím nasazeno 10. 11. dopoledne (zprávy od účetního). Dokud běží starší verze, ukazuje aplikace v okně Zpráv falešné „cron asi neběží“ — starší verze značku nepíše při každém běhu. Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — nasazovat od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
 | třetí cron trigger `*/5 * * * *` | Cloudflare → Worker konektoru → Settings → Triggers → Cron Triggers → Add | **hotovo, ověřeno 10. 11.** — v cloudu se ve 14:15 zapsala značka `zpravy/_mail`. Zkušební mail nepřišel kvůli chybě prvního běhu, opraveno |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
 
@@ -1492,13 +1492,21 @@ v každém skriptu, načtení skladu a odeslání společně v
 `sklad_firestore.py` JSON. Hlídá to `test-kontrolyprohlizec.js`, sekce 8.
 
 **Spouštěč kontrol** (`SPOUŠTĚČ KONTROL`, 13. 11. 2026, čeká na první
-ostrý běh): `nastroje/spoustec.py` běží na PC **bez okna** a ovládá se
-**z aplikace** — panel *Kontroly na PC* nahoře v okně Kontroly listingů
-(`SPOUŠTĚNÍ KONTROL Z APLIKACE`), i z mobilu. První verze měla vlastní
-okno v tkinteru a majitel ho odmítl („vypadá staře, chci moderní
-jednoduchej disajn") — nevracej ho. Dvojklik na `KONTROLY.pyw` spustí
-spouštěč na pozadí a otevře aplikaci na `…#kontroly`; druhý dvojklik
-jen otevře aplikaci (`jediny`). Kontroly se najdou samy podle složek
+ostrý běh): `nastroje/spoustec.py` se ovládá **z aplikace** — panel
+*Kontroly na PC* nahoře v okně Kontroly listingů (`SPOUŠTĚNÍ KONTROL
+Z APLIKACE`), i z mobilu. První verze měla na PC ovládací okno
+v tkinteru s tlačítky a majitel ho odmítl („vypadá staře, chci moderní
+jednoduchej disajn") — nevracej ho. Na PC zůstalo jen **tiché okno**
+(`okno_stavu`, majitel 13. 11.: „ať v PC vidím, že se něco reálně
+děje"): startuje schované na liště, po kliknutí černá plocha s točícím
+se kolečkem (při běhu zelené a rychlé, v klidu pomalé) a pod ním co se
+děje (`popis_stavu`). **Nic se v něm neovládá**; křížek ho jen schová
+(zavřené by znamenalo, že ze SKLADu nic nejde), vypíná se odkazem
+Ukončit. Bez tkinteru jede spouštěč bez okna. Dvojklik na `KONTROLY.pyw`
+spustí spouštěč a otevře aplikaci na `…#kontroly`; další dvojklik okno
+ukáže a otevře aplikaci (`jediny`). **Aplikace sama spouštěč na PC
+nezapne** (prohlížeč program spustit nesmí) — proto se pouští po
+přihlášení do Windows a běží, dokud se PC nevypne. Kontroly se najdou samy podle složek
 (`<místo>/<místo>_kontrola.py`) — **nová kontrola spouštěč ani aplikaci
 neupravuje**. Bez prohlížeče běží naráz (`SOUBEZNE`), přes prohlížeč
 kontrol po jedné (sdílejí profil; pozná se podle `Prohlizec(` ve
@@ -1507,7 +1515,7 @@ skriptu). WTB je ruční (`RUCNI`, bere schránku). Stav, deník
 výpis běhu v `<místo>/posledni_beh.txt`.
 
 **Spojení s aplikací jde přes Firestore**, kolekce `users/{uid}/spoustec`
-(**nový blok pravidel — ruční krok**): aplikace položí pokyn
+(blok pravidel `spoustec`, publikovaný 13. 11.): aplikace položí pokyn
 `prikaz_…` (`{co, klic, kdy}`), spouštěč se každých `DOTAZ_S` (10 s)
 zeptá, pokyn provede a smaže, a do `pc` zapisuje stav (při změně, při
 běhu nejvýš po 3 s, jinak aspoň jednou za `TEP_S` = 2 min). Aplikace

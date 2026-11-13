@@ -2,13 +2,14 @@
 """
 Spouštěč kontrol pro MTKM.Store (Gabro) — kontroly na PC ovládané z aplikace SKLAD.
 
-Nemá vlastní okno. Ovládá se v aplikaci SKLAD → Kontroly listingů
+Ovládá se v aplikaci SKLAD → Kontroly listingů
 (i z mobilu): Spustit vše, jednotlivé kontroly, Zastavit, Přihlásit
 v okně, stav a výpis při chybě. Aplikace a PC si předávají pokyny
 a stav přes Firestore (kolekce spoustec, viz Agent níž).
 
-Dvojklik na KONTROLY.pyw spustí spouštěč na pozadí (bez černého okna)
-a otevře aplikaci. Kontroly bez prohlížeče běží naráz (SOUBEZNE),
+Na PC má jen tiché okno (okno_stavu): startuje schované na liště
+a po kliknutí ukáže točící se kolečko a co se právě děje. Dvojklik na
+KONTROLY.pyw spustí spouštěč a otevře aplikaci; další dvojklik ukáže okno. Kontroly bez prohlížeče běží naráz (SOUBEZNE),
 kontroly přes prohlížeč kontrol (Tnsky, KLEKT…) jedna po druhé —
 sdílejí jeden profil a dva Chromy na něm spustit nejde.
 
@@ -659,6 +660,120 @@ class Agent:
                     break
 
 
+# ── Tiché okno ──────────────────────────────────────────────────────────
+#
+# Majitel (13. 11. 2026): ovládání je ve SKLADu, ale na PC chce vidět, že
+# program opravdu běží — okno, které nevyskočí (startuje jen na liště),
+# po kliknutí černá plocha s točícím se kolečkem a pod ním, co se právě
+# děje. Nic se v něm neovládá, jen ukazuje. Křížek okno jen schová na
+# lištu (zavřít omylem = kontroly by přestaly jít ze SKLADu); vypnout
+# jde odkazem Ukončit dole. Bez tkinteru běží spouštěč bez okna jako dřív.
+
+BARVY = {"bg": "#0b0b0b", "stopa": "#1d1d1d", "accent": "#c8ff00", "text": "#f0f0f0",
+         "muted": "#7a7a7a", "muted2": "#4a4a4a", "chyba": "#ff4444", "pozor": "#ff8c1a"}
+
+
+def popis_stavu(sp, ag):
+    """(nadpis, řádek, patička, barva kolečka, běží) — co okno ukáže."""
+    with sp.zamek:
+        ks = [(k, dict(sp.s(k["klic"]))) for k in sp.kontroly]
+    bezi = [(k, s) for k, s in ks if s.get("stav") == "bezi"]
+    ceka = [k for k, s in ks if s.get("stav") == "ceka"]
+    if bezi:
+        jmena = ", ".join(k["nazev"] for k, _ in bezi)
+        nadpis = "Běží " + jmena + (" · čeká %d" % len(ceka) if ceka else "")
+        k, s = bezi[-1]
+        radek = (k["nazev"] + ": " + s["radek"]) if s.get("radek") else ""
+        barva = "accent"
+    elif ceka:
+        nadpis, radek, barva = "Kontroly čekají na spuštění", "", "accent"
+    else:
+        problem = [k["nazev"] for k, s in ks if s.get("stav") in ("chyba", "prihlasit")]
+        nadpis = "Připraveno — čekám na pokyn ze SKLADu"
+        radek = ("Pozornost chce: " + ", ".join(problem)) if problem else (
+            "Naposledy všechny: " + time.strftime("%d. %m. %H:%M", time.localtime(sp.stav["posledni_vse"]))
+            if sp.stav.get("posledni_vse") else "")
+        barva = "pozor" if problem else "muted"
+    if ag.chyba:
+        pata, barva_paty = "Spojení se SKLADem: " + ag.chyba, "chyba"
+    elif ag.posledni_zapis:
+        pata, barva_paty = "Spojeno se SKLADem · " + time.strftime("%H:%M:%S", time.localtime(ag.posledni_zapis)), "muted2"
+    else:
+        pata, barva_paty = "Připojuji se ke SKLADu…", "muted2"
+    return nadpis, radek, pata, barva_paty, barva, bool(bezi or ceka)
+
+
+def okno_stavu(sp, ag, zamek):
+    import tkinter as tk
+    B = BARVY
+    win = os.name == "nt"
+    root = tk.Tk()
+    root.title("MTKM kontroly")
+    root.configure(bg=B["bg"])
+    root.geometry("440x330")
+    root.minsize(360, 280)
+    root.iconify()                       # nevyskočí — jen ikona na liště
+    F = "Segoe UI" if win else "DejaVu Sans"
+
+    platno = tk.Canvas(root, width=96, height=96, bg=B["bg"], highlightthickness=0)
+    platno.pack(pady=(46, 22))
+    platno.create_oval(10, 10, 86, 86, outline=B["stopa"], width=5)
+    oblouk = platno.create_arc(10, 10, 86, 86, start=90, extent=100, style="arc", outline=B["accent"], width=5)
+    nadpis = tk.Label(root, font=(F + " Semibold" if win else F, 12, "bold"), bg=B["bg"], fg=B["text"], wraplength=400)
+    nadpis.pack(padx=20)
+    radek = tk.Label(root, font=(F, 10), bg=B["bg"], fg=B["muted"], wraplength=400, justify="center")
+    radek.pack(padx=20, pady=(6, 0))
+    dole = tk.Frame(root, bg=B["bg"])
+    dole.pack(side="bottom", fill="x", padx=16, pady=12)
+    pata = tk.Label(dole, font=(F, 8), bg=B["bg"], fg=B["muted2"], anchor="w")
+    pata.pack(side="left")
+    konec = tk.Label(dole, text="Ukončit", font=(F, 8, "underline"), bg=B["bg"], fg=B["muted2"], cursor="hand2")
+    konec.pack(side="right")
+
+    stav = {"uhel": 90.0, "posledni": None, "ukazat": False}
+
+    def toc():
+        bezi = stav["posledni"] and stav["posledni"][5]
+        stav["uhel"] = (stav["uhel"] - (7 if bezi else 1.6)) % 360   # při běhu rychle, jinak klidně
+        platno.itemconfigure(oblouk, start=stav["uhel"])
+        root.after(16, toc)
+
+    def obnov():
+        p = popis_stavu(sp, ag)
+        if p != stav["posledni"]:
+            stav["posledni"] = p
+            nadpis.configure(text=p[0])
+            radek.configure(text=p[1])
+            pata.configure(text=p[2], fg=B[p[3]])
+            platno.itemconfigure(oblouk, outline=B[p[4]] if p[4] != "muted" else B["muted2"])
+            platno.itemconfigure(oblouk, extent=100 if p[5] else 70)
+        if stav["ukazat"]:
+            stav["ukazat"] = False
+            root.deiconify()
+            root.lift()
+        root.after(250, obnov)
+
+    def ukonci(_e=None):
+        sp.zastav()
+        zapis_log("spouštěč ukončen z okna")
+        root.destroy()
+    konec.bind("<Button-1>", ukonci)
+    root.protocol("WM_DELETE_WINDOW", root.iconify)   # křížek jen schová na lištu
+
+    def poslouchej():                    # druhý dvojklik na KONTROLY.pyw okno ukáže
+        while True:
+            try:
+                c, _ = zamek.accept()
+                c.close()
+                stav["ukazat"] = True
+            except OSError:
+                return
+    threading.Thread(target=poslouchej, daemon=True).start()
+    obnov()
+    toc()
+    root.mainloop()
+
+
 def otevri_aplikaci():
     try:
         import webbrowser
@@ -703,7 +818,14 @@ def main(argv):
         threading.Thread(target=start, daemon=True).start()
     else:
         otevri_aplikaci()
-    ag.bez_konce()
+    # Spojení se SKLADem jede na pozadí, okno (když jde) v hlavním vlákně
+    try:
+        import tkinter  # noqa: F401
+    except ImportError:
+        ag.bez_konce()
+        return 0
+    threading.Thread(target=ag.bez_konce, daemon=True).start()
+    okno_stavu(sp, ag, zamek)
     return 0
 
 
