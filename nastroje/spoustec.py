@@ -833,6 +833,37 @@ class Kolecko:
         return img
 
 
+def nastav_ikonu(root, tk, win):
+    """Ikona okna i lišty. Hlavní cesta je iconphoto s PNG zabudovanými
+    v sklad_ikona.py — Tk 8.6 ji umí všude. Samotný .ico přes iconbitmap
+    u majitele nezabral a ukázalo se pírko Tk (13. 11. 2026); zůstává
+    jako druhý pokus. Co se povedlo, jde do okno_info.txt vedle souboru
+    (na Disku), ať se to dá zjistit bez majitele u PC."""
+    obrazky, zprava = [], []
+    try:
+        import sklad_ikona
+        obrazky = [tk.PhotoImage(data=sklad_ikona.PNG[v]) for v in (256, 48, 32, 16)]
+        root.iconphoto(True, *obrazky)
+        zprava.append("iconphoto: ok")
+    except Exception as e:
+        zprava.append("iconphoto: %s" % e)
+    if win and os.path.exists(IKONA):
+        try:
+            root.iconbitmap(default=IKONA)
+            zprava.append("iconbitmap: ok")
+        except Exception as e:
+            zprava.append("iconbitmap: %s" % e)
+    try:
+        with open(os.path.join(SLOZKA, "okno_info.txt"), "w", encoding="utf-8") as f:
+            f.write("%s\nspuštěno %s\nPython %s, Tk %s\n%s\n" % (
+                NAZEV, time.strftime("%d. %m. %Y %H:%M:%S"), sys.version.split()[0],
+                root.tk.call("info", "patchlevel"), "\n".join(zprava)))
+    except Exception:
+        pass
+    zapis_log("ikona: " + "; ".join(zprava))
+    return obrazky
+
+
 def okno_stavu(sp, ag, zamek):
     import tkinter as tk
     B = BARVY
@@ -841,11 +872,8 @@ def okno_stavu(sp, ag, zamek):
     root = tk.Tk()
     root.title(NAZEV)
     root.configure(bg=B["bg"])
-    if os.path.exists(IKONA):
-        try:
-            root.iconbitmap(default=IKONA) if win else None
-        except Exception:
-            pass
+    ikona = nastav_ikonu(root, tk, win)
+    root._sklad_ikona = ikona            # obrázky musí žít, jinak je Tk zahodí
     meritko = max(1.0, root.winfo_fpixels("1i") / 96.0)   # 1,5 při zvětšení 150 %
     px = lambda v: int(round(v * meritko))
     root.geometry("%dx%d" % (px(460), px(340)))

@@ -1540,7 +1540,12 @@ a kulatými konci (plátno Tk vyhlazovat neumí) a s texty stojí
 **uprostřed okna** (`place`, ať je okno jakkoli velké). Patička
 „Připojeno ke SKLAD.". Ikona `sklad_kontroly.ico` (bílé S, limetková
 tečka a prstenec, jako logo aplikace; 16–256 px, **obrázky BMP, ne PNG**
-— Tk ve Windows PNG uvnitř .ico neumí a mohl tím shodit celý program) je
+— Tk ve Windows PNG uvnitř .ico neumí a mohl tím shodit celý program).
+**Okno ale ikonu bere hlavně přes `iconphoto`** z PNG zabudovaných
+v `sklad_ikona.py` (`nastav_ikonu`) — samotný .ico u majitele nezabral
+a místo ikony bylo pírko Tk; .ico je druhý pokus a ikona zástupce.
+Co se povedlo, zapíše každý start do `okno_info.txt` vedle souboru
+(na Disku, Claude si ho přečte). Ikona je
 v okně, na liště a na zástupci, který se jednou založí na ploše
 (`zastupce_na_plose`; smazaný se nevrací). **Pád při startu se nesmí ztratit**: `.pyw` nemá konzoli, takže
 `SKLAD. kontroly.pyw` každou chybu (i tvrdý pád přes `faulthandler`)

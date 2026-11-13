@@ -322,6 +322,17 @@ print(json.dumps({'n': len(im.rows), 'roh': im.rows[0][0], 'barev': len(barvy), 
   fs.writeFileSync(path.join(padDir, 'spoustec.py'), 'def main(argv):\n    return 0\n');
   await new Promise(res => execFile('python3', [path.join(padDir, 'SKLAD. kontroly.pyw')], () => res()));
   ok('po úspěšném startu stará chyba zmizí', !fs.existsSync(path.join(padDir, 'chyba_spoustece.txt')));
+  // Ikona přes iconphoto (PNG v sklad_ikona.py) — .ico u majitele nezabral, bylo vidět pírko Tk
+  const ik = await new Promise(res => execFile('python3', ['-I', '-c', `
+import sys, json, base64, struct; sys.path.insert(0, sys.argv[1]); import sklad_ikona as I
+out = {}
+for v, d in I.PNG.items():
+    b = base64.b64decode(d); out[v] = [b[:4] == b'\\x89PNG', struct.unpack('>II', b[16:24])]
+print(json.dumps(out))
+`, NASTROJE], (e, o, err) => res(e ? { chyba: String(err || e) } : JSON.parse(o))));
+  ok('ikona v PNG ve velikostech 16, 32, 48 a 256', ['16', '32', '48', '256'].every(v => ik[v] && ik[v][0] && ik[v][1][0] === +v && ik[v][1][1] === +v), JSON.stringify(ik));
+  ok('okno bere ikonu přes iconphoto, .ico je druhý pokus, výsledek do okno_info.txt', /root\.iconphoto\(True, \*obrazky\)/.test(kod12)
+    && /root\.iconbitmap\(default=IKONA\)/.test(kod12) && /okno_info\.txt/.test(kod12) && /root\._sklad_ikona = ikona/.test(kod12));
   const ico2 = fs.readFileSync(path.join(NASTROJE, 'sklad_kontroly.ico'));
   ok('ikona má klasické BMP obrázky, ne PNG (Tk PNG v .ico neumí)', [...Array(ico2.readUInt16LE(4)).keys()].every(i => {
     const off = ico2.readUInt32LE(6 + 16 * i + 12); return ico2.readUInt32LE(off) === 40; }));
