@@ -314,6 +314,7 @@ print(json.dumps({'n': len(im.rows), 'roh': im.rows[0][0], 'barev': len(barvy), 
   // Pád při startu se nesmí ztratit (pythonw nemá konzoli): zapíše se do chyba_spoustece.txt
   const padDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pad-'));
   fs.copyFileSync(path.join(NASTROJE, 'SKLAD. kontroly.pyw'), path.join(padDir, 'SKLAD. kontroly.pyw'));
+  fs.writeFileSync(path.join(padDir, 'sklad_firestore.py'), '');
   fs.writeFileSync(path.join(padDir, 'spoustec.py'), 'def main(argv):\n    raise ValueError("rozbitá ikona")\n');
   const pad = await new Promise(res => execFile('python3', [path.join(padDir, 'SKLAD. kontroly.pyw')], (e) => res(e ? e.code : 0)));
   const chyba = fs.existsSync(path.join(padDir, 'chyba_spoustece.txt')) ? fs.readFileSync(path.join(padDir, 'chyba_spoustece.txt'), 'utf8') : '';
@@ -321,6 +322,7 @@ print(json.dumps({'n': len(im.rows), 'roh': im.rows[0][0], 'barev': len(barvy), 
   ok('prázdný záznam tvrdého pádu se uklidí', !fs.existsSync(path.join(padDir, 'chyba_spoustece.txt.pad')));
   fs.writeFileSync(path.join(padDir, 'spoustec.py'), 'def main(argv):\n    return 0\n');
   await new Promise(res => execFile('python3', [path.join(padDir, 'SKLAD. kontroly.pyw')], () => res()));
+  ok('počká na soubory z Disku, místo aby hned spadl', /for _ in range\(90\)/.test(fs.readFileSync(path.join(NASTROJE, 'SKLAD. kontroly.pyw'), 'utf8')));
   ok('po úspěšném startu stará chyba zmizí', !fs.existsSync(path.join(padDir, 'chyba_spoustece.txt')));
   // Ikona přes iconphoto (PNG v sklad_ikona.py) — .ico u majitele nezabral, bylo vidět pírko Tk
   const ik = await new Promise(res => execFile('python3', ['-I', '-c', `

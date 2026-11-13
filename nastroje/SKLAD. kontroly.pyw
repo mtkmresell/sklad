@@ -40,6 +40,16 @@ def _ohlas(text):
 
 try:
     sys.path.insert(0, SLOZKA)
+    # Disk Google stahuje nové verze s pár minutami zpoždění — po aktualizaci
+    # chvíli chyběl spoustec.py a program spadl (13. 11. 2026). Počká se.
+    import time
+    for _ in range(90):
+        if all(os.path.exists(os.path.join(SLOZKA, f)) for f in ("spoustec.py", "sklad_firestore.py")):
+            break
+        time.sleep(2)
+    else:
+        raise RuntimeError("Ve složce MTKM-kontroly chybí spoustec.py nebo sklad_firestore.py — Disk Google je "
+                           "asi ještě nestáhl. Počkej pár minut a spusť znovu.")
     import spoustec  # noqa: E402
     kod = spoustec.main(sys.argv[1:])
 except SystemExit:
