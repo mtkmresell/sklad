@@ -1225,6 +1225,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | okno pro účetního (měsíc) | `ÚČETNICTVÍ` |
 | zprávy a poznámky účetní ↔ majitel | `ZPRÁVY A POZNÁMKY`, v konektoru `ZPRÁVY OD ÚČETNÍHO` |
 | Finance (daňová evidence, výpisy) | `finance.js`, v index.html `FINANCE — DAŇOVÁ EVIDENCE` |
+| spouštěč kontrol na PC (okno, po zapnutí) | `nastroje/spoustec.py`, `SPOUŠTĚČ KONTROL` v CLAUDE.md |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1481,23 +1482,50 @@ změnily rozložení (Adonio má payout, kusy a stav na jednom řádku, prodané
 v prohlížeči se dotahují, takže „nepřihlášeno" se řekne až po chvíli
 čekání (`_ok_pockej`). **KLEKT se přihlašuje kódem z e-mailu** — heslo
 nestačí, takže jen přihlášení v okně, žádné `prihlas_sam`. Dlouhé kroky
-ukazují průběh (`S.pracuji`, u KLEKT prodlužování po pěti s počtem) —
+ukazují průběh (`S.pracuji`, u KLEKT prodlužování po dávkách s počtem,
+tři nabídky naráz) —
 majiteli kontrola vypadala, že se sekla. **Průběh mají všechny kontroly**
 (majitel, 12. 11. 2026: viděl ho jen u Released a KLEKT) — čtení webu
 v každém skriptu, načtení skladu a odeslání společně v
 `sklad_firestore.py`. Píše se do **stderr**: stdout nese u příkazů
 `sklad_firestore.py` JSON. Hlídá to `test-kontrolyprohlizec.js`, sekce 8.
 
-Dál: malá aplikace na spouštění všech kontrol.
-Nakonec malá aplikace na spouštění. Otevřené: může PC běžet trvale,
-nebo se budit (Wake on LAN rozdělaný)?
+**Spouštěč kontrol** (`SPOUŠTĚČ KONTROL`, 13. 11. 2026, čeká na první
+ostrý běh): `nastroje/spoustec.py`, dvojklik na `KONTROLY.pyw` (bez
+černého okna). Okno ve vzhledu SKLADu — u každé kontroly stav, kdy
+běžela, souhrn z řádku za HOTOVO, Spustit / V okně / Výpis / Zastavit,
+nahoře **Spustit vše**. Kontroly se najdou samy podle složek
+(`<místo>/<místo>_kontrola.py`) — **nová kontrola spouštěč neupravuje**.
+Bez prohlížeče běží naráz (`SOUBEZNE`), přes prohlížeč kontrol po jedné
+(sdílejí profil; pozná se podle `Prohlizec(` ve skriptu). WTB je ruční
+(`RUCNI`, bere schránku). Stav v `%LOCALAPPDATA%\MTKM-kontroly\spoustec.json`,
+výpis běhu v `<místo>/posledni_beh.txt`.
 
-Pořadí domluvené 11. 11.: doma dokončit Bazoš (kroky výš), **pak
-skládat další kontroly** (každý web vlastní skript, napojený na tentýž
-`sklad_firestore.py`) a **nakonec malou aplikaci** s jednoduchým
-rozhraním — výběr jedné kontroly nebo všech naráz (kroky 4–5 zadání:
-okno s kolečkem, jeden spouštěč). Tuzex, TheBeast a další zatím běží
-přes skilly v chatu a konektor.
+**Po zapnutí PC** (majitel, 13. 11. 2026: server nemá, PC neběží pořád,
+Wake on LAN nejde — nemá kabel; chce kontroly po každém zapnutí PC,
+„jen aby to nepřekáželo a neotravovalo"): přepínač v okně zapíše
+`HKCU\…\Run` (`prikaz_po_zapnuti`, čeká až 10 min, než se připojí Disk
+Google). Okno se otevře jen jako ikona na liště, počká na internet,
+pustí vše a **při úspěchu mlčí** — jedno oznámení Windows jen když něco
+chce přihlásit nebo spadlo. Do `ODSTUP_PO_ZAPNUTI_S` (2 h) od posledního
+běhu se po zapnutí nespouští nic. Tři věci se nesmí rozbít:
+
+- **Nikdy nečekat na klávesnici.** Kontroly dostanou `SKLAD_BEZ_PTANI=1`
+  a zavřený stdin: místo otázky na heslo (`prihlaseni_webu`) nebo Enteru
+  (`Prohlizec.prihlaseni`) skončí hláškou začínající „Potřeba
+  přihlásit" a spouštěč nabídne **Přihlásit v okně** (pustí
+  `SPUSTIT_*.bat` postaru). Kontrola zaseklá na `input()` by po zapnutí
+  PC visela napořád a nikdo by to neviděl.
+- **Prohlížeč běží skrytý** (`SKLAD_PROHLIZEC=skryty`). Web, který
+  prohlížeč bez okna nepustí (Cloudflare), se zkusí znovu s oknem mimo
+  obrazovku (`mimo`) a spouštěč si to u něj pamatuje (`rezim`). Bez
+  proměnné (spuštění přes .bat) je okno vidět jako dřív.
+- **Zaseklá kontrola se po `LIMIT_BEHU_S` (40 min) ukončí** a jen jedno
+  okno spouštěče naráz (`jediny`, druhé start jen ukáže první).
+
+Hlídá to `test-spoustec.js` (okno samotné jen tam, kde je tkinter
+a obrazovka). Dál: spouštění kontrol z aplikace SKLAD (lísteček přes
+Firestore, který spouštěč převezme).
 
 ### Názvy příspěvků na Instagramu
 
@@ -2006,7 +2034,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 87 souborů
+node test/run.js              # kontrola syntaxe + všech 88 souborů
 node test/run.js archive      # jen vybrané
 ```
 

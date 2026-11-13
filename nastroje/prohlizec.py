@@ -47,7 +47,11 @@ class Prohlizec:
     """with Prohlizec() as b: s = b.otevri(url); b.prihlaseni(s, test_js, 'Tnsky'); s.evaluate(js)"""
 
     def __init__(self, viditelny=True):
-        self.viditelny = viditelny
+        # Spouštěč kontrol nastaví SKLAD_PROHLIZEC: „skryty“ = bez okna,
+        # „mimo“ = okno mimo obrazovku (weby, které poznají prohlížeč bez
+        # okna — ověření Cloudflare). Bez proměnné okno vidět je (SPUSTIT_*.bat).
+        self.rezim = os.environ.get("SKLAD_PROHLIZEC", "")
+        self.viditelny = viditelny and self.rezim != "skryty"
         self._pw = self._ctx = None
 
     def __enter__(self):
@@ -62,9 +66,12 @@ class Prohlizec:
             try:
                 # en-US: čísla a data ve stránkách stejně jako ve vestavěném prohlížeči skillů
                 # („1,234 Kč“), podle toho jsou psané čtecí skripty
+                args = ["--disable-blink-features=AutomationControlled"]
+                if self.rezim == "mimo":
+                    args += ["--window-position=-2400,-2400", "--window-size=1280,900"]
                 self._ctx = self._pw.chromium.launch_persistent_context(
                     PROFIL, channel=kanal, headless=not self.viditelny, viewport={"width": 1280, "height": 900},
-                    locale="en-US", args=["--disable-blink-features=AutomationControlled"])
+                    locale="en-US", args=args)
                 break
             except Exception as e:
                 posledni = e
@@ -97,6 +104,9 @@ class Prohlizec:
         for _ in range(pokusu):
             if _ok_pockej(stranka, test_js, 8):
                 return True
+            if os.environ.get("SKLAD_BEZ_PTANI") == "1":   # spouštěč: nikdo nezmáčkne Enter
+                raise ChybaProhlizece("Potřeba přihlásit: na %s se v prohlížeči kontrol musíš přihlásit. "
+                                      "Ve spouštěči kontrol klikni na Přihlásit v okně." % misto)
             print("\n>>> V okně prohlížeče se přihlas na %s (případně odklikni ověření)." % misto)
             print(">>> Až uvidíš svoje nabídky, vrať se sem a zmáčkni Enter.")
             try:

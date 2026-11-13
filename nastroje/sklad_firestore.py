@@ -181,6 +181,18 @@ def nacti_pristup():
 # a přihlašují se samy. Leží ve stejném trezoru jako účet čtečky, každé
 # místo pod vlastním jménem „SKLAD-web-<místo>". Nikdy v souboru na Disku.
 
+# Spouštěč kontrol (spoustec.py) pouští kontroly na pozadí, bez okna —
+# nikdo nesedí u klávesnice, takže otázka na heslo nebo „zmáčkni Enter“
+# by kontrolu zasekla napořád. S SKLAD_BEZ_PTANI=1 se místo otázky skončí
+# chybou, která začíná POTREBA_PRIHLASIT; spouštěč ji pozná a nabídne
+# spuštění v okně.
+POTREBA_PRIHLASIT = 'Potřeba přihlásit: '
+
+
+def bez_ptani():
+    return os.environ.get('SKLAD_BEZ_PTANI') == '1'
+
+
 def _jmeno_webu(misto):
     return 'SKLAD-web-' + ''.join(c for c in str(misto) if c.isalnum())
 
@@ -203,6 +215,9 @@ def prihlaseni_webu(misto, zeptat=True):
         return z[0], z[1], False
     if not zeptat:
         raise ChybaSkladu('Chybí přihlášení k %s.' % misto)
+    if bez_ptani():
+        raise ChybaSkladu(POTREBA_PRIHLASIT + 'k %s nemám uložené heslo. Spusť kontrolu jednou v okně '
+                          '(ve spouštěči tlačítko Přihlásit v okně) — zeptá se a příště už se přihlásí sama.' % misto)
     import getpass
     print('Přihlášení k %s (uloží se do Správce pověření Windows, příště se neptá).' % misto)
     email = ''

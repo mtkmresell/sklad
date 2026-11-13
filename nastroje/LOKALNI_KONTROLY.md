@@ -256,6 +256,28 @@ skladu** (Vyřízeno), u místa štítek „47/50 inzerátů" — na limitu
 oranžový. `ids` u Opravit jsou nepovinné; když jsou, jde z řádku
 otevřít detail kusu.
 
+## Spouštěč — všechny kontroly v jednom okně
+
+Dvojklik na **`KONTROLY.pyw`** (v hlavní složce `MTKM-kontroly`, vedle
+`sklad_firestore.py`). Otevře se okno se všemi kontrolami:
+
+- **Spustit vše** — kontroly bez prohlížeče jedou naráz, ty přes Chrome
+  (Tnsky, KLEKT, Hypeboost…) jedna po druhé. Chrome je skrytý.
+- U každé kontroly: kdy běžela, co našla, **Spustit**, **Výpis** (co
+  kontrola vypsala, i živě), **V okně** (postaru, s černým oknem).
+- **Přihlásit v okně** se ukáže, když se kontrola nedokáže přihlásit
+  sama (chybí heslo, vypršelo přihlášení na KLEKT nebo Facebooku).
+  Pustí kontrolu v okně, tam se přihlásíš — příště už jede sama.
+- **Spouštět po zapnutí PC** (vpravo nahoře) — po přihlášení do Windows
+  se spouštěč otevře jen jako ikona na liště a pustí všechno sám. Když
+  všechno projde, neozve se; když něco potřebuje tebe, přijde jedno
+  oznámení vpravo dole. Když kontroly běžely před méně než dvěma
+  hodinami (restart PC), nepouští se znovu. Vypnout jde tímtéž klikem.
+
+WTB se pouští jen v okně (bere text pingeru ze schránky).
+Nová kontrola = nová složka `<místo>/<místo>_kontrola.py`, spouštěč ji
+najde sám.
+
 ## Další kroky (zadání, body 3–8)
 
 - **3 Zobrazení v aplikaci** — hotovo (Opravit, Není ve SKLAD., limit).
@@ -264,9 +286,7 @@ otevřít detail kusu.
   Firestore: aplikace zapíše „spusť kontrolu", program na PC to uvidí
   a smí to po sobě uklidit. Dnes čtečka smí zapsat jen `pozadavek_…`
   a ten zpracovává aplikace, takže na tohle se hodit nebude.
-- Zbytek (okno s kolečkem, `.exe`, jeden spouštěč, další weby, GitHub
-  Actions) se tohohle souboru netýká — `sklad_firestore.py` se jen
-  přibalí.
+- Jeden spouštěč s oknem — hotovo (`KONTROLY.pyw`, viz výš).
 
 Hlídá to `test/test-skladpy.js`: Python proti falešnému serveru
 (čtení, náhled, zápis jen pod `pozadavek_…`, odmítnutí nesmyslů)

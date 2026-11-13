@@ -47,9 +47,10 @@ for(const l of L){const a=l.attributes||l;out.push({id:String(l.id||a.id),name:a
 if(L.length<25)break;}return out;}"""
 JS_FEED = r"""async(skus)=>{const res={};const fr0=[...skus];await Promise.all([0,1,2].map(async()=>{while(fr0.length){const sku=fr0.shift();const seen=new Map();for(let p=1;p<=14;p++){const t=await __k.get('/catalog.data?search='+encodeURIComponent(sku)+'&page='+p);if(!t)break;const m=__k.dec(t);const cb=__k.najdi(m,/catalog-bare$/);const fr=cb&&cb.data&&cb.data.feedResponse;const D=(fr&&fr.data)||[];D.forEach(d=>{const a=d.attributes||{};seen.set(String(d.id),{id:String(d.id),name:a.name,price:+a.sale_price,size:a.size||[],fs:a.formatted_size,type:a.listing_type,img:a.image_url||''});});const pg=fr&&fr.meta&&fr.meta.pagy;if(!D.length||(pg&&pg.page>=pg.pages))break;}res[sku]=[...seen.values()];}}));return res;}"""
 JS_AUTO = r"""async(skus)=>{const res={};const fr0=[...skus];await Promise.all([0,1,2].map(async()=>{while(fr0.length){const sku=fr0.shift();try{const r=await fetch('https://api.k-v3.com/api/v2/catalogs/autocomplete?search='+encodeURIComponent(sku)+'&page[number]=1&page[size]=40');const j=await r.json();res[sku]=(j.data||[]).map(d=>({name:d.attributes.name,sku:d.attributes.sku}));}catch(e){res[sku]=null;}}}));return res;}"""
-JS_PRODLOUZIT = r"""async(ids)=>{let ok=0,fail=[];for(const id of ids){let hotovo=false;for(let a=0;a<4&&!hotovo;a++){try{const t=await __k.get('/profile/seller/listings/'+id+'/edit.data');if(!t)continue;const m=__k.dec(t);const e=__k.najdi(m,/seller-listing-edit$/);const l=e&&e.data&&e.data.listing;if(!l)continue;
+# Tři nabídky naráz (jako katalog) — po jedné to u 100+ nabídek trvalo nejdéle z celé kontroly
+JS_PRODLOUZIT = r"""async(ids)=>{let ok=0,fail=[];const q=[...ids];await Promise.all([0,1,2].map(async()=>{while(q.length){const id=q.shift();let hotovo=false;for(let a=0;a<4&&!hotovo;a++){try{const t=await __k.get('/profile/seller/listings/'+id+'/edit.data');if(!t)continue;const m=__k.dec(t);const e=__k.najdi(m,/seller-listing-edit$/);const l=e&&e.data&&e.data.listing;if(!l)continue;
 const f=new URLSearchParams({quantity:String(l.quantity),salePriceCents:String(l.salePriceCents),expiration:'60'});if(l.acceptBids){f.set('acceptBids','true');if(l.bidRange!=null)f.set('bidRange',String(l.bidRange));}
-const r=await fetch('/profile/seller/listings/'+id+'/edit',{method:'POST',body:f,credentials:'include',headers:{'Content-Type':'application/x-www-form-urlencoded'}});hotovo=r.ok;}catch(e){}}hotovo?ok++:fail.push(id);}return {ok,fail};}"""
+const r=await fetch('/profile/seller/listings/'+id+'/edit',{method:'POST',body:f,credentials:'include',headers:{'Content-Type':'application/x-www-form-urlencoded'}});hotovo=r.ok;}catch(e){}}hotovo?ok++:fail.push(id);}}));return {ok,fail};}"""
 
 
 def nsku(s):
@@ -232,9 +233,11 @@ def main(argv):
 
         def prodluz():
             r["prodlouzeno"] = {"ok": 0, "fail": []}
-            for i in range(0, len(ids), 5):   # po pěti, ať je vidět, kolik už je hotovo
-                print("\r  Prodlužuji expiraci na KLEKT… %d / %d   " % (min(i + 5, len(ids)), len(ids)), end="", flush=True)
-                d = s.evaluate(JS_PRODLOUZIT, ids[i:i + 5])
+            tty = sys.stdout.isatty()   # ve spouštěči kontrol bez \r — každý stav na vlastní řádek
+            for i in range(0, len(ids), 12):   # po dávkách, ať je vidět, kolik už je hotovo
+                print("%s  Prodlužuji expiraci na KLEKT… %d / %d   " % ("\r" if tty else "", min(i + 12, len(ids)), len(ids)),
+                      end="" if tty else "\n", flush=True)
+                d = s.evaluate(JS_PRODLOUZIT, ids[i:i + 12])
                 r["prodlouzeno"]["ok"] += d["ok"]; r["prodlouzeno"]["fail"] += d["fail"]
             print()
             print("Expirace prodloužena u %d nabídek" % r["prodlouzeno"]["ok"] + (", selhalo %d" % len(r["prodlouzeno"]["fail"]) if r["prodlouzeno"]["fail"] else ""))
