@@ -1550,7 +1550,9 @@ v okně, na liště a na zástupci, který se jednou založí na ploše
 (`zastupce_na_plose`; smazaný se nevrací). **Pád při startu se nesmí ztratit**: `.pyw` nemá konzoli, takže
 `SKLAD. kontroly.pyw` každou chybu (i tvrdý pád přes `faulthandler`)
 zapíše do `chyba_spoustece.txt` vedle sebe (na Disku, Claude si ho
-přečte) a ukáže hlášku. Bez tkinteru jede spouštěč
+přečte) a ukáže hlášku. Disk Google si při souběhu staré a nové verze nechá
+novou klidně pod „spoustec (1).py" — `.pyw` vezme i tu (`_najdi`) a když
+soubor chybí, vypíše do chyby, co ve složce je. Bez tkinteru jede spouštěč
 bez okna. Dvojklik na `SKLAD. kontroly.pyw` (dřív `KONTROLY.pyw`;
 záznam v Po spuštění se při každém startu přepíše na aktuální cestu,
 `obnov_v_registru`)

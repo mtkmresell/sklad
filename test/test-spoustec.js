@@ -324,6 +324,16 @@ print(json.dumps({'n': len(im.rows), 'roh': im.rows[0][0], 'barev': len(barvy), 
   await new Promise(res => execFile('python3', [path.join(padDir, 'SKLAD. kontroly.pyw')], () => res()));
   ok('počká na soubory z Disku, místo aby hned spadl', /for _ in range\(90\)/.test(fs.readFileSync(path.join(NASTROJE, 'SKLAD. kontroly.pyw'), 'utf8')));
   ok('po úspěšném startu stará chyba zmizí', !fs.existsSync(path.join(padDir, 'chyba_spoustece.txt')));
+  // Disk Google nechá novou verzi pod „spoustec (1).py“ (13. 11. 2026: „chybí spoustec.py“)
+  const dupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dup-'));
+  fs.copyFileSync(path.join(NASTROJE, 'SKLAD. kontroly.pyw'), path.join(dupDir, 'SKLAD. kontroly.pyw'));
+  fs.writeFileSync(path.join(dupDir, 'sklad_firestore (1).py'), 'X = 7\n');
+  fs.writeFileSync(path.join(dupDir, 'spoustec (1).py'), 'import sklad_firestore\ndef main(argv):\n    open(__file__ + ".ok", "w").write(str(sklad_firestore.X))\n    return 0\n');
+  const dup = await new Promise(res => execFile('python3', [path.join(dupDir, 'SKLAD. kontroly.pyw')], (e) => res(e ? e.code : 0)));
+  const okSoubor = path.join(dupDir, 'spoustec (1).py.ok');
+  ok('najde i „spoustec (1).py“ a „sklad_firestore (1).py“ od Disku Google', dup === 0 && fs.existsSync(okSoubor)
+    && fs.readFileSync(okSoubor, 'utf8') === '7', String(dup));
+  ok('když soubor opravdu chybí, chyba vypíše, co ve složce je', /Ve složce je: %s/.test(fs.readFileSync(path.join(NASTROJE, 'SKLAD. kontroly.pyw'), 'utf8')));
   // Ikona přes iconphoto (PNG v sklad_ikona.py) — .ico u majitele nezabral, bylo vidět pírko Tk
   const ik = await new Promise(res => execFile('python3', ['-I', '-c', `
 import sys, json, base64, struct; sys.path.insert(0, sys.argv[1]); import sklad_ikona as I

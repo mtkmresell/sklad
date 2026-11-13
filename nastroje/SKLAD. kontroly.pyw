@@ -38,19 +38,48 @@ def _ohlas(text):
         pass
 
 
+def _najdi(jmeno):
+    """Cesta k jmeno.py. Disk Google si při souběhu staré a nové verze
+    nechá novou pod jménem „jmeno (1).py" — i tu se vezme (nejnovější)."""
+    presne = os.path.join(SLOZKA, jmeno + ".py")
+    if os.path.exists(presne):
+        return presne
+    kandidati = [os.path.join(SLOZKA, f) for f in os.listdir(SLOZKA)
+                 if f.lower().startswith(jmeno + " (") and f.lower().endswith(").py")]
+    return max(kandidati, key=os.path.getmtime) if kandidati else None
+
+
+def _nacti(jmeno, cesta):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(jmeno, cesta)
+    modul = importlib.util.module_from_spec(spec)
+    sys.modules[jmeno] = modul
+    spec.loader.exec_module(modul)
+    return modul
+
+
 try:
     sys.path.insert(0, SLOZKA)
     # Disk Google stahuje nové verze s pár minutami zpoždění — po aktualizaci
     # chvíli chyběl spoustec.py a program spadl (13. 11. 2026). Počká se.
     import time
     for _ in range(90):
-        if all(os.path.exists(os.path.join(SLOZKA, f)) for f in ("spoustec.py", "sklad_firestore.py")):
+        cesty = {j: _najdi(j) for j in ("sklad_firestore", "spoustec")}
+        if all(cesty.values()):
             break
         time.sleep(2)
     else:
-        raise RuntimeError("Ve složce MTKM-kontroly chybí spoustec.py nebo sklad_firestore.py — Disk Google je "
-                           "asi ještě nestáhl. Počkej pár minut a spusť znovu.")
-    import spoustec  # noqa: E402
+        soubory = ", ".join(sorted(f for f in os.listdir(SLOZKA) if f.lower().endswith((".py", ".pyw"))))
+        raise RuntimeError("Ve složce MTKM-kontroly chybí %s — Disk Google je asi ještě nestáhl. "
+                           "Počkej pár minut a spusť znovu. (Ve složce je: %s)"
+                           % (" a ".join(j + ".py" for j, c in cesty.items() if not c), soubory or "nic"))
+    for j, c in cesty.items():         # pod správným jménem, i když soubor má „(1)"
+        if os.path.basename(c) != j + ".py":
+            _nacti(j, c)
+    if "spoustec" in sys.modules:
+        spoustec = sys.modules["spoustec"]
+    else:
+        import spoustec  # noqa: E402
     kod = spoustec.main(sys.argv[1:])
 except SystemExit:
     raise
