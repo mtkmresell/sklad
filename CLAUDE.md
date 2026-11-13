@@ -1383,7 +1383,16 @@ Ctrl+V majiteli nešlo vůbec. **Ctrl+V do skrytého pole pošle znak
 `\x16`** místo textu — u Stuffsellu odešel jako heslo a web hlásil
 špatné heslo (13. 11. 2026). `zeptej_heslo` proto heslo s řídicími
 znaky bere jako vložení a čte schránku (BOM ořízne `_jen_heslo`)
-a vypíše jen počet znaků, nikdy heslo. Hlídá to `test-skladpy.js`, 5b.
+a vypíše jen počet znaků, nikdy heslo. **Heslo jde i napsat** — na
+Windows `cti_heslo` ukazuje místo písmen hvězdičky, Backspace maže a
+Ctrl+V vloží schránku (majitel: naslepo psát nešlo a kopírovat heslo
+odněkud zdržovalo). **Při špatném hesle se zeptá znovu**
+(`prihlas_opakovane`, `POKUSU_PRIHLASENI` = 3, e-mail se nabídne
+předvyplněný) — dřív překlep znamenal Enter a spustit program znovu.
+Všechny kontroly s heslem jdou přes ni (TheBeast, Sellect, Tuzex,
+Stuffsell, SneakersNow, Adonio; v prohlížeči `prihlas_sam`). Ze
+spouštěče se nikdo zeptat nemůže, tam končí „Potřeba přihlásit".
+Hlídá to `test-skladpy.js` 5b a `test-thebeast.js` 5.
 
 `nastroje/bazos/bazos_kontrola.py` (kopie skriptu z PC, upravená) už nečte
 `sklad.json` a nepotřebuje Clauda v chatu: sklad načte z cloudu, sám

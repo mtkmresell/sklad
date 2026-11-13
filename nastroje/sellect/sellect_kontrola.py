@@ -349,14 +349,10 @@ def main(argv):
     data, polozky = S.nacti_sklad(token)
     skladem = S.skladem(polozky)
     print(f"Sklad z cloudu: {len(skladem)} kusů skladem")
-    email, heslo, nove = S.prihlaseni_webu(MISTO)
     w = Web()
-    try:
-        prihlas_web(w, email, heslo)
-    except PermissionError as e:
-        if not nove:
-            S.zapomen_prihlaseni_webu(MISTO)
-        raise RuntimeError(f"{e} Spusť znovu, zeptá se na heslo.")
+    # Při špatném hesle se zeptá znovu; nové heslo se uloží až níž,
+    # když Sellect opravdu ukáže nabídky
+    _, email, heslo, nove = S.prihlas_opakovane(MISTO, lambda e, h: prihlas_web(w, e, h), uloz=False)
     with S.pracuji("Otevírám Aktuální nabídky na Sellectu"):
         _, stranka = w.get("/nabidky/aktualni")
     if not prihlasena(stranka):

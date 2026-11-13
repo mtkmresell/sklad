@@ -219,32 +219,111 @@ def prihlaseni_webu(misto, zeptat=True):
     if bez_ptani():
         raise ChybaSkladu(POTREBA_PRIHLASIT + 'k %s nemám uložené heslo. Spusť kontrolu jednou v okně '
                           '(ve spouštěči tlačítko Přihlásit v okně) — zeptá se a příště už se přihlásí sama.' % misto)
-    import getpass
     print('Přihlášení k %s (uloží se do Správce pověření Windows, příště se neptá).' % misto)
+    minule = _posledni_email.get(misto, '')
     email = ''
     for _ in range(3):
-        email = input('E-mail na %s: ' % misto).strip()
+        if minule:
+            # Opakovaný pokus: e-mail se nemusí psát znovu, Enter ho nechá
+            email = input('E-mail na %s [%s — Enter = stejný]: ' % (misto, minule)).strip() or minule
+        else:
+            email = input('E-mail na %s: ' % misto).strip()
         if email:
             break
-    print('Heslo zkopíruj (Ctrl+C) a tady dej jen Enter. Nebo ho napiš — při psaní se nic neukazuje.')
+    print('Heslo napiš (místo písmen se ukazují hvězdičky, Backspace maže) nebo vlož Ctrl+V, pak Enter.')
+    print('Jen Enter = vezme heslo zkopírované ve schránce.')
     heslo, odkud = zeptej_heslo()
     if not email or not heslo:
         raise ChybaSkladu('Přihlášení k %s nevyplněné.' % misto)
+    _posledni_email[misto] = email
     # Heslo se nikdy nevypisuje — jen kolik má znaků, ať jde poznat, že přišlo celé
     print('Heslo mám (%d znaků, %s). Přihlašuji…' % (len(heslo), odkud))
     return email, heslo, True
 
 
-def zeptej_heslo(pokusu=3):
-    """(heslo, odkud). Enter = vezme se schránka.
+_posledni_email = {}
+POKUSU_PRIHLASENI = 3
 
-    Ctrl+V v klasické konzoli Windows do skrytého pole nevloží text, ale
-    neviditelný znak (\x16) — ten pak odešel jako heslo a web ho odmítl
-    (Stuffsell 13. 11. 2026). Heslo s řídicími znaky se proto bere jako
-    „chtěl jsem vložit" a čte se schránka."""
-    import getpass
+
+def prihlas_opakovane(misto, zkus, uloz=True, pokusu=POKUSU_PRIHLASENI):
+    """Přihlásí se na web; při špatném hesle se zeptá znovu (majitel 13. 11.
+    2026: překlep znamenal Enter a celý program spouštět znovu).
+
+    zkus(email, heslo) vrátí přihlášení, nebo vyhodí PermissionError, když
+    web e-mail či heslo odmítl. Uložené heslo, které nefunguje, se zapomene.
+    Ze spouštěče (bez ptaní) se nikdo zeptat nemůže — tam se rovnou skončí.
+    Vrací (výsledek, email, heslo, nove); s uloz=False si volající nové
+    heslo uloží sám, až si ověří, že přihlášení opravdu platí."""
     for pokus in range(pokusu):
-        heslo = getpass.getpass('Heslo: ')
+        email, heslo, nove = prihlaseni_webu(misto)
+        try:
+            vysledek = zkus(email, heslo)
+        except PermissionError as e:
+            if not nove:
+                zapomen_prihlaseni_webu(misto)
+                if bez_ptani():
+                    raise ChybaSkladu(POTREBA_PRIHLASIT + '%s odmítl uložené heslo. Spusť kontrolu v okně '
+                                      '(ve SKLADu Přihlásit na PC) a zadej ho znovu.' % misto)
+            zbyva = pokusu - pokus - 1
+            if not zbyva:
+                raise RuntimeError('%s Spusť znovu a zadej správné heslo.' % e)
+            print('\n%s Zkus to znovu — %s.' % (e, 'ještě 1 pokus' if zbyva == 1 else 'ještě %d pokusy' % zbyva))
+            continue
+        if nove and uloz:
+            uloz_prihlaseni_webu(misto, email, heslo)
+        return vysledek, email, heslo, nove
+
+
+def cti_heslo(vyzva='Heslo: '):
+    """Heslo z klávesnice. Na Windows se místo písmen ukazují hvězdičky
+    (majitel: psát naslepo bez jediného znaku nešlo), Backspace maže
+    a Ctrl+V vloží schránku. Jinde (testy, Linux) getpass."""
+    try:
+        import msvcrt
+    except ImportError:
+        import getpass
+        return getpass.getpass(vyzva)
+    sys.stdout.write(vyzva)
+    sys.stdout.flush()
+    znaky = []
+    while True:
+        z = msvcrt.getwch()
+        if z in ('\r', '\n'):
+            break
+        if z == '\x03':
+            raise KeyboardInterrupt
+        if z in ('\x00', '\xe0'):      # šipky a F-klávesy: druhý znak zahodit
+            msvcrt.getwch()
+            continue
+        if z == '\x08':                # Backspace
+            if znaky:
+                znaky.pop()
+                sys.stdout.write('\b \b')
+            continue
+        if z == '\x16':                # Ctrl+V v klasické konzoli
+            vlozene = heslo_ze_schranky()
+            if vlozene:
+                vymaz_schranku()
+            znaky.extend(vlozene)
+            sys.stdout.write('*' * len(vlozene))
+        elif ord(z) >= 32:
+            znaky.append(z)
+            sys.stdout.write('*')
+        sys.stdout.flush()
+    sys.stdout.write('\n')
+    sys.stdout.flush()
+    return ''.join(znaky)
+
+
+def zeptej_heslo(pokusu=3):
+    """(heslo, odkud). Prázdný Enter = vezme se schránka.
+
+    Ctrl+V v klasické konzoli Windows do skrytého pole (getpass) nevloží
+    text, ale neviditelný znak (\x16) — ten pak odešel jako heslo a web ho
+    odmítl (Stuffsell 13. 11. 2026). cti_heslo Ctrl+V umí; kdyby se řídicí
+    znak přesto dostal do hesla, bere se to jako „chtěl jsem vložit"."""
+    for pokus in range(pokusu):
+        heslo = cti_heslo('Heslo: ')
         odkud = 'napsané'
         if not heslo or any(ord(c) < 32 for c in heslo):
             heslo = heslo_ze_schranky()
@@ -254,9 +333,8 @@ def zeptej_heslo(pokusu=3):
         if heslo:
             return heslo, odkud
         if pokus < pokusu - 1:   # prázdná schránka → zeptat se znovu, ne spadnout
-            print('Ve schránce žádné heslo není. Zkopíruj ho znovu (Ctrl+C) a dej jen Enter (bez Ctrl+V).')
+            print('Nic jsi nenapsal a ve schránce žádné heslo není. Napiš ho, nebo zkopíruj (Ctrl+C) a dej Enter.')
     return '', ''
-
 
 
 def uloz_prihlaseni_webu(misto, email, heslo):

@@ -296,16 +296,9 @@ def main(argv):
     token = S.prihlas()
     data, polozky = S.nacti_sklad(token)
     print(f"Sklad z cloudu: {len(S.skladem(polozky))} kusů skladem")
-    email, heslo, nove = S.prihlaseni_webu(MISTO)
     url, klic = nastaveni_portalu()
-    try:
-        cookie = prihlas_web(url, klic, email, heslo)
-    except PermissionError as e:
-        if not nove:
-            S.zapomen_prihlaseni_webu(MISTO)
-        raise RuntimeError(f"{e} Spusť znovu, zeptá se na heslo.")
-    if nove:
-        S.uloz_prihlaseni_webu(MISTO, email, heslo)
+    # Při špatném hesle se zeptá znovu, uložené nefunkční zapomene
+    cookie = S.prihlas_opakovane(MISTO, lambda e, h: prihlas_web(url, klic, e, h))[0]
     with S.pracuji("Načítám Moje nabídky na Adoniu"):
         kam, stranka = _get(PORTAL + "/listings", cookie)
     radky = text_stranky(stranka)

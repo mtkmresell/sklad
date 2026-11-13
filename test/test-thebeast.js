@@ -142,7 +142,17 @@ const naz = (a) => (a || []).map(x => x.nazev + '|' + x.velikost).sort().join(' 
   r = await new Promise(res => execFile('python3', ['-I', path.join(tmp, 'ridic2.py'), NASTROJE, path.join(tmp, 'vstup.json'), tmp],
     { cwd: tmp, env: { PATH: process.env.PATH, HOME: tmp } }, (err, so) => { const s = String(so); res(JSON.parse(s.slice(s.lastIndexOf('###') + 3))); }));
   ok('uložené špatné heslo se zapomene a řekne se, ať se spustí znovu', /Špatné heslo/.test(r.chyba) && /Spusť znovu/.test(r.chyba)
-    && JSON.stringify(r.zapomenuto) === '["TheBeast"]', JSON.stringify(r));
+    && r.zapomenuto.length >= 1 && r.zapomenuto.every(m => m === 'TheBeast'), JSON.stringify(r));
+
+  /* Majitel 13. 11. 2026: překlep v hesle znamenal Enter a celý program
+     znovu. Teď se při špatném hesle zeptá znovu (S.prihlas_opakovane). */
+  fs.writeFileSync(path.join(tmp, 'ridic3.py'), RIDIC.replace(
+    "R.S.prihlaseni_webu = lambda misto, zeptat=True: ('gabro@x.cz', 'tajne', True)",
+    "hesla = ['spatne', 'tajne']\nR.S.prihlaseni_webu = lambda misto, zeptat=True: ('gabro@x.cz', hesla.pop(0), True)"));
+  r = await new Promise(res => execFile('python3', ['-I', path.join(tmp, 'ridic3.py'), NASTROJE, path.join(tmp, 'vstup.json'), tmp],
+    { cwd: tmp, env: { PATH: process.env.PATH, HOME: tmp } }, (err, so) => { const s = String(so); res({ out: s, j: s.indexOf('###') < 0 ? null : JSON.parse(s.slice(s.lastIndexOf('###') + 3)) }); }));
+  ok('překlep v hesle: zeptá se znovu, s druhým heslem projde a uloží ho', r.j && JSON.stringify(r.j.ulozeno) === '["TheBeast"]'
+    && /Zkus to znovu/.test(r.out), r.out.slice(-400));
 
   sekce('6) Zdroj');
   const zdroj = fs.readFileSync(path.join(NASTROJE, 'thebeast_kontrola.py'), 'utf8');

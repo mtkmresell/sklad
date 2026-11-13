@@ -197,7 +197,7 @@ def prihlas_sam(b, stranka, test_js, misto, url, login_url=None):
     if _ok_pockej(stranka, test_js):
         return True
     import sklad_firestore as S
-    for pokus in range(2):
+    for pokus in range(S.POKUSU_PRIHLASENI):
         email, heslo, nove = S.prihlaseni_webu(misto)
         if login_url:
             jdi(stranka, login_url, 2000)

@@ -231,6 +231,20 @@ print(json.dumps([zkus('\\x16', 'Tajne 123\\r\\n'), zkus('', '\\ufeffTajne123'),
   ok('BOM ze schránky se ořízne', hesla[1] && hesla[1][0] === 'Tajne123', JSON.stringify(hesla[1]));
   ok('napsané heslo zůstane napsané', hesla[2] && hesla[2][0] === 'Napsane1' && hesla[2][1] === 'napsané', JSON.stringify(hesla[2]));
   ok('Ctrl+V s prázdnou schránkou nepošle \\x16', hesla[3] && hesla[3][0] === '', JSON.stringify(hesla[3]));
+  // Psaní s hvězdičkami (Windows): podvržená klávesnice msvcrt
+  const hv = await new Promise(res => execFile('python3', ['-I', '-c', `
+import sys, io, json, types; sys.path.insert(0, sys.argv[1])
+klavesy = list('ab\\x08c\\x00Hd\\x16\\r')
+m = types.ModuleType('msvcrt'); m.getwch = lambda: klavesy.pop(0); sys.modules['msvcrt'] = m
+import sklad_firestore as S
+S.heslo_ze_schranky = lambda: 'XY'; S.vymaz_schranku = lambda: None
+out = io.StringIO(); puvodni = sys.stdout; sys.stdout = out
+h = S.cti_heslo('Heslo: ')
+sys.stdout = puvodni
+print(json.dumps([h, out.getvalue()]))
+`, path.dirname(SKRIPT)], (e, out, err) => res(e ? { chyba: String(err || e) } : JSON.parse(out))));
+  ok('psaní: Backspace maže, šipka se ignoruje, Ctrl+V vloží schránku', hv[0] === 'acdXY', JSON.stringify(hv));
+  ok('na obrazovce jen hvězdičky, heslo ne', hv[1] && !/[acdXY]/.test(hv[1].replace('Heslo: ', '')) && (hv[1].match(/\*/g) || []).length === 6, JSON.stringify(hv));
   ok('heslo se nikdy nevypisuje, jen počet znaků', !/print\([^)]*%s[^)]*heslo\)/.test(zdroj) && /Heslo mám \(%d znaků/.test(zdroj));
 
   /* ── Aplikace převezme, co Python zapsal ─────────────────────────── */

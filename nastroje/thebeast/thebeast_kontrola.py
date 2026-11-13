@@ -244,15 +244,8 @@ def main(argv):
     data, polozky = S.nacti_sklad(token)
     skladem, prodane = S.skladem(polozky), S.prodane(polozky)
     print(f"Sklad z cloudu: {len(skladem)} kusů skladem")
-    email, heslo, nove = S.prihlaseni_webu(MISTO)
-    try:
-        web = prihlas_web(email, heslo)
-    except PermissionError as e:
-        if not nove:
-            S.zapomen_prihlaseni_webu(MISTO)
-        raise RuntimeError(f"{e} Spusť znovu, zeptá se na heslo.")
-    if nove:
-        S.uloz_prihlaseni_webu(MISTO, email, heslo)
+    # Při špatném hesle se zeptá znovu, uložené nefunkční zapomene
+    web = S.prihlas_opakovane(MISTO, prihlas_web)[0]
     with S.pracuji("Čtu nabídky a katalog TheBeast"):
         nabidky, katalog, katalog_nazvy = nacti_nabidky(web)
     print(f"TheBeast: {len(nabidky)} aktivních nabídek, katalog {len(katalog)} SKU")

@@ -38,10 +38,10 @@ python sklad_firestore.py nastavit
 ```
 
 Zeptá se na e-mail a heslo čtečky, ověří, že sedí, a uloží je.
-**Heslo stačí zkopírovat (Ctrl+C) a u otázky na heslo dát jen Enter** —
-vezme se ze schránky a schránka se pak vymaže. Psát ho do příkazového
-řádku jde taky, ale naslepo (nic se neukazuje) a vložení přes Ctrl+V
-tam často nefunguje; majitel ho tam takhle nedostal vůbec.
+**Heslo napiš** (místo písmen se ukazují hvězdičky, Backspace maže),
+**vlož Ctrl+V**, nebo ho zkopíruj (Ctrl+C) a dej jen Enter — vezme se
+ze schránky a schránka se pak vymaže. Pak se vypíše, kolik má znaků
+(heslo samo nikdy).
 
 E-mail i heslo čtečky jsou v nastavení prostředí Claude Code
 (claude.ai → Code → Environments → Default → proměnné `SKLAD_EMAIL`
@@ -127,7 +127,9 @@ a Poslední kusy.
 
 `thebeast/SPUSTIT_thebeast.bat`, `sellect/SPUSTIT_sellect.bat`,
 `tuzex/SPUSTIT_tuzex.bat`. **Poprvé se každá zeptá na e-mail a heslo
-k tomu webu** — heslo zkopíruj (Ctrl+C) a dej jen Enter. Po povedeném
+k tomu webu** — heslo napiš (hvězdičky), vlož Ctrl+V, nebo ho zkopíruj
+a dej jen Enter. **Když web heslo odmítne, zeptá se znovu** (třikrát,
+e-mail stačí potvrdit Enterem), program se nemusí spouštět znovu. Po povedeném
 přihlášení se uloží do Správce pověření Windows (`SKLAD-web-TheBeast` …)
 a příště se neptá. Změněné heslo: spusť s `--nove-heslo` (stačí do
 spouštěče dopsat), nebo ho program při odmítnutí zapomene sám.
