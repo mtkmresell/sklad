@@ -25,8 +25,8 @@
 //                                            smí jedině zprávy majiteli
 //
 // Co pravidlo nepovolí, to Firestore odmítne — proto tu musí být pokryté
-// všechny tři kolekce, které aplikace používá (sklad, crm, zpravy),
-// a nic jiného tu být nemusí.
+// všechny kolekce, které aplikace používá (sklad, crm, finance, zpravy,
+// spoustec), a nic jiného tu být nemusí.
 //
 // Hlídá to test/test-pravidla.js: žádné zbylé zástupné texty, že se čtečka
 // zápisem nedostane na `data`, `cache`, `sold_*` ani `photo_*`, a že účetní
@@ -115,6 +115,28 @@ service cloud.firestore {
     match /users/{uid}/finance/{dokument} {
       allow read:  if jeMajitel(uid) || jeUcetni(uid);
       allow write: if jeMajitel(uid);
+    }
+
+    // Spouštěč kontrol na PC (nastroje/spoustec.py, v index.html
+    // SPOUŠTĚNÍ KONTROL Z APLIKACE). Aplikace sem položí pokyn
+    // `prikaz_*` (spusť kontrolu), program na PC běží pod účtem čtečky,
+    // pokyn vyzvedne a smaže a do `pc` zapisuje, co právě dělá.
+    // Pokyn smí založit JEDINĚ majitel — čtečku používá i konektor
+    // a chat, a ty nesmí na PC spouštět nic. Účetní sem nevidí.
+    match /users/{uid}/spoustec/{dokument} {
+      allow read:   if jeMajitel(uid) || jeCtecka(uid);
+      allow write:  if jeMajitel(uid) || jeStavPc(uid, dokument);
+      allow delete: if jeVyrizenyPrikaz(uid, dokument);
+    }
+
+    // Program na PC zapisuje jen svůj stav
+    function jeStavPc(uid, dokument) {
+      return jeCtecka(uid) && dokument == 'pc';
+    }
+
+    // … a vyřízený pokyn smaže (založit ho nesmí)
+    function jeVyrizenyPrikaz(uid, dokument) {
+      return jeCtecka(uid) && dokument.matches('^prikaz_[A-Za-z0-9_-]{1,60}$');
     }
 
     // Zprávy a poznámky mezi účetním a majitelem (index.html ZPRÁVY

@@ -14,6 +14,7 @@ const os = require('os');
 const { execFile } = require('child_process');
 
 let selhalo = 0, proslo = 0;
+function shoda(popis, a, b) { ok(popis, JSON.stringify(a) === JSON.stringify(b), 'čekáno ' + JSON.stringify(b) + '\n  dostal ' + JSON.stringify(a)); }
 function ok(popis, podminka, detail) {
   if (podminka) proslo++;
   else { selhalo++; console.log('FAIL: ' + popis + (detail === undefined ? '' : '\n  ' + detail)); }
@@ -287,19 +288,144 @@ print('###' + json.dumps(out, ensure_ascii=False))
   ok('KONTROLY.pyw spouští spoustec.main', /spoustec\.main\(/.test(fs.readFileSync(path.join(NASTROJE, 'KONTROLY.pyw'), 'utf8')));
   ok('stav mimo Google Disk (LOCALAPPDATA)', /LOCALAPPDATA/.test(kod12));
   ok('spouštěč není na webu (.assetsignore)', /nastroje/.test(fs.readFileSync(path.join(__dirname, '..', '.assetsignore'), 'utf8')));
-  // Okno samo — jen když je tkinter a X (Xvfb); jinak se přeskočí
-  const r12 = await python(['-c', `
-import sys, os, threading, time
+  ok('spouštěč nemá vlastní okno (ovládá se z aplikace SKLAD)', !/import tkinter|from tkinter/.test(kod12));
+
+  sekce('13) pokyny z aplikace');
+  const r13 = await python(['-I', '-c', `
+import sys, os, json, time
 sys.path.insert(0, ${JSON.stringify(NASTROJE)})
-import tkinter, spoustec as S
-sp = S.Spoustec(${JSON.stringify(KOREN)}, ${JSON.stringify(path.join(tmp, 'stav.json'))})
-def konec():
-    time.sleep(1.5); print('###OKNO', flush=True); os._exit(0)
-threading.Thread(target=konec, daemon=True).start()
-S.okno(sp)
-`], { DISPLAY: process.env.DISPLAY || '' }, 20000);
-  if (/###OKNO/.test(r12.out)) ok('okno se otevře bez chyby', !/Traceback/.test(r12.out), r12.out);
-  else console.log('  (okno přeskočeno — není tkinter nebo obrazovka)');
+import spoustec as S
+koren, tmp = ${JSON.stringify(KOREN)}, ${JSON.stringify(tmp)}
+open(os.path.join(koren, 'gama', 'gama_kontrola.py'), 'w', encoding='utf-8').write(open(os.path.join(koren, 'alfa', 'alfa_kontrola.py'), encoding='utf-8').read())
+ted = lambda s=0: time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() + s))
+class Mrak:
+    def __init__(self):
+        self.p, self.zapisy, self.smazane, self.chyba, self.nesmaz = [], [], [], None, False
+    def prikazy(self):
+        if self.chyba: raise Exception(self.chyba)
+        return [x for x in self.p if x[0] not in self.smazane]
+    def zapis_stav(self, o):
+        self.zapisy.append(o)
+    def smaz_prikaz(self, j):
+        if self.nesmaz: raise Exception('403')
+        self.smazane.append(j)
+out = {}
+sp = S.Spoustec(koren, os.path.join(tmp, 'stav13.json'))
+m = Mrak(); ag = S.Agent(sp, m)
+m.p = [('prikaz_a', {'co': 'spust', 'klic': 'alfa', 'kdy': ted()}),
+       ('prikaz_stary', {'co': 'spust', 'klic': 'beta', 'kdy': ted(-20 * 60)}),
+       ('prikaz_zly', {'co': 'cmd /c del', 'klic': 'alfa', 'kdy': ted()}),
+       ('prikaz_cesta', {'co': 'spust', 'klic': '../../evil', 'kdy': ted()}),
+       ('prikaz_bezcasu', {'co': 'spust', 'klic': 'gama'})]
+ag.krok()
+out['smazane'] = sorted(m.smazane)
+out['alfa_bezi'] = sp.bezi('alfa')
+out['beta'] = sp.s('beta').get('stav'); out['gama'] = sp.s('gama').get('stav')
+for _ in range(100):
+    if not sp.bezi(): break
+    time.sleep(0.1)
+out['alfa'] = sp.s('alfa').get('stav')
+out['zapis1'] = m.zapisy[0] if m.zapisy else None
+n = len(m.zapisy)
+ag.krok(); out['bez_zmeny_nezapise'] = len(m.zapisy) - n
+ag.posledni_zapis -= S.TEP_S + 1
+ag.krok(); out['tep'] = len(m.zapisy) - n
+# pokyn, který se nepodaří smazat, se neprovede dvakrát
+m.nesmaz = True
+if os.path.exists(os.path.join(koren, 'beta', 'stopa.txt')): os.remove(os.path.join(koren, 'beta', 'stopa.txt'))
+m.p = [('prikaz_b', {'co': 'spust', 'klic': 'beta', 'kdy': ted()})]
+ag.krok()
+for _ in range(100):
+    if not sp.bezi(): break
+    time.sleep(0.1)
+ag.krok()
+out['beta_behu'] = len([1 for r in open(os.path.join(koren, 'beta', 'stopa.txt'), encoding='utf-8') if 'start' in r]) if os.path.exists(os.path.join(koren, 'beta', 'stopa.txt')) else 0
+# výpadek cloudu agenta neshodí
+m.chyba = 'Nejde se spojit s Googlem'
+ag.krok(); out['chyba'] = ag.chyba
+m.chyba = None; ag.krok(); out['chyba_po'] = ag.chyba
+# zastavit vše a po_zapnuti (mimo Windows nic nezapíše)
+m.nesmaz = False
+m.p = [('prikaz_z', {'co': 'zastav', 'klic': None, 'kdy': ted()})]
+ag.krok(); out['zastaveno'] = sp.zastaveno
+print('###' + json.dumps(out, ensure_ascii=False, default=str))
+`]);
+  const j13 = json(r13.out) || {};
+  if (!json(r13.out)) console.log(r13.out.slice(-2000));
+  shoda('všechny pokyny se po vyřízení smažou', j13.smazane, ['prikaz_a', 'prikaz_bezcasu', 'prikaz_cesta', 'prikaz_stary', 'prikaz_zly']);
+  ok('Spustit z aplikace kontrolu pustí', j13.alfa_bezi && j13.alfa === 'ok', JSON.stringify(j13));
+  ok('starý pokyn (PC bylo vypnuté) se neprovede', !j13.beta);
+  ok('pokyn bez času se neprovede', !j13.gama);
+  ok('neznámý pokyn ani cizí cesta nic nespustí', !j13.beta && !j13.gama);
+  const k1 = (j13.zapis1 || {}).kontroly || [];
+  ok('stav pro aplikaci: kontroly s klíčem, jménem a stavem', k1.length >= 9 && k1.every(k => k.klic && k.nazev && 'stav' in k), JSON.stringify(k1[0]));
+  ok('stav nese čas a jestli se spouští po zapnutí', j13.zapis1 && 'po_zapnuti' in j13.zapis1 && /^\d{4}-\d\d-\d\dT/.test(j13.zapis1.tep || ''), JSON.stringify(j13.zapis1).slice(0, 200));
+  ok('bez změny se stav nezapisuje pořád', j13.bez_zmeny_nezapise === 0, j13.bez_zmeny_nezapise);
+  ok('ale aspoň jednou za TEP_S (aplikace pozná zapnuté PC)', j13.tep === 1, j13.tep);
+  ok('nesmazaný pokyn se neprovede dvakrát', j13.beta_behu === 1, j13.beta_behu);
+  ok('výpadek cloudu spouštěč neshodí a pak se vzpamatuje', /Googlem/.test(j13.chyba) && j13.chyba_po === '', JSON.stringify([j13.chyba, j13.chyba_po]));
+  ok('Zastavit vše z aplikace', j13.zastaveno === true);
+
+  sekce('14) cloud: jen pc, jen pokyny');
+  const http = require('http');
+  const volani = [];
+  const server = http.createServer((req, res) => {
+    let t = ''; req.on('data', c => t += c); req.on('end', () => {
+      volani.push({ m: req.method, u: req.url, a: req.headers.authorization, t });
+      const posli = (st, o) => { res.writeHead(st, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+      if (req.url.includes('/zakazano/')) return posli(403, {});
+      if (req.method === 'GET') return posli(200, { documents: [
+        { name: 'x/spoustec/pc', fields: { tep: { stringValue: 'x' } } },
+        { name: 'x/spoustec/prikaz_ab1', fields: { co: { stringValue: 'vse' }, kdy: { stringValue: '2026-11-13T10:00:00Z' } } }] });
+      posli(200, {});
+    });
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const r14 = await python(['-I', '-c', `
+import sys, os, json
+sys.path.insert(0, ${JSON.stringify(NASTROJE)})
+import spoustec as S, sklad_firestore as SF
+c = S.Cloud(prihlaseni=lambda: 'TOKEN')
+out = {'prikazy': c.prikazy()}
+c.zapis_stav({'tep': 'T', 'kontroly': [{'klic': 'alfa', 'stav': 'ok'}]})
+c.smaz_prikaz('prikaz_ab1')
+try:
+    c.smaz_prikaz('pc'); out['smaz_pc'] = 'smazal'
+except ValueError:
+    out['smaz_pc'] = 'odmítnuto'
+SF.FS_BASE = SF.FS_BASE.replace('/fs', '/zakazano/fs')
+try:
+    c.prikazy(); out['403'] = ''
+except SF.ChybaSkladu as e:
+    out['403'] = str(e)
+print('###' + json.dumps(out, ensure_ascii=False))
+`], { SKLAD_FS_BASE: 'http://127.0.0.1:' + port + '/fs', SKLAD_AUTH_URL: 'http://127.0.0.1:' + port + '/auth' });
+  server.close();
+  const j14 = json(r14.out) || {};
+  if (!json(r14.out)) console.log(r14.out.slice(-1500));
+  shoda('pokyny se čtou jen prikaz_… (pc ne)', j14.prikazy, [['prikaz_ab1', { co: 'vse', kdy: '2026-11-13T10:00:00Z' }]]);
+  const zapisy = volani.filter(v => v.m !== 'GET');
+  shoda('zapisuje se jen spoustec/pc a maže jen pokyn', zapisy.map(v => v.m + ' ' + v.u.replace(/\?.*/, '')),
+    ['PATCH /fs/users/p6JKNhfrbmZYaF8OIBxgd9durmq2/spoustec/pc', 'DELETE /fs/users/p6JKNhfrbmZYaF8OIBxgd9durmq2/spoustec/prikaz_ab1']);
+  ok('s tokenem', volani.every(v => v.a === 'Bearer TOKEN'));
+  ok('smazat jde jen pokyn, ne stav', j14.smaz_pc === 'odmítnuto');
+  ok('nepublikovaná pravidla se řeknou naplno', /blok spoustec/.test(j14['403'] || ''), j14['403']);
+  ok('spouštěč do skladu nezapisuje', !/sklad\//.test(fs.readFileSync(path.join(NASTROJE, 'spoustec.py'), 'utf8').replace(/sklad_firestore|sklad\.mtkm/g, '')));
+
+  sekce('15) dvojklik, když už spouštěč běží');
+  const r15 = await python(['-I', '-c', `
+import sys, json
+sys.path.insert(0, ${JSON.stringify(NASTROJE)})
+import spoustec as S
+z = S.jediny()
+otevreno = []
+S.otevri_aplikaci = lambda: otevreno.append(1)
+kod = S.main([])
+print('###' + json.dumps({'kod': kod, 'otevreno': len(otevreno), 'adresa': S.ADRESA_APLIKACE}))
+`]);
+  const j15 = json(r15.out) || {};
+  ok('druhý spouštěč nevznikne, jen se otevře aplikace na okně kontrol', j15.kod === 0 && j15.otevreno === 1 && /#kontroly$/.test(j15.adresa || ''), r15.out.slice(-400));
 
   konec();
 })();

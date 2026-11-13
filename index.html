@@ -1074,6 +1074,56 @@ a.kl-jmeno:hover { color:var(--accent); text-decoration:underline; }
 .kl-karta .kl-kus:first-child { border-top:none; }
 .kl-kus-jm { display:flex; align-items:center; gap:10px; min-width:0; }
 .kl-nahled { width:44px; height:32px; flex:none; object-fit:contain; border-radius:5px; background:#fff; }
+/* ── SPOUŠTĚNÍ KONTROL Z APLIKACE (panel Kontroly na PC) ── */
+.kl-pc { margin:0 0 14px; background:var(--surface2); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.kl-pc:empty { display:none; }
+.pc-hlava { display:flex; align-items:center; gap:10px; padding:12px 14px; flex-wrap:wrap; cursor:pointer; }
+.pc-hlava:hover .pc-sipka { color:var(--text); }
+.pc-tecka { width:9px; height:9px; border-radius:50%; background:var(--muted2); flex:none; }
+.pc-tecka.on { background:var(--accent); box-shadow:0 0 0 4px rgba(200,255,0,0.12); }
+.pc-tecka.bezi { background:var(--accent); animation:pcPuls 1.4s ease-in-out infinite; }
+@keyframes pcPuls { 0%,100% { box-shadow:0 0 0 0 rgba(200,255,0,0.35); } 50% { box-shadow:0 0 0 6px rgba(200,255,0,0); } }
+.pc-titul { font-weight:700; font-size:14px; }
+.pc-sub { font-size:12px; color:var(--muted); flex:1 1 180px; min-width:0; }
+.pc-sub b { color:var(--text); font-weight:600; }
+.pc-chips { display:flex; gap:6px; }
+.pc-chip { font-family:'DM Mono',monospace; font-size:10px; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+.pc-chip.ok { background:rgba(200,255,0,0.10); color:var(--accent); }
+.pc-chip.pozor { background:rgba(255,140,26,0.14); color:var(--chybi); }
+.pc-btn, .pc-mini { font:inherit; border-radius:8px; cursor:pointer; white-space:nowrap; border:1px solid var(--border);
+  background:var(--surface); color:var(--text); transition:background .15s, border-color .15s, color .15s, opacity .15s; }
+.pc-btn { font-size:12px; font-weight:600; padding:7px 14px; }
+.pc-mini { font-size:11px; padding:5px 11px; flex:none; }
+.pc-btn:hover, .pc-mini:hover { border-color:#555; }
+.pc-btn.hlavni, .pc-mini.hlavni { background:var(--accent); color:#000; border-color:var(--accent); }
+.pc-btn.hlavni:hover, .pc-mini.hlavni:hover { opacity:.88; }
+.pc-btn[disabled] { opacity:.55; cursor:default; }
+.pc-sipka { color:var(--muted2); font-size:11px; width:12px; text-align:center; }
+.pc-seznam { border-top:1px solid var(--border); padding:6px 8px 8px; }
+.pc-radek { display:flex; align-items:center; gap:11px; padding:8px 8px; border-radius:8px; transition:background .15s; }
+.pc-radek:hover { background:var(--surface); }
+.pc-bod { width:7px; height:7px; border-radius:50%; background:var(--muted2); flex:none; }
+.pc-bod.ok, .pc-bod.rucne { background:var(--accent); }
+.pc-bod.chyba { background:var(--danger); }
+.pc-bod.prihlasit { background:var(--chybi); }
+.pc-bod.bezi, .pc-bod.ceka, .pc-bod.okno { background:var(--accent); animation:pcPuls 1.4s ease-in-out infinite; }
+.pc-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.pc-jmeno { font-size:13px; font-weight:600; }
+.pc-stav { font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+.pc-radek.chyba .pc-stav { color:var(--danger); }
+.pc-radek.pozor .pc-stav { color:var(--chybi); }
+.pc-radek.bezi .pc-stav { color:var(--text); }
+.pc-ok { color:var(--accent); }
+.pc-cas { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-left:6px; white-space:nowrap; }
+.pc-toc { display:inline-block; width:10px; height:10px; margin-right:6px; vertical-align:-1px; border-radius:50%;
+  border:2px solid rgba(200,255,0,0.25); border-top-color:var(--accent); animation:spin .8s linear infinite; }
+.pc-odeslano { font-size:11px; color:var(--muted); flex:none; }
+.pc-vypis-btn { font:inherit; font-size:11px; background:none; border:none; color:var(--muted); text-decoration:underline; cursor:pointer; margin-left:8px; padding:0; }
+.pc-vypis { font-family:'DM Mono',monospace; font-size:10.5px; color:var(--muted); background:var(--bg); border:1px solid var(--border);
+  border-radius:8px; padding:9px 11px; margin-top:6px; white-space:pre-wrap; max-height:220px; overflow:auto; }
+.pc-po { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); padding:10px 8px 2px; border-top:1px solid var(--border); margin-top:6px; cursor:pointer; }
+.pc-po input { accent-color:var(--accent); width:15px; height:15px; cursor:pointer; }
+@media (max-width:600px) { .pc-sub { flex-basis:100%; order:5; } .pc-chips { display:none; } }
 /* ── REPORT KONTROLY (celá obrazovka, po vzoru reportů v artifactu) ── */
 #reportOv { align-items:stretch; justify-content:center; padding:0; }
 .rp-stranka { background:var(--bg); width:100%; max-width:980px; height:100%; overflow-y:auto; overscroll-behavior:contain;
@@ -6148,8 +6198,14 @@ function openKontroly(rozbalit) {
   ov.id = 'kontrolyOv';
   ov.className = 'mo open';
   ov.style.zIndex = '1100';
+  // Průběh běžící kontroly na PC (vteřiny) — překreslí se jen její řádek
+  var pcTik = setInterval(function () {
+    var ks = (_pc.stav && _pc.stav.kontroly) || [];
+    if (_pcRozbaleno && ks.some(function (k) { return k.stav === 'bezi'; })) prekresli();
+  }, 1000);
   function zavri() {
     ov.remove(); window._klPrekresli = null;
+    clearInterval(pcTik);
     if (btn) btn.classList.remove('active');
     document.removeEventListener('keydown', esc);
   }
@@ -6163,6 +6219,22 @@ function openKontroly(rozbalit) {
     if (!t) return;
     var co = t.getAttribute('data-kl');
     if (co === 'zavrit') { zavri(); return; }
+    // Kontroly na PC (SPOUŠTĚNÍ KONTROL Z APLIKACE)
+    if (co === 'pc') { pcPokyn(t.dataset.co, t.dataset.klic || null); return; }
+    if (co === 'pc-po') { pcPokyn('po_zapnuti', null, { zapnout: !!t.checked }); return; }
+    if (co === 'pc-vypis') { _pcVypis[t.dataset.klic] = !_pcVypis[t.dataset.klic]; prekresli(); return; }
+    if (co === 'pc-rozbal') {
+      var sez = ov.querySelector('.pc-seznam');
+      if (_pcRozbaleno) {
+        _pcRozbaleno = false;
+        animujVysku(sez, false, function () { sez.style.cssText = ''; prekresli(); });
+        var s = ov.querySelector('.pc-sipka'); if (s) s.textContent = '▸';
+      } else {
+        _pcRozbaleno = true; prekresli();
+        animujVysku(ov.querySelector('.pc-seznam'), true);
+      }
+      return;
+    }
     if (co === 'misto') { prepniMisto(t.dataset.misto); return; }
     if (co === 'hotovo') { var duch = duchRadku(t); kontrolaOdbav(t.dataset.misto, t.dataset.id); vlozDucha(duch); return; }
     if (co === 'hotovo-inz') { var duch2 = duchRadku(t); kontrolaOdbavInzerat(t.dataset.misto, t.getAttribute('data-klic')); vlozDucha(duch2); return; }
@@ -6257,7 +6329,7 @@ function openKontroly(rozbalit) {
      místa, jejichž obsah se opravdu změnil (`posledni`). Rozbalení
      a sbalení jede výškou, vyřízený řádek odjede jako „duch“ — stav se
      přitom mění hned, duch je jen vzhled a nedá se na něj kliknout. */
-  var posledni = {};
+  var posledni = {}, pcPosledni = {};
   var bezPohybu = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   function animujVysku(el, otevrit, hotovo) {
     if (bezPohybu || !el) { if (hotovo) hotovo(); return; }
@@ -6329,8 +6401,10 @@ function openKontroly(rozbalit) {
       ov.innerHTML = '<div class="modal kl-modal">'
         + '<div class="mh"><div class="mt2">Kontroly listingů</div><button class="xb" data-kl="zavrit">✕</button></div>'
         + '<div class="kl-uvod">Výsledky kontrol listingů — z Clauda i z kontrol na PC. Po každé kontrole se sem uloží samy: co chybí, co smazat, co opravit.</div>'
+        + '<div class="kl-pc"></div>'
         + '<div class="kl-seznam"></div><div class="kl-konec"></div></div>';
     }
+    pcVykresliPanel(ov, pcPosledni);
     var bloky = [], h = '';
     if (!mista.length) {
       h += '<div class="kl-prazdno">Zatím sem nedorazila žádná kontrola. Pusť v Claudovi kontrolu e-shopu; '
@@ -6410,6 +6484,230 @@ function openKontroly(rozbalit) {
   window._klPrekresli = prekresli;
   prekresli();
   document.body.appendChild(ov);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SPOUŠTĚNÍ KONTROL Z APLIKACE
+
+   Kontroly listingů běží na majitelově PC (nastroje/spoustec.py, spouští
+   se po zapnutí PC). Odsud se dají pustit odkudkoli, i z mobilu: aplikace
+   položí do `users/{uid}/spoustec/prikaz_…` pokyn, spouštěč ho do deseti
+   vteřin vyzvedne, provede a smaže, a do `spoustec/pc` zapisuje, co dělá
+   (stav každé kontroly, průběh, chyby). Panel je nahoře v okně Kontroly
+   listingů (majitel, 13. 11. 2026 — okno spouštěče na PC „vypadalo
+   staře“, ovládání patří sem, kde je i výsledek).
+
+   Čtyři věci se nesmí rozbít:
+   - **Pokyn nese jen co a kterou kontrolu** (`co`, `klic`, `kdy`). Žádný
+     příkaz ani cesta; spouštěč pustí jedině kontrolu, kterou sám našel
+     ve složce. Pokyn smí založit jen majitel (pravidla, blok spoustec) —
+     čtečku používá i konektor a chat.
+   - **PC je zapnuté, jen když stav nedávno přišel** (`PC_ONLINE_MS`;
+     spouštěč ho posílá aspoň jednou za 2 min). Vypnuté PC tlačítka
+     nemá — pokyn starší deseti minut spouštěč zahodí, takže by „spustit“
+     u vypnutého PC tvrdilo něco, co se nestane. Po zapnutí se kontroly
+     spustí samy.
+   - **Účetní panel nemá** a posluchač se mu nespouští (`_pcSpust`).
+   - **Panel se nepřestavuje celý** — mění se jen řádky, jejichž obsah
+     se změnil (jako místa v okně, viz PLYNULÉ OKNO), jinak by průběh
+     běžící kontroly okno každou vteřinu problikl.
+
+   Hlídá to test-spoustec.js (strana PC) a test-kontroly.js, sekce 13.
+══════════════════════════════════════════════════════════════════════ */
+var PC_ONLINE_MS = 5 * 60 * 1000;
+var PC_ODESLANO_MS = 60 * 1000;     // „Odesláno…“, dokud PC nepotvrdí (pak se tlačítko vrátí)
+var _pc = { stav: null, nacteno: false, chyba: '' };
+var _pcUnsub = null, _pcOdeslano = {}, _pcRozbaleno = false, _pcVypis = {};
+
+function _pcSpust() {
+  _pcZastav();
+  if (jeUctetni()) return;
+  var fns = window._fbFns, uid = _datovyUid();
+  if (!fns || !window._fbDb || !uid) return;
+  var prvni = true;
+  try {
+    _pcUnsub = fns.onSnapshot(fns.collection(window._fbDb, 'users', uid, 'spoustec'), function (snap) {
+      var stav = null;
+      snap.forEach(function (d) { if (d.id === 'pc') stav = d.data() || null; });
+      _pc = { stav: stav, nacteno: true, chyba: '' };
+      pcPrekresli();
+      // Odkaz z PC (KONTROLY.pyw otevře …#kontroly) → rovnou okno kontrol
+      if (prvni && location.hash === '#kontroly' && !jeUctetni()) {
+        try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+        if (!document.getElementById('kontrolyOv')) openKontroly();
+      }
+      prvni = false;
+    }, function (err) {
+      _pc = { stav: null, nacteno: true, chyba: (err && err.code) || 'chyba' };
+      pcPrekresli();
+    });
+  } catch (e) { console.warn('spouštěč:', e); }
+}
+function _pcZastav() {
+  if (_pcUnsub) { try { _pcUnsub(); } catch (e) {} _pcUnsub = null; }
+  _pc = { stav: null, nacteno: false, chyba: '' };
+  _pcOdeslano = {};
+}
+function pcPrekresli() { if (window._klPrekresli) window._klPrekresli(); }
+
+function pcOnline() {
+  var t = _pc.stav && _pc.stav.tep ? new Date(_pc.stav.tep).getTime() : 0;
+  return !!t && Date.now() - t < PC_ONLINE_MS;
+}
+function pcBezi(k) { return k && (k.stav === 'bezi' || k.stav === 'ceka'); }
+
+function pcPokyn(co, klic, navic) {
+  if (jeUctetni()) return;
+  var fns = window._fbFns, uid = _datovyUid();
+  if (!fns || !window._fbDb || !uid) { showToast('Kontroly se spouští přes cloud — přihlas se.', 'err'); return; }
+  var id = 'prikaz_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  var data = { co: co, klic: klic || null, kdy: new Date().toISOString() };
+  Object.keys(navic || {}).forEach(function (k) { data[k] = navic[k]; });
+  _pcOdeslano[klic || '*'] = Date.now();
+  pcPrekresli();
+  fns.setDoc(fns.doc(window._fbDb, 'users', uid, 'spoustec', id), data).catch(function (e) {
+    delete _pcOdeslano[klic || '*'];
+    pcPrekresli();
+    showToast(e && e.code === 'permission-denied'
+      ? 'Cloud pokyn odmítl — v konzoli Firebase chybí blok spoustec z firestore.rules.'
+      : 'Pokyn pro PC se nepodařilo odeslat. Zkus to znovu.', 'err');
+  });
+}
+
+function _pcOdeslanoNedavno(klic) {
+  var t = _pcOdeslano[klic || '*'];
+  return !!t && Date.now() - t < PC_ODESLANO_MS;
+}
+function _pcCas(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  var dni = _klStari(iso);
+  var hod = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+  return (dni === 0 ? 'dnes ' : dni === 1 ? 'včera ' : _klDatum(iso) + ' ') + hod;
+}
+function _pcTrvani(s) {
+  s = Math.max(0, Math.round(s || 0));
+  return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0') + ' s';
+}
+// „Adonio: smazat 1 | přidat 3“ → „smazat 1 · přidat 3“
+function _pcSouhrn(k) {
+  var t = String(k.souhrn || '').replace(/^[^:|]{1,40}:\s*/, '');
+  return t.split('|').map(function (x) { return x.trim(); }).filter(Boolean).join(' · ');
+}
+
+/* Hlavička panelu: stav PC, počty, Spustit vše, po zapnutí PC */
+function pcHlavaHTML() {
+  if (!_pc.nacteno) return '<div class="pc-hlava"><span class="pc-tecka"></span><span class="pc-titul">Kontroly na PC</span><span class="pc-sub">Načítám…</span></div>';
+  if (_pc.chyba) {
+    return '<div class="pc-hlava"><span class="pc-tecka"></span><span class="pc-titul">Kontroly na PC</span>'
+      + '<span class="pc-sub">' + (_pc.chyba === 'permission-denied'
+        ? 'Chybí nová pravidla Firestore (blok spoustec) — publikuj je v konzoli Firebase.'
+        : 'Stav PC se nepodařilo načíst.') + '</span></div>';
+  }
+  var s = _pc.stav;
+  if (!s) {
+    return '<div class="pc-hlava"><span class="pc-tecka"></span><span class="pc-titul">Kontroly na PC</span>'
+      + '<span class="pc-sub">Spusť na PC jednou <b>KONTROLY.pyw</b> ze složky MTKM-kontroly — pak se kontroly dají pouštět odsud.</span></div>';
+  }
+  var on = pcOnline(), ks = s.kontroly || [];
+  var bezi = ks.filter(pcBezi).length;
+  var pozor = ks.filter(function (k) { return k.stav === 'chyba' || k.stav === 'prihlasit'; }).length;
+  var ok = ks.filter(function (k) { return k.stav === 'ok' || k.stav === 'rucne'; }).length;
+  var sub = !on ? 'PC je vypnuté · ozvalo se ' + (_pcCas(s.tep) || '—') + ' · po zapnutí se kontroly spustí samy'
+    : bezi ? 'Běží ' + bezi + (bezi === 1 ? ' kontrola' : bezi < 5 ? ' kontroly' : ' kontrol')
+    : s.posledni_vse ? 'Všechny naposledy ' + _pcCas(s.posledni_vse) + ' · ' + _pcTrvani(s.posledni_vse_trvani)
+    : 'PC je zapnuté';
+  var chips = (ok ? '<span class="pc-chip ok">' + ok + ' v pořádku</span>' : '')
+    + (pozor ? '<span class="pc-chip pozor">' + pozor + ' chce pozornost</span>' : '');
+  var akce = !on ? ''
+    : s.vse_bezi || bezi
+      ? '<button class="pc-btn" data-kl="pc" data-co="zastav">Zastavit vše</button>'
+      : (_pcOdeslanoNedavno('*')
+        ? '<button class="pc-btn hlavni" disabled>Odesláno…</button>'
+        : '<button class="pc-btn hlavni" data-kl="pc" data-co="vse">Spustit vše</button>');
+  return '<div class="pc-hlava" data-kl="pc-rozbal">'
+    + '<span class="pc-tecka' + (on ? (bezi ? ' bezi' : ' on') : '') + '"></span>'
+    + '<span class="pc-titul">Kontroly na PC</span><span class="pc-sub">' + escHtml(sub) + '</span>'
+    + '<span class="pc-chips">' + chips + '</span>' + akce
+    + '<span class="pc-sipka">' + (_pcRozbaleno ? '▾' : '▸') + '</span></div>';
+}
+
+/* Řádek jedné kontroly (klíč = složka kontroly na PC) */
+function pcRadekHTML(k) {
+  var on = pcOnline(), st = k.stav || '';
+  var stavText, trida = '';
+  if (st === 'bezi') {
+    var zac = k.zacatek ? new Date(k.zacatek).getTime() : Date.now();
+    stavText = '<span class="pc-toc"></span>' + escHtml(k.radek || 'Běží…') + ' <span class="pc-cas">' + _pcTrvani((Date.now() - zac) / 1000) + '</span>';
+    trida = 'bezi';
+  } else if (st === 'ceka') { stavText = 'Čeká na spuštění'; trida = 'bezi'; }
+  else if (st === 'okno') { stavText = 'Běží v okně na PC'; trida = 'bezi'; }
+  else if (st === 'chyba' || st === 'prihlasit') { stavText = escHtml(String(k.zprava || '').replace(/^Potřeba přihlásit:\s*/, '')); trida = st === 'chyba' ? 'chyba' : 'pozor'; }
+  else if (st === 'ok') {
+    stavText = '<span class="pc-ok">✓</span> ' + escHtml(_pcCas(k.konec)) + (_pcSouhrn(k) ? ' · ' + escHtml(_pcSouhrn(k)) : '')
+      + (k.poslano ? '' : ' · nic se neposlalo');
+  } else if (st === 'rucne') stavText = 'Proběhlo v okně na PC · ' + escHtml(_pcCas(k.konec));
+  else if (st === 'nevi') stavText = 'Nedoběhlo';
+  else stavText = k.rucni ? 'Jen v okně na PC (bere text ze schránky)' : 'Ještě neběželo';
+  var akce = '';
+  if (on) {
+    if (_pcOdeslanoNedavno(k.klic) && !pcBezi(k)) akce = '<span class="pc-odeslano">Odesláno…</span>';
+    else if (pcBezi(k)) akce = '<button class="pc-mini" data-kl="pc" data-co="zastav" data-klic="' + escHtml(k.klic) + '">Zastavit</button>';
+    else if (st === 'prihlasit' || k.rucni) akce = '<button class="pc-mini' + (k.rucni ? '' : ' hlavni') + '" data-kl="pc" data-co="okno" data-klic="' + escHtml(k.klic) + '">' + (k.rucni ? 'Otevřít na PC' : 'Přihlásit na PC') + '</button>';
+    else if (st !== 'okno') akce = '<button class="pc-mini" data-kl="pc" data-co="spust" data-klic="' + escHtml(k.klic) + '">Spustit</button>';
+  }
+  var vypis = k.vypis && (st === 'chyba' || st === 'prihlasit')
+    ? '<button class="pc-vypis-btn" data-kl="pc-vypis" data-klic="' + escHtml(k.klic) + '">' + (_pcVypis[k.klic] ? 'Skrýt výpis' : 'Výpis') + '</button>' : '';
+  return '<div class="pc-radek ' + trida + '" data-pck="' + escHtml(k.klic) + '">'
+    + '<span class="pc-bod ' + (st || 'nic') + '"></span>'
+    + '<div class="pc-text"><span class="pc-jmeno">' + escHtml(k.nazev || k.klic) + '</span>'
+    + '<span class="pc-stav">' + stavText + vypis + '</span>'
+    + (_pcVypis[k.klic] && vypis ? '<pre class="pc-vypis">' + escHtml(k.vypis) + '</pre>' : '') + '</div>'
+    + akce + '</div>';
+}
+
+/* Vykreslí panel do okna Kontroly listingů — jen co se změnilo */
+function pcVykresliPanel(ov, posledni) {
+  var el = ov.querySelector('.kl-pc');
+  if (!el) return;
+  if (jeUctetni()) { el.innerHTML = ''; return; }
+  var hl = pcHlavaHTML();
+  if (posledni.hlava !== hl) {
+    var stara = el.querySelector('.pc-hlava'), tpl = document.createElement('div');
+    tpl.innerHTML = hl;
+    if (stara) el.replaceChild(tpl.firstChild, stara); else el.insertBefore(tpl.firstChild, el.firstChild);
+    posledni.hlava = hl;
+  }
+  var sez = el.querySelector('.pc-seznam');
+  if (!sez) { sez = document.createElement('div'); sez.className = 'pc-seznam'; el.appendChild(sez); }
+  var ukazat = _pcRozbaleno && _pc.stav && !_pc.chyba;
+  sez.style.display = ukazat ? '' : 'none';
+  if (!ukazat) return;
+  var stare = {}, pouzite = [];
+  [].slice.call(sez.children).forEach(function (r) { stare[r.getAttribute('data-pck')] = r; });
+  (_pc.stav.kontroly || []).forEach(function (k) {
+    var h = pcRadekHTML(k), r = stare[k.klic];
+    if (!r || posledni['r_' + k.klic] !== h) {
+      var tpl = document.createElement('div');
+      tpl.innerHTML = h;
+      var novy = tpl.firstChild;
+      if (r) sez.replaceChild(novy, r);
+      r = novy;
+      posledni['r_' + k.klic] = h;
+    }
+    pouzite.push(r);
+    sez.appendChild(r);
+  });
+  [].slice.call(sez.children).forEach(function (r) { if (pouzite.indexOf(r) === -1) sez.removeChild(r); });
+  var po = sez.querySelector('.pc-po');
+  var poH = '<label class="pc-po"><input type="checkbox" data-kl="pc-po"' + (_pc.stav.po_zapnuti ? ' checked' : '')
+    + (pcOnline() ? '' : ' disabled') + '> Spouštět kontroly po zapnutí PC</label>';
+  if (!po || posledni.po !== poH) {
+    if (po) po.remove();
+    var t = document.createElement('div'); t.innerHTML = poH;
+    sez.appendChild(t.firstChild);
+    posledni.po = poH;
+  } else sez.appendChild(po);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -20622,6 +20920,7 @@ document.addEventListener('fb-auth', function(e) {
   // Odhlášení — zruš listener a vyčisti data
   if (_fbUnsubscribe) { _fbUnsubscribe(); _fbUnsubscribe = null; }
   try { _zprZastav(); } catch(e) {}
+  try { _pcZastav(); } catch(e) {}
   try { if (window.finZastav) finZastav(); } catch(e) {}
   // Režim účetního patří k účtu, ne k záložce. Vypíná se při každé změně
   // přihlášení, ne jen při odhlášení — Firebase umí ohlásit rovnou nového
@@ -20656,6 +20955,8 @@ function _spustSkladPosluchace() {
     var _firstSnapshot = true;
     // Zprávy od účetního — vlastní kolekce, čte se z téže kóje (ZPRÁVY A POZNÁMKY)
     try { _zprSpust(); } catch(e) { console.warn('zprávy:', e); }
+    // Kontroly na PC — stav spouštěče a pokyny (SPOUŠTĚNÍ KONTROL Z APLIKACE)
+    try { _pcSpust(); } catch(e) { console.warn('spouštěč:', e); }
     // Finance — vlastní kolekce a vlastní soubor (finance.js)
     try { if (window.finSpust) finSpust(); } catch(e) { console.warn('finance:', e); }
     ukazStaraData();   // dokud cloud mlčí, ať je vidět, jak stará data to jsou

@@ -1225,7 +1225,8 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | okno pro účetního (měsíc) | `ÚČETNICTVÍ` |
 | zprávy a poznámky účetní ↔ majitel | `ZPRÁVY A POZNÁMKY`, v konektoru `ZPRÁVY OD ÚČETNÍHO` |
 | Finance (daňová evidence, výpisy) | `finance.js`, v index.html `FINANCE — DAŇOVÁ EVIDENCE` |
-| spouštěč kontrol na PC (okno, po zapnutí) | `nastroje/spoustec.py`, `SPOUŠTĚČ KONTROL` v CLAUDE.md |
+| spouštěč kontrol na PC (po zapnutí, pokyny) | `nastroje/spoustec.py`, `SPOUŠTĚČ KONTROL` v CLAUDE.md |
+| kontroly na PC z aplikace (panel, pokyny) | `SPOUŠTĚNÍ KONTROL Z APLIKACE` |
 
 ## Čtení dat mimo prohlížeč
 
@@ -1313,7 +1314,7 @@ nic nenapoví — dokud je majitel neudělá, je nová funkce jen text v souboru
 
 | co | kde | stav |
 |---|---|---|
-| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **čeká** — nový blok `finance` (11. 11., Finance). Blok `zpravy` publikovaný 10. 11. (majitel); předtím ověřený lísteček `pozadavek_*` z příkazové řádky |
+| `firestore.rules` | konzole Firebase → Firestore → Rules → Publish | **čeká** — nové bloky `spoustec` (13. 11., spouštění kontrol z aplikace) a `finance` (11. 11., Finance). Blok `zpravy` publikovaný 10. 11. (majitel); předtím ověřený lísteček `pozadavek_*` z příkazové řádky |
 | `konektor/worker.js` | Cloudflare → Workers → Edit code → Deploy | **čeká na nasazení** (11. 11.: `sklad_kontrola` umí `opravit`, `neniVeSkladu`, `inzeratu`, `limit`; 10. 11. odpoledne: oprava mailu o zprávách — první běh, hlídání při každém cronu, `zkontrolovano` pro stopu v aplikaci). Předtím nasazeno 10. 11. dopoledne (zprávy od účetního). Dokud běží starší verze, ukazuje aplikace v okně Zpráv falešné „cron asi neběží“ — starší verze značku nepíše při každém běhu. Na mobilu se v editoru Cloudflare starý kód nedá spolehlivě označit a nahradit — nasazovat od počítače, nebo zapojit automatické nasazení z GitHubu (majitel zatím nerozhodl). |
 | třetí cron trigger `*/5 * * * *` | Cloudflare → Worker konektoru → Settings → Triggers → Cron Triggers → Add | **hotovo, ověřeno 10. 11.** — v cloudu se ve 14:15 zapsala značka `zpravy/_mail`. Zkušební mail nepřišel kvůli chybě prvního běhu, opraveno |
 | `RESEND_API_KEY`, `MAIL_KOMU` + dva cron triggery | Cloudflare | **pošta nastavená** (12. 10. majiteli chodily maily o potížích z Pikastore). **Cron triggery nepotvrzené** — srovnání komise pouští i šťouchnutí z aplikace po každém uložení, takže maily o potížích samy nedokazují, že cron běží. Ranní obhlídka (mail o Bazoši, pondělní obhlídka) by to dokázala — zeptej se, jestli chodí. |
@@ -1491,41 +1492,71 @@ v každém skriptu, načtení skladu a odeslání společně v
 `sklad_firestore.py` JSON. Hlídá to `test-kontrolyprohlizec.js`, sekce 8.
 
 **Spouštěč kontrol** (`SPOUŠTĚČ KONTROL`, 13. 11. 2026, čeká na první
-ostrý běh): `nastroje/spoustec.py`, dvojklik na `KONTROLY.pyw` (bez
-černého okna). Okno ve vzhledu SKLADu — u každé kontroly stav, kdy
-běžela, souhrn z řádku za HOTOVO, Spustit / V okně / Výpis / Zastavit,
-nahoře **Spustit vše**. Kontroly se najdou samy podle složek
-(`<místo>/<místo>_kontrola.py`) — **nová kontrola spouštěč neupravuje**.
-Bez prohlížeče běží naráz (`SOUBEZNE`), přes prohlížeč kontrol po jedné
-(sdílejí profil; pozná se podle `Prohlizec(` ve skriptu). WTB je ruční
-(`RUCNI`, bere schránku). Stav v `%LOCALAPPDATA%\MTKM-kontroly\spoustec.json`,
+ostrý běh): `nastroje/spoustec.py` běží na PC **bez okna** a ovládá se
+**z aplikace** — panel *Kontroly na PC* nahoře v okně Kontroly listingů
+(`SPOUŠTĚNÍ KONTROL Z APLIKACE`), i z mobilu. První verze měla vlastní
+okno v tkinteru a majitel ho odmítl („vypadá staře, chci moderní
+jednoduchej disajn") — nevracej ho. Dvojklik na `KONTROLY.pyw` spustí
+spouštěč na pozadí a otevře aplikaci na `…#kontroly`; druhý dvojklik
+jen otevře aplikaci (`jediny`). Kontroly se najdou samy podle složek
+(`<místo>/<místo>_kontrola.py`) — **nová kontrola spouštěč ani aplikaci
+neupravuje**. Bez prohlížeče běží naráz (`SOUBEZNE`), přes prohlížeč
+kontrol po jedné (sdílejí profil; pozná se podle `Prohlizec(` ve
+skriptu). WTB je ruční (`RUCNI`, bere schránku). Stav, deník
+(`spoustec_log.txt`) a nastavení v `%LOCALAPPDATA%\MTKM-kontroly\`,
 výpis běhu v `<místo>/posledni_beh.txt`.
 
-**Po zapnutí PC** (majitel, 13. 11. 2026: server nemá, PC neběží pořád,
-Wake on LAN nejde — nemá kabel; chce kontroly po každém zapnutí PC,
-„jen aby to nepřekáželo a neotravovalo"): přepínač v okně zapíše
-`HKCU\…\Run` (`prikaz_po_zapnuti`, čeká až 10 min, než se připojí Disk
-Google). Okno se otevře jen jako ikona na liště, počká na internet,
-pustí vše a **při úspěchu mlčí** — jedno oznámení Windows jen když něco
-chce přihlásit nebo spadlo. Do `ODSTUP_PO_ZAPNUTI_S` (2 h) od posledního
-běhu se po zapnutí nespouští nic. Tři věci se nesmí rozbít:
+**Spojení s aplikací jde přes Firestore**, kolekce `users/{uid}/spoustec`
+(**nový blok pravidel — ruční krok**): aplikace položí pokyn
+`prikaz_…` (`{co, klic, kdy}`), spouštěč se každých `DOTAZ_S` (10 s)
+zeptá, pokyn provede a smaže, a do `pc` zapisuje stav (při změně, při
+běhu nejvýš po 3 s, jinak aspoň jednou za `TEP_S` = 2 min). Aplikace
+bere PC za zapnuté, když stav přišel do `PC_ONLINE_MS` (5 min).
+Čtyři věci se nesmí rozbít:
 
+- **Pokyn smí založit jedině majitel** (pravidla: čtečka jen zapíše
+  `pc` a smaže `prikaz_*`). Čtečku používá i konektor a chat — kdyby
+  směla pokyn založit, spouštěl by kontroly na PC kdokoli s jejím
+  heslem. Pokyn nese **jen co a kterou kontrolu**; spouštěč pustí
+  jedině kontrolu, kterou sám našel, a neznámý pokyn zahodí.
+- **Pokyn starší `PRIKAZ_STARY_S` (10 min) se neprovede**, jen smaže,
+  a **vypnuté PC v aplikaci tlačítka nemá** — „Spustit" u vypnutého PC
+  by slibovalo něco, co se nestane. Po zapnutí se kontroly spustí samy.
+  Pokyn, který se nepovedlo smazat, se neprovede dvakrát (`vyrizene`).
 - **Nikdy nečekat na klávesnici.** Kontroly dostanou `SKLAD_BEZ_PTANI=1`
   a zavřený stdin: místo otázky na heslo (`prihlaseni_webu`) nebo Enteru
   (`Prohlizec.prihlaseni`) skončí hláškou začínající „Potřeba
-  přihlásit" a spouštěč nabídne **Přihlásit v okně** (pustí
-  `SPUSTIT_*.bat` postaru). Kontrola zaseklá na `input()` by po zapnutí
-  PC visela napořád a nikdo by to neviděl.
+  přihlásit" a aplikace nabídne **Přihlásit na PC** (spouštěč pustí
+  `SPUSTIT_*.bat` s oknem). Kontrola zaseklá na `input()` by na pozadí
+  visela napořád a nikdo by to neviděl. Zaseklou kontrolu po
+  `LIMIT_BEHU_S` (40 min) ukončí. Při chybě jde do aplikace i konec
+  výpisu (`vypis`, tlačítko Výpis) — z mobilu se jinak k chybě nedostaneš.
 - **Prohlížeč běží skrytý** (`SKLAD_PROHLIZEC=skryty`). Web, který
   prohlížeč bez okna nepustí (Cloudflare), se zkusí znovu s oknem mimo
   obrazovku (`mimo`) a spouštěč si to u něj pamatuje (`rezim`). Bez
   proměnné (spuštění přes .bat) je okno vidět jako dřív.
-- **Zaseklá kontrola se po `LIMIT_BEHU_S` (40 min) ukončí** a jen jedno
-  okno spouštěče naráz (`jediny`, druhé start jen ukáže první).
 
-Hlídá to `test-spoustec.js` (okno samotné jen tam, kde je tkinter
-a obrazovka). Dál: spouštění kontrol z aplikace SKLAD (lísteček přes
-Firestore, který spouštěč převezme).
+Panel se **nepřestavuje celý** — mění se jen řádky, jejichž obsah se
+změnil (průběh běžící kontroly tiká každou vteřinu). Účetní ho nemá
+a posluchač se mu nespouští.
+
+**Po zapnutí PC** (majitel, 13. 11. 2026: server nemá, PC neběží pořád,
+Wake on LAN nejde — nemá kabel; chce kontroly po každém zapnutí PC,
+„jen aby to nepřekáželo a neotravovalo"): při prvním spuštění se samo
+zapíše do `HKCU\…\Run` (`prikaz_po_zapnuti`, čeká až 10 min, než se
+připojí Disk Google), vypnout jde v panelu. Po zapnutí počká na
+internet, pustí vše a **při úspěchu mlčí** — jedno oznámení Windows
+jen když něco chce přihlásit nebo spadlo. Do `ODSTUP_PO_ZAPNUTI_S`
+(2 h) od posledního běhu se po zapnutí nespouští nic.
+
+Hlídá to `test-spoustec.js` (strana PC, podvržený cloud)
+a `test-kontroly.js`, sekce 15 (panel v aplikaci).
+
+**Reporty 12. 11.**: v cloudu ležely jen reporty Adonia, Klektu,
+Releasedu a Tnsky, kontroly přitom dorazily od všech. Reporty se
+zapsaly (zápis by jinak skončil chybou) a později zmizely; aplikace je
+od 79d7570 (12. 11. ráno) nemaže, starší verze ano — nejspíš je smazala
+neobnovená záložka (mobil). Dorazí s dalším během kontrol.
 
 ### Názvy příspěvků na Instagramu
 

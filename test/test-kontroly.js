@@ -570,6 +570,114 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   ok('odkliknout nejde a lísteček se nepřevezme', uc.stejne && uc.smazano === 0, JSON.stringify(uc));
   ok('a v povolených akcích účetního nejsou', uc.akce);
 
+  sekce('15) Kontroly na PC — spouštění z aplikace');
+  /* Spouštěč na PC (nastroje/spoustec.py) zapisuje stav do spoustec/pc,
+     aplikace mu dává pokyny do spoustec/prikaz_…. Panel je nahoře v okně
+     Kontroly listingů. Hlídá se hlavně: pokyn nese jen co a kterou
+     kontrolu, vypnuté PC nemá tlačítka, panel nebliká, účetní nic. */
+  await page.evaluate(() => {
+    window.__pokyny = [];
+    window.__pcSnap = null; window.__pcErr = null;
+    window._fbFns.collection = function () { return { cesta: [].slice.call(arguments).slice(1).join('/') }; };
+    window._fbFns.setDoc = function (ref, data) { window.__pokyny.push({ cesta: ref.cesta, data: data }); return Promise.resolve(); };
+    window._fbFns.onSnapshot = function (ref, next, err) { window.__pcSnap = next; window.__pcErr = err; return function () { window.__pcSnap = null; }; };
+    window.__pcStav = function (stav) { window.__pcSnap(window.__snimek(stav ? [{ id: 'pc', data: stav }] : [])); };
+    _pcSpust();
+  });
+  ok('posluchač poslouchá kolekci spoustec', await page.evaluate(() => typeof window.__pcSnap === 'function'));
+  let pc = await page.evaluate(() => { window.__pcStav(null); openKontroly(); return document.querySelector('#kontrolyOv .kl-pc').textContent; });
+  ok('bez spouštěče návod, jak ho pustit', /KONTROLY\.pyw/.test(pc), pc);
+  const tedIso = () => new Date().toISOString();
+  const STAV = () => ({ tep: tedIso(), po_zapnuti: true, vse_bezi: false, posledni_vse: tedIso(), posledni_vse_trvani: 212, kontroly: [
+    { klic: 'adonio', nazev: 'Adonio', stav: 'ok', souhrn: 'Adonio: smazat 1 | přidat 3', konec: tedIso(), poslano: true },
+    { klic: 'klekt', nazev: 'Klekt', prohlizec: true, stav: 'bezi', radek: 'Prodlužuji expiraci na KLEKT… 24 / 61', zacatek: new Date(Date.now() - 65000).toISOString() },
+    { klic: 'facebook', nazev: 'Facebook', prohlizec: true, stav: 'prihlasit', zprava: 'Potřeba přihlásit: na Facebook se musíš přihlásit.' },
+    { klic: 'refresher', nazev: 'Refresher <img src=x onerror=window.__xss2=1>', stav: 'chyba', zprava: 'Refresher vrátil 502', vypis: 'Traceback…\n!!! CHYBA: Refresher vrátil 502' },
+    { klic: 'wtb', nazev: 'WTB Market', rucni: true, stav: '' },
+  ] });
+  pc = await page.evaluate((s) => {
+    window.__pcStav(s);
+    const ov = document.getElementById('kontrolyOv');
+    const h = ov.querySelector('.pc-hlava');
+    const out = { hlava: h.textContent, tecka: h.querySelector('.pc-tecka').className, seznam: getComputedStyle(ov.querySelector('.pc-seznam')).display };
+    h.click();
+    out.radku = ov.querySelectorAll('.pc-radek').length;
+    out.tlacitka = [...ov.querySelectorAll('.pc-radek')].map(r => r.getAttribute('data-pck') + ':' + [...r.querySelectorAll('button')].map(b => b.textContent).join('/'));
+    out.bezi = ov.querySelector('[data-pck="klekt"]').textContent;
+    out.ok = ov.querySelector('[data-pck="adonio"]').textContent;
+    return out;
+  }, STAV());
+  ok('PC zapnuté: tečka svítí, je vidět, že něco běží', /bezi/.test(pc.tecka) && /Běží 1 kontrola/.test(pc.hlava), JSON.stringify(pc));
+  ok('počty v hlavičce', /1 v pořádku/.test(pc.hlava) && /2 chce pozornost/.test(pc.hlava), pc.hlava);
+  ok('seznam je zavřený, dokud se neklikne', pc.seznam === 'none' && pc.radku === 5, JSON.stringify(pc));
+  shoda('u každé kontroly správné tlačítko', pc.tlacitka, ['adonio:Spustit', 'klekt:Zastavit', 'facebook:Výpis/Přihlásit na PC'.replace('Výpis/', ''), 'refresher:Výpis/Spustit', 'wtb:Otevřít na PC']);
+  ok('běžící kontrola ukazuje průběh a čas', /24 \/ 61/.test(pc.bezi) && /1 min 0[5-9] s/.test(pc.bezi), pc.bezi);
+  ok('hotová ukazuje souhrn bez jména místa', /smazat 1 · přidat 3/.test(pc.ok) && !/Adonio: /.test(pc.ok), pc.ok);
+  ok('jméno z PC se escapuje', await page.evaluate(() => !window.__xss2 && !document.querySelector('#kontrolyOv .pc-radek img')));
+
+  pc = await page.evaluate(() => {
+    const ov = document.getElementById('kontrolyOv');
+    window.__pokyny = [];
+    ov.querySelector('[data-pck="adonio"] button').click();
+    ov.querySelector('[data-pck="facebook"] button').click();
+    ov.querySelector('.pc-hlava [data-co="zastav"]').click();
+    return { pokyny: window.__pokyny, adonio: ov.querySelector('[data-pck="adonio"]').textContent };
+  });
+  ok('Spustit položí pokyn do spoustec/prikaz_…', /\/users\/majitel1\/spoustec\/prikaz_[a-z0-9]+$/.test(pc.pokyny[0].cesta), pc.pokyny[0].cesta);
+  shoda('pokyn nese jen co, kterou kontrolu a kdy', pc.pokyny.map(p => Object.keys(p.data).sort().join(',') + '=' + p.data.co + ':' + p.data.klic),
+    ['co,kdy,klic=spust:adonio', 'co,kdy,klic=okno:facebook', 'co,kdy,klic=zastav:null']);
+  ok('dokud PC nepotvrdí, je vidět Odesláno…', /Odesláno/.test(pc.adonio) && !/Spustit/.test(pc.adonio), pc.adonio);
+
+  pc = await page.evaluate(() => {
+    const ov = document.getElementById('kontrolyOv');
+    const ad = ov.querySelector('[data-pck="adonio"]'), modal = ov.querySelector('.kl-modal');
+    ov.querySelector('[data-pck="refresher"] .pc-vypis-btn').click();
+    const vypis = (ov.querySelector('[data-pck="refresher"] .pc-vypis') || {}).textContent || '';
+    return new Promise(res => setTimeout(() => res({ vypis, stejnyRadek: ov.querySelector('[data-pck="adonio"]') === ad,
+      stejneOkno: ov.querySelector('.kl-modal') === modal, cas: ov.querySelector('[data-pck="klekt"]').textContent }), 1300));
+  });
+  ok('výpis chyby jde rozbalit', /!!! CHYBA: Refresher vrátil 502/.test(pc.vypis), pc.vypis);
+  ok('průběh tiká, okno ani ostatní řádky se nepřestaví', pc.stejnyRadek && pc.stejneOkno && /1 min 0[6-9] s|1 min 1\d s/.test(pc.cas), JSON.stringify(pc));
+
+  pc = await page.evaluate(() => {
+    window.__pokyny = [];
+    const cb = document.querySelector('#kontrolyOv .pc-po input');
+    cb.click();
+    return window.__pokyny.map(p => p.data);
+  });
+  ok('vypnutí spouštění po zapnutí PC jde jako pokyn', pc.length === 1 && pc[0].co === 'po_zapnuti' && pc[0].zapnout === false, JSON.stringify(pc));
+
+  pc = await page.evaluate((s) => {
+    s.tep = new Date(Date.now() - 11 * 60000).toISOString();
+    window.__pcStav(s);
+    const ov = document.getElementById('kontrolyOv');
+    return { hlava: ov.querySelector('.pc-hlava').textContent, tlacitek: ov.querySelectorAll('.kl-pc button[data-kl="pc"]').length,
+      po: ov.querySelector('.pc-po input').disabled };
+  }, STAV());
+  ok('vypnuté PC: řekne se to a tlačítka nejsou', /PC je vypnuté/.test(pc.hlava) && pc.tlacitek === 0 && pc.po, JSON.stringify(pc));
+  pc = await page.evaluate(() => { window.__pcErr({ code: 'permission-denied' }); return document.querySelector('#kontrolyOv .kl-pc').textContent; });
+  ok('nepublikovaná pravidla se řeknou naplno', /blok spoustec/.test(pc), pc);
+  await page.evaluate(() => document.getElementById('kontrolyOv').remove());
+
+  pc = await page.evaluate(() => {
+    history.replaceState(null, '', location.pathname + '#kontroly');
+    _pcSpust();
+    window.__pcStav(null);
+    const out = { okno: !!document.getElementById('kontrolyOv'), hash: location.hash };
+    document.getElementById('kontrolyOv') && document.getElementById('kontrolyOv').remove();
+    return out;
+  });
+  ok('odkaz …#kontroly z PC otevře rovnou okno kontrol', pc.okno && pc.hash === '', JSON.stringify(pc));
+  pc = await page.evaluate(() => {
+    _uctetniRezim = true; window.__pcSnap = null;
+    _pcSpust();
+    const out = { posluchac: !!window.__pcSnap };
+    window.__pokyny = []; pcPokyn('vse'); out.pokyny = window.__pokyny.length;
+    _uctetniRezim = false;
+    return out;
+  });
+  ok('účetní: žádný posluchač ani pokyn', !pc.posluchac && pc.pokyny === 0, JSON.stringify(pc));
+
   ok('starý nástroj Chybějící listingy je pryč', await page.evaluate(() => typeof openMissingListings === 'undefined' && !document.getElementById('btnMissingList')));
   ok('žádné JS chyby', errs.length === 0, JSON.stringify(errs.slice(0, 3)));
   await browser.close();

@@ -77,7 +77,28 @@ if (crm) {
 
 /* ── Kdo smí zapisovat ──────────────────────────────────────────────── */
 const zapisy = kod.match(/allow write:([^;]*)/g) || [];
-ok('zápis je definovaný u všech čtyř bloků (sklad, crm, finance, zprávy)', zapisy.length === 4, 'nalezeno: ' + zapisy.length);
+ok('zápis je definovaný u všech pěti bloků (sklad, crm, finance, zprávy, spouštěč)', zapisy.length === 5, 'nalezeno: ' + zapisy.length);
+
+/* Spouštěč kontrol (nastroje/spoustec.py): pokyn „spusť kontrolu na PC"
+   smí založit JEDINĚ majitel. Čtečku používá i konektor a chat — kdyby
+   směla pokyn založit, spouštěl by kontroly na PC kdokoli s jejím heslem.
+   Čtečka (program na PC) zapisuje jen svůj stav a vyřízený pokyn maže. */
+const spoustec = (function () {
+  const i = kod.indexOf('match /users/{uid}/spoustec/');
+  return i === -1 ? '' : kod.slice(i, kod.indexOf('\n    }', i));
+})();
+ok('spouštěč má vlastní blok', !!spoustec);
+if (spoustec) {
+  const r = (op) => ((spoustec.match(new RegExp('allow ' + op + ':([^;]*)')) || [])[1] || '').trim();
+  ok('spouštěč čte majitel a čtečka, účetní ne', /jeMajitel/.test(r('read')) && /jeCtecka/.test(r('read')) && !/jeUcetni/.test(r('read')), r('read'));
+  ok('do spouštěče píše majitel a čtečka jen stav PC', r('write') === 'if jeMajitel(uid) || jeStavPc(uid, dokument)', r('write'));
+  ok('čtečka smí jen mazat vyřízený pokyn', r('delete') === 'if jeVyrizenyPrikaz(uid, dokument)', r('delete'));
+  ok('žádné create/update pro čtečku', !/allow (create|update)/.test(spoustec));
+  const telo = (fn) => (kod.match(new RegExp('function ' + fn + '\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n    \\}')) || [])[1] || '';
+  ok('stav PC jen čtečka a jen dokument pc', /jeCtecka\(uid\)/.test(telo('jeStavPc')) && /dokument == 'pc'/.test(telo('jeStavPc')), telo('jeStavPc'));
+  const vz = (telo('jeVyrizenyPrikaz').match(/matches\('([^']+)'\)/) || [])[1];
+  ok('mazat smí jen pokyny', /jeCtecka\(uid\)/.test(telo('jeVyrizenyPrikaz')) && !!vz && new RegExp(vz).test('prikaz_abc') && !new RegExp(vz).test('pc'), vz);
+}
 
 /* Finance (finance.js): výpisy z účtu. Zapisuje jen majitel, účetní čte,
    čtečka (AI, konektor) sem nesmí vůbec. */

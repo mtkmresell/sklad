@@ -1,30 +1,36 @@
 # -*- coding: utf-8 -*-
 """
-Spouštěč kontrol pro MTKM.Store (Gabro) — jedno okno pro všechny kontroly.
+Spouštěč kontrol pro MTKM.Store (Gabro) — kontroly na PC ovládané z aplikace SKLAD.
 
-Spouští se dvojklikem na KONTROLY.pyw (bez černého okna příkazové řádky).
-U každé kontroly je vidět, kdy běžela, jak dopadla a co právě dělá;
-nahoře „Spustit vše“. Kontroly bez prohlížeče běží naráz (SOUBEZNE),
-kontroly přes prohlížeč kontrol (Tnsky, KLEKT…) jedna po druhé — sdílejí
-jeden profil a dva Chromy na něm spustit nejde.
+Nemá vlastní okno. Ovládá se v aplikaci SKLAD → Kontroly listingů
+(i z mobilu): Spustit vše, jednotlivé kontroly, Zastavit, Přihlásit
+v okně, stav a výpis při chybě. Aplikace a PC si předávají pokyny
+a stav přes Firestore (kolekce spoustec, viz Agent níž).
 
-Po zapnutí PC (přepínač „Spouštět po zapnutí PC“, zápis do registru
-Windows, nic se neinstaluje) se okno otevře jen jako ikona na liště
-a pustí všechny kontroly samo. Neotravuje: když všechno projde, neozve
-se; když něco potřebuje tebe (přihlášení, chyba), přijde jedno oznámení
-Windows. Po zapnutí do ODSTUP_PO_ZAPNUTI od posledního běhu se nespouští
-nic — restart PC kvůli aktualizaci nemá pouštět kontroly znovu.
+Dvojklik na KONTROLY.pyw spustí spouštěč na pozadí (bez černého okna)
+a otevře aplikaci. Kontroly bez prohlížeče běží naráz (SOUBEZNE),
+kontroly přes prohlížeč kontrol (Tnsky, KLEKT…) jedna po druhé —
+sdílejí jeden profil a dva Chromy na něm spustit nejde.
+
+Po zapnutí PC (zapíná se samo při prvním spuštění, vypnout jde
+v aplikaci; zápis do registru Windows, nic se neinstaluje) běží
+spouštěč tiše na pozadí a pustí všechny kontroly. Neotravuje: když
+všechno projde, neozve se; když něco potřebuje tebe (přihlášení,
+chyba), přijde jedno oznámení Windows. Po zapnutí do ODSTUP_PO_ZAPNUTI
+od posledního běhu se nespouští nic — restart PC kvůli aktualizaci
+nemá pouštět kontroly znovu.
 
 Kontroly se pouštějí bez okna a bez klávesnice (SKLAD_BEZ_PTANI=1):
 kde by se kontrola ptala na heslo nebo čekala na Enter, skončí hláškou
-„Potřeba přihlásit“ a tady se ukáže tlačítko „V okně“ — pustí kontrolu
-postaru přes SPUSTIT_*.bat, kde se dá přihlásit. Prohlížeč kontrol běží
-skrytý; web, který prohlížeč bez okna nepustí (ověření Cloudflare), se
-zkusí podruhé s oknem mimo obrazovku a spouštěč si to u něj zapamatuje.
+„Potřeba přihlásit“ a aplikace nabídne „Přihlásit na PC“ — pustí
+kontrolu postaru přes SPUSTIT_*.bat, kde se dá přihlásit. Prohlížeč
+kontrol běží skrytý; web, který prohlížeč bez okna nepustí (ověření
+Cloudflare), se zkusí podruhé s oknem mimo obrazovku a spouštěč si to
+u něj zapamatuje.
 
-Výpis každého běhu je v <kontrola>/posledni_beh.txt (tlačítko Výpis).
-Stav spouštěče je v %LOCALAPPDATA%\\MTKM-kontroly\\spoustec.json — mimo
-Google Disk, ať se dvě PC nepřepisují.
+Výpis každého běhu je v <kontrola>/posledni_beh.txt, deník spouštěče
+v %LOCALAPPDATA%\\MTKM-kontroly\\spoustec_log.txt, stav v spoustec.json
+tamtéž — mimo Google Disk, ať se dvě PC nepřepisují.
 
 V repozitáři: nastroje/spoustec.py, hlídá to test/test-spoustec.js.
 """
@@ -245,7 +251,9 @@ class Spoustec:
             self.s(klic).update(stav=v["stav"], zprava=v["zprava"], poslano=v["poslano"],
                                 konec=time.time(), trvani=round(time.time() - zac), radek="")
             if v["stav"] == "ok":
-                self.s(klic).update(souhrn=v["souhrn"], posledni_ok=time.time())
+                self.s(klic).update(souhrn=v["souhrn"], posledni_ok=time.time(), vypis="")
+            else:   # konec výpisu, ať jde chyba přečíst i z mobilu
+                self.s(klic)["vypis"] = "\n".join([r for r in text.replace("\r", "\n").split("\n") if r.strip()][-25:])[-3000:]
         self.uloz()
 
     def spust(self, klic):
@@ -459,299 +467,228 @@ def jediny(port=PORT_ZAMKU):
         return None
 
 
-# ── Okno ────────────────────────────────────────────────────────────────
-
-BARVY = dict(bg="#0f0f0f", surface="#181818", surface2="#222222", surface3="#2a2a2a", border="#2e2e2e",
-             accent="#c8ff00", accent2="#ff6b35", text="#f0f0f0", muted="#777777", muted2="#555555",
-             danger="#ff4444", warning="#ffaa00")
-STAVY = {   # stav → (barva tečky, popisek)
-    "ok": ("accent", "V pořádku"), "rucne": ("accent", "V okně"), "chyba": ("danger", "Chyba"),
-    "prihlasit": ("warning", "Přihlásit"), "bezi": ("warning", "Běží"), "ceka": ("muted", "Čeká"),
-    "okno": ("warning", "V okně"), "nevi": ("muted2", "Nedoběhlo"), None: ("muted2", "Ještě neběželo"),
-}
 
 
-def kdy(ts):
+# ── Spojení s aplikací SKLAD ────────────────────────────────────────────
+#
+# Spouštěč nemá vlastní okno (majitel, 13. 11. 2026: okno v tkinteru
+# „vypadá staře“). Ovládá se z aplikace SKLAD, okno Kontroly listingů:
+# aplikace položí pokyn `spoustec/prikaz_…`, spouštěč ho do DOTAZ_S
+# vyzvedne, provede a smaže, a do `spoustec/pc` zapisuje, co dělá.
+# Funguje odkudkoli, i z mobilu — jen PC musí být zapnuté.
+#
+# Pokyn smí založit jedině majitel (pravidla Firestore, blok spoustec);
+# spouštěč běží pod účtem čtečky a smí jen číst, zapsat `pc` a smazat
+# vyřízený pokyn. Pokyn nese jen „co“ a „kterou kontrolu“ — žádný příkaz
+# ani cestu, spustit jde jedině kontrola, kterou spouštěč sám našel.
+
+ADRESA_APLIKACE = "https://sklad.mtkm-resell.workers.dev/#kontroly"
+KOLEKCE = "spoustec"
+PRIKAZ_PREFIX = "prikaz_"
+PRIKAZ_STARY_S = 10 * 60   # pokyn starší než 10 min se neprovede (PC bylo vypnuté)
+DOTAZ_S = 10               # jak často se ptá na pokyny
+TEP_S = 120                # stav aspoň jednou za 2 min — podle toho aplikace pozná zapnuté PC
+ZAPIS_ODSTUP_S = 3         # při běhu kontrol stav nejvýš jednou za 3 s
+AKCE = ("vse", "spust", "zastav", "okno", "po_zapnuti")
+LOG = os.path.join(DATA, "spoustec_log.txt")
+
+
+def _iso(ts):
     if not ts:
-        return ""
-    t, ted = time.localtime(ts), time.localtime()
-    hod = time.strftime("%H:%M", t)
-    if t.tm_yday == ted.tm_yday and t.tm_year == ted.tm_year:
-        return "dnes " + hod
-    if time.localtime(time.time() - 86400).tm_yday == t.tm_yday:
-        return "včera " + hod
-    return time.strftime("%d. %m. ", t).lstrip("0").replace(" 0", " ") + hod
+        return None
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts))
 
 
-def trvani(s):
-    s = int(s or 0)
-    return "%d s" % s if s < 60 else "%d min %02d s" % (s // 60, s % 60)
+def _z_iso(t):
+    try:
+        import calendar
+        return calendar.timegm(time.strptime(str(t)[:19], "%Y-%m-%dT%H:%M:%S"))
+    except (ValueError, TypeError):
+        return None
 
 
-def okno(sp, po_zapnuti=False, zamek=None):
-    import tkinter as tk
-    from tkinter import messagebox
-    B = BARVY
-    win = os.name == "nt"
-    F_NADPIS = ("Bahnschrift SemiBold", 17) if win else ("DejaVu Sans", 15, "bold")
-    F_JMENO = ("Segoe UI Semibold", 11) if win else ("DejaVu Sans", 10, "bold")
-    F = ("Segoe UI", 10) if win else ("DejaVu Sans", 9)
-    F_MALE = ("Segoe UI", 9) if win else ("DejaVu Sans", 8)
-    F_MONO = ("Consolas", 9) if win else ("DejaVu Sans Mono", 8)
+def zapis_log(text):
+    """Krátký deník spouštěče (bez okna se jinak nedá zjistit, co se dělo)."""
+    try:
+        os.makedirs(DATA, exist_ok=True)
+        if os.path.exists(LOG) and os.path.getsize(LOG) > 200000:
+            os.replace(LOG, LOG + ".stary")
+        with open(LOG, "a", encoding="utf-8") as f:
+            f.write("%s  %s\n" % (time.strftime("%d.%m. %H:%M:%S"), text))
+    except OSError:
+        pass
 
-    root = tk.Tk()
-    root.title("MTKM kontroly")
-    root.configure(bg=B["bg"])
-    root.geometry("860x720")
-    root.minsize(640, 420)
-    if po_zapnuti:
-        root.iconify()     # po zapnutí PC jen ikona na liště — nepřekáží
 
-    def tlacitko(rodic, text, prikaz, hlavni=False, male=False):
-        bg, fg, hov = (B["accent"], "#000", "#d8ff4d") if hlavni else (B["surface2"], B["text"], B["surface3"])
-        l = tk.Label(rodic, text=text, bg=bg, fg=fg, font=(F_JMENO if hlavni and not male else F_MALE if male else F),
-                     padx=12 if not male else 9, pady=6 if not male else 3, cursor="hand2",
-                     highlightthickness=0 if hlavni else 1, highlightbackground=B["border"])
-        l.bind("<Enter>", lambda e: l.configure(bg=hov))
-        l.bind("<Leave>", lambda e: l.configure(bg=bg))
-        l.bind("<Button-1>", lambda e: prikaz())
-        return l
+class Cloud:
+    """Firestore pro spouštěč: čte pokyny, zapisuje jen `pc`, maže jen pokyny."""
 
-    # Hlavička
-    hl = tk.Frame(root, bg=B["surface"], padx=20, pady=14)
-    hl.pack(fill="x")
-    tk.Frame(root, bg=B["border"], height=1).pack(fill="x")
-    logo = tk.Frame(hl, bg=B["surface"])
-    logo.pack(side="left")
-    for text, barva in (("MTKM", "text"), (".", "accent"), ("  kontroly", "muted")):
-        tk.Label(logo, text=text, font=F_NADPIS, bg=B["surface"], fg=B[barva], padx=0, bd=0).pack(side="left")
+    def __init__(self, prihlaseni=None):
+        import sklad_firestore as S
+        self.S = S
+        self.prihlaseni = prihlaseni or S.prihlas
+        self._token, self._kdy = None, 0
 
-    vse_btn = tlacitko(hl, "Spustit vše", lambda: spust_vse(), hlavni=True)
-    vse_btn.pack(side="right")
+    def token(self):
+        if not self._token or time.time() - self._kdy > 50 * 60:   # token platí hodinu
+            self._token, self._kdy = self.prihlaseni(), time.time()
+        return self._token
 
-    po_var = {"on": je_po_zapnuti()}
-    po_lbl = tk.Label(hl, bg=B["surface"], font=F_MALE, cursor="hand2", padx=14)
-    po_lbl.pack(side="right")
+    def _url(self, jmeno=""):
+        return self.S.FS_BASE + "/users/" + self.S.MAJITEL_UID + "/" + KOLEKCE + ("/" + jmeno if jmeno else "")
 
-    def kresli_po():
-        po_lbl.configure(text=("●  Spouštět po zapnutí PC" if po_var["on"] else "○  Spouštět po zapnutí PC"),
-                         fg=B["accent"] if po_var["on"] else B["muted"])
+    def _odpoved(self, status, co):
+        if status == 401:
+            self._token = None
+        if status == 403:
+            raise self.S.ChybaSkladu("Cloud odmítl %s (403) — v konzoli Firebase chybí blok spoustec "
+                                     "z firestore.rules." % co)
+        if status not in (200, 404):
+            raise self.S.ChybaSkladu("Cloud: %s selhalo (%s)." % (co, status))
 
-    def prepni_po(_e=None):
-        if not win:
-            return
+    def prikazy(self):
+        status, j = self.S._http(self._url() + "?pageSize=50", token=self.token())
+        self._odpoved(status, "čtení pokynů")
+        out = []
+        for d in (j or {}).get("documents", []) if status == 200 else []:
+            jmeno = d["name"].rsplit("/", 1)[-1]
+            if re.match(r"^%s[A-Za-z0-9_-]{1,60}$" % PRIKAZ_PREFIX, jmeno):
+                out.append((jmeno, self.S.rozbal_pole(d.get("fields"))))
+        return out
+
+    def zapis_stav(self, obsah):
+        telo = {"fields": self.S.zabal(obsah)["mapValue"]["fields"]}
+        status, _ = self.S._http(self._url("pc"), telo, token=self.token(), metoda="PATCH")
+        self._odpoved(status, "zápis stavu")
+
+    def smaz_prikaz(self, jmeno):
+        if not re.match(r"^%s[A-Za-z0-9_-]{1,60}$" % PRIKAZ_PREFIX, jmeno):
+            raise ValueError("mazat se smí jen pokyn")
+        status, _ = self.S._http(self._url(jmeno), token=self.token(), metoda="DELETE")
+        self._odpoved(status, "smazání pokynu")
+
+
+class Agent:
+    """Spojka mezi aplikací a spouštěčem. krok() = jedno kolo: pokyny + stav."""
+
+    def __init__(self, sp, cloud=None):
+        self.sp, self.cloud = sp, cloud or Cloud()
+        self.vyrizene = set()          # pokyn, který se nepovedlo smazat, se neprovede dvakrát
+        self.posledni_obsah, self.posledni_zapis = None, 0
+        self.chyba = ""
+
+    def stav_pro_aplikaci(self):
+        with self.sp.zamek:
+            kontroly = []
+            for k in self.sp.kontroly:
+                s = dict(self.sp.s(k["klic"]))
+                kontroly.append({
+                    "klic": k["klic"], "nazev": k["nazev"], "prohlizec": k["prohlizec"], "rucni": bool(k["rucni"]),
+                    "stav": s.get("stav") or "", "zprava": s.get("zprava") or "", "souhrn": s.get("souhrn") or "",
+                    "radek": s.get("radek") or "", "zacatek": _iso(s.get("zacatek")), "konec": _iso(s.get("konec")),
+                    "trvani": int(s.get("trvani") or 0), "poslano": bool(s.get("poslano")),
+                    "vypis": s.get("vypis") or "" if s.get("stav") in ("chyba", "prihlasit") else "",
+                })
+            return {
+                "po_zapnuti": je_po_zapnuti(), "vse_bezi": bool(self.sp.vse_bezi),
+                "posledni_vse": _iso(self.sp.stav.get("posledni_vse")),
+                "posledni_vse_trvani": int(self.sp.stav.get("posledni_vse_trvani") or 0),
+                "info": self.sp.info or "", "pocitac": (os.environ.get("COMPUTERNAME") or "")[:40],
+                "kontroly": kontroly,
+            }
+
+    def proved(self, data):
+        """Jeden pokyn z aplikace. Vrací, co se udělalo (pro deník)."""
+        co, klic = (data or {}).get("co"), (data or {}).get("klic")
+        znama = any(k["klic"] == klic for k in self.sp.kontroly)
+        kdy = _z_iso((data or {}).get("kdy"))
+        if co not in AKCE:
+            return "neznámý pokyn"
+        if not kdy or time.time() - kdy > PRIKAZ_STARY_S:
+            return "starý pokyn, neprovádí se"
+        if co == "vse":
+            self.sp.spust_vse(self.po_vsem)
+        elif co == "spust" and znama:
+            self.sp.spust(klic)
+        elif co == "zastav":
+            self.sp.zastav(klic if znama else None)
+        elif co == "okno" and znama:
+            self.sp.v_okne(klic)
+        elif co == "po_zapnuti" and os.name == "nt":
+            nastav_po_zapnuti(bool(data.get("zapnout")))
+        else:
+            return "pokyn bez platné kontroly"
+        return "provedeno: %s %s" % (co, klic or "")
+
+    def po_vsem(self, sh):
+        pass
+
+    def krok(self):
         try:
-            nastav_po_zapnuti(not po_var["on"])
-            po_var["on"] = je_po_zapnuti()
-        except OSError as e:
-            messagebox.showerror("MTKM kontroly", "Nepovedlo se: %s" % e)
-        kresli_po()
-    po_lbl.bind("<Button-1>", prepni_po)
-    kresli_po()
-
-    # Pruh se souhrnem
-    pruh = tk.Frame(root, bg=B["bg"], padx=20, pady=12)
-    pruh.pack(fill="x")
-    dlazdice = {}
-    for klic, popis, barva in (("ok", "V pořádku", "accent"), ("prihlasit", "Přihlásit", "warning"),
-                               ("chyba", "Chyby", "danger"), ("bezi", "Běží", "text")):
-        d = tk.Frame(pruh, bg=B["surface"], padx=16, pady=8, highlightthickness=1, highlightbackground=B["border"])
-        d.pack(side="left", padx=(0, 9))
-        tk.Label(d, text=popis.upper(), font=F_MONO, bg=B["surface"], fg=B["muted"]).pack(anchor="w")
-        v = tk.Label(d, text="0", font=F_NADPIS, bg=B["surface"], fg=B[barva])
-        v.pack(anchor="w")
-        dlazdice[klic] = v
-    info = tk.Label(pruh, text="", font=F_MALE, bg=B["bg"], fg=B["muted"], justify="right")
-    info.pack(side="right")
-
-    # Seznam kontrol (rolovací)
-    obal = tk.Frame(root, bg=B["bg"])
-    obal.pack(fill="both", expand=True, padx=(20, 8), pady=(0, 14))
-    platno = tk.Canvas(obal, bg=B["bg"], highlightthickness=0, bd=0)
-    posuv = tk.Scrollbar(obal, orient="vertical", command=platno.yview, width=10)
-    seznam = tk.Frame(platno, bg=B["bg"])
-    okno_id = platno.create_window((0, 0), window=seznam, anchor="nw")
-    platno.configure(yscrollcommand=posuv.set)
-    platno.pack(side="left", fill="both", expand=True)
-    posuv.pack(side="right", fill="y")
-    seznam.bind("<Configure>", lambda e: platno.configure(scrollregion=platno.bbox("all")))
-    platno.bind("<Configure>", lambda e: platno.itemconfigure(okno_id, width=e.width - 10))
-    root.bind_all("<MouseWheel>", lambda e: platno.yview_scroll(int(-e.delta / 120), "units"))
-    root.bind_all("<Button-4>", lambda e: platno.yview_scroll(-1, "units"))
-    root.bind_all("<Button-5>", lambda e: platno.yview_scroll(1, "units"))
-
-    radky = {}
-    for k in sp.kontroly:
-        r = tk.Frame(seznam, bg=B["surface"], padx=14, pady=10, highlightthickness=1, highlightbackground=B["border"])
-        r.pack(fill="x", pady=(0, 7))
-        tecka = tk.Canvas(r, width=12, height=12, bg=B["surface"], highlightthickness=0)
-        tecka.create_oval(1, 1, 11, 11, fill=B["muted2"], outline="", tags="t")
-        tecka.grid(row=0, column=0, rowspan=2, padx=(0, 12), sticky="n", pady=5)
-        hlavni = tk.Frame(r, bg=B["surface"])
-        hlavni.grid(row=0, column=1, sticky="we")
-        tk.Label(hlavni, text=k["nazev"], font=F_JMENO, bg=B["surface"], fg=B["text"]).pack(side="left")
-        stav_l = tk.Label(hlavni, text="", font=F_MONO, bg=B["surface"], fg=B["muted"], padx=10)
-        stav_l.pack(side="left")
-        cas_l = tk.Label(hlavni, text="", font=F_MONO, bg=B["surface"], fg=B["muted"])
-        cas_l.pack(side="right")
-        popis = tk.Label(r, text="", font=F_MALE, bg=B["surface"], fg=B["muted"], justify="left", anchor="w")
-        popis.grid(row=1, column=1, sticky="we", pady=(3, 0))
-        tl = tk.Frame(r, bg=B["surface"])
-        tl.grid(row=0, column=2, rowspan=2, padx=(14, 0))
-        r.columnconfigure(1, weight=1)
-        r.bind("<Configure>", lambda e, p=popis: p.configure(wraplength=max(200, e.width - 330)))
-        b_spust = tlacitko(tl, "Spustit", lambda kl=k["klic"]: sp.spust(kl), male=True)
-        b_vypis = tlacitko(tl, "Výpis", lambda kk=k: ukaz_vypis(kk), male=True)
-        b_okno = tlacitko(tl, "V okně", lambda kl=k["klic"]: sp.v_okne(kl), male=True)
-        b_stop = tlacitko(tl, "Zastavit", lambda kl=k["klic"]: zastav_jednu(kl), male=True)
-        b_prihl = tlacitko(tl, "Přihlásit v okně", lambda kl=k["klic"]: sp.v_okne(kl), hlavni=True, male=True)
-        radky[k["klic"]] = dict(tecka=tecka, stav=stav_l, cas=cas_l, popis=popis, spust=b_spust, vypis=b_vypis,
-                                okno=b_okno, stop=b_stop, prihl=b_prihl, posledni=None)
-
-    def zastav_jednu(klic):
-        sp.zastav(klic)
-
-    tocit = "◐◓◑◒"
-
-    def obnov():
-        """Mění jen texty a barvy — okno se nepřestavuje, takže nebliká."""
-        ted = time.time()
-        for k in sp.kontroly:
-            with sp.zamek:
-                s = dict(sp.s(k["klic"]))
-            st = s.get("stav")
-            barva, popisek = STAVY.get(st, STAVY[None])
-            if st in ("bezi", "okno"):
-                popisek = "%s %s · %s" % (tocit[int(ted * 4) % 4], popisek, trvani(ted - (s.get("zacatek") or ted)))
-            if k["rucni"] and st is None:
-                popisek = "Ručně"
-            if st in ("bezi", "ceka", "okno"):
-                text, fg = s.get("radek") or "", B["text"]
-            elif st in ("chyba", "prihlasit"):
-                text, fg = s.get("zprava") or "", B[barva]
-            else:
-                text, fg = s.get("souhrn") or (k["rucni"] or ""), B["muted"]
-                if st == "ok" and not s.get("poslano"):
-                    text += "  (nic se neposlalo)"
-            cas = ""
-            if s.get("konec") and st not in ("bezi", "ceka", "okno"):
-                cas = "%s · %s" % (kdy(s["konec"]), trvani(s.get("trvani")))
-            if st == "ok" and s.get("posledni_ok") and ted - s["posledni_ok"] > 2 * 86400:
-                barva = "warning"
-            novy = (barva, popisek, text, fg, cas, st)
-            r = radky[k["klic"]]
-            if novy == r["posledni"]:
-                continue
-            r["posledni"] = novy
-            r["tecka"].itemconfigure("t", fill=B[barva])
-            r["stav"].configure(text=popisek, fg=B[barva] if st else B["muted2"])
-            r["popis"].configure(text=text, fg=fg)
-            r["cas"].configure(text=cas)
-            bezi = st in ("bezi", "ceka", "okno")
-            for nazev in ("spust", "okno", "stop", "prihl", "vypis"):
-                r[nazev].pack_forget()
-            if st in ("bezi", "ceka"):
-                r["stop"].pack(side="left", padx=(6, 0))
-            elif st == "prihlasit" and os.path.exists(k["bat"]):
-                r["prihl"].pack(side="left", padx=(6, 0))
-            elif not bezi:
-                if not k["rucni"]:
-                    r["spust"].pack(side="left", padx=(6, 0))
-                if os.path.exists(k["bat"]):
-                    r["okno"].pack(side="left", padx=(6, 0))
-            if os.path.exists(os.path.join(k["slozka"], VYPIS)) and st not in ("okno", "rucne"):
-                r["vypis"].pack(side="left", padx=(6, 0))
-        sh = sp.souhrn()
-        for klic, lbl in dlazdice.items():
-            lbl.configure(text=str(sh[klic]))
-        posl = sp.stav.get("posledni_vse")
-        t = ("Všechny naposledy: %s · %s" % (kdy(posl), trvani(sp.stav.get("posledni_vse_trvani")))) \
-            if posl else "Všechny ještě neběžely."
-        info.configure(text=t + ("\n" + sp.info if sp.info and not sh["bezi"] else ""))
-        vse_btn.configure(text="Zastavit vše" if sp.vse_bezi else "Spustit vše")
-        if sh["bezi"]:
-            root.title("MTKM kontroly — běží %d" % sh["bezi"])
-        elif sh["chyba"] + sh["prihlasit"]:
-            root.title("MTKM kontroly — ! %d chce pozornost" % (sh["chyba"] + sh["prihlasit"]))
-        else:
-            root.title("MTKM kontroly")
-        if zamek is not None and ukazat["ano"]:
-            ukazat["ano"] = False
-            root.deiconify()
-            root.lift()
-        root.after(400, obnov)
-
-    def spust_vse():
-        if sp.vse_bezi:
-            sp.zastav()
-        else:
-            sp.spust_vse()
-
-    vypisy = {}
-
-    def ukaz_vypis(k):
-        if k["klic"] in vypisy and vypisy[k["klic"]].winfo_exists():
-            vypisy[k["klic"]].lift()
-            return
-        t = tk.Toplevel(root, bg=B["bg"])
-        vypisy[k["klic"]] = t
-        t.title("Výpis — %s" % k["nazev"])
-        t.geometry("820x560")
-        horni = tk.Frame(t, bg=B["surface"], padx=14, pady=10)
-        horni.pack(fill="x")
-        tk.Label(horni, text=k["nazev"], font=F_JMENO, bg=B["surface"], fg=B["text"]).pack(side="left")
-        tlacitko(horni, "Otevřít složku", lambda: os.startfile(k["slozka"]) if win else None, male=True).pack(side="right")
-        txt = tk.Text(t, bg=B["bg"], fg=B["text"], font=F_MONO, bd=0, padx=14, pady=10, wrap="word",
-                      insertbackground=B["text"], highlightthickness=0)
-        txt.pack(fill="both", expand=True)
-        txt.tag_configure("chyba", foreground=B["danger"])
-        txt.tag_configure("hotovo", foreground=B["accent"])
-        stav = {"velikost": -1}
-
-        def nacti():
-            if not t.winfo_exists():
-                return
-            cesta = os.path.join(k["slozka"], VYPIS)
-            try:
-                vel = os.path.getsize(cesta)
-                if vel != stav["velikost"]:
-                    stav["velikost"] = vel
-                    with open(cesta, encoding="utf-8", errors="replace") as f:
-                        obsah = f.read()
-                    dole = txt.yview()[1] > 0.98
-                    txt.configure(state="normal")
-                    txt.delete("1.0", "end")
-                    for r in obsah.splitlines(True):
-                        tag = "chyba" if r.startswith("!!!") else ("hotovo" if "HOTOVO" in r or r.startswith("Posláno") else "")
-                        txt.insert("end", r, tag)
-                    txt.configure(state="disabled")
-                    if dole or stav["velikost"] == vel and sp.bezi(k["klic"]):
-                        txt.see("end")
-            except OSError:
-                pass
-            t.after(700, nacti)
-        nacti()
-
-    def zavrit():
-        if sp.bezi() and not messagebox.askyesno("MTKM kontroly", "Kontroly ještě běží. Zastavit je a zavřít okno?"):
-            return
-        sp.zastav()
-        root.destroy()
-    root.protocol("WM_DELETE_WINDOW", zavrit)
-
-    ukazat = {"ano": False}
-    if zamek is not None:
-        def poslouchej():
-            while True:
+            for jmeno, data in sorted(self.cloud.prikazy(), key=lambda x: str(x[1].get("kdy"))):
+                if jmeno in self.vyrizene:
+                    continue
+                self.vyrizene.add(jmeno)
+                zapis_log("%s → %s" % (jmeno, self.proved(data)))
                 try:
-                    c, _ = zamek.accept()
-                    c.close()
-                    ukazat["ano"] = True
-                except OSError:
-                    return
-        threading.Thread(target=poslouchej, daemon=True).start()
+                    self.cloud.smaz_prikaz(jmeno)
+                except Exception as e:
+                    zapis_log("pokyn %s se nesmazal: %s" % (jmeno, e))
+            obsah = self.stav_pro_aplikaci()
+            ted = time.time()
+            zmena = obsah != self.posledni_obsah
+            if (zmena and ted - self.posledni_zapis >= ZAPIS_ODSTUP_S) or ted - self.posledni_zapis >= TEP_S:
+                self.cloud.zapis_stav(dict(obsah, tep=_iso(ted)))
+                self.posledni_obsah, self.posledni_zapis = obsah, ted
+            if self.chyba:
+                zapis_log("spojení s aplikací zase jede")
+            self.chyba = ""
+        except Exception as e:
+            if str(e) != self.chyba:
+                zapis_log("spojení s aplikací: %s" % e)
+            self.chyba = str(e)
 
-    if po_zapnuti:
+    def bez_konce(self):
+        while True:
+            self.krok()
+            # při běhu kontrol se stav posílá častěji, ať je v aplikaci vidět průběh
+            konec = time.time() + (DOTAZ_S if not self.chyba else 60)
+            while time.time() < konec:
+                time.sleep(1)
+                if self.sp.bezi() and time.time() - self.posledni_zapis >= ZAPIS_ODSTUP_S \
+                        and self.stav_pro_aplikaci() != self.posledni_obsah:
+                    break
+
+
+def otevri_aplikaci():
+    try:
+        import webbrowser
+        webbrowser.open(ADRESA_APLIKACE)
+    except Exception:
+        pass
+
+
+def main(argv):
+    """Dvojklik na KONTROLY.pyw: spustí spouštěč na pozadí (když neběží)
+    a otevře aplikaci SKLAD na okně Kontroly listingů. Po zapnutí PC
+    (--po-zapnuti) jen tiše na pozadí a pustí všechny kontroly."""
+    po = "--po-zapnuti" in argv
+    zamek = jediny()
+    if zamek is None:              # už běží — stačí ukázat aplikaci
+        if not po:
+            otevri_aplikaci()
+        return 0
+    sp = Spoustec()
+    zapis_log("spouštěč běží" + (" (po zapnutí PC)" if po else ""))
+    # Poprvé se rovnou zapne spouštění po zapnutí PC — o to majitel stál
+    if os.name == "nt" and not sp.stav.get("po_zapnuti_nastaveno"):
+        try:
+            nastav_po_zapnuti(True)
+            sp.stav["po_zapnuti_nastaveno"] = True
+            sp.uloz()
+        except OSError as e:
+            zapis_log("spuštění po zapnutí se nenastavilo: %s" % e)
+    ag = Agent(sp)
+    if po:
         def hotovo(sh):
             if sh["chyba"] or sh["prihlasit"]:
                 casti = []
@@ -759,21 +696,14 @@ def okno(sp, po_zapnuti=False, zamek=None):
                     casti.append("%d potřebuje přihlásit" % sh["prihlasit"])
                 if sh["chyba"]:
                     casti.append("%d skončilo chybou" % sh["chyba"])
-                oznameni("Kontroly doběhly", ", ".join(casti) + ". Otevři okno MTKM kontroly.")
+                oznameni("Kontroly doběhly", ", ".join(casti) + ". Podrobnosti v SKLADu → Kontroly listingů.")
 
         def start():
             sp.info = sp.po_zapnuti(hotovo) or ""
         threading.Thread(target=start, daemon=True).start()
-
-    obnov()
-    root.mainloop()
-
-
-def main(argv):
-    zamek = jediny()
-    if zamek is None:
-        return 0           # spouštěč už běží — ukáže se ten
-    okno(Spoustec(), po_zapnuti="--po-zapnuti" in argv, zamek=zamek)
+    else:
+        otevri_aplikaci()
+    ag.bez_konce()
     return 0
 
 
