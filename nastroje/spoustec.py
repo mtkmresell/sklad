@@ -954,7 +954,8 @@ def main(argv):
         obnov_v_registru()
     except OSError as e:
         zapis_log("obnova záznamu v Po spuštění se nepovedla: %s" % e)
-    zastupce_na_plose(sp)
+    # zástupce na pozadí — PowerShell trvá pár vteřin a okno nemá čekat
+    threading.Thread(target=zastupce_na_plose, args=(sp,), daemon=True).start()
     ag = Agent(sp)
     if po:
         def hotovo(sh):

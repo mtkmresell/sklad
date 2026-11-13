@@ -1539,9 +1539,13 @@ a vlastní AppUserModelID pro ikonu na liště), rozměry se násobí
 a kulatými konci (plátno Tk vyhlazovat neumí) a s texty stojí
 **uprostřed okna** (`place`, ať je okno jakkoli velké). Patička
 „Připojeno ke SKLAD.". Ikona `sklad_kontroly.ico` (bílé S, limetková
-tečka a prstenec, jako logo aplikace; PNG uvnitř, 16–256 px) je
+tečka a prstenec, jako logo aplikace; 16–256 px, **obrázky BMP, ne PNG**
+— Tk ve Windows PNG uvnitř .ico neumí a mohl tím shodit celý program) je
 v okně, na liště a na zástupci, který se jednou založí na ploše
-(`zastupce_na_plose`; smazaný se nevrací). Bez tkinteru jede spouštěč
+(`zastupce_na_plose`; smazaný se nevrací). **Pád při startu se nesmí ztratit**: `.pyw` nemá konzoli, takže
+`SKLAD. kontroly.pyw` každou chybu (i tvrdý pád přes `faulthandler`)
+zapíše do `chyba_spoustece.txt` vedle sebe (na Disku, Claude si ho
+přečte) a ukáže hlášku. Bez tkinteru jede spouštěč
 bez okna. Dvojklik na `SKLAD. kontroly.pyw` (dřív `KONTROLY.pyw`;
 záznam v Po spuštění se při každém startu přepíše na aktuální cestu,
 `obnov_v_registru`)

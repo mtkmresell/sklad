@@ -311,6 +311,20 @@ print(json.dumps({'n': len(im.rows), 'roh': im.rows[0][0], 'barev': len(barvy), 
     && kol.barev > 20 && kol.akcent && kol.stejny, JSON.stringify(kol));
   ok('patička „Připojeno ke SKLAD.“', /Připojeno ke SKLAD\. · /.test(kod12) && !/Spojeno se SKLADem/.test(kod12));
   ok('stav mimo Google Disk (LOCALAPPDATA)', /LOCALAPPDATA/.test(kod12));
+  // Pád při startu se nesmí ztratit (pythonw nemá konzoli): zapíše se do chyba_spoustece.txt
+  const padDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pad-'));
+  fs.copyFileSync(path.join(NASTROJE, 'SKLAD. kontroly.pyw'), path.join(padDir, 'SKLAD. kontroly.pyw'));
+  fs.writeFileSync(path.join(padDir, 'spoustec.py'), 'def main(argv):\n    raise ValueError("rozbitá ikona")\n');
+  const pad = await new Promise(res => execFile('python3', [path.join(padDir, 'SKLAD. kontroly.pyw')], (e) => res(e ? e.code : 0)));
+  const chyba = fs.existsSync(path.join(padDir, 'chyba_spoustece.txt')) ? fs.readFileSync(path.join(padDir, 'chyba_spoustece.txt'), 'utf8') : '';
+  ok('pád při startu se zapíše do chyba_spoustece.txt (vedle souboru, na Disku)', pad === 1 && /ValueError: rozbitá ikona/.test(chyba), pad + ' ' + chyba);
+  ok('prázdný záznam tvrdého pádu se uklidí', !fs.existsSync(path.join(padDir, 'chyba_spoustece.txt.pad')));
+  fs.writeFileSync(path.join(padDir, 'spoustec.py'), 'def main(argv):\n    return 0\n');
+  await new Promise(res => execFile('python3', [path.join(padDir, 'SKLAD. kontroly.pyw')], () => res()));
+  ok('po úspěšném startu stará chyba zmizí', !fs.existsSync(path.join(padDir, 'chyba_spoustece.txt')));
+  const ico2 = fs.readFileSync(path.join(NASTROJE, 'sklad_kontroly.ico'));
+  ok('ikona má klasické BMP obrázky, ne PNG (Tk PNG v .ico neumí)', [...Array(ico2.readUInt16LE(4)).keys()].every(i => {
+    const off = ico2.readUInt32LE(6 + 16 * i + 12); return ico2.readUInt32LE(off) === 40; }));
   // Majitel 13. 11. 2026: program se jmenuje „SKLAD. kontroly“ (okno, oznámení, Po spuštění)
   ok('jméno programu SKLAD. kontroly v okně i v Po spuštění', /NAZEV = "SKLAD\. kontroly"/.test(kod12) && /root\.title\(NAZEV\)/.test(kod12)
     && /JMENO_V_REGISTRU = NAZEV/.test(kod12) && !/root\.title\("MTKM/.test(kod12));
