@@ -546,6 +546,15 @@ u tlačítka jdou, do značek u kusů ne. Očistí je `_klInzeraty` v aplikaci,
 — **tvar se musí měnit na všech třech místech**; `test-skladpy.js` ho
 prohání celou cestou Python → aplikace → okno.
 
+**Místo kontroly mimo nastavení** (`MÍSTO KONTROLY MIMO NASTAVENÍ`,
+majitel 13. 11. 2026): WTB Market majitel mezi místy prodeje nemá
+(nejsou tam fajfky), výsledek kontroly ale chce v okně. Kontrola
+i report s `mimo: true` proto projdou i s místem mimo nastavení
+(`jeMistoKontroly`), jen se slušným jménem (`_klMistoMimo`, Python
+`mimo_nastaveni_ok`). **Bez `mimo` platí dál jen místa z nastavení**
+a fajfky (`zmeny`) jen pro skutečná místa — `jeMistoProdeje` se kvůli
+tomu neměnil. Hlídá to `test-kontroly.js`, sekce 11.
+
 **Report z kontroly na PC** (`REPORT KONTROLY`, 12. 11. 2026): skript
 artifact v Claudovi vyrobit nemůže, a majitel report používá — u e-shopů
 je v něm mnohem víc, než se vejde do okna (payouty, kopírovat vše), a
@@ -1455,9 +1464,12 @@ JS jako ve skillech** (`page.evaluate`), porovnání je v Pythonu podle
 `kontrola.py` skillů. Zápisy na cizí weby vždy, bez ptaní (`pred_odeslanim`, jen `--nahled` nic):
 Hypeboost prodlouží almost expired, KLEKT expiraci na 60 dní (bez IE5836).
 Released si pamatuje katalog v `katalog_released.json`. WTB bere text
-pingeru ze schránky (nebo `pinger.txt`); do aplikace pošle report jen
-když je „WTB Market" v nastavení míst prodeje — **aplikace i
-`posli_report` berou jen místa z nastavení**. **Žádná kontrola se neptá „a/n"** (majitel, 12. 11. 2026): náhled,
+pingeru **ze SKLADu** (`WTB PINGER VE SKLADU`, dokument
+`spoustec/wtb_pinger`, vkládá ho majitel v panelu Kontroly na PC), pak
+`pinger.txt`, schránku jen při ručním spuštění; jede automaticky
+s ostatními. Výsledek posílá **i bez „WTB Market" v nastavení míst** —
+kontrola a report nesou `mimo` (viz `MÍSTO KONTROLY MIMO NASTAVENÍ`
+u Kontrol listingů), fajfky žádné. **Žádná kontrola se neptá „a/n"** (majitel, 12. 11. 2026): náhled,
 prodloužení na webu a odeslání fajfek, kontroly i reportu proběhne samo
 (`dokonci_kontrolu`); `--nahled` jen ukáže. Zrychlení: stránky e-shopů
 a detaily inzerátů se čtou souběžně (`S.paralelne`, `S.stranky`; Bazoš
@@ -1512,7 +1524,7 @@ přihlášení do Windows a běží, dokud se PC nevypne. Kontroly se najdou sam
 (`<místo>/<místo>_kontrola.py`) — **nová kontrola spouštěč ani aplikaci
 neupravuje**. Bez prohlížeče běží naráz (`SOUBEZNE`), přes prohlížeč
 kontrol po jedné (sdílejí profil; pozná se podle `Prohlizec(` ve
-skriptu). WTB je ruční (`RUCNI`, bere schránku). Stav, deník
+skriptu). Ruční (`RUCNI`) teď není žádná — WTB bere pinger ze SKLADu. Stav, deník
 (`spoustec_log.txt`) a nastavení v `%LOCALAPPDATA%\MTKM-kontroly\`,
 výpis běhu v `<místo>/posledni_beh.txt`.
 

@@ -109,6 +109,7 @@ if hasattr(R, 'SOUBOR'):
     R.SOUBOR = tmp + '/pinger.txt'; open(R.SOUBOR, 'w', encoding='utf-8').write(vstup.get('pinger', ''))
 zapisy = []
 R.S.prihlas = lambda *a: 'token'
+R.S.nacti_pinger_wtb = lambda token, uid=None: (vstup.get('pinger_cloud', ''), '2026-11-13T09:30:00Z' if vstup.get('pinger_cloud') else None)
 R.S.nacti_sklad = lambda token, uid=None: ({'platGroups': vstup['mista'], 'savedAt': 'x'}, vstup['sklad'])
 def zapis(token, uid, jmeno, obsah):
     assert jmeno.startswith('pozadavek_')
@@ -222,8 +223,16 @@ const odeslano = (r, misto) => {
   ok('proběhne', r.j && !r.j.chyba, r.out.slice(-800));
   ok('Smazat s čísly z pingeru: #1 Yeezy (prodaný), #3 Black Cat 45 (není)', JSON.stringify((r.v.smazat || []).map(x => x.cislo)) === '[1,3]', JSON.stringify(r.v.smazat));
   ok('velikost M/L = M není chyba; Přidat jen Dunk', naz(r.v.pridat) === 'Nike Dunk Low Panda|42', naz(r.v.pridat));
+  /* Majitel 13. 11. 2026: výsledek WTB chce v aplikaci, i když WTB Market
+     nemá mezi místy prodeje. Kontrola i report jdou s `mimo`, fajfky ne. */
   r = await spust('wtb', [], 'a', { pinger: PINGER });
-  ok('WTB není v nastavení míst → nic se neposílá a řekne se, co doplnit', r.j && r.j.zapisy.length === 0 && /přidej „WTB Market“/.test(r.out), r.out.slice(-300));
+  o = odeslano(r);
+  ok('WTB není v nastavení míst → report i kontrola s mimo, žádné fajfky', o.rep && o.k && o.k.mimo === true && o.rep.obsah.mimo === true
+    && !o.z.some(x => x.obsah.zmeny && x.obsah.zmeny.length), JSON.stringify(o.z.map(x => x.jmeno)) + r.out.slice(-300));
+  r = await spust('wtb', ['--nahled'], '', { pinger: '', pinger_cloud: PINGER });
+  ok('pinger vložený ve SKLADu má přednost a jede z cloudu', r.j && !r.j.chyba && JSON.stringify((r.v.smazat || []).map(x => x.cislo)) === '[1,3]' && /ze SKLADu/.test(r.out), r.out.slice(-400));
+  r = await spust('wtb', ['--nahled'], '', { pinger: '', bez_ptani: true });
+  ok('bez pingeru skončí chybou s návodem, kam ho vložit', r.j && /Vložit pinger/.test(r.j.chyba), (r.j && r.j.chyba || '').slice(-300));
   r = await spust('wtb', [], 'a', { pinger: PINGER, mista: Object.assign({}, MISTA, { local: ['Facebook', 'WTB Market'] }) });
   o = odeslano(r);
   ok('s WTB Market v nastavení: report a kontrola, žádné fajfky', o.rep && o.k && o.k.misto === 'WTB Market' && !o.z.some(x => x.obsah.zmeny && x.obsah.zmeny.length)

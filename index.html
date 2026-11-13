@@ -1121,6 +1121,15 @@ a.kl-jmeno:hover { color:var(--accent); text-decoration:underline; }
 .pc-vypis-btn { font:inherit; font-size:11px; background:none; border:none; color:var(--muted); text-decoration:underline; cursor:pointer; margin-left:8px; padding:0; }
 .pc-vypis { font-family:'DM Mono',monospace; font-size:10.5px; color:var(--muted); background:var(--bg); border:1px solid var(--border);
   border-radius:8px; padding:9px 11px; margin-top:6px; white-space:pre-wrap; max-height:220px; overflow:auto; }
+.pc-pinger-info { display:block; color:var(--muted); font-size:11px; margin-top:2px; }
+.pc-radek .pc-mini + .pc-mini { margin-left:6px; }
+.pc-pinger-modal { max-width:620px; }
+.pc-pinger-napoveda { font-size:12px; color:var(--muted); margin:-6px 0 12px; line-height:1.5; }
+.pc-pinger-pole { width:100%; min-height:220px; max-height:55vh; resize:vertical; background:var(--surface2); color:var(--text);
+  border:1px solid var(--border); border-radius:10px; padding:11px 13px; font-family:'DM Mono',monospace; font-size:12px; line-height:1.55; outline:none; }
+.pc-pinger-pole:focus { border-color:var(--accent); }
+.pc-pinger-dole { display:flex; align-items:center; gap:8px; margin-top:12px; }
+.pc-pinger-pocet { flex:1; font-size:12px; color:var(--muted); font-family:'DM Mono',monospace; }
 .pc-po { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); padding:10px 8px 2px; border-top:1px solid var(--border); margin-top:6px; cursor:pointer; }
 .pc-po input { accent-color:var(--accent); width:15px; height:15px; cursor:pointer; }
 @media (max-width:600px) { .pc-sub { flex-basis:100%; order:5; } .pc-chips { display:none; } }
@@ -5918,10 +5927,22 @@ function _ulozKontroly(vse) {
 }
 
 // Co se z lístečku smí vzít a v jakém tvaru — dokument přijde po síti
+/* MÍSTO KONTROLY MIMO NASTAVENÍ (majitel, 13. 11. 2026): WTB Market
+   v nastavení míst prodeje mít nechce (není to platforma, fajfky nemá),
+   výsledek kontroly a report ale ano. Lísteček to musí říct výslovně
+   (`mimo: true`) a jméno musí vypadat jako jméno místa — dokument přijde
+   po síti. Fajfky na takové místo dál nejdou (togglePlatItem se ptá
+   jeMistoProdeje). Python má kopii v mimo_nastaveni_ok. */
+function _klMistoMimo(m) {
+  return typeof m === 'string' && m === m.trim() && /^[\p{L}\p{N}][\p{L}\p{N}_ .\-]{0,39}$/u.test(m);
+}
+function jeMistoKontroly(m, mimo) {
+  return jeMistoProdeje(m) || (mimo === true && _klMistoMimo(m));
+}
 function _kontrolaZListecku(v) {
   var k = v && v.kontrola;
   if (!k || typeof k !== 'object' || Array.isArray(k)) return null;
-  if (!jeMistoProdeje(k.misto)) return null;
+  if (!jeMistoKontroly(k.misto, k.mimo)) return null;
   var ids = function (a) {
     var out = [];
     (Array.isArray(a) ? a : []).forEach(function (id) {
@@ -5954,7 +5975,8 @@ function _kontrolaZListecku(v) {
     opravit: _klInzeraty(k.opravit, true),
     neniVeSkladu: _klInzeraty(k.neniVeSkladu, false),
     inzeratu: _klCislo(k.inzeratu),
-    limit: _klCislo(k.limit)
+    limit: _klCislo(k.limit),
+    mimo: !jeMistoProdeje(k.misto)
   };
 }
 function _klText(v, n) { return typeof v === 'string' ? v.trim().slice(0, n) : ''; }
@@ -5991,7 +6013,7 @@ function _kontrolaPrijmi(k) {
   nove[k.misto] = { misto: k.misto, datum: k.datum, report: k.report, web: k.web || (stara && stara.web) || '',
     chybi: k.chybi, smazat: k.smazat, nejde: k.nejde || [],
     opravit: k.opravit || [], neniVeSkladu: k.neniVeSkladu || [], inzeratu: k.inzeratu, limit: k.limit,
-    sFajfkou: sFajfkou, hotovo: [], hotovoInz: [], poznamka: k.poznamka, prijato: new Date().toISOString() };
+    mimo: k.mimo === true, sFajfkou: sFajfkou, hotovo: [], hotovoInz: [], poznamka: k.poznamka, prijato: new Date().toISOString() };
   _ulozKontroly(nove);
   return nove[k.misto];
 }
@@ -6175,7 +6197,7 @@ function kontrolyTlacitko() {
 function kontrolyZastarale() {
   var vse = getKontroly();
   return Object.keys(vse).filter(function (m) {
-    return vse[m] && vse[m].datum && jeMistoProdeje(m) && _klStari(vse[m].datum) > KONTROLA_STARA_DNI;
+    return vse[m] && vse[m].datum && jeMistoKontroly(m, vse[m].mimo) && _klStari(vse[m].datum) > KONTROLA_STARA_DNI;
   });
 }
 
@@ -6222,6 +6244,7 @@ function openKontroly(rozbalit) {
     // Kontroly na PC (SPOUŠTĚNÍ KONTROL Z APLIKACE)
     if (co === 'pc') { pcPokyn(t.dataset.co, t.dataset.klic || null); return; }
     if (co === 'pc-po') { pcPokyn('po_zapnuti', null, { zapnout: !!t.checked }); return; }
+    if (co === 'pc-pinger') { pcVlozPinger(); return; }
     if (co === 'pc-vypis') { _pcVypis[t.dataset.klic] = !_pcVypis[t.dataset.klic]; prekresli(); return; }
     if (co === 'pc-rozbal') {
       var sez = ov.querySelector('.pc-seznam');
@@ -6516,7 +6539,7 @@ function openKontroly(rozbalit) {
 ══════════════════════════════════════════════════════════════════════ */
 var PC_ONLINE_MS = 5 * 60 * 1000;
 var PC_ODESLANO_MS = 60 * 1000;     // „Odesláno…“, dokud PC nepotvrdí (pak se tlačítko vrátí)
-var _pc = { stav: null, nacteno: false, chyba: '' };
+var _pc = { stav: null, pinger: null, nacteno: false, chyba: '' };
 var _pcUnsub = null, _pcOdeslano = {}, _pcRozbaleno = false, _pcVypis = {};
 
 function _pcSpust() {
@@ -6527,9 +6550,12 @@ function _pcSpust() {
   var prvni = true;
   try {
     _pcUnsub = fns.onSnapshot(fns.collection(window._fbDb, 'users', uid, 'spoustec'), function (snap) {
-      var stav = null;
-      snap.forEach(function (d) { if (d.id === 'pc') stav = d.data() || null; });
-      _pc = { stav: stav, nacteno: true, chyba: '' };
+      var stav = null, pinger = null;
+      snap.forEach(function (d) {
+        if (d.id === 'pc') stav = d.data() || null;
+        if (d.id === 'wtb_pinger') pinger = d.data() || null;
+      });
+      _pc = { stav: stav, pinger: pinger, nacteno: true, chyba: '' };
       pcPrekresli();
       // Odkaz z PC (KONTROLY.pyw otevře …#kontroly) → rovnou okno kontrol
       if (prvni && location.hash === '#kontroly' && !jeUctetni()) {
@@ -6545,8 +6571,9 @@ function _pcSpust() {
 }
 function _pcZastav() {
   if (_pcUnsub) { try { _pcUnsub(); } catch (e) {} _pcUnsub = null; }
-  _pc = { stav: null, nacteno: false, chyba: '' };
+  _pc = { stav: null, pinger: null, nacteno: false, chyba: '' };
   _pcOdeslano = {};
+  var pv = document.getElementById('pcPingerOv'); if (pv) pv.remove();
 }
 function pcPrekresli() { if (window._klPrekresli) window._klPrekresli(); }
 
@@ -6555,6 +6582,63 @@ function pcOnline() {
   return !!t && Date.now() - t < PC_ONLINE_MS;
 }
 function pcBezi(k) { return k && (k.stav === 'bezi' || k.stav === 'ceka'); }
+
+/* WTB PINGER VE SKLADU (majitel, 13. 11. 2026): pinger WTB Market nemá
+   stránku ani API, text se dřív kopíroval do schránky na PC a kontrola
+   se pouštěla ručně. Teď se vloží sem, uloží do spoustec/wtb_pinger
+   (zapisuje jen majitel, spouštěč pod účtem čtečky jen čte) a WTB
+   kontrola jede s ostatními automaticky. Text platí, dokud se nevloží
+   nový — pinger se mění jen tehdy, když ho majitel upraví. */
+var PC_PINGER_MAX = 200000;
+function pcPingerPocet(text) { return (String(text || '').match(/\(\d+\)/g) || []).length; }
+function pcVlozPinger() {
+  if (jeUctetni()) return;
+  var stare = document.getElementById('pcPingerOv');
+  if (stare) stare.remove();
+  var ov = document.createElement('div');
+  ov.id = 'pcPingerOv';
+  ov.className = 'mo open';
+  ov.style.zIndex = '1150';
+  ov.innerHTML = '<div class="modal pc-pinger-modal">'
+    + '<div class="mh"><div class="mt2">Pinger WTB Market</div></div>'
+    + '<div class="pc-pinger-napoveda">Vlož celý text pingeru, jak ho máš nahozený — „(0) název velikost, (1) název velikost, …“. '
+    + 'Uloží se do SKLADu a WTB kontrola ho při každém běhu použije sama.</div>'
+    + '<textarea class="pc-pinger-pole" spellcheck="false" placeholder="(0) Jordan 4 Black Cat 44, (1) …"></textarea>'
+    + '<div class="pc-pinger-dole"><span class="pc-pinger-pocet"></span>'
+    + '<button class="pc-btn" data-p="zrusit">Zrušit</button><button class="pc-btn hlavni" data-p="ulozit">Uložit</button></div></div>';
+  document.body.appendChild(ov);
+  var pole = ov.querySelector('textarea'), pocet = ov.querySelector('.pc-pinger-pocet');
+  pole.value = (_pc.pinger && _pc.pinger.text) || '';
+  function prepocitej() { var n = pcPingerPocet(pole.value); pocet.textContent = n ? n + ' položek' : ''; }
+  prepocitej();
+  pole.addEventListener('input', prepocitej);
+  function zavri() { ov.remove(); document.removeEventListener('keydown', esc, true); }
+  // Escape zavře jen tohle okno, okno kontrol pod ním zůstane
+  function esc(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); zavri(); } }
+  document.addEventListener('keydown', esc, true);
+  ov.addEventListener('click', function (e) {
+    if (e.target === ov) { zavri(); return; }
+    var t = e.target.closest('[data-p]');
+    if (!t) return;
+    if (t.getAttribute('data-p') === 'zrusit') { zavri(); return; }
+    var text = pole.value.trim(), n = pcPingerPocet(text);
+    if (!n) { showToast('V textu není žádná položka ve tvaru „(0) název velikost“.', 'err'); return; }
+    if (text.length > PC_PINGER_MAX) { showToast('Text pingeru je moc dlouhý.', 'err'); return; }
+    var fns = window._fbFns, uid = _datovyUid();
+    if (!fns || !window._fbDb || !uid) { showToast('Pinger se ukládá do cloudu — přihlas se.', 'err'); return; }
+    var data = { text: text, polozek: n, kdy: new Date().toISOString() };
+    fns.setDoc(fns.doc(window._fbDb, 'users', uid, 'spoustec', 'wtb_pinger'), data).then(function () {
+      _pc.pinger = data; pcPrekresli();
+      showToast('Pinger uložený (' + n + ' položek). WTB kontrola ho použije při dalším běhu.');
+    }).catch(function (e2) {
+      showToast(e2 && e2.code === 'permission-denied'
+        ? 'Cloud pinger odmítl — v konzoli Firebase chybí blok spoustec z firestore.rules.'
+        : 'Pinger se nepodařilo uložit. Zkus to znovu.', 'err');
+    });
+    zavri();
+  });
+  setTimeout(function () { pole.focus(); }, 30);
+}
 
 function pcPokyn(co, klic, navic) {
   if (jeUctetni()) return;
@@ -6648,7 +6732,16 @@ function pcRadekHTML(k) {
       + (k.poslano ? '' : ' · nic se neposlalo');
   } else if (st === 'rucne') stavText = 'Proběhlo v okně na PC · ' + escHtml(_pcCas(k.konec));
   else if (st === 'nevi') stavText = 'Nedoběhlo';
-  else stavText = k.rucni ? 'Jen v okně na PC (bere text ze schránky)' : 'Ještě neběželo';
+  else stavText = k.rucni ? 'Jen v okně na PC' : 'Ještě neběželo';
+  // WTB: text pingeru se vkládá sem (WTB PINGER VE SKLADU)
+  var pingerTl = '';
+  if (k.klic === 'wtb') {
+    var p = _pc.pinger;
+    stavText += '<span class="pc-pinger-info">' + (p && p.text
+      ? 'Pinger: ' + escHtml(String(p.polozek || 0)) + ' položek · vložen ' + escHtml(_pcCas(p.kdy))
+      : 'Pinger zatím není vložený') + '</span>';
+    pingerTl = '<button class="pc-mini" data-kl="pc-pinger">' + (p && p.text ? 'Upravit pinger' : 'Vložit pinger') + '</button>';
+  }
   var akce = '';
   if (on) {
     if (_pcOdeslanoNedavno(k.klic) && !pcBezi(k)) akce = '<span class="pc-odeslano">Odesláno…</span>';
@@ -6663,7 +6756,7 @@ function pcRadekHTML(k) {
     + '<div class="pc-text"><span class="pc-jmeno">' + escHtml(k.nazev || k.klic) + '</span>'
     + '<span class="pc-stav">' + stavText + vypis + '</span>'
     + (_pcVypis[k.klic] && vypis ? '<pre class="pc-vypis">' + escHtml(k.vypis) + '</pre>' : '') + '</div>'
-    + akce + '</div>';
+    + pingerTl + akce + '</div>';
 }
 
 /* Vykreslí panel do okna Kontroly listingů — jen co se změnilo */
@@ -6745,7 +6838,7 @@ function _rpOdkaz(u, n) {
   return (typeof u === 'string' && /^https?:\/\//i.test(u) && u.length <= (n || 500)) ? u : '';
 }
 function _reportZDokumentu(v) {
-  if (!v || typeof v !== 'object' || !jeMistoProdeje(v.misto)) return null;
+  if (!v || typeof v !== 'object' || !jeMistoKontroly(v.misto, v.mimo)) return null;
   var d = new Date(typeof v.datum === 'string' ? v.datum : '');
   if (isNaN(d.getTime())) return null;
   var lim = v.limit && typeof v.limit === 'object' ? v.limit : null;

@@ -49,9 +49,9 @@ CEKANI_NA_SIT_S = 5 * 60        # po zapnutí PC chvíli trvá, než naskočí W
 PORT_ZAMKU = 47831              # jen jedno okno spouštěče naráz
 JMENO_V_REGISTRU = "MTKM kontroly"
 
-# Kontroly, které se samy pustit nedají: WTB bere text pingeru ze schránky.
-# Spustit vše je přeskakuje, tlačítko je pustí v okně.
-RUCNI = {"wtb": "Bere text pingeru ze schránky — pouští se jen v okně."}
+# Kontroly, které se samy pustit nedají — Spustit vše je přeskakuje,
+# tlačítko je pustí v okně. Zatím žádná.
+RUCNI = {}   # WTB už bere pinger ze SKLADu (13. 11. 2026) a jede s ostatními
 NAZVY = {"bazos": "Bazoš"}      # kde jméno místa v souboru není (Bazoš má .cz i .sk)
 
 NO_WINDOW = 0x08000000          # CREATE_NO_WINDOW — bez černého okna

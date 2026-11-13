@@ -2,18 +2,18 @@
 """
 WTB Market kontrola pro MTKM.Store (Gabro).
 
-WTB pinger nemá stránku ani API: zkopíruj (Ctrl+C) celý text, jak máš
-pinger nahozený — „(0) název velikost, (1) název velikost, …" — a spusť
-SPUSTIT_wtb.bat. Skript text vezme ze schránky (nebo ze souboru
-pinger.txt vedle sebe, když ho tam uložíš), porovná se skladem z cloudu
-a pošle Report do aplikace SKLAD. Pravidla jsou ze skillu „wtb-kontrola"
-(zůstává jako záloha).
+WTB pinger nemá stránku ani API: text pingeru — „(0) název velikost,
+(1) název velikost, …" — vlož ve SKLADu (Kontroly listingů → Kontroly na
+PC → WTB Market → Vložit pinger). Kontrola si ho vezme z cloudu a jede
+s ostatními automaticky. Bez něj vezme pinger.txt vedle sebe, nakonec
+schránku. Porovná se skladem z cloudu a pošle kontrolu i Report do
+aplikace. Pravidla jsou ze skillu „wtb-kontrola" (zůstává jako záloha).
 
 - Velikosti se NIKDY neřeší jako chyba (37 = 37 1/3, S = S/M) — Gabro
   listuje schválně šířeji. Sekce Opravit u WTB není.
-- WTB Market není ve SKLADu platforma: fajfky se neposílají. Report do
-  aplikace jde, až bude „WTB Market" v Nastavení → místa prodeje
-  (aplikace bere jen místa z nastavení); do té doby se výsledek jen vypíše.
+- WTB Market není ve SKLADu platforma: fajfky se neposílají. Kontrola
+  a report jdou do aplikace i tak (místo kontroly „mimo nastavení“,
+  `mimo=True`).
 - U Smazat je číslo z pingeru (#12) — podle něj mažeš.
 
 V repozitáři: nastroje/wtb/wtb_kontrola.py, hlídá to test/test-kontrolyprohlizec.js.
@@ -124,15 +124,36 @@ def sestav_report(r, datum):
             ]}
 
 
+def text_pingeru(argv, token):
+    """(text, odkud). Přednost má pinger vložený ve SKLADu — s ním jede WTB
+    kontrola automaticky s ostatními. Pak pinger.txt, nakonec schránka.
+    --schranka vezme schránku i tehdy, když je ve SKLADu jiný text."""
+    if "--schranka" in argv:
+        return schranka(), "ze schránky"
+    try:
+        text, kdy = S.nacti_pinger_wtb(token)
+    except S.ChybaSkladu as e:
+        print("  (pinger ze SKLADu se nepodařilo načíst: %s)" % e)
+        text, kdy = "", None
+    if text.strip():
+        return text, "ze SKLADu" + (" (vložen %s)" % str(kdy)[:16].replace("T", " ") if kdy else "")
+    if os.path.exists(SOUBOR):
+        return open(SOUBOR, encoding="utf-8").read(), "z pinger.txt"
+    # Ze spouštěče (bez ptaní) schránku nebrat — je v ní, co zrovna kdo zkopíroval
+    if S.bez_ptani():
+        return "", ""
+    return schranka(), "ze schránky"
+
+
 def main(argv):
     start = time.time()
-    text = open(SOUBOR, encoding="utf-8").read() if os.path.exists(SOUBOR) and "--schranka" not in argv else schranka()
+    token = S.prihlas()
+    text, odkud = text_pingeru(argv, token)
     pinger = rozeber(text)
     if not pinger:
-        raise RuntimeError("Ve schránce (ani v pinger.txt) není text pingeru ve tvaru „(0) název velikost, (1) …“. "
-                           "Zkopíruj ho a spusť znovu.")
-    print(f"Pinger: {len(pinger)} položek")
-    token = S.prihlas()
+        raise RuntimeError("Chybí text pingeru. Vlož ho ve SKLADu: Kontroly listingů → Kontroly na PC → "
+                           "WTB Market → Vložit pinger (nebo ho zkopíruj a spusť kontrolu v okně).")
+    print(f"Pinger {odkud}: {len(pinger)} položek")
     data, polozky = S.nacti_sklad(token)
     print(f"Sklad z cloudu: {len(S.skladem(polozky))} kusů skladem")
     r = vyhodnot(pinger, polozky)
@@ -146,15 +167,12 @@ def main(argv):
     print("\n================ HOTOVO ================")
     print(f"WTB: smazat {len(r['smazat'])} | přidat {len(r['pridat'])}")
     print(f"Trvalo {int(time.time() - start)} s.")
-    rep = sestav_report(r, datum)
-    if MISTO in S.mista_prodeje(data):
-        S.dokonci_kontrolu(token, data, polozky, [], rep, dict(
-            misto=MISTO, datum=datum, chybi=[x["ids"][0] for x in r["pridat"]],
-            neni_ve_skladu=[{"nazev": x["nazev"], "velikost": "", "odkaz": ""} for x in r["smazat"]]), argv)
-        return
-    # Aplikace bere jen místa z nastavení (report i kontrola) — bez toho se jen vypíše
-    print("\nWTB Market není v nastavení míst prodeje, takže do aplikace SKLAD. se nic neposílá.")
-    print("Výsledek máš výš. Když chceš report i v aplikaci: Nastavení → místa prodeje → přidej „WTB Market“.")
+    # WTB Market v nastavení míst prodeje být nemusí (majitel, 13. 11. 2026):
+    # kontrola i report jdou do aplikace jako místo kontroly „mimo nastavení“.
+    rep = dict(sestav_report(r, datum), mimo=True)
+    S.dokonci_kontrolu(token, data, polozky, [], rep, dict(
+        misto=MISTO, datum=datum, chybi=[x["ids"][0] for x in r["pridat"]], mimo=True,
+        neni_ve_skladu=[{"nazev": x["nazev"], "velikost": "", "odkaz": ""} for x in r["smazat"]]), argv)
 
 if __name__ == "__main__":
     try:

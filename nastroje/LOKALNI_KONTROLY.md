@@ -170,9 +170,11 @@ Dvě kontroly přes prohlížeč naráz nepojedou (sdílí jeden profil) — dru
 - Dlouhé kroky (čtení, prodlužování) ukazují v okně točící se značku
   a vteřiny; kontrola se nesekla, jen pracuje.
 - **Released** si pamatuje katalog v `released/katalog_released.json`.
-- **WTB**: zkopíruj text pingeru (Ctrl+C) a spusť `SPUSTIT_wtb.bat`.
-  Do aplikace pošle report, až bude „WTB Market" v Nastavení → místa
-  prodeje; do té doby jen vypíše výsledek.
+- **WTB**: text pingeru vlož ve SKLADu (Kontroly listingů → Kontroly
+  na PC → WTB Market → Vložit pinger). Pak jede s ostatními sama a
+  výsledek i report pošle do aplikace, i když WTB Market nemáš mezi
+  místy prodeje. Ručně (`SPUSTIT_wtb.bat --schranka`) jde vzít i text
+  ze schránky.
 
 Když kontrola spadne uprostřed, může po ní zůstat otevřené okno Chromu
 kontrol — **zavři ho**, jinak se další kontrola přes prohlížeč nespustí
@@ -281,7 +283,7 @@ PC** — funguje i z mobilu, jen PC musí být zapnuté:
 `firestore.rules`, publikovat v konzoli Firebase). Bez nich se kontroly
 po zapnutí PC pustí dál, jen je aplikace neuvidí a nespustí.
 
-WTB se pouští jen v okně (bere text pingeru ze schránky). Deník
+WTB jede s ostatními (pinger bere ze SKLADu). Deník
 spouštěče je v `%LOCALAPPDATA%\MTKM-kontroly\spoustec_log.txt`.
 Nová kontrola = nová složka `<místo>/<místo>_kontrola.py`, spouštěč
 ji najde sám.

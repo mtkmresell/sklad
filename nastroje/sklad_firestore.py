@@ -41,6 +41,7 @@ Podrobnosti a postup: nastroje/LOKALNI_KONTROLY.md
 import json
 import os
 import random
+import re
 import string
 import sys
 import time
@@ -536,9 +537,16 @@ def _inzeraty(seznam, s_ids, polozky, pozor, druh):
     return out
 
 
+def mimo_nastaveni_ok(misto):
+    """Kontrola místa, které v nastavení míst prodeje není (WTB Market —
+    majitel ho tam mít nechce, výsledek kontroly ale ano, 13. 11. 2026).
+    Jen rozumné jméno; aplikace to ověřuje stejně (_klMistoMimo)."""
+    return isinstance(misto, str) and bool(re.match(r'^[^\W_][\w .\-]{0,39}$', misto)) and misto == misto.strip()
+
+
 def posli_kontrolu(token, data, polozky, misto, chybi=(), smazat=(), nejde=(), report='', web='',
                    poznamka='', datum=None, odeslat=False, uid=MAJITEL_UID,
-                   opravit=(), neni_ve_skladu=(), inzeratu=None, limit=None):
+                   opravit=(), neni_ve_skladu=(), inzeratu=None, limit=None, mimo=False):
     """Výsledek kontroly jednoho místa → okno Kontroly listingů v aplikaci.
 
     chybi  = id kusů skladem, které na místě nevisí (sekce Přidat)
@@ -548,13 +556,17 @@ def posli_kontrolu(token, data, polozky, misto, chybi=(), smazat=(), nejde=(), r
              inzeráty, kde velikosti nesedí se skladem (ids = kusy skladem, nepovinné)
     neni_ve_skladu = [{"nazev", "odkaz", "velikost"}] inzerát běží, kus ve skladu nikdy nebyl
     inzeratu, limit = počet inzerátů na místě a jeho limit (Bazoš 50)
+    mimo = místo kontroly, které v nastavení míst prodeje není (WTB Market)
     Stejný tvar jako sklad_kontrola v konektoru; ukládá se i čistá
     kontrola bez nálezů („vše sedí" je taky zpráva). Bez odeslat=True jen náhled.
     """
     mista = mista_prodeje(data)
-    if not mista:
+    if mimo:
+        if not mimo_nastaveni_ok(misto):
+            return {'stav': 'nezname_misto', 'poznamka': 'Neplatné jméno místa kontroly: %s' % misto}
+    elif not mista:
         return {'stav': 'nezname_mista', 'poznamka': 'V cloudu chybí nastavení míst prodeje — otevři aplikaci.'}
-    if misto not in mista:
+    elif misto not in mista:
         return {'stav': 'nezname_misto', 'poznamka': 'Takové místo prodeje v nastavení není: %s' % misto,
                 'mista_v_nastaveni': mista}
     for seznam in (chybi, smazat, nejde, opravit, neni_ve_skladu):
@@ -610,6 +622,8 @@ def posli_kontrolu(token, data, polozky, misto, chybi=(), smazat=(), nejde=(), r
         'inzeratu': inzeratu if isinstance(inzeratu, int) and inzeratu >= 0 else None,
         'limit': limit if isinstance(limit, int) and limit >= 0 else None,
     }
+    if mimo:
+        kontrola['mimo'] = True
     vysledek = {'kontrola': kontrola, 'nelze': nelze, 'pozor': pozor}
     if not odeslat:
         vysledek['stav'] = 'nahled'
@@ -674,9 +688,13 @@ def posli_report(token, data, polozky, report, odeslat=False, uid=MAJITEL_UID):
     Bez odeslat=True jen náhled."""
     mista = mista_prodeje(data)
     misto = (report or {}).get('misto')
-    if not mista:
+    mimo = (report or {}).get('mimo') is True
+    if mimo:
+        if not mimo_nastaveni_ok(misto):
+            return {'stav': 'nezname_misto', 'poznamka': 'Neplatné jméno místa kontroly: %s' % misto}
+    elif not mista:
         return {'stav': 'nezname_mista', 'poznamka': 'V cloudu chybí nastavení míst prodeje — otevři aplikaci.'}
-    if misto not in mista:
+    elif misto not in mista:
         return {'stav': 'nezname_misto', 'poznamka': 'Takové místo prodeje v nastavení není: %s' % misto}
     podle_id = {it.get('id') for it in polozky if it}
     lim = report.get('limit') if isinstance(report.get('limit'), dict) else None
@@ -694,6 +712,8 @@ def posli_report(token, data, polozky, report, odeslat=False, uid=MAJITEL_UID):
                    'radky': _report_radky(s.get('radky'), podle_id)}
                   for s in (report.get('sekce') or [])[:20] if isinstance(s, dict)],
     }
+    if mimo:
+        ven['mimo'] = True
     jmeno = REPORT_PREFIX + klic_reportu(misto)
     vysledek = {'report': ven, 'dokument': jmeno}
     if not odeslat:
@@ -702,6 +722,25 @@ def posli_report(token, data, polozky, report, odeslat=False, uid=MAJITEL_UID):
     _zapis_dokument(token, uid, jmeno, ven)
     vysledek['stav'] = 'zadano'
     return vysledek
+
+
+# ── Text pingeru WTB Market ─────────────────────────────────────────────
+#
+# Majitel ho vloží v aplikaci (Kontroly listingů → Kontroly na PC → WTB
+# Market → Vložit pinger) a aplikace ho uloží do spoustec/wtb_pinger.
+# WTB kontrola si ho odtud vezme sama — díky tomu jede s ostatními
+# automaticky, bez schránky (13. 11. 2026). Jen čtení.
+
+def nacti_pinger_wtb(token, uid=MAJITEL_UID):
+    """(text, kdy) z cloudu; ('', None), když tam žádný není."""
+    status, j = _http(FS_BASE + '/users/' + uid + '/spoustec/wtb_pinger', token=token)
+    if status == 404:
+        return '', None
+    if status != 200:
+        raise ChybaSkladu('Čtení pingeru z cloudu selhalo (%s).' % status)
+    d = rozbal_pole((j or {}).get('fields'))
+    text = d.get('text') if isinstance(d.get('text'), str) else ''
+    return text, d.get('kdy')
 
 
 # ── Společný závěr kontroly ─────────────────────────────────────────────

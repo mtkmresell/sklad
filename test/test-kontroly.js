@@ -319,6 +319,23 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   shoda('javascript: se do odkazu nedostane', filtr[1].report, '');
   shoda('ani do odkazu na e-shop', await page.evaluate(() => _kontrolaZListecku({ kontrola: { misto: 'Hypeboost', web: 'javascript:alert(1)' } }).web), '');
   ok('poznámka se usekne', filtr[1].poznamka.length === 500);
+  /* WTB Market majitel mezi místy prodeje nemá, výsledek ale chce vidět
+     (13. 11. 2026): kontrola s `mimo` projde i mimo nastavení, jen se
+     slušným jménem; bez `mimo` dál neprojde. */
+  const mimo = await page.evaluate(() => [
+    _kontrolaZListecku({ kontrola: { misto: 'WTB Market', mimo: true, chybi: ['a'] } }),
+    _kontrolaZListecku({ kontrola: { misto: 'WTB Market', chybi: ['a'] } }),
+    _kontrolaZListecku({ kontrola: { misto: '<img src=x>', mimo: true, chybi: ['a'] } }),
+    _kontrolaZListecku({ kontrola: { misto: 'x'.repeat(60), mimo: true } }),
+    _kontrolaZListecku({ kontrola: { misto: 'Hypeboost', mimo: true } }).mimo,
+    !!_reportZDokumentu({ misto: 'WTB Market', mimo: true, datum: new Date().toISOString(), sekce: [] }),
+    !!_reportZDokumentu({ misto: 'WTB Market', datum: new Date().toISOString(), sekce: [] }),
+  ]);
+  ok('místo mimo nastavení s mimo projde a nese mimo', mimo[0] && mimo[0].misto === 'WTB Market' && mimo[0].mimo === true, JSON.stringify(mimo[0]));
+  shoda('bez mimo dál neprojde', mimo[1], null);
+  ok('nesmyslné jméno neprojde ani s mimo', mimo[2] === null && mimo[3] === null, JSON.stringify(mimo.slice(2, 4)));
+  shoda('místo z nastavení není mimo', mimo[4], false);
+  ok('report s mimo projde, bez něj ne', mimo[5] === true && mimo[6] === false, JSON.stringify(mimo.slice(5)));
   ok('nic navíc', !('navic' in filtr[1]));
   ok('nesmyslné datum se nahradí platným', !isNaN(new Date(filtr[1].datum).getTime()));
   shoda('lísteček bez kontroly není kontrola', filtr[2], null);
@@ -593,7 +610,7 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
     { klic: 'klekt', nazev: 'Klekt', prohlizec: true, stav: 'bezi', radek: 'Prodlužuji expiraci na KLEKT… 24 / 61', zacatek: new Date(Date.now() - 65000).toISOString() },
     { klic: 'facebook', nazev: 'Facebook', prohlizec: true, stav: 'prihlasit', zprava: 'Potřeba přihlásit: na Facebook se musíš přihlásit.' },
     { klic: 'refresher', nazev: 'Refresher <img src=x onerror=window.__xss2=1>', stav: 'chyba', zprava: 'Refresher vrátil 502', vypis: 'Traceback…\n!!! CHYBA: Refresher vrátil 502' },
-    { klic: 'wtb', nazev: 'WTB Market', rucni: true, stav: '' },
+    { klic: 'wtb', nazev: 'WTB Market', stav: '' },
   ] });
   pc = await page.evaluate((s) => {
     window.__pcStav(s);
@@ -610,7 +627,7 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   ok('PC zapnuté: tečka svítí, je vidět, že něco běží', /bezi/.test(pc.tecka) && /Běží 1 kontrola/.test(pc.hlava), JSON.stringify(pc));
   ok('počty v hlavičce', /1 v pořádku/.test(pc.hlava) && /2 chce pozornost/.test(pc.hlava), pc.hlava);
   ok('seznam je zavřený, dokud se neklikne', pc.seznam === 'none' && pc.radku === 5, JSON.stringify(pc));
-  shoda('u každé kontroly správné tlačítko', pc.tlacitka, ['adonio:Spustit', 'klekt:Zastavit', 'facebook:Výpis/Přihlásit na PC'.replace('Výpis/', ''), 'refresher:Výpis/Spustit', 'wtb:Otevřít na PC']);
+  shoda('u každé kontroly správné tlačítko', pc.tlacitka, ['adonio:Spustit', 'klekt:Zastavit', 'facebook:Výpis/Přihlásit na PC'.replace('Výpis/', ''), 'refresher:Výpis/Spustit', 'wtb:Vložit pinger/Spustit']);
   ok('běžící kontrola ukazuje průběh a čas', /24 \/ 61/.test(pc.bezi) && /1 min 0[5-9] s/.test(pc.bezi), pc.bezi);
   ok('hotová ukazuje souhrn bez jména místa', /smazat 1 · přidat 3/.test(pc.ok) && !/Adonio: /.test(pc.ok), pc.ok);
   ok('jméno z PC se escapuje', await page.evaluate(() => !window.__xss2 && !document.querySelector('#kontrolyOv .pc-radek img')));
@@ -638,6 +655,46 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   });
   ok('výpis chyby jde rozbalit', /!!! CHYBA: Refresher vrátil 502/.test(pc.vypis), pc.vypis);
   ok('průběh tiká, okno ani ostatní řádky se nepřestaví', pc.stejnyRadek && pc.stejneOkno && /1 min 0[6-9] s|1 min 1\d s/.test(pc.cas), JSON.stringify(pc));
+
+  /* WTB PINGER VE SKLADU: text pingeru se vloží v aplikaci a uloží do
+     spoustec/wtb_pinger, WTB kontrola ho bere sama. */
+  pc = await page.evaluate(() => {
+    window.__pokyny = [];
+    const ov = document.getElementById('kontrolyOv');
+    ov.querySelector('[data-pck="wtb"] [data-kl="pc-pinger"]').click();
+    const m = document.getElementById('pcPingerOv');
+    const out = { okno: !!m, nahore: m && +m.style.zIndex > +getComputedStyle(ov).zIndex };
+    const pole = m.querySelector('textarea');
+    pole.value = 'nic tu není'; pole.dispatchEvent(new Event('input'));
+    m.querySelector('[data-p="ulozit"]').click();
+    out.prazdnyNeprosel = !window.__pokyny.length && !!document.getElementById('pcPingerOv');
+    pole.value = '(0) Jordan 4 Black Cat 44, (1) Yeezy Slide 42,\n(2) Corteiz Alcatraz Hoodie M/L';
+    pole.dispatchEvent(new Event('input'));
+    out.pocet = m.querySelector('.pc-pinger-pocet').textContent;
+    m.querySelector('[data-p="ulozit"]').click();
+    out.pokyny = window.__pokyny;
+    out.zavreno = !document.getElementById('pcPingerOv');
+    return out;
+  });
+  ok('Vložit pinger otevře okno nad oknem kontrol', pc.okno, JSON.stringify(pc));
+  ok('text bez položek se neuloží', pc.prazdnyNeprosel, JSON.stringify(pc));
+  ok('počet položek se ukazuje při psaní', pc.pocet === '3 položek', pc.pocet);
+  ok('uloží se do spoustec/wtb_pinger s textem, počtem a časem', pc.zavreno && pc.pokyny.length === 1 && /\/users\/majitel1\/spoustec\/wtb_pinger$/.test(pc.pokyny[0].cesta)
+    && pc.pokyny[0].data.polozek === 3 && /Black Cat/.test(pc.pokyny[0].data.text) && Object.keys(pc.pokyny[0].data).sort().join() === 'kdy,polozek,text', JSON.stringify(pc.pokyny));
+  pc = await page.evaluate(() => new Promise(res => setTimeout(() => {
+    const ov = document.getElementById('kontrolyOv');
+    const r = ov.querySelector('[data-pck="wtb"]');
+    r.querySelector('[data-kl="pc-pinger"]').click();
+    const m = document.getElementById('pcPingerOv');
+    const out = { radek: r.textContent, predvyplneno: m.querySelector('textarea').value.indexOf('Yeezy') !== -1 };
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    out.zavrenoPinger = !document.getElementById('pcPingerOv');
+    out.kontrolyZustaly = !!document.getElementById('kontrolyOv') && ov.classList.contains('open');
+    return res(out);
+  }, 50)));
+  ok('řádek WTB ukazuje vložený pinger a tlačítko Upravit', /Pinger: 3 položek/.test(pc.radek) && /Upravit pinger/.test(pc.radek), pc.radek);
+  ok('znovu otevřené okno má uložený text', pc.predvyplneno);
+  ok('Escape zavře jen okno pingeru, kontroly zůstanou', pc.zavrenoPinger && pc.kontrolyZustaly, JSON.stringify(pc));
 
   pc = await page.evaluate(() => {
     window.__pokyny = [];

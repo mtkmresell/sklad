@@ -189,7 +189,7 @@ function json(out) {
   ok('jména míst ze skriptů', sk.bazos && sk.bazos.nazev === 'Bazoš' && sk.thebeast.nazev === 'TheBeast' && sk.wtb.nazev === 'WTB Market', JSON.stringify([sk.bazos, sk.thebeast, sk.wtb]));
   const sProhl = j.skutecne.filter(x => x.prohlizec).map(x => x.klic).sort().join(',');
   ok('kontroly přes prohlížeč kontrol se poznají', sProhl === 'adonio,facebook,hypeboost,klekt,released,sneakerstore,tnsky', sProhl);
-  ok('jen WTB je ruční (schránka)', j.skutecne.filter(x => x.rucni).map(x => x.klic).join(',') === 'wtb');
+  ok('žádná kontrola není ruční — WTB bere pinger ze SKLADu', !j.skutecne.some(x => x.rucni), JSON.stringify(j.skutecne.filter(x => x.rucni)));
   ok('každá kontrola má SPUSTIT_*.bat (tlačítko V okně)', j.skutecne_bat);
 
   sekce('2) rozbor výpisu');
@@ -205,7 +205,7 @@ function json(out) {
   const st = j.stav.kontroly, S = j.stopy;
   ok('doběhlo', j.dobehlo, j.trvalo);
   ok('složka bez kontroly se nebere', !j.nalezene.some(x => x[0] === 'debug'));
-  ok('ruční WTB se nespustí', !S.wtb.length && !st.wtb);
+  ok('WTB jede se všemi ostatními', S.wtb.length > 0 && st.wtb && st.wtb.stav === 'ok', JSON.stringify(st.wtb));
   for (const k of ['alfa', 'beta', 'gama', 'prohl1', 'prohl2'])
     ok(k + ' ok se souhrnem a posláno', st[k] && st[k].stav === 'ok' && st[k].poslano && st[k].souhrn.startsWith(k[0].toUpperCase() + k.slice(1)), JSON.stringify(st[k]));
   ok('kontroly dostanou SKLAD_BEZ_PTANI=1', Object.values(S).flat().filter(x => 'bez_ptani' in x).every(x => x.bez_ptani === '1'));
