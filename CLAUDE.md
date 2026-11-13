@@ -1379,7 +1379,11 @@ Na staré adrese jdou vytáhnout v konzoli:
 `sklad_firestore.py` na PC majitele běží (přihlášení čtečky ve Správci
 pověření, `test` vidí sklad). **Heslo se při `nastavit` bere ze schránky**
 (jen Enter) — psát ho do příkazového řádku Windows naslepo a vkládat
-Ctrl+V majiteli nešlo vůbec.
+Ctrl+V majiteli nešlo vůbec. **Ctrl+V do skrytého pole pošle znak
+`\x16`** místo textu — u Stuffsellu odešel jako heslo a web hlásil
+špatné heslo (13. 11. 2026). `zeptej_heslo` proto heslo s řídicími
+znaky bere jako vložení a čte schránku (BOM ořízne `_jen_heslo`)
+a vypíše jen počet znaků, nikdy heslo. Hlídá to `test-skladpy.js`, 5b.
 
 `nastroje/bazos/bazos_kontrola.py` (kopie skriptu z PC, upravená) už nečte
 `sklad.json` a nepotřebuje Clauda v chatu: sklad načte z cloudu, sám

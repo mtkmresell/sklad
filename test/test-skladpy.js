@@ -214,6 +214,25 @@ function python(args, env) {
   ok('jen standardní knihovna', !/^\s*(import|from)\s+(requests|google|firebase)/m.test(zdroj));
   ok('UID majitele sedí s pravidly', fs.readFileSync(path.resolve(__dirname, '..', 'firestore.rules'), 'utf8').indexOf(UID) !== -1);
 
+  /* Stuffsell 13. 11. 2026: Ctrl+V do skrytého pole v konzoli Windows
+     nevloží text, ale znak \x16 — ten odešel jako heslo a web ho odmítl.
+     Řídicí znak = „chtěl jsem vložit" → bere se schránka; BOM se ořízne. */
+  sekce('5b) Heslo: Ctrl+V a schránka');
+  const hesla = await new Promise(res => execFile('python3', ['-I', '-c', `
+import sys, json, getpass; sys.path.insert(0, sys.argv[1]); import sklad_firestore as S
+vstupy = []; S.vymaz_schranku = lambda: None
+def zkus(napsano, schranka):
+    getpass.getpass = lambda *a: napsano
+    S.heslo_ze_schranky = lambda: S._jen_heslo(schranka)
+    return list(S.zeptej_heslo(1))
+print(json.dumps([zkus('\\x16', 'Tajne 123\\r\\n'), zkus('', '\\ufeffTajne123'), zkus('Napsane1', 'jine'), zkus('\\x16', '')]))
+`, path.dirname(SKRIPT)], (e, out, err) => res(e ? { chyba: String(err || e) } : JSON.parse(out))));
+  ok('Ctrl+V (\\x16) → vezme se schránka bez konce řádku', hesla[0] && hesla[0][0] === 'Tajne 123' && hesla[0][1] === 'ze schránky', JSON.stringify(hesla));
+  ok('BOM ze schránky se ořízne', hesla[1] && hesla[1][0] === 'Tajne123', JSON.stringify(hesla[1]));
+  ok('napsané heslo zůstane napsané', hesla[2] && hesla[2][0] === 'Napsane1' && hesla[2][1] === 'napsané', JSON.stringify(hesla[2]));
+  ok('Ctrl+V s prázdnou schránkou nepošle \\x16', hesla[3] && hesla[3][0] === '', JSON.stringify(hesla[3]));
+  ok('heslo se nikdy nevypisuje, jen počet znaků', !/print\([^)]*%s[^)]*heslo\)/.test(zdroj) && /Heslo mám \(%d znaků/.test(zdroj));
+
   /* ── Aplikace převezme, co Python zapsal ─────────────────────────── */
   sekce('6) Aplikace lístečky převezme');
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium' });

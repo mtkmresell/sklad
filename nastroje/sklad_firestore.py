@@ -227,20 +227,36 @@ def prihlaseni_webu(misto, zeptat=True):
         if email:
             break
     print('Heslo zkopíruj (Ctrl+C) a tady dej jen Enter. Nebo ho napiš — při psaní se nic neukazuje.')
-    heslo = ''
-    for pokus in range(3):
+    heslo, odkud = zeptej_heslo()
+    if not email or not heslo:
+        raise ChybaSkladu('Přihlášení k %s nevyplněné.' % misto)
+    # Heslo se nikdy nevypisuje — jen kolik má znaků, ať jde poznat, že přišlo celé
+    print('Heslo mám (%d znaků, %s). Přihlašuji…' % (len(heslo), odkud))
+    return email, heslo, True
+
+
+def zeptej_heslo(pokusu=3):
+    """(heslo, odkud). Enter = vezme se schránka.
+
+    Ctrl+V v klasické konzoli Windows do skrytého pole nevloží text, ale
+    neviditelný znak (\x16) — ten pak odešel jako heslo a web ho odmítl
+    (Stuffsell 13. 11. 2026). Heslo s řídicími znaky se proto bere jako
+    „chtěl jsem vložit" a čte se schránka."""
+    import getpass
+    for pokus in range(pokusu):
         heslo = getpass.getpass('Heslo: ')
-        if not heslo:
+        odkud = 'napsané'
+        if not heslo or any(ord(c) < 32 for c in heslo):
             heslo = heslo_ze_schranky()
+            odkud = 'ze schránky'
             if heslo:
                 vymaz_schranku()
         if heslo:
-            break
-        if pokus < 2:   # prázdná schránka → zeptat se znovu, ne spadnout
-            print('Ve schránce žádné heslo není. Zkopíruj ho znovu (Ctrl+C) a dej Enter.')
-    if not email or not heslo:
-        raise ChybaSkladu('Přihlášení k %s nevyplněné.' % misto)
-    return email, heslo, True
+            return heslo, odkud
+        if pokus < pokusu - 1:   # prázdná schránka → zeptat se znovu, ne spadnout
+            print('Ve schránce žádné heslo není. Zkopíruj ho znovu (Ctrl+C) a dej jen Enter (bez Ctrl+V).')
+    return '', ''
+
 
 
 def uloz_prihlaseni_webu(misto, email, heslo):
@@ -862,7 +878,8 @@ def _jen_heslo(text):
 
     Kopíruje se z nastavení prostředí, kde je řádek celý („SKLAD_HESLO=…"),
     takže se případné jméno proměnné před rovnítkem utne."""
-    t = (text or '').strip()
+    # BOM a neviditelné znaky, které Windows rádo přilepí na začátek/konec
+    t = (text or '').replace('\ufeff', '').replace('\u200b', '').strip()
     if t.startswith('SKLAD_HESLO='):
         t = t[len('SKLAD_HESLO='):].strip()
     return t
@@ -918,23 +935,18 @@ def hlavni(argv):
     zbytek = [a for a in zbytek if a != '--odeslat']
 
     if prikaz == 'nastavit':
-        import getpass
         print('Přihlášení účtu ČTEČKY (ne tvého hlavního účtu).')
         email = input('E-mail: ').strip()
         # Psaní hesla do příkazového řádku je naslepo (nic se neukazuje)
         # a vložení přes Ctrl+V tam často nejde vůbec. Proto stačí heslo
         # zkopírovat a dát jen Enter — vezme se ze schránky.
         print('Heslo zkopíruj (Ctrl+C) a tady dej jen Enter. Nebo ho napiš — při psaní se nic neukazuje.')
-        heslo = getpass.getpass('Heslo: ')
-        ze_schranky = not heslo
-        if ze_schranky:
-            heslo = heslo_ze_schranky()
-            if not heslo:
-                raise ChybaSkladu('Ve schránce nic není. Zkopíruj heslo (Ctrl+C) a spusť to znovu.')
+        heslo, odkud = zeptej_heslo()  # ze schránky ji hned vymaže
+        if not heslo:
+            raise ChybaSkladu('Ve schránce nic není. Zkopíruj heslo (Ctrl+C) a spusť to znovu.')
+        print('Heslo mám (%d znaků, %s). Ověřuji…' % (len(heslo), odkud))
         prihlas(email, heslo)          # ověří, že sedí, dřív než se uloží
         uloz_pristup(email, heslo)
-        if ze_schranky:
-            vymaz_schranku()            # heslo ve schránce nemá co dělat
         print('Uloženo do Správce pověření Windows pod jménem %s. Přihlášení funguje.' % POVERENI_JMENO)
         return 0
 
