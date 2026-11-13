@@ -9,7 +9,7 @@ a stav přes Firestore (kolekce spoustec, viz Agent níž).
 
 Na PC má jen tiché okno (okno_stavu): startuje schované na liště
 a po kliknutí ukáže točící se kolečko a co se právě děje. Dvojklik na
-KONTROLY.pyw spustí spouštěč a otevře aplikaci; další dvojklik ukáže okno. Kontroly bez prohlížeče běží naráz (SOUBEZNE),
+„SKLAD. kontroly.pyw" spustí spouštěč a otevře aplikaci; další dvojklik ukáže okno. Kontroly bez prohlížeče běží naráz (SOUBEZNE),
 kontroly přes prohlížeč kontrol (Tnsky, KLEKT…) jedna po druhé —
 sdílejí jeden profil a dva Chromy na něm spustit nejde.
 
@@ -49,6 +49,8 @@ CEKANI_NA_SIT_S = 5 * 60        # po zapnutí PC chvíli trvá, než naskočí W
 PORT_ZAMKU = 47831              # jen jedno okno spouštěče naráz
 NAZEV = "SKLAD. kontroly"          # jméno programu na liště, v oznámeních i v Po spuštění (majitel 13. 11. 2026)
 JMENO_V_REGISTRU = NAZEV
+SPOUSTECI_SOUBOR = NAZEV + ".pyw"          # na něj se kliká; dřív KONTROLY.pyw
+IKONA = os.path.join(SLOZKA, "sklad_kontroly.ico")
 STARA_JMENA_V_REGISTRU = ("MTKM kontroly",)   # dřívější jméno — uklidí se, jinak by se pouštělo dvakrát
 
 # Kontroly, které se samy pustit nedají — Spustit vše je přeskakuje,
@@ -426,23 +428,11 @@ def je_po_zapnuti():
         return False
 
 
-def prejmenuj_v_registru():
-    """Záznam pod starým jménem přepíše na nové (jen když tam starý je)."""
-    if os.name != "nt":
-        return
-    import winreg
-    try:
-        with _klic_run() as k:
-            stary = False
-            for jmeno in STARA_JMENA_V_REGISTRU:
-                try:
-                    winreg.QueryValueEx(k, jmeno)
-                    stary = True
-                except OSError:
-                    pass
-    except OSError:
-        return
-    if stary:
+def obnov_v_registru():
+    """Když je spouštění po zapnutí PC zapnuté, zapíše ho znovu: s novým
+    jménem (dřív „MTKM kontroly") i s cestou k souboru, ze kterého se
+    právě běží (dřív KONTROLY.pyw). Starý záznam se tím uklidí."""
+    if os.name == "nt" and je_po_zapnuti():
         nastav_po_zapnuti(True)
 
 
@@ -456,7 +446,7 @@ def nastav_po_zapnuti(zapnout):
                 pass
         if zapnout:
             winreg.SetValueEx(k, JMENO_V_REGISTRU, 0, winreg.REG_SZ,
-                              prikaz_po_zapnuti(pythonw_exe(), os.path.join(SLOZKA, "KONTROLY.pyw")))
+                              prikaz_po_zapnuti(pythonw_exe(), os.path.join(SLOZKA, SPOUSTECI_SOUBOR)))
         else:
             try:
                 winreg.DeleteValue(k, JMENO_V_REGISTRU)
@@ -729,45 +719,171 @@ def popis_stavu(sp, ag):
     if ag.chyba:
         pata, barva_paty = "Spojení se SKLADem: " + ag.chyba, "chyba"
     elif ag.posledni_zapis:
-        pata, barva_paty = "Spojeno se SKLADem · " + time.strftime("%H:%M:%S", time.localtime(ag.posledni_zapis)), "muted2"
+        pata, barva_paty = "Připojeno ke SKLAD. · " + time.strftime("%H:%M:%S", time.localtime(ag.posledni_zapis)), "muted2"
     else:
         pata, barva_paty = "Připojuji se ke SKLADu…", "muted2"
     return nadpis, radek, pata, barva_paty, barva, bool(bezi or ceka)
+
+
+def zastupce_na_plose(sp):
+    """Jednou založí na ploše zástupce „SKLAD. kontroly" s ikonou (soubor
+    .pyw má v Průzkumníku ikonu Pythonu). Když ho majitel smaže, znovu
+    se nezakládá — pamatuje se to ve stavu."""
+    if os.name != "nt" or sp.stav.get("zastupce_vytvoren"):
+        return
+    cil = os.path.join(SLOZKA, SPOUSTECI_SOUBOR)
+    ps = ("$d=[Environment]::GetFolderPath('Desktop');"
+          "$s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $d ($env:SK_N+'.lnk')));"
+          "$s.TargetPath=$env:SK_P;$s.Arguments='\"'+$env:SK_C+'\"';"
+          "$s.WorkingDirectory=$env:SK_W;$s.IconLocation=$env:SK_I;$s.Description=$env:SK_N;$s.Save()")
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, timeout=30,
+                           env=dict(os.environ, SK_N=NAZEV, SK_P=pythonw_exe(), SK_C=cil, SK_W=SLOZKA, SK_I=IKONA),
+                           creationflags=NO_WINDOW)
+        if r.returncode == 0:
+            sp.stav["zastupce_vytvoren"] = True
+            sp.uloz()
+            zapis_log("zástupce na ploše vytvořen")
+    except Exception as e:
+        zapis_log("zástupce na ploše se nevytvořil: %s" % e)
+
+
+def _ostre_okno():
+    """Bez tohohle Windows okno při zvětšení (125 %, 150 %) jen roztáhne
+    jako obrázek — text i kolečko pak vypadají rozmazaně a rozpixelovaně
+    (majitel 13. 11. 2026). A vlastní AppUserModelID, aby na liště byla
+    ikona SKLAD. kontroly, ne Pythonu."""
+    if os.name != "nt":
+        return
+    import ctypes
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MTKM.SKLAD.kontroly")
+    except Exception:
+        pass
+
+
+def _hex(c):
+    c = c.lstrip("#")
+    return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _mix(a, b, t):
+    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+
+
+class Kolecko:
+    """Hladké točící se kolečko. Plátno v Tk neumí vyhlazování, takže
+    oblouk na něm byl zubatý; tady se snímky počítají po pixelech
+    s vyhlazenými okraji a kulatými konci a jen se střídají."""
+    KROKU = 90                                   # snímků na otáčku (4°)
+
+    def __init__(self, tk, velikost, tloustka, pozadi, stopa):
+        self.tk, self.D = tk, int(velikost)
+        self.c = (self.D - 1) / 2.0
+        self.w = float(tloustka)
+        self.R = self.D / 2.0 - self.w / 2.0 - 1.5
+        self.pozadi, self.stopa = _hex(pozadi), _hex(stopa)
+        self.cache = {}
+        import math
+        self.math = math
+        self.body = []                           # pixely u prstence: (x, y, krytí, úhel)
+        for y in range(self.D):
+            for x in range(self.D):
+                dx, dy = x - self.c, self.c - y
+                r = math.hypot(dx, dy)
+                kryti = max(0.0, min(1.0, self.w / 2 - abs(r - self.R) + 0.5))
+                if abs(r - self.R) <= self.w / 2 + 1.5:
+                    self.body.append((x, y, kryti, math.degrees(math.atan2(dy, dx)) % 360))
+        bg = "#%02x%02x%02x" % self.pozadi
+        self.zaklad = [[bg] * self.D for _ in range(self.D)]
+        for x, y, k, _u in self.body:
+            if k > 0:
+                self.zaklad[y][x] = "#%02x%02x%02x" % tuple(int(round(v)) for v in _mix(self.pozadi, self.stopa, k))
+
+    def snimek(self, krok, barva, rozpeti):
+        klic = (krok % self.KROKU, barva, rozpeti)
+        if klic in self.cache:
+            return self.cache[klic]
+        m = self.math
+        a0 = (krok % self.KROKU) * 360.0 / self.KROKU
+        konce = [(self.c + self.R * m.cos(m.radians(a)), self.c - self.R * m.sin(m.radians(a)))
+                 for a in (a0, a0 + rozpeti)]
+        b = _hex(barva)
+        radky = [r[:] for r in self.zaklad]
+        for x, y, k, u in self.body:
+            if (u - a0) % 360 <= rozpeti:
+                kryti = k
+            else:
+                d = min(m.hypot(x - ex, y - ey) for ex, ey in konce)
+                kryti = max(0.0, min(1.0, self.w / 2 - d + 0.5))
+            if kryti <= 0:
+                continue
+            pod = _mix(self.pozadi, self.stopa, k)
+            radky[y][x] = "#%02x%02x%02x" % tuple(int(round(v)) for v in _mix(pod, b, kryti))
+        img = self.tk.PhotoImage(width=self.D, height=self.D)
+        img.put(" ".join("{" + " ".join(r) + "}" for r in radky))
+        self.cache[klic] = img
+        return img
 
 
 def okno_stavu(sp, ag, zamek):
     import tkinter as tk
     B = BARVY
     win = os.name == "nt"
+    _ostre_okno()
     root = tk.Tk()
     root.title(NAZEV)
     root.configure(bg=B["bg"])
-    root.geometry("440x330")
-    root.minsize(360, 280)
+    if os.path.exists(IKONA):
+        try:
+            root.iconbitmap(default=IKONA) if win else None
+        except Exception:
+            pass
+    meritko = max(1.0, root.winfo_fpixels("1i") / 96.0)   # 1,5 při zvětšení 150 %
+    px = lambda v: int(round(v * meritko))
+    root.geometry("%dx%d" % (px(460), px(340)))
+    root.minsize(px(360), px(280))
     root.iconify()                       # nevyskočí — jen ikona na liště
     F = "Segoe UI" if win else "DejaVu Sans"
 
-    platno = tk.Canvas(root, width=96, height=96, bg=B["bg"], highlightthickness=0)
-    platno.pack(pady=(46, 22))
-    platno.create_oval(10, 10, 86, 86, outline=B["stopa"], width=5)
-    oblouk = platno.create_arc(10, 10, 86, 86, start=90, extent=100, style="arc", outline=B["accent"], width=5)
-    nadpis = tk.Label(root, font=(F + " Semibold" if win else F, 12, "bold"), bg=B["bg"], fg=B["text"], wraplength=400)
-    nadpis.pack(padx=20)
-    radek = tk.Label(root, font=(F, 10), bg=B["bg"], fg=B["muted"], wraplength=400, justify="center")
-    radek.pack(padx=20, pady=(6, 0))
+    # Kolečko a texty uprostřed okna, ať je okno jakkoli velké
+    stred = tk.Frame(root, bg=B["bg"])
+    stred.place(relx=0.5, rely=0.46, anchor="center")
+    kolo = Kolecko(tk, px(88), px(6), B["bg"], B["stopa"])
+    obr = tk.Label(stred, bg=B["bg"], bd=0)
+    obr.pack(pady=(0, px(22)))
+    nadpis = tk.Label(stred, font=(F + " Semibold" if win else F, 12, "bold"), bg=B["bg"], fg=B["text"],
+                      wraplength=px(400), justify="center")
+    nadpis.pack()
+    radek = tk.Label(stred, font=(F, 10), bg=B["bg"], fg=B["muted"], wraplength=px(400), justify="center")
+    radek.pack(pady=(px(6), 0))
     dole = tk.Frame(root, bg=B["bg"])
-    dole.pack(side="bottom", fill="x", padx=16, pady=12)
+    dole.pack(side="bottom", fill="x", padx=px(16), pady=px(12))
     pata = tk.Label(dole, font=(F, 8), bg=B["bg"], fg=B["muted2"], anchor="w")
     pata.pack(side="left")
     konec = tk.Label(dole, text="Ukončit", font=(F, 8, "underline"), bg=B["bg"], fg=B["muted2"], cursor="hand2")
     konec.pack(side="right")
 
-    stav = {"uhel": 90.0, "posledni": None, "ukazat": False}
+    def zalom(_e=None):                  # text se zalamuje podle šířky okna
+        w = max(px(240), root.winfo_width() - px(60))
+        nadpis.configure(wraplength=w)
+        radek.configure(wraplength=w)
+    root.bind("<Configure>", zalom)
+
+    stav = {"uhel": 0.0, "posledni": None, "ukazat": False, "barva": B["accent"], "rozpeti": 100}
 
     def toc():
         bezi = stav["posledni"] and stav["posledni"][5]
         stav["uhel"] = (stav["uhel"] - (7 if bezi else 1.6)) % 360   # při běhu rychle, jinak klidně
-        platno.itemconfigure(oblouk, start=stav["uhel"])
+        krok = int(round(stav["uhel"] / (360.0 / Kolecko.KROKU)))
+        obr.configure(image=kolo.snimek(krok, stav["barva"], stav["rozpeti"]))
         root.after(16, toc)
 
     def obnov():
@@ -777,8 +893,8 @@ def okno_stavu(sp, ag, zamek):
             nadpis.configure(text=p[0])
             radek.configure(text=p[1])
             pata.configure(text=p[2], fg=B[p[3]])
-            platno.itemconfigure(oblouk, outline=B[p[4]] if p[4] != "muted" else B["muted2"])
-            platno.itemconfigure(oblouk, extent=100 if p[5] else 70)
+            stav["barva"] = B[p[4]] if p[4] != "muted" else B["muted2"]
+            stav["rozpeti"] = 100 if p[5] else 70
         if stav["ukazat"]:
             stav["ukazat"] = False
             root.deiconify()
@@ -792,7 +908,7 @@ def okno_stavu(sp, ag, zamek):
     konec.bind("<Button-1>", ukonci)
     root.protocol("WM_DELETE_WINDOW", root.iconify)   # křížek jen schová na lištu
 
-    def poslouchej():                    # druhý dvojklik na KONTROLY.pyw okno ukáže
+    def poslouchej():                    # druhý dvojklik na spouštěcí soubor okno ukáže
         while True:
             try:
                 c, _ = zamek.accept()
@@ -815,7 +931,7 @@ def otevri_aplikaci():
 
 
 def main(argv):
-    """Dvojklik na KONTROLY.pyw: spustí spouštěč na pozadí (když neběží)
+    """Dvojklik na „SKLAD. kontroly.pyw": spustí spouštěč na pozadí (když neběží)
     a otevře aplikaci SKLAD na okně Kontroly listingů. Po zapnutí PC
     (--po-zapnuti) jen tiše na pozadí a pustí všechny kontroly."""
     po = "--po-zapnuti" in argv
@@ -835,9 +951,10 @@ def main(argv):
         except OSError as e:
             zapis_log("spuštění po zapnutí se nenastavilo: %s" % e)
     try:
-        prejmenuj_v_registru()
+        obnov_v_registru()
     except OSError as e:
-        zapis_log("přejmenování v Po spuštění se nepovedlo: %s" % e)
+        zapis_log("obnova záznamu v Po spuštění se nepovedla: %s" % e)
+    zastupce_na_plose(sp)
     ag = Agent(sp)
     if po:
         def hotovo(sh):

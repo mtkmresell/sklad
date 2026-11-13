@@ -1,4 +1,4 @@
-// Test: spouštěč kontrol (nastroje/spoustec.py, KONTROLY.pyw).
+// Test: spouštěč kontrol (nastroje/spoustec.py, SKLAD. kontroly.pyw).
 //
 // Spouštěč pouští kontroly bez okna — i sám po zapnutí PC, kdy u počítače
 // nikdo nesedí. Nesmí proto nikdy čekat na klávesnici (kontrola, která by
@@ -285,13 +285,37 @@ print('###' + json.dumps(out, ensure_ascii=False))
   const kod12 = fs.readFileSync(path.join(NASTROJE, 'spoustec.py'), 'utf8');
   ok('spouštěč sám nikdy nečeká na klávesnici', !/\binput\(|getpass/.test(kod12));
   ok('kontroly běží bez černého okna', /CREATE_NO_WINDOW|NO_WINDOW = 0x08000000/.test(kod12) && /creationflags=NO_WINDOW/.test(kod12));
-  ok('KONTROLY.pyw spouští spoustec.main', /spoustec\.main\(/.test(fs.readFileSync(path.join(NASTROJE, 'KONTROLY.pyw'), 'utf8')));
+  ok('SKLAD. kontroly.pyw spouští spoustec.main', /spoustec\.main\(/.test(fs.readFileSync(path.join(NASTROJE, 'SKLAD. kontroly.pyw'), 'utf8'))
+    && !fs.existsSync(path.join(NASTROJE, 'KONTROLY.pyw')));
+  ok('registr ukazuje na SKLAD. kontroly.pyw', /SPOUSTECI_SOUBOR = NAZEV \+ "\.pyw"/.test(kod12) && /os\.path\.join\(SLOZKA, SPOUSTECI_SOUBOR\)/.test(kod12));
+  const ico = fs.readFileSync(path.join(NASTROJE, 'sklad_kontroly.ico'));
+  ok('ikona je platné .ico s víc velikostmi (16 až 256)', ico.readUInt16LE(2) === 1 && ico.readUInt16LE(4) >= 6 && ico[6] === 16, ico.readUInt16LE(4));
+  ok('ikona v okně, na liště (AppUserModelID) i na zástupci', /iconbitmap\(default=IKONA\)/.test(kod12) && /SetCurrentProcessExplicitAppUserModelID/.test(kod12)
+    && /IconLocation=\$env:SK_I/.test(kod12) && /zastupce_vytvoren/.test(kod12));
+  ok('ostré okno při zvětšení Windows (DPI) před vytvořením okna', /_ostre_okno\(\)\s*\n\s*root = tk\.Tk\(\)/.test(kod12) && /SetProcessDpiAwareness/.test(kod12));
+  ok('kolečko a texty uprostřed okna', /stred\.place\(relx=0\.5, rely=0\.4\d, anchor="center"\)/.test(kod12));
+  // Kolečko se kreslí po pixelech s vyhlazením (plátno Tk bylo zubaté)
+  const kol = await new Promise(res => execFile('python3', ['-I', '-c', `
+import sys, json; sys.path.insert(0, sys.argv[1]); import spoustec as S
+class Img:
+    def __init__(s, width, height): s.w = width
+    def put(s, d): s.rows = [r.strip('{}').split() for r in d.split('} {')]
+class Tk: PhotoImage = Img
+k = S.Kolecko(Tk, 90, 6, S.BARVY['bg'], S.BARVY['stopa'])
+im = k.snimek(0, S.BARVY['accent'], 100)
+barvy = set(c for r in im.rows for c in r)
+print(json.dumps({'n': len(im.rows), 'roh': im.rows[0][0], 'barev': len(barvy), 'akcent': S.BARVY['accent'] in barvy,
+  'stejny': k.snimek(0, S.BARVY['accent'], 100) is im}))
+`, NASTROJE], (e, out, err) => res(e ? { chyba: String(err || e) } : JSON.parse(out))));
+  ok('kolečko: vyhlazené okraje (víc odstínů), barva oblouku, pozadí v rohu, snímky se pamatují', kol.n === 90 && kol.roh === '#0b0b0b'
+    && kol.barev > 20 && kol.akcent && kol.stejny, JSON.stringify(kol));
+  ok('patička „Připojeno ke SKLAD.“', /Připojeno ke SKLAD\. · /.test(kod12) && !/Spojeno se SKLADem/.test(kod12));
   ok('stav mimo Google Disk (LOCALAPPDATA)', /LOCALAPPDATA/.test(kod12));
   // Majitel 13. 11. 2026: program se jmenuje „SKLAD. kontroly“ (okno, oznámení, Po spuštění)
   ok('jméno programu SKLAD. kontroly v okně i v Po spuštění', /NAZEV = "SKLAD\. kontroly"/.test(kod12) && /root\.title\(NAZEV\)/.test(kod12)
     && /JMENO_V_REGISTRU = NAZEV/.test(kod12) && !/root\.title\("MTKM/.test(kod12));
   ok('starý záznam „MTKM kontroly“ se uklidí, ať se nepouští dvakrát', /STARA_JMENA_V_REGISTRU = \("MTKM kontroly",\)/.test(kod12)
-    && /def nastav_po_zapnuti[\s\S]*?for jmeno in STARA_JMENA_V_REGISTRU[\s\S]*?DeleteValue/.test(kod12) && /prejmenuj_v_registru\(\)/.test(kod12));
+    && /def nastav_po_zapnuti[\s\S]*?for jmeno in STARA_JMENA_V_REGISTRU[\s\S]*?DeleteValue/.test(kod12) && /obnov_v_registru\(\)/.test(kod12));
   ok('spouštěč není na webu (.assetsignore)', /nastroje/.test(fs.readFileSync(path.join(__dirname, '..', '.assetsignore'), 'utf8')));
   /* Tiché okno (majitel, 13. 11. 2026): jen ukazuje, že program běží.
      Nevyskočí (startuje na liště), křížek ho jen schová a ovládat se

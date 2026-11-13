@@ -262,7 +262,7 @@ otevřít detail kusu.
 
 ## Spouštěč — kontroly ovládané z aplikace SKLAD
 
-Na PC jednou dvojklik na **`KONTROLY.pyw`** (hlavní složka
+Na PC jednou dvojklik na **`SKLAD. kontroly.pyw`** (hlavní složka
 `MTKM-kontroly`, vedle `sklad_firestore.py`). Spouštěč se spustí
 s tichým oknem — nevyskočí, je jen na liště; po kliknutí ukáže točící
 se kolečko a co právě dělá (křížek ho schová, vypíná se odkazem
@@ -296,7 +296,7 @@ ji najde sám.
   Zbývá, aby je skript posílal.
 - **6 Tlačítko ve SKLADu + hlídač** — hotovo (panel Kontroly na PC,
   blok `spoustec` v pravidlech).
-- Jeden spouštěč ovládaný z aplikace — hotovo (`KONTROLY.pyw`, viz výš).
+- Jeden spouštěč ovládaný z aplikace — hotovo (`SKLAD. kontroly.pyw`, viz výš).
 
 Hlídá to `test/test-skladpy.js`: Python proti falešnému serveru
 (čtení, náhled, zápis jen pod `pozadavek_…`, odmítnutí nesmyslů)

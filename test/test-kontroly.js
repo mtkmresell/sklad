@@ -603,7 +603,7 @@ const ENV = { SKLAD_EMAIL: 'ctecka@sklad.local', SKLAD_HESLO: 'tajne', SKLAD_UID
   });
   ok('posluchač poslouchá kolekci spoustec', await page.evaluate(() => typeof window.__pcSnap === 'function'));
   let pc = await page.evaluate(() => { window.__pcStav(null); openKontroly(); return document.querySelector('#kontrolyOv .kl-pc').textContent; });
-  ok('bez spouštěče návod, jak ho pustit', /KONTROLY\.pyw/.test(pc), pc);
+  ok('bez spouštěče návod, jak ho pustit', /SKLAD\. kontroly/.test(pc), pc);
   const tedIso = () => new Date().toISOString();
   const STAV = () => ({ tep: tedIso(), po_zapnuti: true, vse_bezi: false, posledni_vse: tedIso(), posledni_vse_trvani: 212, kontroly: [
     { klic: 'adonio', nazev: 'Adonio', stav: 'ok', souhrn: 'Adonio: smazat 1 | přidat 3', konec: tedIso(), poslano: true },

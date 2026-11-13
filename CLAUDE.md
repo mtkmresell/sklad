@@ -1531,7 +1531,20 @@ v Po spuštění; starý záznam „MTKM kontroly" se při startu uklidí,
 se kolečkem (při běhu zelené a rychlé, v klidu pomalé) a pod ním co se
 děje (`popis_stavu`). **Nic se v něm neovládá**; křížek ho jen schová
 (zavřené by znamenalo, že ze SKLADu nic nejde), vypíná se odkazem
-Ukončit. Bez tkinteru jede spouštěč bez okna. Dvojklik na `KONTROLY.pyw`
+Ukončit. **Okno musí být ostré** (majitel: „rozpixelované a
+neuhlazené"): před `tk.Tk()` se volá `_ostre_okno` (DPI awareness —
+jinak Windows při zvětšení 125/150 % okno roztáhne jako obrázek
+a vlastní AppUserModelID pro ikonu na liště), rozměry se násobí
+`meritko`, kolečko kreslí `Kolecko` po pixelech s vyhlazením
+a kulatými konci (plátno Tk vyhlazovat neumí) a s texty stojí
+**uprostřed okna** (`place`, ať je okno jakkoli velké). Patička
+„Připojeno ke SKLAD.". Ikona `sklad_kontroly.ico` (bílé S, limetková
+tečka a prstenec, jako logo aplikace; PNG uvnitř, 16–256 px) je
+v okně, na liště a na zástupci, který se jednou založí na ploše
+(`zastupce_na_plose`; smazaný se nevrací). Bez tkinteru jede spouštěč
+bez okna. Dvojklik na `SKLAD. kontroly.pyw` (dřív `KONTROLY.pyw`;
+záznam v Po spuštění se při každém startu přepíše na aktuální cestu,
+`obnov_v_registru`)
 spustí spouštěč a otevře aplikaci na `…#kontroly`; další dvojklik okno
 ukáže a otevře aplikaci (`jediny`). **Aplikace sama spouštěč na PC
 nezapne** (prohlížeč program spustit nesmí) — proto se pouští po

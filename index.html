@@ -6557,7 +6557,7 @@ function _pcSpust() {
       });
       _pc = { stav: stav, pinger: pinger, nacteno: true, chyba: '' };
       pcPrekresli();
-      // Odkaz z PC (KONTROLY.pyw otevře …#kontroly) → rovnou okno kontrol
+      // Odkaz z PC (SKLAD. kontroly.pyw otevře …#kontroly) → rovnou okno kontrol
       if (prvni && location.hash === '#kontroly' && !jeUctetni()) {
         try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
         if (!document.getElementById('kontrolyOv')) openKontroly();
@@ -6691,7 +6691,7 @@ function pcHlavaHTML() {
   var s = _pc.stav;
   if (!s) {
     return '<div class="pc-hlava"><span class="pc-tecka"></span><span class="pc-titul">Kontroly na PC</span>'
-      + '<span class="pc-sub">Spusť na PC jednou <b>KONTROLY.pyw</b> ze složky MTKM-kontroly — pak se kontroly dají pouštět odsud.</span></div>';
+      + '<span class="pc-sub">Spusť na PC jednou <b>SKLAD. kontroly</b> (zástupce na ploše, nebo soubor ve složce MTKM-kontroly) — pak se kontroly dají pouštět odsud.</span></div>';
   }
   var on = pcOnline(), ks = s.kontroly || [];
   var bezi = ks.filter(pcBezi).length;
