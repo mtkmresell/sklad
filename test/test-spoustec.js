@@ -287,6 +287,11 @@ print('###' + json.dumps(out, ensure_ascii=False))
   ok('kontroly běží bez černého okna', /CREATE_NO_WINDOW|NO_WINDOW = 0x08000000/.test(kod12) && /creationflags=NO_WINDOW/.test(kod12));
   ok('KONTROLY.pyw spouští spoustec.main', /spoustec\.main\(/.test(fs.readFileSync(path.join(NASTROJE, 'KONTROLY.pyw'), 'utf8')));
   ok('stav mimo Google Disk (LOCALAPPDATA)', /LOCALAPPDATA/.test(kod12));
+  // Majitel 13. 11. 2026: program se jmenuje „SKLAD. kontroly“ (okno, oznámení, Po spuštění)
+  ok('jméno programu SKLAD. kontroly v okně i v Po spuštění', /NAZEV = "SKLAD\. kontroly"/.test(kod12) && /root\.title\(NAZEV\)/.test(kod12)
+    && /JMENO_V_REGISTRU = NAZEV/.test(kod12) && !/root\.title\("MTKM/.test(kod12));
+  ok('starý záznam „MTKM kontroly“ se uklidí, ať se nepouští dvakrát', /STARA_JMENA_V_REGISTRU = \("MTKM kontroly",\)/.test(kod12)
+    && /def nastav_po_zapnuti[\s\S]*?for jmeno in STARA_JMENA_V_REGISTRU[\s\S]*?DeleteValue/.test(kod12) && /prejmenuj_v_registru\(\)/.test(kod12));
   ok('spouštěč není na webu (.assetsignore)', /nastroje/.test(fs.readFileSync(path.join(__dirname, '..', '.assetsignore'), 'utf8')));
   /* Tiché okno (majitel, 13. 11. 2026): jen ukazuje, že program běží.
      Nevyskočí (startuje na liště), křížek ho jen schová a ovládat se

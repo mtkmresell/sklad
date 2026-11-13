@@ -47,7 +47,9 @@ LIMIT_BEHU_S = 40 * 60          # zaseklou kontrolu po 40 minutách ukončit
 ODSTUP_PO_ZAPNUTI_S = 2 * 3600  # po zapnutí PC nespouštět, když vše běželo před chvílí
 CEKANI_NA_SIT_S = 5 * 60        # po zapnutí PC chvíli trvá, než naskočí Wi-Fi
 PORT_ZAMKU = 47831              # jen jedno okno spouštěče naráz
-JMENO_V_REGISTRU = "MTKM kontroly"
+NAZEV = "SKLAD. kontroly"          # jméno programu na liště, v oznámeních i v Po spuštění (majitel 13. 11. 2026)
+JMENO_V_REGISTRU = NAZEV
+STARA_JMENA_V_REGISTRU = ("MTKM kontroly",)   # dřívější jméno — uklidí se, jinak by se pouštělo dvakrát
 
 # Kontroly, které se samy pustit nedají — Spustit vše je přeskakuje,
 # tlačítko je pustí v okně. Zatím žádná.
@@ -413,15 +415,45 @@ def je_po_zapnuti():
     try:
         import winreg
         with _klic_run() as k:
-            winreg.QueryValueEx(k, JMENO_V_REGISTRU)
-        return True
+            for jmeno in (JMENO_V_REGISTRU,) + STARA_JMENA_V_REGISTRU:
+                try:
+                    winreg.QueryValueEx(k, jmeno)
+                    return True
+                except OSError:
+                    pass
+        return False
     except OSError:
         return False
+
+
+def prejmenuj_v_registru():
+    """Záznam pod starým jménem přepíše na nové (jen když tam starý je)."""
+    if os.name != "nt":
+        return
+    import winreg
+    try:
+        with _klic_run() as k:
+            stary = False
+            for jmeno in STARA_JMENA_V_REGISTRU:
+                try:
+                    winreg.QueryValueEx(k, jmeno)
+                    stary = True
+                except OSError:
+                    pass
+    except OSError:
+        return
+    if stary:
+        nastav_po_zapnuti(True)
 
 
 def nastav_po_zapnuti(zapnout):
     import winreg
     with _klic_run(True) as k:
+        for jmeno in STARA_JMENA_V_REGISTRU:
+            try:
+                winreg.DeleteValue(k, jmeno)
+            except OSError:
+                pass
         if zapnout:
             winreg.SetValueEx(k, JMENO_V_REGISTRU, 0, winreg.REG_SZ,
                               prikaz_po_zapnuti(pythonw_exe(), os.path.join(SLOZKA, "KONTROLY.pyw")))
@@ -708,7 +740,7 @@ def okno_stavu(sp, ag, zamek):
     B = BARVY
     win = os.name == "nt"
     root = tk.Tk()
-    root.title("MTKM kontroly")
+    root.title(NAZEV)
     root.configure(bg=B["bg"])
     root.geometry("440x330")
     root.minsize(360, 280)
@@ -802,6 +834,10 @@ def main(argv):
             sp.uloz()
         except OSError as e:
             zapis_log("spuštění po zapnutí se nenastavilo: %s" % e)
+    try:
+        prejmenuj_v_registru()
+    except OSError as e:
+        zapis_log("přejmenování v Po spuštění se nepovedlo: %s" % e)
     ag = Agent(sp)
     if po:
         def hotovo(sh):
@@ -811,7 +847,7 @@ def main(argv):
                     casti.append("%d potřebuje přihlásit" % sh["prihlasit"])
                 if sh["chyba"]:
                     casti.append("%d skončilo chybou" % sh["chyba"])
-                oznameni("Kontroly doběhly", ", ".join(casti) + ". Podrobnosti v SKLADu → Kontroly listingů.")
+                oznameni(NAZEV + ": kontroly doběhly", ", ".join(casti) + ". Podrobnosti v SKLADu → Kontroly listingů.")
 
         def start():
             sp.info = sp.po_zapnuti(hotovo) or ""

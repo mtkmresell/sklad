@@ -1525,7 +1525,9 @@ Z APLIKACE`), i z mobilu. První verze měla na PC ovládací okno
 v tkinteru s tlačítky a majitel ho odmítl („vypadá staře, chci moderní
 jednoduchej disajn") — nevracej ho. Na PC zůstalo jen **tiché okno**
 (`okno_stavu`, majitel 13. 11.: „ať v PC vidím, že se něco reálně
-děje"): startuje schované na liště, po kliknutí černá plocha s točícím
+děje"), jménem **SKLAD. kontroly** (`NAZEV` — okno, oznámení i záznam
+v Po spuštění; starý záznam „MTKM kontroly" se při startu uklidí,
+`STARA_JMENA_V_REGISTRU`, jinak by se pouštělo dvakrát): startuje schované na liště, po kliknutí černá plocha s točícím
 se kolečkem (při běhu zelené a rychlé, v klidu pomalé) a pod ním co se
 děje (`popis_stavu`). **Nic se v něm neovládá**; křížek ho jen schová
 (zavřené by znamenalo, že ze SKLADu nic nejde), vypíná se odkazem
