@@ -64,6 +64,14 @@ const M = 'majitel1';
   }
   check('název je v tabulce vidět jako text', await page.evaluate(() => { switchTab('stock'); setView('table'); renderItems(); return /<img src="x"/.test(document.getElementById('itemsGrid').textContent); }));
 
+  // Oprava z 14. 11.: prázdná velikost má značku „×“, ne vypsané „<span…“ (ošetřilo se i HTML z convertSize)
+  check('kus bez velikosti: v tabulce není vidět kus HTML jako text', await page.evaluate(() => {
+    items.push({ id: 'b1', name: 'Bez velikosti', category: 'pokemon', buyPrice: 100, buyDate: items[0].buyDate, saleState: 'stock', platforms: [] });
+    switchTab('stock'); setView('table'); renderItems();
+    const r = !/<span|&lt;span/.test(document.getElementById('itemsGrid').textContent);
+    items.pop(); renderItems(); return r;
+  }));
+
   section('2) Detail položky');
   for (const id of ['a1', 'a2', 'a3']) {
     await page.evaluate((i) => openDetail(i), id);

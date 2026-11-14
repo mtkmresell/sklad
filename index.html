@@ -888,7 +888,7 @@ body.prostredi-finance #financeApp { display:block; flex:1; min-height:0; overfl
 .fin-dlazdice { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
 .fin-dl { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 16px; min-width:132px; text-align:left; font-family:inherit; color:var(--text); }
 .fin-dl-l { font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
-.fin-dl-v { font-family:'Syne',sans-serif; font-weight:700; font-size:18px; margin-top:3px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.fin-dl-v { font-family:'Syne',sans-serif; font-weight:700; font-size:18px; margin-top:3px; font-variant-numeric:lining-nums tabular-nums; white-space:nowrap; }
 #financeApp .plus, .fin-mo .plus { color:var(--accent); }
 #financeApp .minus, .fin-mo .minus { color:var(--text); }
 button.fin-dl { cursor:pointer; transition:border-color .15s; }
@@ -924,7 +924,7 @@ button.fin-dl.akt { border-color:var(--text); }
 .fin-ucet, .fin-vs, .fin-pozn { display:block; font-family:'DM Mono',monospace; font-size:10.5px; color:var(--muted); font-weight:400; margin-top:2px; }
 .fin-pozn { font-family:inherit; font-size:11.5px; font-style:italic; }
 .fin-zp { color:var(--muted); max-width:340px !important; }
-.fin-c { white-space:nowrap !important; font-family:'Syne',sans-serif; font-weight:700; font-variant-numeric:tabular-nums; }
+.fin-c { white-space:nowrap !important; font-family:'Syne',sans-serif; font-weight:700; font-variant-numeric:lining-nums tabular-nums; }
 .fin-kat { font-size:11px; font-style:normal; background:var(--surface2); border-radius:20px; padding:2px 9px; white-space:nowrap; color:var(--text); }
 .fin-banka { font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; border-radius:5px; padding:2px 7px; white-space:nowrap; }
 .fin-banka.b-airbank { color:#3d7a12; background:#eef6e2; }
@@ -942,7 +942,7 @@ button.fin-dl.akt { border-color:var(--text); }
 .fin-prazdne b { color:var(--text); }
 .fin-nadpis { font-family:'Syne',sans-serif; font-weight:800; font-size:15px; margin:22px 0 10px; }
 .fin-nadpis:first-of-type { margin-top:4px; }
-.fin-rok td, .fin-kategorie td { vertical-align:middle; font-variant-numeric:tabular-nums; }
+.fin-rok td, .fin-kategorie td { vertical-align:middle; font-variant-numeric:lining-nums tabular-nums; }
 .fin-rok td.r { position:relative; white-space:nowrap; }
 .fin-pruh { position:absolute; left:auto; right:12px; bottom:5px; height:2px; background:var(--accent); border-radius:2px; opacity:.55; max-width:calc(100% - 24px); }
 .fin-pruh.vyd { background:var(--text); opacity:.3; }
@@ -965,7 +965,7 @@ button.fin-dl.akt { border-color:var(--text); }
 .fin-modal .mt2 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .fin-nav { display:flex; align-items:center; gap:6px; flex-shrink:0; font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); }
 .fin-nav .fin-sip { width:28px; height:28px; font-size:16px; }
-.fin-det-castka { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; margin:-6px 0 14px; font-variant-numeric:tabular-nums; }
+.fin-det-castka { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; margin:-6px 0 14px; font-variant-numeric:lining-nums tabular-nums; }
 .fin-det-info { background:var(--bg); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:16px; }
 .fin-r { display:flex; gap:12px; padding:4px 0; font-size:13px; }
 .fin-r span { color:var(--muted); min-width:120px; font-family:'DM Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding-top:2px; flex-shrink:0; }
@@ -7360,7 +7360,7 @@ function tableHTML(list) {
       <td style="padding:4px 6px;">${tImgHtml}</td>
       <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${kontrolaZnackyHtml(it)}${tNameHtml}${profBadge(it)?' '+profBadge(it):''}</td>
       <td style="text-align:center">${tSkuHtml}</td>
-      <td style="font-family:monospace;font-size:11px;text-align:center;cursor:pointer;" data-action="sizeunit">${escHtml(convertSize(it.size, it.name)) || `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`}</td>
+      <td style="font-family:monospace;font-size:11px;text-align:center;cursor:pointer;" data-action="sizeunit">${_velHtml(it.size, it.name) || `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center">${COND_L[it.condition]||it.condition||'—'}</td>
       <td class="td-num td-buy${(it.saleState||'stock')==='stock'?' calc-buy':''}" style="text-align:center">${buyStr}</td>
       ${tab!=='waiting'?`<td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.buyDate)}</td>`:''}
@@ -7537,7 +7537,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
         out += '<td style="padding:4px 6px;">'+chImgHtml+'</td>';
         out += '<td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+kontrolaZnackyHtml(ch)+chNameHtml+'</td>';
         out += '<td style="text-align:center;">'+chSkuHtml+'</td>';
-        out += '<td style="font-family:monospace;font-size:11px;text-align:center;">'+escHtml(convertSize(ch.size, ch.name))+'</td>';
+        out += '<td style="font-family:monospace;font-size:11px;text-align:center;">'+_velHtml(ch.size, ch.name)+'</td>';
         out += '<td style="font-family:monospace;font-size:11px;text-align:center;">'+(COND_L[ch.condition]||ch.condition||'—')+'</td>';
         out += '<td class="td-num td-buy" style="text-align:center;">'+chBuyStr+'</td>';
         out += '<td class="td-num td-sell" style="text-align:center;">'+chSellStr+'</td>';
@@ -19791,6 +19791,8 @@ function _odkazHtml(u) {
   if (/^[\w-]+(\.[\w-]+)+([\/?#]|$)/.test(u)) return escHtml('https://' + u);
   return '#';
 }
+// Velikost do buňky: text ošetřený, prázdná velikost dostane značku „×“ (ta je HTML z convertSize)
+function _velHtml(size, name) { return size ? escHtml(convertSize(size, name)) : convertSize(size, name); }
 function _jsText(s) { return String(s == null ? '' : s).replace(/[\\'"<>&`\n\r]/g, ''); }
 
 function _crmNameById(id) {
@@ -22293,7 +22295,7 @@ function renderSoldView(){
             html+='<td class="'+(_chRohS?'chybi-td':'')+'" style="padding:3px 8px;">'+_chRohS+'<span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
             html+='<td style="padding:3px 8px;color:var(--muted2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+kontrolaZnackyHtml(ch)+ch.name+'</td>';
             html+='<td style="padding:3px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(escHtml(ch.sku)||'—')+'</td>';
-            html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+escHtml(convertSize(ch.size,ch.name))+'</td>';
+            html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+_velHtml(ch.size,ch.name)+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+czk(buyKcC)+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--accent);">'+itemSell+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:'+ipc+';">'+(itemProfit!=null?czkSign(itemProfit):'—')+'</td>';
@@ -22321,7 +22323,7 @@ function renderSoldView(){
       html+='<td class="'+(_rohS?'chybi-td':'')+'" style="padding:6px 8px;">'+_rohS+'<span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span></td>';
       html+='<td style="padding:6px 8px;font-size:13px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+kontrolaZnackyHtml(it)+(it.stockxUrl?'<a href="'+_odkazHtml(buildStockxUrlWithSize(it.stockxUrl,it.name,it.size))+'" target="_blank" rel="noopener" class="stockx-link" onclick="event.stopPropagation()">'+escHtml(it.name)+'</a>':escHtml(it.name))+(profBadge(it)?' '+profBadge(it):'')+'</td>';
       html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(escHtml(it.sku)||'—')+'</td>';
-      html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);cursor:pointer;" data-action="sizeunit">'+escHtml(convertSize(it.size,it.name))+'</td>';
+      html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);cursor:pointer;" data-action="sizeunit">'+_velHtml(it.size,it.name)+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);">'+bs+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--accent);font-weight:600;">'+ss+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:'+pc+';font-weight:600;">'+czkSign(profit)+'</td>';

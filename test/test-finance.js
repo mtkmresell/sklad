@@ -162,6 +162,9 @@ const REVOLUT = [
   });
   check('Finance jsou světlé: pozadí, hlavička i okno', barvy.telo === 'rgb(244, 242, 236)' && barvy.hlavicka === 'rgb(255, 255, 255)' && barvy.okno === 'rgb(255, 255, 255)', JSON.stringify(barvy));
   check('akcent je tmavě zelený a text na něm bílý', barvy.app === '#17603a' && barvy.tlacitko === 'rgb(255, 255, 255)', JSON.stringify(barvy));
+  // Majitel (14. 11.): „finance mají divný font čísel" — bez lining-nums kreslí Syne skákavé (staré) číslice
+  check('číslice ve Financích jsou rovné jako ve skladu (lining-nums)', await page.evaluate(() =>
+    ['.fin-c', '.fin-dl-v'].every(q => /lining-nums/.test(getComputedStyle(document.querySelector('#financeApp ' + q)).fontVariantNumeric))));
   check('okna skladu (Nastavení) zůstávají tmavá', barvy.nastaveni === '#181818', barvy.nastaveni);
   check('prostředí se pamatuje pro obnovení stránky', await page.evaluate(() => localStorage.getItem('sklad_prostredi_v1') === 'finance'));
   check('po obnovení se vrátí do Financí', await page.evaluate(() => { prepniProstredi('sklad', true); const pred = document.body.classList.contains('prostredi-finance'); finSpust(); return !pred && document.body.classList.contains('prostredi-finance'); }));
