@@ -973,40 +973,87 @@ a `test-upozorneni.js`, sekce 14.
 
 ### Finance — daňová evidence (`finance.js`, `FINANCE — DAŇOVÁ EVIDENCE`)
 
-Druhé pracovní prostředí (majitel, 11. 11. 2026): přepínač **Sklad |
-Finance** v hlavičce. Tabulka transakcí z výpisů **Air Bank** a **Revolut
-Pro** se záložkami Air Bank / Revolut / Dohromady, měsíc ‹ ›, souhrn po
-měnách, filtry (Příjmy, Výdaje, Bez dokladu) a hledání. U každé
-transakce **odkaz na doklad** (OneDrive, jako `invoiceUrl` u položek —
-účetní jen klikne a stáhne), kategorie, poznámka a „Doklad není
-potřeba“ (převody mezi vlastními účty, poplatky). Plán dalších kroků:
-párování se sklad prodeji / nákupy, pohled účetního po měsících, export
-pro jeho program, automatické stahování výpisů.
+Druhé pracovní prostředí (majitel, 11. 11. 2026; doladěno 13. 11.):
+přepínač **Sklad | Finance** v hlavičce. Tabulka transakcí z výpisů
+**Air Bank** a **Revolut Pro** se záložkami Air Bank / Revolut /
+Dohromady, měsíc ‹ ›, souhrn po měnách, filtry (Příjmy, Výdaje, Bez
+dokladu) a hledání. U každé transakce **odkaz na doklad** (OneDrive, jako
+`invoiceUrl` u položek), kategorie, poznámka a „Doklad není potřeba“
+(převody mezi vlastními účty, poplatky). K tomu:
 
-Čtyři věci se nesmí rozbít:
+- **Světlý vzhled** — majitel chce podle barev hned poznat, že je ve
+  Financích. Stejná písma a tvary, mění se jen proměnné barev (krémové
+  pozadí, tmavě zelený akcent `#17603a`) na hlavičce, `#financeApp`,
+  oknech Financí (`.fin-mo`) a liště `.fin-hrom`. **Okna skladu
+  (Nastavení) zůstávají tmavá** — mají natvrdo psané tmavé barvy;
+  proměnné se proto nepřepisují na `body`. Text na akcentu je bílý
+  (`.btn-pri`, `.add-btn` mají ve skladu černý).
+- **Párování se skladem** (`kandidati`, `navrhy`, `jistyNavrh`): výdaj
+  ↔ nákup (kus i celá objednávka / FP / KS podle `klicNakupu`, totéž co
+  `stejnyNakup`), příjem ↔ prodej (kus i celý payout místa a dne).
+  Sedět musí měna, částka (na korunu / 5 centů) a datum poblíž; číslo
+  objednávky ve zprávě je jistota. Doklad se pak **převezme z položky**
+  (`dokladStav`: `invoiceUrl`, `saleInvoiceUrl`, nebo prodejní doklad
+  z řady) a kroužek je obrysový (`ze-skladu`). Hromadně „Spárovat se
+  skladem · N“ jen pro jednoznačné návrhy, ručně hledáním v detailu.
+- **Kategorie podle protistrany** (`pravidlo`): nový pohyb při importu
+  dostane kategorii naposledy zařazeného pohybu téže protistrany;
+  v detailu jde zařadit i ostatní nezařazené od ní. Hromadné úpravy
+  (Vybrat → lišta dole): kategorie, doklad není / je potřeba, smazat.
+- **Přehled roku** (měsíce a kategorie, klik otevře pohyby) a **Export
+  CSV** toho, co je vidět (středník, desetinná čárka, BOM).
+- **Účetní Finance vidí, jen čte**: nemá Import, Vybrat, párování ani
+  ukládání; odkazy na doklad jsou `a.faktura-link` (jiné odkazy ven má
+  vypnuté). **Zaúčtováno** odškrtává do vlastní složky — tentýž dokument
+  jako okno Účetnictví, klíč `f:<id transakce>` s otiskem (datum, měna,
+  částka). Poprvé se mu otevře minulý měsíc.
+- Po obnovení stránky se vrátí prostředí, ve kterém člověk skončil
+  (`sklad_prostredi_v1`). Detail listuje šipkami a „Uložit a další“
+  (Enter v poli s odkazem) skočí na další pohyb bez dokladu.
+
+Plán dalších kroků: automatické stahování výpisů, import PDF (majitel
+umí z bank zatím jen PDF — návod na CSV je v okně importu; **zeptej se,
+jestli CSV v bance našel**), export pro program účetního.
+
+Co se nesmí rozbít:
 
 - **Vlastní soubor a vlastní kolekce** (`users/{uid}/finance`), aby
-  chyba ve financích nikdy nesáhla na sklad a obráceně. Do skladu
-  finance.js nezapisuje nic. `index.html` jen načte skript, má přepínač
-  v hlavičce a CSS; spouští ho `_spustSkladPosluchace` (`finSpust`)
-  a zastavuje `fb-auth` (`finZastav`). **`finance.js` nesmí do
-  `.assetsignore`**, jinak na webu chybí.
+  chyba ve financích nikdy nesáhla na sklad a obráceně. **Do skladu
+  finance.js nezapisuje nic** — párování si pamatuje transakce (pole
+  `sklad` s id položek a `skladTyp`), položka o něm neví. `index.html`
+  jen načte skript, má přepínač v hlavičce a CSS; spouští ho
+  `_spustSkladPosluchace` (`finSpust`) a zastavuje `fb-auth`
+  (`finZastav`). **`finance.js` nesmí do `.assetsignore`**, jinak na
+  webu chybí.
 - **Každá transakce je vlastní dokument `t_<banka>_<otisk>`.** Otisk je
   z reference banky (Air Bank „Referenční číslo“, Revolut „ID“), bez ní
   z obsahu řádku a pořadí shody v souboru. **Stejný výpis podruhé nic
   nezdvojí** a ručně doplněný doklad nepřepíše (náhled nové pohyby
-  odfiltruje dřív, než se zapíše).
+  odfiltruje dřív, než se zapíše). Úpravy jdou vždy s `merge`, celý
+  dokument se píše jen při importu.
 - **Sloupce výpisu se poznávají podle názvu** (`FIN_SLOUPCE`, bez
   diakritiky), ne podle pořadí. Bez data nebo částky se nic neuloží
   a řekne se to. Revolut: bere se jen `State = COMPLETED`. Air Bank
-  umí poslat i windows-1250, dekóduje se podle toho.
-- **Účetní Finance zatím nevidí** (přepínač i `prepniProstredi` mají
-  bránu `jeUctetni()`); pravidla mu čtení už dovolují, pohled pro něj
-  přijde jako další krok.
+  umí poslat i windows-1250, dekóduje se podle toho. **Banka se pozná
+  z hlavičky** (`poznejBanku`), zaškrtnutá volba je jen záloha — špatně
+  zaškrtnutá ukládala pohyby pod cizí záložku.
+- **Radši nenavrhnout než navrhnout špatně.** Osobní kusy se nenabízí
+  nikdy, položka spárovaná s jedním pohybem se nenabídne druhému
+  a hromadné párování bere jen pohyb s právě jedním kandidátem.
+  Špatný pár by účetnímu podstrčil cizí doklad.
+- **Zkratky skladu ve Financích nic nedělají** (posluchač kláves
+  v capture fázi): „n“ otevíralo Přidat položku a čísla přepínala
+  sekce skladu, který není vidět. Escape se pouští dál.
+- **Účetní: schované tlačítko nestačí** — `cloud()` vrací účetnímu
+  `null`, takže žádná zapisovací funkce nic neodešle, a pravidla
+  Firestore zápis odmítnou. Přepínač prostředí se u něj drží u loga:
+  bez přepínače profilů končil pod záložkami skladu a nešlo na něj
+  kliknout.
 
 Blok `finance` ve `firestore.rules` je v konzoli publikovaný (13. 11.);
-bez něj cloud zápis odmítne a aplikace to řekne.
-Hlídá to `test-finance.js`.
+bez něj cloud zápis odmítne a aplikace to řekne. `test/fakefs.js` umí
+`merge` i v dávce (dřív ho zahazoval a úprava smazala zbytek dokumentu
+— jen v testu). Hlídá to `test-finance.js`.
 
 ### Společný nákupní doklad (`SPOLEČNÝ NÁKUPNÍ DOKLAD`)
 

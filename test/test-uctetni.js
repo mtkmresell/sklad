@@ -208,7 +208,8 @@ const POLOZKY = [
       if (window.__otisk() !== pred) zmeny.push(kde + ': ' + (el.dataset.action || (el.getAttribute('onclick') || '').slice(0, 30) || el.textContent.trim().slice(0, 20)));
       // ukliď po sobě, ať další klik nezačíná v rozdělaném okně
       document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));
-      document.querySelectorAll('#retailersMgrOv, #zprOv, #ucetOv, [id^="_del"]').forEach(o => o.remove && o.remove());
+      document.querySelectorAll('#retailersMgrOv, #zprOv, #ucetOv, [id^="_del"]').forEach(o => o.remove && o.remove());      // přepínač Sklad | Finance účetní má — po kliku zpátky do skladu, ať se dál kliká v něm
+      if (document.body.classList.contains('prostredi-finance')) prepniProstredi('sklad', true);
     };
     for (const el of Array.from(document.querySelectorAll('button, [data-action], [onclick]')).filter(vid)) {
       if (!el.closest('.mo')) await klikni(el, 'hlavní pohled');

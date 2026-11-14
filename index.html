@@ -837,86 +837,207 @@ header { flex-shrink: 0; }
 /* ── FINANCE — DAŇOVÁ EVIDENCE (finance.js) ──────────────────────────
    Druhé prostředí: třída na <body> schová všechno skladové a ukáže
    #financeApp. Sklad zůstává v DOM, jen schovaný — přepnutí zpátky nic
-   nepřestavuje. */
+   nepřestavuje.
+   SVĚTLÝ VZHLED (majitel, 13. 11. 2026): podle barev má být hned vidět,
+   že jsem ve Financích. Mění se jen proměnné barev — písma, tvary
+   a třídy zůstávají ze skladu. Platí pro hlavičku, #financeApp, okna
+   Financí (.fin-mo) a lištu hromadných úprav; okna skladu (Nastavení)
+   zůstávají tmavá, mají natvrdo psané tmavé barvy. */
 .prostredi-switch { display:flex; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:3px; gap:2px; flex-shrink:0; }
-.ps-btn { background:none; border:none; color:var(--muted); font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600; padding:5px 11px; border-radius:6px; cursor:pointer; }
+.ps-btn { background:none; border:none; color:var(--muted); font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600; padding:5px 11px; border-radius:6px; cursor:pointer; transition:all 0.2s; }
 .ps-btn.active { background:var(--text); color:#000; }
-.ps-btn[data-kam="finance"].active { background:#6cb6ff; }
+body.prostredi-finance .ps-btn.active { background:var(--accent); color:#fff; }
+/* Účetní nemá přepínač profilů, takže by přepínač prostředí skončil uprostřed
+   hlavičky pod záložkami skladu a nešlo by na něj kliknout — drží se u loga */
+body.uctetni .prostredi-switch { margin-left:8px; margin-right:auto; }
 body.prostredi-finance #profileSwitch, body.prostredi-finance .header-tabs, body.prostredi-finance #statsBarWrap,
 body.prostredi-finance .filters, body.prostredi-finance .main, body.prostredi-finance #customersSection,
-body.prostredi-finance #theadClone, body.prostredi-finance #stareDataPruh,
+body.prostredi-finance #theadClone, body.prostredi-finance #stareDataPruh, body.prostredi-finance .bulk-bar,
 body.prostredi-finance .header-right > :not(#userBadge):not(#btnSettings) { display:none !important; }
+body.prostredi-finance { background:#f4f2ec; }
+body.prostredi-finance header, #financeApp, .fin-mo, .fin-hrom {
+  --bg:#f4f2ec; --surface:#ffffff; --surface2:#eceae2; --surface3:#e2dfd5; --border:#dcd8cc;
+  --accent:#17603a; --accent2:#b4541a; --text:#171714; --muted:#6d6a60; --muted2:#a39f93;
+  --danger:#bf3a2b; --warning:#a86400; --fin-chybi:#c2600a; --fin-jemna:rgba(23,96,58,.09);
+  color:var(--text);
+}
+body.prostredi-finance header { box-shadow:0 1px 0 var(--border); }
+body.prostredi-finance .icon-btn:hover { border-color:var(--muted2); }
 #financeApp { display:none; }
-body.prostredi-finance #financeApp { display:block; flex:1; min-height:0; overflow-y:auto; padding:16px 18px 40px; }
-.fin-lista { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
-.fin-zal { display:flex; background:var(--surface2); border-radius:8px; padding:3px; gap:2px; }
-.fin-zal-btn { background:none; border:none; color:var(--muted); font-family:inherit; font-size:13px; font-weight:500; padding:7px 13px; border-radius:6px; cursor:pointer; }
+body.prostredi-finance #financeApp { display:block; flex:1; min-height:0; overflow-y:auto; padding:18px 22px 90px; background:var(--bg);
+  scrollbar-width:thin; scrollbar-color:#c9c5b8 transparent; animation:finVjezd .22s ease; }
+@keyframes finVjezd { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion:reduce) { body.prostredi-finance #financeApp { animation:none; } }
+.fin-lista { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+.fin-zal { display:flex; background:var(--surface2); border-radius:9px; padding:3px; gap:2px; }
+.fin-zal-btn { background:none; border:none; color:var(--muted); font-family:inherit; font-size:13px; font-weight:500; padding:7px 13px; border-radius:7px; cursor:pointer; transition:background .15s,color .15s; white-space:nowrap; }
+.fin-zal-btn:hover { color:var(--text); }
 .fin-zal-btn span { font-family:'DM Mono',monospace; font-size:10px; opacity:.7; margin-left:3px; }
-.fin-zal-btn.akt { background:#6cb6ff; color:#000; }
+.fin-zal-btn.akt { background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.1); }
 .fin-obdobi { display:flex; align-items:center; gap:6px; }
-.fin-obd-text { font-family:'Syne',sans-serif; font-weight:700; font-size:16px; min-width:150px; text-align:center; }
-.fin-sip, .fin-mini { background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:7px; cursor:pointer; font-family:inherit; }
-.fin-sip { width:32px; height:32px; font-size:18px; line-height:1; }
-.fin-mini { font-size:11px; padding:6px 10px; color:var(--muted); }
-.fin-mini.akt { color:#6cb6ff; border-color:#6cb6ff; }
-.fin-import-btn { margin-left:auto; }
-.fin-dlazdice { display:flex; gap:9px; flex-wrap:wrap; margin-bottom:14px; }
-.fin-dl { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; min-width:120px; text-align:left; font-family:inherit; color:var(--text); }
+.fin-obd-text { font-family:'Syne',sans-serif; font-weight:800; font-size:17px; min-width:150px; text-align:center; }
+.fin-sip, .fin-mini { background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:8px; cursor:pointer; font-family:inherit; transition:border-color .15s,color .15s,background .15s; }
+.fin-sip:hover, .fin-mini:hover { border-color:var(--muted2); }
+.fin-sip { width:32px; height:32px; font-size:18px; line-height:1; flex-shrink:0; }
+.fin-mini { font-size:12px; padding:7px 11px; color:var(--muted); white-space:nowrap; }
+.fin-mini:hover { color:var(--text); }
+.fin-mini.akt { color:var(--accent); border-color:var(--accent); background:var(--fin-jemna); }
+.fin-mini.fin-nebezp:hover, .fin-mini.fin-nebezp[data-jiste] { color:var(--danger); border-color:var(--danger); }
+.fin-akce { margin-left:auto; display:flex; gap:8px; align-items:center; }
+#financeApp .add-btn, .fin-mo .btn-pri { color:#fff; }
+.fin-dlazdice { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.fin-dl { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:12px 16px; min-width:132px; text-align:left; font-family:inherit; color:var(--text); }
 .fin-dl-l { font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
-.fin-dl-v { font-family:'Syne',sans-serif; font-weight:700; font-size:17px; margin-top:2px; font-variant-numeric:tabular-nums; }
-#financeApp .plus, .fin-modal .plus { color:var(--accent); }
-#financeApp .minus, .fin-modal .minus { color:var(--text); }
-.fin-dl-bez { cursor:pointer; }
-.fin-dl-bez.svit { border-color:rgba(255,140,26,.55); }
-.fin-dl-bez.svit .fin-dl-v { color:#ff8c1a; }
+.fin-dl-v { font-family:'Syne',sans-serif; font-weight:700; font-size:18px; margin-top:3px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#financeApp .plus, .fin-mo .plus { color:var(--accent); }
+#financeApp .minus, .fin-mo .minus { color:var(--text); }
+button.fin-dl { cursor:pointer; transition:border-color .15s; }
+button.fin-dl:hover { border-color:var(--muted2); }
+.fin-dl-bez.svit { border-color:rgba(194,96,10,.5); background:#fff8f0; }
+.fin-dl-bez.svit .fin-dl-v { color:var(--fin-chybi); }
+button.fin-dl.akt { border-color:var(--text); }
 .fin-filtry { display:flex; gap:7px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
-.fin-inp { flex:1; min-width:180px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:inherit; font-size:13px; padding:8px 11px; outline:none; }
-.fin-inp:focus { border-color:#6cb6ff; }
-.fin-chip { background:none; border:1px solid var(--border); color:var(--muted); border-radius:20px; padding:5px 12px; font-size:12px; font-family:inherit; cursor:pointer; }
-.fin-chip.akt { border-color:#6cb6ff; color:#6cb6ff; background:rgba(108,182,255,.08); }
+.fin-inp { flex:1; min-width:180px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:inherit; font-size:13px; padding:8px 11px; outline:none; transition:border-color .2s; }
+.fin-inp:focus { border-color:var(--accent); }
+.fin-inp::placeholder { color:var(--muted2); }
+.fin-chip { background:var(--surface); border:1px solid var(--border); color:var(--muted); border-radius:20px; padding:5px 12px; font-size:12px; font-family:inherit; cursor:pointer; transition:all .15s; white-space:nowrap; }
+.fin-chip:hover { color:var(--text); border-color:var(--muted2); }
+.fin-chip.akt { border-color:var(--accent); color:var(--accent); background:var(--fin-jemna); font-weight:600; }
+.fin-chip-par { border-color:var(--accent); color:var(--accent); font-weight:600; }
 .fin-pocet { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); margin-left:auto; }
-.fin-tab-obal { overflow-x:auto; }
+.fin-tab-obal { overflow-x:auto; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); }
 .fin-tab { width:100%; border-collapse:collapse; font-size:13px; }
-.fin-tab th { background:var(--bg); font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); text-align:left; padding:9px 10px; border-bottom:1px solid var(--border); position:static; }
-.fin-tab td { padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top; max-width:none; white-space:normal; overflow:visible; }
-.fin-tab tbody tr { cursor:pointer; }
-.fin-tab tbody tr:hover td { background:var(--surface2); }
+.fin-tab th { background:var(--surface); font-family:'DM Mono',monospace; font-size:10px; font-weight:500; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); position:static; white-space:nowrap; }
+.fin-tab td { padding:10px 12px; border-bottom:1px solid var(--surface2); vertical-align:top; max-width:none; white-space:normal; overflow:visible; }
+.fin-tab tbody tr:last-child td { border-bottom:none; }
+.fin-tab tbody tr { cursor:pointer; transition:background .1s; }
+.fin-tab tbody tr:hover td { background:#f8f7f2; }
+.fin-tab tbody tr.vybrano td { background:var(--fin-jemna); }
+.fin-tab tbody tr.prazdny { cursor:default; color:var(--muted2); }
+.fin-tab tbody tr.prazdny:hover td { background:none; }
 .fin-tab .r { text-align:right; } .fin-tab .c { text-align:center; }
+.fin-cb { width:34px; text-align:center !important; }
+.fin-cb input, .fin-chk input, .fin-par input { accent-color:var(--accent); width:15px; height:15px; cursor:pointer; }
+.fin-zauc.zmena { outline:2px solid var(--fin-chybi); outline-offset:1px; }
 .fin-d { white-space:nowrap !important; font-family:'DM Mono',monospace; font-size:12px; color:var(--muted); }
 .fin-pr { font-weight:600; }
-.fin-ucet, .fin-vs { display:block; font-family:'DM Mono',monospace; font-size:10.5px; color:var(--muted); font-weight:400; margin-top:2px; }
+.fin-ucet, .fin-vs, .fin-pozn { display:block; font-family:'DM Mono',monospace; font-size:10.5px; color:var(--muted); font-weight:400; margin-top:2px; }
+.fin-pozn { font-family:inherit; font-size:11.5px; font-style:italic; }
 .fin-zp { color:var(--muted); max-width:340px !important; }
 .fin-c { white-space:nowrap !important; font-family:'Syne',sans-serif; font-weight:700; font-variant-numeric:tabular-nums; }
-.fin-kat { font-size:11px; border:1px solid var(--border); border-radius:20px; padding:2px 9px; white-space:nowrap; }
+.fin-kat { font-size:11px; font-style:normal; background:var(--surface2); border-radius:20px; padding:2px 9px; white-space:nowrap; color:var(--text); }
 .fin-banka { font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; border-radius:5px; padding:2px 7px; white-space:nowrap; }
-.fin-banka.b-airbank { color:#8fd14f; border:1px solid rgba(143,209,79,.4); }
-.fin-banka.b-revolut { color:#6cb6ff; border:1px solid rgba(108,182,255,.4); }
-.fin-dok { display:inline-flex; width:24px; height:24px; border-radius:50%; align-items:center; justify-content:center; font-size:12px; font-weight:700; text-decoration:none; }
-.fin-dok.ok { background:rgba(200,255,0,.12); color:var(--accent); }
-.fin-dok.chybi { background:rgba(255,140,26,.14); color:#ff8c1a; }
-.fin-dok.nic { color:var(--muted); }
-.fin-prazdne { color:var(--muted); font-size:14px; line-height:1.6; border:1px dashed var(--border); border-radius:var(--radius); padding:24px; text-align:center; }
+.fin-banka.b-airbank { color:#3d7a12; background:#eef6e2; }
+.fin-banka.b-revolut { color:#1d5fa8; background:#e6f0fb; }
+.fin-sklad { font-size:11px; border-radius:5px; padding:2px 7px; white-space:nowrap; display:inline-block; max-width:170px; overflow:hidden; text-overflow:ellipsis; vertical-align:top; }
+.fin-sklad.ma { background:var(--fin-jemna); color:var(--accent); }
+.fin-sklad.navrh { border:1px dashed var(--accent); color:var(--accent); font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
+.fin-dok { display:inline-flex; width:24px; height:24px; border-radius:50%; align-items:center; justify-content:center; font-size:12px; font-weight:700; text-decoration:none; border:none; font-family:inherit; padding:0; }
+.fin-dok.ok { background:var(--accent); color:#fff !important; cursor:pointer; transition:transform .12s; }
+.fin-dok.ok:hover { transform:scale(1.12); }
+.fin-dok.ok.ze-skladu { background:var(--fin-jemna); color:var(--accent) !important; box-shadow:inset 0 0 0 1.5px var(--accent); }
+.fin-dok.chybi { background:#fdebd8; color:var(--fin-chybi); }
+.fin-dok.nic { color:var(--muted2); }
+.fin-prazdne { color:var(--muted); font-size:14px; line-height:1.6; border:1px dashed var(--border); border-radius:var(--radius); padding:34px 24px; text-align:center; background:var(--surface); }
 .fin-prazdne b { color:var(--text); }
-.fin-modal { max-width:560px; }
-.fin-det-castka { font-family:'Syne',sans-serif; font-weight:800; font-size:26px; margin:-6px 0 14px; font-variant-numeric:tabular-nums; }
-.fin-det-info { background:var(--surface2); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:16px; }
+.fin-nadpis { font-family:'Syne',sans-serif; font-weight:800; font-size:15px; margin:22px 0 10px; }
+.fin-nadpis:first-of-type { margin-top:4px; }
+.fin-rok td, .fin-kategorie td { vertical-align:middle; font-variant-numeric:tabular-nums; }
+.fin-rok td.r { position:relative; white-space:nowrap; }
+.fin-pruh { position:absolute; left:auto; right:12px; bottom:5px; height:2px; background:var(--accent); border-radius:2px; opacity:.55; max-width:calc(100% - 24px); }
+.fin-pruh.vyd { background:var(--text); opacity:.3; }
+.fin-saldo { font-family:'Syne',sans-serif; font-weight:700; }
+.fin-nic { color:var(--muted2); }
+.fin-bez-n { color:var(--fin-chybi); font-weight:700; background:#fdebd8; border-radius:20px; padding:1px 9px; font-size:12px; }
+.fin-ok-n { color:var(--accent); font-weight:700; }
+.fin-tab tfoot td { border-top:1px solid var(--border); border-bottom:none; font-weight:600; background:#faf9f5; white-space:nowrap; }
+/* Lišta hromadných úprav */
+.fin-hrom { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); z-index:150; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:10px 14px; box-shadow:0 10px 34px rgba(40,35,20,.22); font-size:13px; max-width:calc(100vw - 24px); animation:finVjezd .18s ease; }
+.fin-hrom .fin-inp { flex:0 1 190px; min-width:120px; }
+/* Okna Financí */
+.mo.fin-mo { background:rgba(40,36,26,.42); backdrop-filter:blur(3px); }
+.mo.fin-mo.open { animation:finPozadi .2s ease; }
+@keyframes finPozadi { from { background:rgba(40,36,26,0); } to { background:rgba(40,36,26,.42); } }
+.fin-modal { max-width:580px; box-shadow:0 18px 60px rgba(40,35,20,.25); scrollbar-width:thin; scrollbar-color:#c9c5b8 transparent; }
+.fin-modal-siroky { max-width:680px; }
+.fin-modal .mh { gap:10px; }
+.fin-modal .mt2 { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.fin-nav { display:flex; align-items:center; gap:6px; flex-shrink:0; font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); }
+.fin-nav .fin-sip { width:28px; height:28px; font-size:16px; }
+.fin-det-castka { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; margin:-6px 0 14px; font-variant-numeric:tabular-nums; }
+.fin-det-info { background:var(--bg); border-radius:var(--radius-sm); padding:10px 12px; margin-bottom:16px; }
 .fin-r { display:flex; gap:12px; padding:4px 0; font-size:13px; }
-.fin-r span { color:var(--muted); min-width:120px; font-family:'DM Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding-top:2px; }
+.fin-r span { color:var(--muted); min-width:120px; font-family:'DM Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.04em; padding-top:2px; flex-shrink:0; }
 .fin-r b { font-weight:500; word-break:break-word; }
-.fin-otevrit { display:inline-block; margin-top:8px; }
+.fin-otevrit { display:inline-block; margin-top:8px; color:var(--accent) !important; font-weight:600; font-size:13px; text-decoration:none; }
+a.fin-otevrit:hover { text-decoration:underline; }
+.fin-doklad-stav { font-size:13px; font-weight:600; }
+.fin-doklad-stav.chybi { color:var(--fin-chybi); }
+.fin-doklad-stav.nic { color:var(--muted); }
 .fin-chk { display:flex; gap:8px; align-items:center; font-size:12.5px; color:var(--muted); margin-top:10px; cursor:pointer; }
+.fin-zauc-velke { font-size:14px; color:var(--text); font-weight:600; background:var(--bg); border-radius:var(--radius-sm); padding:12px; }
+.fin-zauc-velke i { font-weight:400; color:var(--fin-chybi); }
+.fin-kat-volby { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.fin-pozn-pole { margin-top:12px; }
+.fin-kand { display:flex; align-items:center; gap:10px; border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:6px; background:var(--surface); }
+.fin-kand.sparovano { border-color:var(--accent); background:var(--fin-jemna); }
+.fin-kand-t { flex:1; min-width:0; }
+.fin-kand-t b { display:block; font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fin-kand-t span { display:block; font-family:'DM Mono',monospace; font-size:10.5px; color:var(--muted); margin-top:2px; }
+.fin-kand-t i { color:var(--accent); font-style:normal; }
+.fin-sparovat { color:var(--accent); border-color:var(--accent); font-weight:600; }
+.fin-odparovat { margin-top:4px; }
+.fin-sklad-hledat { width:100%; margin:6px 0 8px; }
 .fin-smazat { flex:1; }
-.fin-pom { color:var(--muted); font-size:13px; line-height:1.55; margin-bottom:12px; }
+.fin-smazat[data-jiste] { color:var(--danger); border-color:var(--danger); }
+.fin-pom { color:var(--muted); font-size:13px; line-height:1.55; margin-bottom:10px; }
 .fin-banky { display:flex; gap:10px; margin-bottom:12px; }
 .fin-banka-volba { display:flex; align-items:center; gap:7px; border:1px solid var(--border); border-radius:8px; padding:8px 12px; cursor:pointer; font-size:13px; }
+.fin-banka-volba input { accent-color:var(--accent); }
+.fin-drop { display:block; border:1.5px dashed var(--muted2); border-radius:var(--radius); padding:22px; text-align:center; color:var(--muted); font-size:13px; cursor:pointer; transition:all .15s; background:var(--bg); }
+.fin-drop:hover, .fin-drop.nad { border-color:var(--accent); background:var(--fin-jemna); color:var(--text); }
+.fin-drop input { display:none; }
+.fin-drop b { color:var(--accent); }
+.fin-kde { margin-top:10px; font-size:12.5px; color:var(--muted); }
+.fin-kde summary { cursor:pointer; color:var(--accent); font-weight:600; }
+.fin-kde p { margin-top:7px; line-height:1.5; }
 .fin-nahled { margin-top:12px; }
-.fin-nahled-sum { font-size:13px; margin-bottom:8px; }
-.fin-nahled-r { display:grid; grid-template-columns:90px 1fr auto; gap:10px; font-size:12.5px; padding:5px 0; border-bottom:1px solid var(--border); }
-.fin-chyba { color:var(--danger); font-size:13px; }
+.fin-nahled-sum { font-size:13px; margin-bottom:8px; line-height:1.5; }
+.fin-nahled-r { display:grid; grid-template-columns:90px 1fr auto; gap:10px; font-size:12.5px; padding:6px 0; border-bottom:1px solid var(--surface2); }
+.fin-chyba { color:var(--danger); font-size:13px; line-height:1.5; }
+.fin-par-seznam { max-height:50vh; overflow-y:auto; margin-bottom:6px; }
+.fin-par { display:flex; gap:10px; align-items:flex-start; padding:9px 4px; border-bottom:1px solid var(--surface2); cursor:pointer; }
+.fin-par > div { flex:1; min-width:0; }
+.fin-par-tx { display:grid; grid-template-columns:86px 1fr auto; gap:10px; font-size:13px; }
+.fin-par-tx span { font-family:'DM Mono',monospace; font-size:11.5px; color:var(--muted); }
+.fin-par-sk { font-size:12px; color:var(--accent); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 @media (max-width:700px) {
-  body.prostredi-finance #financeApp { overflow:visible; padding:12px 12px 40px; }
-  .fin-import-btn { margin-left:0; width:100%; }
+  body.prostredi-finance #financeApp { overflow:visible; padding:12px 12px 110px; }
+  .fin-akce { margin-left:0; width:100%; }
+  .fin-import-btn { flex:1; }
+  .fin-obdobi { width:100%; justify-content:space-between; }
+  .fin-obd-text { flex:1; }
+  .fin-zal { width:100%; } .fin-zal-btn { flex:1; padding:7px 6px; }
+  .fin-dlazdice { gap:7px; }
+  .fin-dl { flex:1 1 30%; min-width:0; padding:9px 10px; }
+  .fin-dl-v { font-size:13px; }
+  .fin-dl-l { font-size:9px; }
   .fin-zp { max-width:none !important; }
+  /* Řádek tabulky pohybů je na telefonu karta */
+  .fin-tab:not(.fin-rok):not(.fin-kategorie) thead { display:none; }
+  .fin-tab:not(.fin-rok):not(.fin-kategorie) tbody tr { display:grid; grid-template-columns:auto 1fr auto; gap:2px 10px; padding:11px 12px; border-bottom:1px solid var(--surface2); align-items:center; }
+  .fin-tab:not(.fin-rok):not(.fin-kategorie) td { padding:0; border:none; }
+  .fin-tab:not(.fin-rok):not(.fin-kategorie) td:empty { display:none; }
+  .fin-tab td.fin-cb { grid-row:1 / span 3; width:auto; }
+  .fin-tab td.fin-pr { grid-column:2; grid-row:1; }
+  .fin-tab td.fin-c { grid-column:3; grid-row:1; }
+  .fin-tab td.fin-d { grid-column:2; grid-row:2; }
+  .fin-tab td.fin-dk { grid-column:3; grid-row:2 / span 2; text-align:right; }
+  .fin-tab td.fin-b { display:none; }
+  .fin-tab td.fin-zp, .fin-tab td.fin-k, .fin-tab td.fin-s { grid-column:2; font-size:12px; }
+  .fin-hrom { left:8px; right:8px; bottom:10px; transform:none; }
+  .fin-r span { min-width:92px; }
 }
 
 
@@ -3808,6 +3929,8 @@ function otevriUctetniManual() {
     + '<p>Zákazníci, analytika, wishlist a osobní sbírka. Do těch dat pohled účetního nevidí.</p>'
     + '<h4>Doklady</h4>'
     + '<p>U prodejů, ke kterým se doklad vystavuje, je v detailu položky tlačítko <b>Doklad</b>. Datum na něm je den, kdy dorazily peníze, a čísla jdou v roce podle data. Doklad má každý vyplacený prodej sám, nikdo ho nemusí vystavovat.</p>'
+    + '<h4>Finance</h4>'
+    + '<p>Přepínač <b>Sklad | Finance</b> vedle loga otevře pohyby z bankovních účtů (Air Bank, Revolut) po měsících. U každého pohybu je doklad — zelená fajfka ho otevře — a kategorie. Pohyby jdou stáhnout jako CSV a odškrtávat jako zaúčtované; značky se ukládají jen u tebe.</p>'
     + '<h4>Účetnictví</h4>'
     + '<p>Tlačítko <b>Účetnictví</b> v oranžovém pruhu: vybereš měsíc a máš pohromadě všechny prodejní doklady toho měsíce (jeden soubor, každý doklad na své stránce), přehled prodejů a nákupů ke stažení pro Excel, nákupní doklady s odkazy, kontrolu číselné řady a eurové prodeje bez kurzu ČNB.</p>'
     + '<p>V sekci <b>Zaúčtováno</b> si odškrtáváš, co už máš zpracované. Značky vidíš jen ty; když majitel zaúčtovaný obchod později změní, ukáže se u něj „změněno".</p>' 

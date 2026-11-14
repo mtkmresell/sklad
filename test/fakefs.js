@@ -72,12 +72,12 @@ module.exports = function installFakeFirestore() {
     writeBatch: function() {
       var ops = [];
       return {
-        set: function(ref, data) { ops.push({ t: 'set', path: ref.path, data: clone(data) }); },
+        set: function(ref, data, opts) { ops.push({ t: 'set', path: ref.path, data: clone(data), merge: !!(opts && opts.merge) }); },
         delete: function(ref) { ops.push({ t: 'del', path: ref.path }); },
         commit: function() {
           if (window.__failWrites) return Promise.reject(new Error('offline'));
           ops.forEach(function(o) {
-            if (o.t === 'set') window.__store[o.path] = o.data; else delete window.__store[o.path];
+            if (o.t === 'set') window.__store[o.path] = o.merge ? Object.assign({}, window.__store[o.path] || {}, o.data) : o.data; else delete window.__store[o.path];
             ozvi(o.path);   // posluchači zpráv a financí; sklad má vlastní __emitSnapshot
           });
           window.__commits++;
