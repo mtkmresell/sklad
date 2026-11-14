@@ -7216,9 +7216,9 @@ function waitStateBadge(it) {
   var cls = entry[0]; var label = entry[1];
   if (ws === 'sent' && it.trackingUrl) {
     var _dpdOnclick = (it.trackingCarrier === 'DPD' && it.trackingNum)
-    ? ' onclick="zkopiruj(\'' + it.trackingNum + '\',function(){showToast(\'' + it.trackingNum + ' zkopírováno\');});"'
+    ? ' onclick="zkopiruj(\'' + _jsText(it.trackingNum) + '\',function(){showToast(\'' + _jsText(it.trackingNum) + ' zkopírováno\');});"'
     : '';
-  return '<a href="' + it.trackingUrl + '" target="_blank" class="ws-badge ' + cls + ' wsb-link" data-tip="' + (it.trackingCarrier||'') + ' ' + (it.trackingNum||'') + (it.trackingCarrier==='DPD'?' (číslo se zkopíruje)':'') + '"' + _dpdOnclick + '>' + label + '</a>';
+  return '<a href="' + _odkazHtml(it.trackingUrl) + '" target="_blank" rel="noopener" class="ws-badge ' + cls + ' wsb-link" data-tip="' + escHtml(it.trackingCarrier||'') + ' ' + escHtml(it.trackingNum||'') + (it.trackingCarrier==='DPD'?' (číslo se zkopíruje)':'') + '"' + _dpdOnclick + '>' + label + '</a>';
   }
   return '<span class="ws-badge ' + cls + '">' + label + '</span>';
 }
@@ -7347,10 +7347,10 @@ function tableHTML(list) {
       ? `<img class="td-img" src="${it.imgUrl}" loading="lazy" data-action="img" data-id="${it.id}" onerror="this.style.display='none';this.nextSibling.style.display='flex'" style="cursor:pointer;" alt=""><div class="td-img-ph" style="display:none" data-action="img" data-id="${it.id}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`
       : `<div class="td-img-ph" data-action="img" data-id="${it.id}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`;
     const tNameHtml = it.stockxUrl
-      ? `<a href="${buildStockxUrlWithSize(it.stockxUrl,it.name,it.size)}" target="_blank" class="stockx-link">${it.name}</a>`
+      ? `<a href="${_odkazHtml(buildStockxUrlWithSize(it.stockxUrl,it.name,it.size))}" target="_blank" rel="noopener" class="stockx-link">${escHtml(it.name)}</a>`
       : it.name;
     const tSkuHtml = it.sku
-      ? `<span style="cursor:pointer;font-family:monospace;font-size:11px;color:var(--muted)" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${it.sku}">${it.sku}</span>`
+      ? `<span style="cursor:pointer;font-family:monospace;font-size:11px;color:var(--muted)" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${escHtml(it.sku)}">${escHtml(it.sku)}</span>`
       : `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`;
     // Oranžový roh jde do první buňky, ať je v rohu řádku i s výběrem (CO CHYBÍ U POLOŽKY)
     const roh = chybiRoh(it);
@@ -7360,7 +7360,7 @@ function tableHTML(list) {
       <td style="padding:4px 6px;">${tImgHtml}</td>
       <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${kontrolaZnackyHtml(it)}${tNameHtml}${profBadge(it)?' '+profBadge(it):''}</td>
       <td style="text-align:center">${tSkuHtml}</td>
-      <td style="font-family:monospace;font-size:11px;text-align:center;cursor:pointer;" data-action="sizeunit">${convertSize(it.size, it.name) || `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`}</td>
+      <td style="font-family:monospace;font-size:11px;text-align:center;cursor:pointer;" data-action="sizeunit">${escHtml(convertSize(it.size, it.name)) || `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center">${COND_L[it.condition]||it.condition||'—'}</td>
       <td class="td-num td-buy${(it.saleState||'stock')==='stock'?' calc-buy':''}" style="text-align:center">${buyStr}</td>
       ${tab!=='waiting'?`<td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.buyDate)}</td>`:''}
@@ -7371,8 +7371,8 @@ function tableHTML(list) {
       ${tab==='sold'?`<td class="td-num td-sell" style="text-align:center">${it.sellPrice?(it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)):'—'}</td>`:''}
       ${tab==='sold'?`<td class="td-num" style="${pc};text-align:center;font-size:12px;">${ps}</td>`:''}
       ${tab==='sold'?`<td style="text-align:center;font-family:monospace;font-size:11px;${it.roi>0?'color:var(--accent)':it.roi<0?'color:var(--danger)':'color:var(--muted)'}">${it.roi!=null?((it.roi>=0?'+':'')+it.roi+'%'):'—'}</td>`:''}
-      ${tab==='stock'?(function(){var _loc=it.location||'Doma';var _lc=_loc==='Na cestě'?'var(--warning)':_loc==='Vráceno'?'#ff4444':_loc==='Bude vráceno'?'#ff4444':_loc==='Zrušeno'?'#ff4444':_loc!=='Doma'?'var(--accent2)':'var(--muted)';var _dpdClick2=it.trackingCarrier==='DPD'&&it.trackingNum?' onclick="event.stopPropagation();zkopiruj(\''+it.trackingNum+'\',function(){showToast(\''+it.trackingNum+' zkopírováno\');});"':' onclick="event.stopPropagation()"';
-var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.trackingUrl?'<a href="'+it.trackingUrl+'" target="_blank"'+_dpdClick2+' class="trk-loc-link" style="color:'+_lc+';text-decoration:none;">'+_loc+'</a>':_loc;return '<td style="font-size:12px;text-align:center;color:'+_lc+'">'+_locTxt+'</td>'})():''}
+      ${tab==='stock'?(function(){var _loc=it.location||'Doma';var _lc=_loc==='Na cestě'?'var(--warning)':_loc==='Vráceno'?'#ff4444':_loc==='Bude vráceno'?'#ff4444':_loc==='Zrušeno'?'#ff4444':_loc!=='Doma'?'var(--accent2)':'var(--muted)';var _dpdClick2=it.trackingCarrier==='DPD'&&it.trackingNum?' onclick="event.stopPropagation();zkopiruj(\''+_jsText(it.trackingNum)+'\',function(){showToast(\''+_jsText(it.trackingNum)+' zkopírováno\');});"':' onclick="event.stopPropagation()"';
+var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.trackingUrl?'<a href="'+_odkazHtml(it.trackingUrl)+'" target="_blank" rel="noopener"'+_dpdClick2+' class="trk-loc-link" style="color:'+_lc+';text-decoration:none;">'+_loc+'</a>':_loc;return '<td style="font-size:12px;text-align:center;color:'+_lc+'">'+_locTxt+'</td>'})():''}
       ${tab==='stock'?daysCell(it):''}
       ${tab==='stock'&&!jeUctetni()?((()=>{
         const GROUPS=getPlatGroups();
@@ -7483,7 +7483,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
     var _pcStyle = profitKc>0?'color:var(--accent)':profitKc<0?'color:var(--danger)':'color:var(--muted)';
     var _roiStr = (roi>=0?'+':'')+roi+'%';
     var _editIcon = '<button id="bedit_'+rec.id+'" onclick="event.stopPropagation();openBulkEditModal(\''+rec.id+'\')" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\';" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\';" style="opacity:0;pointer-events:none;transition:opacity 0.15s;margin-left:10px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;flex-shrink:0;vertical-align:middle;">Upravit</button>';
-    var _bulkLabel = '<span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:2px 5px;font-family:monospace;margin-right:6px;">BULK</span>'+rec.name+' <span style="font-size:10px;color:var(--muted);font-family:monospace;">('+children.length+' ks)</span>'+_editIcon;
+    var _bulkLabel = '<span style="font-size:9px;background:#c8ff0018;color:#8ab200;border:1px solid #c8ff0030;border-radius:4px;padding:2px 5px;font-family:monospace;margin-right:6px;">BULK</span>'+escHtml(rec.name)+' <span style="font-size:10px;color:var(--muted);font-family:monospace;">('+children.length+' ks)</span>'+_editIcon;
     // Bulk hlavní řádek
     out += '<tr class="bulk-group-row'+(isExp?' bulk-group-expanded':'')+(_bRoh?' ma-chybi':'')+'" onclick="toggleBulkExpand(\''+rec.id+'\')" onmouseover="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'1\';_eb.style.pointerEvents=\'auto\';}" onmouseout="var _eb=document.getElementById(\'bedit_'+rec.id+'\');if(_eb){_eb.style.opacity=\'0\';_eb.style.pointerEvents=\'none\';}">';
     if(bulkMode) out += '<td class="vyber-sl'+(_bRoh?' chybi-td':'')+'" style="width:32px;">'+_bRoh+'</td>';
@@ -7520,10 +7520,10 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
           ? '<img class="td-img" src="'+ch.imgUrl+'" loading="lazy" onerror="this.style.display=\'none\'" alt="">'
           : '<div class="td-img-ph" style="opacity:0.5;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>';
         var chNameHtml = ch.stockxUrl
-          ? '<a href="'+ch.stockxUrl+'" target="_blank" class="stockx-link">'+ch.name+'</a>'
+          ? '<a href="'+_odkazHtml(ch.stockxUrl)+'" target="_blank" rel="noopener" class="stockx-link">'+escHtml(ch.name)+'</a>'
           : ch.name;
         var chSkuHtml = ch.sku
-          ? '<span style="cursor:pointer;font-family:monospace;font-size:11px;color:var(--muted)" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="'+ch.sku+'">'+ch.sku+'</span>'
+          ? '<span style="cursor:pointer;font-family:monospace;font-size:11px;color:var(--muted)" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="'+escHtml(ch.sku)+'">'+escHtml(ch.sku)+'</span>'
           : '<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>';
         var chBpKc = ch.buyCurrency==='EUR' ? (ch.buyPrice||0)*(eurRate||25) : (ch.buyPrice||0);
         var chSpKc = rec.itemPrices&&rec.itemPrices[ch.id] ? rec.itemPrices[ch.id] : 0;
@@ -7537,7 +7537,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
         out += '<td style="padding:4px 6px;">'+chImgHtml+'</td>';
         out += '<td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">'+kontrolaZnackyHtml(ch)+chNameHtml+'</td>';
         out += '<td style="text-align:center;">'+chSkuHtml+'</td>';
-        out += '<td style="font-family:monospace;font-size:11px;text-align:center;">'+convertSize(ch.size, ch.name)+'</td>';
+        out += '<td style="font-family:monospace;font-size:11px;text-align:center;">'+escHtml(convertSize(ch.size, ch.name))+'</td>';
         out += '<td style="font-family:monospace;font-size:11px;text-align:center;">'+(COND_L[ch.condition]||ch.condition||'—')+'</td>';
         out += '<td class="td-num td-buy" style="text-align:center;">'+chBuyStr+'</td>';
         out += '<td class="td-num td-sell" style="text-align:center;">'+chSellStr+'</td>';
@@ -7582,12 +7582,12 @@ function cardHTML(it){
     ${(tab!=='stock'&&it.sellPrice)?`<span class="profit-b ${pc}">${ps}</span>`:''}
   </div>`;
   const extraParts=[];
-  if(!customerMode && it.buyWhere) extraParts.push(`<span class="mt" style="font-size:9px;">${it.buyWhere}</span>`);
-  if(!customerMode && it.orderNum) extraParts.push(`<span class="mt" style="font-size:9px;cursor:pointer;" data-tip="Klikni pro zkopírování" data-action="copytext" data-text="${encodeURIComponent('Obj: '+it.orderNum)}">Obj: ${it.orderNum}</span>`);
+  if(!customerMode && it.buyWhere) extraParts.push(`<span class="mt" style="font-size:9px;">${escHtml(it.buyWhere)}</span>`);
+  if(!customerMode && it.orderNum) extraParts.push(`<span class="mt" style="font-size:9px;cursor:pointer;" data-tip="Klikni pro zkopírování" data-action="copytext" data-text="${encodeURIComponent('Obj: '+it.orderNum)}">Obj: ${escHtml(it.orderNum)}</span>`);
   if(!customerMode && it.saleRef) extraParts.push(`<span class="mt" style="font-size:9px;">Prodej: ${it.saleRef}</span>`);
   if(!customerMode && it.actualSell&&it.saleState==='paid') extraParts.push(`<span class="mt" style="font-size:9px;">Prodáno: ${Math.round(it.actualSell).toLocaleString('cs')} Kč</span>`);
-  if(!customerMode && it.from) extraParts.push(`<span class="mt" style="font-size:9px;">Od: ${it.from}</span>`);
-  if(!customerMode && it.note) extraParts.push(`<span style="font-size:10px;color:var(--muted);">${it.note}</span>`);
+  if(!customerMode && it.from) extraParts.push(`<span class="mt" style="font-size:9px;">Od: ${escHtml(it.from)}</span>`);
+  if(!customerMode && it.note) extraParts.push(`<span style="font-size:10px;color:var(--muted);">${escHtml(it.note)}</span>`);
   if(it.tags&&it.tags.length) it.tags.forEach(function(t){ extraParts.push(`<span style="font-size:9px;background:rgba(200,255,0,0.08);border:1px solid rgba(200,255,0,0.2);color:var(--accent);border-radius:20px;padding:1px 6px;font-family:'DM Mono',monospace;">${t}</span>`); });
   const extraHtml=extraParts.length?`<div class="extra-info" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${extraParts.join('')}</div>`:'';
   let waitBtnHtml = '';
@@ -7607,14 +7607,14 @@ function cardHTML(it){
     ? `<img class="item-img" src="${it.imgUrl}" loading="lazy" data-action="img" data-id="${it.id}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="cursor:pointer;" alt=""><div class="item-img-placeholder" style="display:none" data-action="img" data-id="${it.id}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted2)"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`
     : `<div class="item-img-placeholder" data-action="img" data-id="${it.id}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted2)"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>`;
   const nameHtml = it.stockxUrl
-    ? `<a href="${it.stockxUrl}" target="_blank" style="color:inherit;text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${it.name}</a>`
+    ? `<a href="${_odkazHtml(it.stockxUrl)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px solid var(--border);" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${escHtml(it.name)}</a>`
     : it.name;
   // Oranžový roh v rohu karty (CO CHYBÍ U POLOŽKY) — v nabídce zákazníkovi nemá co dělat
   const roh = customerMode ? '' : chybiRoh(it);
   return `<div class="item-card ${it.saleState==='waiting'?'s-waiting':it.saleState==='paid'?'s-paid':''}${roh?' ma-chybi':''}" data-id="${it.id}">
     ${roh}${imgHtml}
     <div class="card-top"><div class="item-name">${customerMode?'':kontrolaZnackyHtml(it)}${nameHtml}</div><span class="cat-badge ${getCatClass(it.category||'jine')}" style="${getCatBadgeStyle(it.category||'jine')}">${getCatLabel(it.category)||it.category}</span></div>
-    ${metas.length?`<div class="card-meta">${metas.map(m=>m.type==='sku'?`<span class="mt" style="cursor:pointer" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${m.val}">${m.val}</span>`:`<span class="mt">${m.val}</span>`).join('')}</div>`:''}
+    ${metas.length?`<div class="card-meta">${metas.map(m=>m.type==='sku'?`<span class="mt" style="cursor:pointer" data-tip="Klikni pro zkopírování" data-action="copysku" data-id="${escHtml(m.val)}">${escHtml(m.val)}</span>`:`<span class="mt">${escHtml(m.val)}</span>`).join('')}</div>`:''}
     ${platHtml}${priceHtml}
     <div class="sale-row"><div class="sd ${st[0]}"></div><div class="st">${st[1]}</div>${it.saleState==='waiting'?`<span style="margin-left:6px;">${waitStateBadge(it)}</span>`:''}${!customerMode&&it.stockIntent&&it.saleState==='stock'?'<span style="margin-left:6px;">'+intentBadge(it.stockIntent)+'</span>':''}${!customerMode&&profBadge(it)?'<span style="margin-left:6px;">'+profBadge(it)+'</span>':''}</div>
     ${extraHtml}${actions}
@@ -11069,9 +11069,9 @@ function openDetail(id) {
   const sizeUs = it.size ? convertSizeToUS(it.size, it.name) : null;
   const sizeCm = it.size ? convertSizeToCM(it.size, it.name) : null;
   const sizeStr = sizeEu ? [
-    (it.category === 'sneakers' ? 'EU\xa0' : '') + sizeEu,
-    sizeUs && sizeUs!==sizeEu ? 'US\xa0' + sizeUs : null,
-    sizeCm ? 'CM\xa0' + sizeCm : null
+    (it.category === 'sneakers' ? 'EU\xa0' : '') + escHtml(sizeEu),
+    sizeUs && sizeUs!==sizeEu ? 'US\xa0' + escHtml(sizeUs) : null,
+    sizeCm ? 'CM\xa0' + escHtml(sizeCm) : null
   ].filter(Boolean).join(' – ') : '—';
 
   const isPaid = it.saleState === 'paid';
@@ -11098,11 +11098,11 @@ function openDetail(id) {
   // Tracking pro Čeká — stav "Odesláno"
   var trackingHtml = null;
   if (isWaiting && it.trackingNum) {
-    var tLabel = (it.trackingCarrier ? it.trackingCarrier + ' · ' : '') + it.trackingNum;
+    var tLabel = escHtml((it.trackingCarrier ? it.trackingCarrier + ' · ' : '') + it.trackingNum);
     var _isDpdW = it.trackingCarrier === 'DPD' && it.trackingNum;
-    var _dpdAttrW = _isDpdW ? ' onclick="event.preventDefault();zkopiruj(\''+it.trackingNum+'\',function(){showToast(\''+it.trackingNum+' zkopírováno\');});window.open(\''+it.trackingUrl+'\',\'_blank\');"' : '';
+    var _dpdAttrW = _isDpdW ? ' onclick="event.preventDefault();zkopiruj(\''+_jsText(it.trackingNum)+'\',function(){showToast(\''+_jsText(it.trackingNum)+' zkopírováno\');});window.open(\''+_jsText(_obrOdkaz(it.trackingUrl)?it.trackingUrl:'')+'\',\'_blank\');"' : '';
     trackingHtml = it.trackingUrl
-      ? '<a href="'+it.trackingUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;cursor:pointer;"'+_dpdAttrW+'>'+tLabel+'</a>'
+      ? '<a href="'+_odkazHtml(it.trackingUrl)+'" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;cursor:pointer;"'+_dpdAttrW+'>'+tLabel+'</a>'
       : '<span style="font-family:monospace;font-size:12px;">'+tLabel+'</span>';
   }
   // Bazoš expirace — zobraz pro každou Bazoš platformu kde je položka zaškrtnutá
@@ -11143,14 +11143,14 @@ function openDetail(id) {
        nejčastěji. Pořadí řádků řídí tohle pole, ne seznamy sekcí níž:
        `renderSection` z nich jen vybírá, řadit je nechává na `rows`. */
     ['Profil', isPersonal(it) ? '<span class="prof-badge">Osobní</span>' : 'Podnikání', false],
-    ['Typ', getCatLabel(it.category)||it.category],
-    ['SKU', it.sku||'—', !!(it.sku)],
-    ['Stav', COND_L[it.condition]||it.condition||'—'],
+    ['Typ', escHtml(getCatLabel(it.category)||it.category)],
+    ['SKU', escHtml(it.sku)||'—', it.sku ? String(it.sku) : false],
+    ['Stav', escHtml(COND_L[it.condition]||it.condition)||'—'],
     ...(catHasSize(it.category)||it.size ? [['Velikost', sizeStr||'—']] : []),
     ['Nákupní cena', it.buyPrice ? (it.buyCurrency==='EUR'?it.buyPrice+' €':czk(it.buyPrice)) : '—'],
     ['Datum nákupu', fmtDate(it.buyDate)||'—'],
-    ['Kde koupeno', it.buyWhere==='Výkup' && odKohoHtml ? 'Výkup · ' + odKohoHtml : it.buyWhere||'—'],
-    ['Číslo objednávky', it.orderNum||'—', !!(it.orderNum)],
+    ['Kde koupeno', it.buyWhere==='Výkup' && odKohoHtml ? 'Výkup · ' + odKohoHtml : escHtml(it.buyWhere)||'—'],
+    ['Číslo objednávky', escHtml(it.orderNum)||'—', it.orderNum ? String(it.orderNum) : false],
     ...(!( it.buyWhere==='Výkup' && odKohoHtml) ? [['Od koho (vykup)', odKohoHtml||'—', false]] : []),
     ...(!isPaid ? [
       /* „Umístění" schválně pro všechny hodnoty. Dřív se to jmenovalo
@@ -11158,7 +11158,7 @@ function openDetail(id) {
          i stav zboží (DS), a ten teď stojí v téže sekci. Dva řádky
          stejného jména vedle sebe by nešlo rozeznat a `renderSection`
          filtruje podle jména, takže by se navíc oba objevily dvakrát. */
-      ['Umístění', it.location||'Doma'],
+      ['Umístění', escHtml(it.location)||'Doma'],
       ...(daysStr ? [['Na skladě', daysStr, false]] : []),
       ...(!isWaiting && it.targetPrice ? [['Cílová cena', (it.targetCurrency==='EUR'?targetEur(it)+' €':czk(it.targetPrice)), false]] : []),
       ...(!isWaiting && it.stockIntent ? [['Strategie', intentBadge(it.stockIntent), false]] : []),
@@ -11179,29 +11179,29 @@ function openDetail(id) {
       ...(isPaid && priceLogHtml(it) ? [['Vývoj ceny', priceLogHtml(it), false]] : []),
       ['Datum prodeje', fmtDate(it.saleDate)||'—'],
       ...(isPaid ? [['Datum vyplacení', fmtDate(it.payoutDate||it.saleDate)||'—']] : []),
-      ['Kde prodáno', it.soldWhere||'—'],
-      ['Číslo obj. prodeje', it.saleRef||'—', !!(it.saleRef)],
+      ['Kde prodáno', escHtml(it.soldWhere)||'—'],
+      ['Číslo obj. prodeje', escHtml(it.saleRef)||'—', it.saleRef ? String(it.saleRef) : false],
       ...(it.linkedCustomerId && _crmNameById(it.linkedCustomerId) ? [['Zákazník', '<span style="color:var(--accent);cursor:pointer;" onclick="openCustomerFromItem(\''+it.linkedCustomerId+'\')">'+escHtml(_crmNameById(it.linkedCustomerId))+' ›</span>', false]] : []),
-      ...(demandLabel(it.demandSource) ? [['Poptávka', demandLabel(it.demandSource)]] : []),
-      ['Způsob platby', it.paymentMethod||'—'],
+      ...(demandLabel(it.demandSource) ? [['Poptávka', escHtml(demandLabel(it.demandSource))]] : []),
+      ['Způsob platby', escHtml(it.paymentMethod)||'—'],
       ...(it.extraCosts ? [['Další náklady', (it.extraCurrency==='EUR'?it.extraCosts+' €':czk(it.extraCosts))]] : []),
     ] : []),
     /* U čekajícího je sledování v sekci Zásilka (`trackingHtml` výš). */
     ...(isPaid ? [
       ...(it.trackingNum ? (function(){
-        var _tl = (it.trackingCarrier?it.trackingCarrier+' · ':'')+it.trackingNum;
+        var _tl = escHtml((it.trackingCarrier?it.trackingCarrier+' · ':'')+it.trackingNum);
         var _isDpd = it.trackingCarrier==='DPD' && it.trackingNum;
-        var _dpdA = _isDpd ? ' onclick="event.preventDefault();zkopiruj(\''+it.trackingNum+'\',function(){showToast(\''+it.trackingNum+' zkopírováno\');});window.open(\''+it.trackingUrl+'\',\'_blank\');"' : '';
+        var _dpdA = _isDpd ? ' onclick="event.preventDefault();zkopiruj(\''+_jsText(it.trackingNum)+'\',function(){showToast(\''+_jsText(it.trackingNum)+' zkopírováno\');});window.open(\''+_jsText(_obrOdkaz(it.trackingUrl)?it.trackingUrl:'')+'\',\'_blank\');"' : '';
         var _html = it.trackingUrl
-          ? '<a href="'+it.trackingUrl+'" target="_blank" style="color:var(--accent);text-decoration:none;cursor:pointer;"'+_dpdA+'>'+_tl+'</a>'
+          ? '<a href="'+_odkazHtml(it.trackingUrl)+'" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;cursor:pointer;"'+_dpdA+'>'+_tl+'</a>'
           : '<span style="font-family:monospace;font-size:12px;">'+_tl+'</span>';
         return [['Sledování zásilky', _html]];
       })() : []),
     ] : []),
 
-    ['Poznámka', it.note||'—'],
-    ...(it.invoiceUrl ? [['Faktura', '<a href="'+it.invoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
-    ...(it.saleInvoiceUrl ? [['Faktura vydaná', '<a href="'+it.saleInvoiceUrl+'" target="_blank" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
+    ['Poznámka', escHtml(it.note)||'—'],
+    ...(it.invoiceUrl ? [['Faktura', '<a href="'+_odkazHtml(it.invoiceUrl)+'" target="_blank" rel="noopener" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
+    ...(it.saleInvoiceUrl ? [['Faktura vydaná', '<a href="'+_odkazHtml(it.saleInvoiceUrl)+'" target="_blank" rel="noopener" class="faktura-link" style="color:var(--accent);text-decoration:none;font-family:monospace;font-size:12px;">Otevřít fakturu</a>', false]] : []),
   ].filter(function(r){ var v=r[1]; return v&&v!=='—'; });
   // Rozdělení řádků do sekcí
   var secBase = ['Profil','Typ','SKU','Stav','Velikost'];
@@ -11566,7 +11566,7 @@ function renderWishlist() {
       var prioLabel = w.priority==='high'?'Vysoká':w.priority==='medium'?'Střední':'Nízká';
       h+='<div class="wish-card" style="background:var(--surface);border:1px solid var(--border);border-left:3px solid '+prioColor+';border-radius:var(--radius);padding:14px;">';
       h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">';
-      h+='<div style="font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;line-height:1.3;">'+w.name+'</div>';
+      h+='<div style="font-family:\'Syne\',sans-serif;font-size:14px;font-weight:700;line-height:1.3;">'+escHtml(w.name)+'</div>';
       h+='<span style="font-size:9px;font-family:\'DM Mono\',monospace;padding:2px 6px;border-radius:3px;white-space:nowrap;color:'+prioColor+';border:1px solid;border-color:'+prioColor+'30;background:'+prioColor+'12;flex-shrink:0;">'+prioLabel+'</span>';
       h+='</div>';
       if (w.category || w.size) {
@@ -11583,7 +11583,7 @@ function renderWishlist() {
         h+='<div style="font-size:11px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-bottom:6px;">Poptal: <span'+_custClick+'>'+escHtml(_custLabel)+'</span>'+(w.linkedCustomerId?'<span style="color:var(--accent);margin-left:4px;">&#128100;</span>':'')+'</div>';
       }
       if (w.note) {
-        h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">'+w.note+'</div>';
+        h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">'+escHtml(w.note)+'</div>';
       }
       var da = w.dateAdded ? new Date(w.dateAdded).toLocaleDateString('cs',{day:'numeric',month:'short',year:'numeric'}) : '';
       if (da) h+='<div style="font-size:10px;color:var(--muted2);font-family:\'DM Mono\',monospace;margin-bottom:10px;">Přidáno: '+da+'</div>';
@@ -13921,15 +13921,15 @@ function openGlobalSearch() {
       html+='<div data-gs-id="'+it.id+'" data-gs-tab="'+(ts==='paid'?'sold':ts)+'" style="display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\';">';
       html+='<div style="flex:1;min-width:0;">';
       html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">';
-      html+='<span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+it.name+'</span>';
-      if(it.size) html+='<span style="font-size:10px;color:var(--muted2);font-family:\'DM Mono\',monospace;flex-shrink:0;">'+it.size+'</span>';
+      html+='<span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(it.name)+'</span>';
+      if(it.size) html+='<span style="font-size:10px;color:var(--muted2);font-family:\'DM Mono\',monospace;flex-shrink:0;">'+escHtml(it.size)+'</span>';
       html+='</div>';
       html+='<div style="display:flex;gap:6px;align-items:center;">';
       html+='<span style="font-size:9px;font-family:\'DM Mono\',monospace;padding:1px 5px;border-radius:3px;border:1px solid;color:'+tabColor+';border-color:'+tabColor+'20;background:'+tabColor+'12;">'+tabLbl+'</span>';
       if(CAT_N[it.category]) html+='<span style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(CAT_N[it.category]||it.category)+'</span>';
       html+='</div></div>';
       html+='<div style="text-align:right;flex-shrink:0;"><div style="font-size:12px;font-family:\'Syne\',sans-serif;font-weight:700;">'+Math.round(sp||bp).toLocaleString('cs')+' Kč</div>';
-      if(it.sku) html+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+it.sku+'</div>';
+      if(it.sku) html+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+escHtml(it.sku)+'</div>';
       html+='</div>';
       html+='</div>';
     });
@@ -14971,7 +14971,7 @@ function buildSizeFilter() {
   });
   // Odeber vybrané velikosti které už nejsou ve skladu
   [...selectedSizes].forEach(s => { if (!allSizes.has(s)) selectedSizes.delete(s); });
-  drop.innerHTML = sorted.map(s => `<label onclick="event.stopPropagation()"><input type="checkbox" value="${s}" ${selectedSizes.has(s)?'checked':''} onchange="toggleSizeFilter('${s}',this.checked)"> ${s}</label>`).join('');
+  drop.innerHTML = sorted.map(s => `<label onclick="event.stopPropagation()"><input type="checkbox" value="${escHtml(s)}" ${selectedSizes.has(s)?'checked':''} onchange="toggleSizeFilter(this.value,this.checked)"> ${escHtml(s)}</label>`).join('');
   updateFilterBtn('size', selectedSizes, 'Všechny vel.');
 }
 
@@ -15034,7 +15034,7 @@ function buildBrandFilter() {
   const brands = [...foundBrands].sort((a, b) => a.localeCompare(b, 'cs'));
   // Odeber vybrané značky které už nejsou ve skladu
   [...selectedBrands].forEach(b => { if (!foundBrands.has(b)) selectedBrands.delete(b); });
-  drop.innerHTML = brands.map(b => `<label onclick="event.stopPropagation()"><input type="checkbox" value="${b}" ${selectedBrands.has(b)?'checked':''} onchange="toggleBrandFilter('${b}',this.checked)"> ${b}</label>`).join('');
+  drop.innerHTML = brands.map(b => `<label onclick="event.stopPropagation()"><input type="checkbox" value="${escHtml(b)}" ${selectedBrands.has(b)?'checked':''} onchange="toggleBrandFilter(this.value,this.checked)"> ${escHtml(b)}</label>`).join('');
   updateFilterBtn('brand', selectedBrands, 'Všechny značky');
 }
 
@@ -15057,7 +15057,7 @@ function buildTagFilter() {
   if (wrap) wrap.style.display='';
   [...selectedTags].forEach(function(t){ if(!foundTags.has(t)) selectedTags.delete(t); });
   var tagsArr = [...foundTags].sort();
-  drop.innerHTML = tagsArr.map(function(t){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+t+'" '+(selectedTags.has(t)?'checked':'')+' onchange="toggleTagFilter(\''+t+'\',this.checked)"> '+t+'</label>'; }).join('');
+  drop.innerHTML = tagsArr.map(function(t){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+escHtml(t)+'" '+(selectedTags.has(t)?'checked':'')+' onchange="toggleTagFilter(this.value,this.checked)"> '+escHtml(t)+'</label>'; }).join('');
   updateFilterBtn('tag', selectedTags, 'Všechny štítky');
 }
 function toggleTagFilter(val, checked) {
@@ -15081,7 +15081,7 @@ function buildCategoryFilter() {
   var foundCats = [...new Set(visItems.map(function(it){ return it.category || 'jine'; }))];
   [...selectedCategories].forEach(function(c){ if (!foundCats.includes(c)) selectedCategories.delete(c); });
   drop.innerHTML = foundCats.sort(function(a,b){ return (CAT_LABELS[a]||a).localeCompare(CAT_LABELS[b]||b,'cs'); })
-    .map(function(c){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+c+'" '+(selectedCategories.has(c)?'checked':'')+' onchange="toggleCategoryFilter(\''+c+'\',this.checked)"> '+(CAT_LABELS[c]||c)+'</label>'; }).join('');
+    .map(function(c){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+escHtml(c)+'" '+(selectedCategories.has(c)?'checked':'')+' onchange="toggleCategoryFilter(this.value,this.checked)"> '+escHtml(CAT_LABELS[c]||c)+'</label>'; }).join('');
   updateFilterBtn('cat', selectedCategories, 'Všechny typy');
 }
 function toggleCategoryFilter(val, checked) {
@@ -15097,7 +15097,7 @@ function buildLocationFilter() {
   var stockItems = items.filter(function(it){ return (it.saleState === 'stock' || !it.saleState) && profMatch(it); });
   var locs = [...new Set(stockItems.map(function(it){ return it.location || 'Doma'; }))].sort(function(a,b){ return a.localeCompare(b,'cs'); });
   [...selectedLocations].forEach(function(l){ if (!locs.includes(l)) selectedLocations.delete(l); });
-  drop.innerHTML = locs.map(function(l){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+l+'" '+(selectedLocations.has(l)?'checked':'')+' onchange="toggleLocationFilter(\''+l+'\',this.checked)"> '+l+'</label>'; }).join('');
+  drop.innerHTML = locs.map(function(l){ return '<label onclick="event.stopPropagation()"><input type="checkbox" value="'+escHtml(l)+'" '+(selectedLocations.has(l)?'checked':'')+' onchange="toggleLocationFilter(this.value,this.checked)"> '+escHtml(l)+'</label>'; }).join('');
   updateFilterBtn('loc', selectedLocations, 'Všechny sklady');
 }
 function toggleLocationFilter(val, checked) {
@@ -15639,7 +15639,7 @@ function openBulkSellModal() {
   var listHtml = selItems.map(function(it){
     var meta = [it.sku, it.size].filter(Boolean).join('  ·  ');
     return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">' +
-      '<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + it.name + '</span>' +
+      '<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(it.name) + '</span>' +
       '<span style="font-size:11px;color:var(--muted);font-family:monospace;white-space:nowrap;">' + meta + '</span>' +
       '<span style="font-size:11px;color:var(--muted);font-family:monospace;margin-left:8px;white-space:nowrap;">' + (it.buyCurrency==='EUR' ? (it.buyPrice||0)+' €' : czk(it.buyPrice||0)) + '</span>' +
     '</div>';
@@ -15683,7 +15683,7 @@ function openBulkSellModal() {
     selItems.forEach(function(it){
       var meta = [it.sku, it.size].filter(Boolean).join(' · ');
       bHtml += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">' +
-        '<span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;flex-shrink:1;">' + it.name + '</span>' +
+        '<span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;flex-shrink:1;">' + escHtml(it.name) + '</span>' +
         '<span style="flex:1;"></span>' +
         '<span style="font-family:monospace;font-size:10px;color:var(--accent);white-space:nowrap;flex-shrink:0;margin-right:6px;">' + (meta||'—') + '</span>' +
         '<input type="number" id="bsItemPrice_'+it.id+'" placeholder="0" oninput="calcBulkStats()" style="width:90px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;">' +
@@ -15951,7 +15951,7 @@ function openBulkEditModal(bulkId) {
     ch2.forEach(function(ch) {
       body += '<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:6px;margin-bottom:6px;">' +
         (ch.imgUrl ? '<img src="'+ch.imgUrl+'" style="width:32px;height:32px;object-fit:contain;border-radius:4px;" onerror="this.style.display=\'none\'">' : '<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--muted);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>') +
-        '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ch.name+'</div>' +
+        '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escHtml(ch.name)+'</div>' +
         '<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(ch.size||'')+(ch.sku?' · '+ch.sku:'')+'</div></div>' +
         '<button onclick="removeBulkChild(\''+bulkId+'\',\''+ch.id+'\')" data-tip="Vyjmout z bulku a vrátit na sklad" onmouseover="this.style.background=\'rgba(255,60,60,0.12)\';this.style.borderColor=\'var(--danger)\';" onmouseout="this.style.background=\'none\';this.style.borderColor=\'var(--danger)\';" style="background:none;border:1px solid var(--danger);color:var(--danger);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;transition:background 0.15s;">↩ Vyjmout</button></div>';
     });
@@ -16033,7 +16033,7 @@ function openBulkEditModal(bulkId) {
           list.innerHTML = filtered.map(function(it){
             return '<div data-pid="'+it.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;border-bottom:1px solid var(--border);transition:background 0.1s;">' +
               (it.imgUrl?'<img src="'+it.imgUrl+'" style="width:36px;height:36px;object-fit:contain;border-radius:4px;flex-shrink:0;" onerror="this.style.display=\'none\'">':'<div style="width:36px;height:36px;background:var(--surface2);border-radius:4px;flex-shrink:0;"></div>') +
-              '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+it.name+'</div>' +
+              '<div style="flex:1;min-width:0;"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(it.name)+'</div>' +
               '<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;">'+(it.size||'')+(it.sku?' · '+it.sku:'')+'</div></div>' +
               '</div>';
           }).join('');
@@ -16293,7 +16293,7 @@ function openBulkPayoutModal(bulkId) {
   overlay.innerHTML =
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;width:90%;max-width:420px;font-family:\'DM Sans\',sans-serif;">' +
       '<div style="font-family:\'Syne\',sans-serif;font-size:18px;font-weight:700;margin-bottom:6px;">Vyplaceno</div>' +
-      '<div style="font-size:12px;color:var(--muted);margin-bottom:18px;font-family:monospace;">' + rec.name + ' · ' + rec.itemIds.length + ' ks · ' + (rec.sellCurrency==='EUR'?getSellOrig(rec)+' €':czk(rec.sellPrice)) + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:18px;font-family:monospace;">' + escHtml(rec.name) + ' · ' + rec.itemIds.length + ' ks · ' + (rec.sellCurrency==='EUR'?getSellOrig(rec)+' €':czk(rec.sellPrice)) + '</div>' +
       '<div style="margin-bottom:14px;">' +
         '<label style="display:block;font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);margin-bottom:5px;">Datum vyplacení</label>' +
         '<input type="date" id="bulkPayoutDateInp" value="'+today+'" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;">' +
@@ -18722,7 +18722,7 @@ function deleteCustomer(id){
         saveCrmToFirestore();
         renderCustomers();
         try{ updateCrmFollowupBadge(); }catch(e){}
-        showToast((isB2c?'Zákazník':'Partner')+' „'+c.name+'" smazán.');
+        showToast((isB2c?'Zákazník':'Partner')+' „'+escHtml(c.name)+'" smazán.');
       }
       closeCustomerDetail();
       // Karta odjede stejně jako karta položky, teprve pak se seznam překreslí
@@ -19777,6 +19777,21 @@ function escHtml(s) {
   if(!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+/* BEZPEČNÉ VKLÁDÁNÍ DO HTML (kontrola podle OWASP, 14. 11. 2026).
+   Název položky, SKU, poznámka i odkaz jsou text od člověka (nebo z importu
+   CSV) a do stránky se skládají jako HTML. Neošetřený „<" v názvu rozbil
+   řádek a šikovně napsaný název by spustil cizí skript — v přihlášené
+   aplikaci, tedy s přístupem ke skladu. Text jde proto přes escHtml(),
+   odkaz do href přes _odkazHtml() (jen http/https, žádné javascript:)
+   a text do inline onclick přes _jsText(). Hlídá to test-bezpecnost.js. */
+function _odkazHtml(u) {
+  u = String(u == null ? '' : u).trim();
+  if (/^https?:\/\//i.test(u)) return escHtml(u);
+  // adresa napsaná bez https:// (www.onedrive…) — dřív z ní byl nefunkční odkaz dovnitř aplikace
+  if (/^[\w-]+(\.[\w-]+)+([\/?#]|$)/.test(u)) return escHtml('https://' + u);
+  return '#';
+}
+function _jsText(s) { return String(s == null ? '' : s).replace(/[\\'"<>&`\n\r]/g, ''); }
 
 function _crmNameById(id) {
   if(!id) return '';
@@ -22277,8 +22292,8 @@ function renderSoldView(){
             html+='<tr class="bulk-child-row'+(_chRohS?' ma-chybi':'')+'" style="cursor:pointer;" data-action="detail" data-id="'+ch.id+'">';
             html+='<td class="'+(_chRohS?'chybi-td':'')+'" style="padding:3px 8px;">'+_chRohS+'<span class="cat-badge '+getCatClass(ch.category||'jine')+'" style="'+getCatBadgeStyle(ch.category||'jine')+'">'+getCatLabel(ch.category||'jine')+'</span></td>';
             html+='<td style="padding:3px 8px;color:var(--muted2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+kontrolaZnackyHtml(ch)+ch.name+'</td>';
-            html+='<td style="padding:3px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(ch.sku||'—')+'</td>';
-            html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+convertSize(ch.size,ch.name)+'</td>';
+            html+='<td style="padding:3px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(escHtml(ch.sku)||'—')+'</td>';
+            html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+escHtml(convertSize(ch.size,ch.name))+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+czk(buyKcC)+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--accent);">'+itemSell+'</td>';
             html+='<td style="padding:3px 8px;text-align:center;font-family:monospace;font-size:11px;color:'+ipc+';">'+(itemProfit!=null?czkSign(itemProfit):'—')+'</td>';
@@ -22304,9 +22319,9 @@ function renderSoldView(){
       var _rohS=chybiRoh(it);
       html+='<tr class="'+(_rohS?'ma-chybi':'')+'" style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" data-action="detail" data-id="'+it.id+'" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">';
       html+='<td class="'+(_rohS?'chybi-td':'')+'" style="padding:6px 8px;">'+_rohS+'<span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span></td>';
-      html+='<td style="padding:6px 8px;font-size:13px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+kontrolaZnackyHtml(it)+(it.stockxUrl?'<a href="'+buildStockxUrlWithSize(it.stockxUrl,it.name,it.size)+'" target="_blank" class="stockx-link" onclick="event.stopPropagation()">'+it.name+'</a>':it.name)+(profBadge(it)?' '+profBadge(it):'')+'</td>';
-      html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(it.sku||'—')+'</td>';
-      html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);cursor:pointer;" data-action="sizeunit">'+convertSize(it.size,it.name)+'</td>';
+      html+='<td style="padding:6px 8px;font-size:13px;text-align:left;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+kontrolaZnackyHtml(it)+(it.stockxUrl?'<a href="'+_odkazHtml(buildStockxUrlWithSize(it.stockxUrl,it.name,it.size))+'" target="_blank" rel="noopener" class="stockx-link" onclick="event.stopPropagation()">'+escHtml(it.name)+'</a>':escHtml(it.name))+(profBadge(it)?' '+profBadge(it):'')+'</td>';
+      html+='<td style="padding:6px 8px;font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(escHtml(it.sku)||'—')+'</td>';
+      html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);cursor:pointer;" data-action="sizeunit">'+escHtml(convertSize(it.size,it.name))+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--muted);">'+bs+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--accent);font-weight:600;">'+ss+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:'+pc+';font-weight:600;">'+czkSign(profit)+'</td>';
@@ -22516,7 +22531,7 @@ function renderStockAnalytics() {
   saSections['nakupy'] = buyChartH;
   var oldest=si.filter(function(it){return daysOld(it)!=null;}).sort(function(a,b){return (daysOld(b)||0)-(daysOld(a)||0);}).slice(0,10);
   var oldH='<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="border-bottom:1px solid var(--border);">'+['Název','Kategorie','Dní','Investice','Intent'].map(function(h,i){return '<th style="padding:5px 8px;text-align:'+(i===0?'left':'center')+';font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:1px;">'+h+'</th>';}).join('')+'</tr></thead><tbody>';
-  oldest.forEach(function(it){ var d=daysOld(it),dc=d>=180?'var(--danger)':d>=90?'var(--warning)':'var(--muted)'; oldH+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" data-action="detail" data-id="'+it.id+'"><td style="padding:6px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;">'+it.name+'</td><td style="padding:6px 8px;text-align:center;"><span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span></td><td style="padding:6px 8px;text-align:center;font-family:monospace;color:'+dc+';">'+d+' dní</td><td style="padding:6px 8px;text-align:center;font-family:monospace;">'+czk(Math.round(buyKc(it)))+'</td><td style="padding:6px 8px;text-align:center;font-size:11px;color:var(--muted);">'+(intentLabels[it.stockIntent||'']||'—')+'</td></tr>'; });
+  oldest.forEach(function(it){ var d=daysOld(it),dc=d>=180?'var(--danger)':d>=90?'var(--warning)':'var(--muted)'; oldH+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" data-action="detail" data-id="'+it.id+'"><td style="padding:6px 8px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;">'+escHtml(it.name)+'</td><td style="padding:6px 8px;text-align:center;"><span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span></td><td style="padding:6px 8px;text-align:center;font-family:monospace;color:'+dc+';">'+d+' dní</td><td style="padding:6px 8px;text-align:center;font-family:monospace;">'+czk(Math.round(buyKc(it)))+'</td><td style="padding:6px 8px;text-align:center;font-size:11px;color:var(--muted);">'+(intentLabels[it.stockIntent||'']||'—')+'</td></tr>'; });
   oldH+='</tbody></table>';
   saSections['oldest'] = oldest.length?oldH:'—';
 
@@ -22953,7 +22968,7 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
     html+='<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" data-action="detail" data-id="'+it.id+'">';
     html+='<span style="font-family:\'DM Mono\',monospace;font-size:11px;color:var(--muted2);width:16px;">'+(i+1)+'.</span>';
     html+='<span class="cat-badge '+getCatClass(it.category||'jine')+'" style="'+getCatBadgeStyle(it.category||'jine')+'">'+getCatLabel(it.category||'jine')+'</span>';
-    html+='<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+it.name+'</span>';
+    html+='<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escHtml(it.name)+'</span>';
     html+='<span style="font-family:monospace;font-size:12px;color:var(--accent);font-weight:600;">+'+czk(p)+'</span>';
     html+='</div>';
   });

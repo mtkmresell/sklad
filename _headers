@@ -1,0 +1,8 @@
+# Bezpečnostní hlavičky webu (Cloudflare Workers, statické soubory).
+# Stránku nejde vložit do cizího rámu, prohlížeč nehádá typ souboru
+# a adresa aplikace se neposílá cizím webům.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()

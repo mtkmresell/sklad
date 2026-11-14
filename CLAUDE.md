@@ -1221,6 +1221,35 @@ navždy a kus by se tvářil jako vystavený tam, kde není.
 
 Hlídá to `test-poskozene.js`, sekce 6 a 7.
 
+### Bezpečné vkládání do HTML (`BEZPEČNÉ VKLÁDÁNÍ DO HTML`)
+
+Kontrola podle OWASP (majitel, 14. 11. 2026 — doporučil mu ji známý).
+Název položky, SKU, velikost, poznámka, „Od koho", místo nákupu, čísla
+objednávek, sledovací číslo i odkazy jsou **text od člověka nebo z importu
+CSV** a aplikace je skládá do HTML. Na desítkách míst šly do stránky
+neošetřené: „<" v názvu rozbil řádek a šikovně napsaný název by spustil
+cizí skript v přihlášené aplikaci (XSS). Nikdo to nezneužil — data si
+zadává majitel sám — ale účetní čte majitelova data a import bere cizí
+soubory.
+
+- **Text jde přes `escHtml()`**, odkaz do `href` přes **`_odkazHtml()`**
+  (jen http/https; adresa bez schématu dostane `https://`, `javascript:`
+  a `data:` skončí jako `#`), text do inline `onclick` přes `_jsText()`.
+- **Hodnota do inline obsluhy se nepíše vůbec** — filtry velikostí,
+  značek, štítků, kategorií a umístění berou `this.value`.
+- V detailu položky se u kopírovacích řádků (SKU, čísla objednávek)
+  předává **text ke zkopírování zvlášť** (třetí prvek řádku), jinak by
+  se do schránky dostal ošetřený text s `&amp;`.
+- Odkazy ven mají `rel="noopener"`. Web posílá hlavičky ze souboru
+  **`_headers`** (nosniff, zákaz vložení do rámu, Referrer-Policy) —
+  **`_headers` nesmí do `.assetsignore`**.
+
+`test-bezpecnost.js` prožene „zlé" hodnoty tabulkou, kartami, detailem,
+hledáním a oknem Účetnictví ve všech třech sekcích. **Nepokrývá všechno**
+— CRM, analytiku, wishlist, hromadná okna a hlášky (`showToast` skládá
+HTML) zatím ne; to je další krok, viz Rozdělaná témata. Nové místo, kam
+se vkládá text od člověka, má jít přes `escHtml()`.
+
 ### Fotky
 
 V paměti a v `localStorage` je fotka v položce jako `imgUrl` (data URI). Do cloudu jde
@@ -1280,6 +1309,7 @@ Sekce v `index.html` jsou označené hlavičkami v komentářích — grepni pod
 | obrázek pro stejné kusy | `SPOLEČNÝ OBRÁZEK POLOŽKY` |
 | okno pro účetního (měsíc) | `ÚČETNICTVÍ` |
 | zprávy a poznámky účetní ↔ majitel | `ZPRÁVY A POZNÁMKY`, v konektoru `ZPRÁVY OD ÚČETNÍHO` |
+| ošetření textů a odkazů (XSS) | `BEZPEČNÉ VKLÁDÁNÍ DO HTML`, `_headers` |
 | Finance (daňová evidence, výpisy) | `finance.js`, v index.html `FINANCE — DAŇOVÁ EVIDENCE` |
 | spouštěč kontrol na PC (po zapnutí, pokyny) | `nastroje/spoustec.py`, `SPOUŠTĚČ KONTROL` v CLAUDE.md |
 | kontroly na PC z aplikace (panel, pokyny) | `SPOUŠTĚNÍ KONTROL Z APLIKACE` |
@@ -2159,6 +2189,15 @@ v `konektor/README.md`. **Ptej se, jestli to zapojil** — do té doby to
 je jen kód v repozitáři. Telegram se zvažoval a majitel ho odmítl:
 nepoužívá ho a časem by ho ignoroval.
 
+**Bezpečnost a vzhled podle doporučení známého (14. 11. 2026).** Hotovo:
+ošetření textů a odkazů v hlavních pohledech, `_headers`. Zbývá a majitel
+si má vybrat: (1) dotáhnout ošetření v CRM, analytice, wishlistu,
+hromadných oknech a hláškách; (2) kontrola integrity cizích skriptů
+(xlsx a exceljs z cdnjs se načítají bez `integrity`) a případně CSP;
+(3) UX/UI průchod na telefonu — nejlíp podle jeho screenshotů, co ho
+na mobilu zdržuje. **Zeptej se, jestli `_headers` po nasazení funguje**
+(Cloudflare → nasazení bez chyby) a co z toho chce dál.
+
 **Další kontroly do „Co chybí".** Majitel chtěl návrhy (9. 10. 2026) a ještě
 si nevybral. Navržené, s počty z ostrých dat toho dne: číslo objednávky
 u nákupu (12 kusů na skladě), číslo prodeje u prodeje (16 z 29), kurz ČNB
@@ -2173,7 +2212,7 @@ jedno bez druhého nejde. Druhý účet by je oddělil. Není to nutné, je to �
 ## Testy
 
 ```bash
-node test/run.js              # kontrola syntaxe + všech 88 souborů
+node test/run.js              # kontrola syntaxe + všech 89 souborů
 node test/run.js archive      # jen vybrané
 ```
 
