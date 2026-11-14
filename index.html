@@ -26,8 +26,10 @@
 @font-face{font-family:'Syne';font-style:normal;font-weight:800;font-display:block;src:url(fonty/Syne-800-normal-latin.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
 @font-face{font-family:'Syne';font-style:normal;font-weight:800;font-display:block;src:url(fonty/Syne-800-normal-latin-ext.woff2) format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<!-- Knihovny pro Excel leží v repozitáři (knihovny/), ne na cizím serveru: cizí skript
+     by měl v přihlášené aplikaci stejná práva jako ona. defer = nezdržují první vykreslení. -->
+<script defer src="knihovny/xlsx.full.min.js"></script>
+<script defer src="knihovny/exceljs.min.js"></script>
 <style>
 :root{--bg:#0f0f0f;--surface:#181818;--surface2:#222;--surface3:#2a2a2a;--border:#2e2e2e;--accent:#c8ff00;--accent2:#ff6b35;--text:#f0f0f0;--muted:#777;--muted2:#555;--danger:#ff4444;--warning:#ffaa00;--radius:12px;--radius-sm:8px;}*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}button,a,[data-action],[onclick]{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;font-size:15px;font-variant-numeric:lining-nums tabular-nums;}header{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;gap:10px;flex-wrap:wrap;}.logo{font-family:Syne,sans-serif;font-size:20px;font-weight:800;flex-shrink:0;}.logo span{color:var(--accent);}.header-tabs{position:absolute;left:50%;transform:translateX(-50%);pointer-events:none;}.header-tabs .tab-bar{pointer-events:auto;}.tab-bar{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;}.tab-btn{background:none;border:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:6px 11px;border-radius:6px;cursor:pointer;transition:all 0.2s;white-space:nowrap;}.tab-btn.active{background:var(--accent);color:#000;}.header-right{display:flex;gap:7px;align-items:center;flex-shrink:0;}.icon-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:var(--radius-sm);font-size:13px;cursor:pointer;height:36px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px;gap:6px;transition:all 0.15s ease;white-space:nowrap;}.icon-btn:hover{border-color:#555;color:var(--text);}.add-btn{background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer;transition:opacity 0.2s;white-space:nowrap;}.add-btn:hover{opacity:0.85;}.stats-bar{display:flex;gap:9px;padding:13px 18px;flex-wrap:wrap;overflow:visible;-webkit-overflow-scrolling:touch;-ms-overflow-style:none;scrollbar-width:none;}.stats-bar::-webkit-scrollbar{display:none;}.pmg-group{margin-bottom:4px;}.pmg-group + .pmg-group{margin-top:22px;}.pmg-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:default;transition:background 0.15s;}.pmg-item.dragging{opacity:0.4;}.pmg-item.drag-over{border-color:var(--accent);background:rgba(200,255,0,0.06);}.pmg-drag{color:var(--muted2);cursor:grab;font-size:14px;line-height:1;user-select:none;flex-shrink:0;}.pmg-drag:active{cursor:grabbing;}.pmg-name{flex:1;font-size:13px;font-family:inherit;}.pmg-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;transition:color 0.15s;}.pmg-del:hover{color:var(--danger);}.pmg-list{min-height:30px;}.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:11px 14px;min-width:110px;flex-shrink:0;text-align:center;}.stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.7px;font-family:'DM Mono',monospace;}.stat-value{font-size:19px;font-weight:700;font-family:Syne,sans-serif;margin-top:2px;}.sv-green{color:var(--accent);}.sv-orange{color:var(--accent2);}.sv-red{color:var(--danger);}.sv-yellow{color:var(--warning);}.filters{padding:0 18px 13px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:1px;position:relative;z-index:100;overflow:visible;}.multi-filter-wrap{position:relative;}
 .multi-filter-drop{position:absolute;top:calc(100% + 4px);left:0;z-index:9999!important;min-width:180px;}.search-wrap{position:relative;flex:1;min-width:160px;}.search-wrap input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 32px 7px 32px;outline:none;transition:border-color 0.2s;}.search-wrap input:focus{border-color:var(--accent);}.si{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;}select{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:7px 10px;padding-right:28px;outline:none;cursor:pointer;}select:focus{border-color:var(--accent);}.items-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:11px;}.item-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;transition:border-color 0.2s,transform 0.15s;display:flex;flex-direction:column;}.item-card:hover{border-color:#3a3a3a;transform:translateY(-1px);}.item-card.s-waiting{border-left:3px solid var(--warning);}.item-card.s-paid{opacity:0.65;border-left:3px solid var(--accent);}.card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:7px;margin-bottom:7px;}.item-name{font-family:Syne,sans-serif;font-size:14px;font-weight:700;line-height:1.3;flex:1;}.cat-badge{font-family:'DM Mono',monospace;font-size:9px;padding:3px 6px;border-radius:20px;white-space:nowrap;flex-shrink:0;}.c-sneakers{background:#ff6b3518;color:#ff6b35;border:1px solid #ff6b3530;}.c-obleceni{background:#6b8cff18;color:#6b8cff;border:1px solid #6b8cff30;}.c-pokemon{background:#ffdd0018;color:#ffdd00;border:1px solid #ffdd0030;}.c-lego{background:#ff003018;color:#ff5566;border:1px solid #ff003030;}.c-hotwheels{background:#ff880018;color:#ff9922;border:1px solid #ff880030;}.c-alternate{background:#bf6bff18;color:#bf6bff;border:1px solid #bf6bff30;}.c-sberatelske{background:#6bffcc18;color:#6bffcc;border:1px solid #6bffcc30;}.c-jine{background:#88888818;color:#aaa;border:1px solid #44444430;}.c-custom{background:#88888818;color:#aaa;border:1px solid #44444430;}.card-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;}.mt{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);background:var(--surface2);padding:2px 5px;border-radius:4px;}.card-prices{display:flex;gap:7px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px;}.pb .pl{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;text-transform:uppercase;}.pb .pv{font-size:15px;font-weight:700;font-family:Syne,sans-serif;}.pv-buy{color:var(--muted);}.pv-sell{color:var(--accent);}.pv-retail{color:var(--muted2);font-size:12px !important;}.profit-b{font-family:'DM Mono',monospace;font-size:10px;padding:3px 7px;border-radius:5px;margin-left:auto;align-self:flex-end;}.pp{background:#c8ff0012;color:var(--accent);border:1px solid #c8ff0022;}.pn{background:#ff444412;color:var(--danger);border:1px solid #ff444422;}.pz{background:var(--surface2);color:var(--muted);border:1px solid var(--border);}.plats-row{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:7px;}.pc{font-family:'DM Mono',monospace;font-size:9px;padding:2px 5px;border-radius:4px;border:1px solid;}.pc-on{background:#c8ff0010;color:#8ab200;border-color:#c8ff0020;}.sale-row{display:flex;align-items:center;gap:5px;margin-bottom:7px;}.sd{width:6px;height:6px;border-radius:50%;flex-shrink:0;}.sd-stock{background:var(--muted2);}.sd-waiting{background:var(--warning);}.sd-paid{background:var(--accent);}.st{font-size:10px;font-family:'DM Mono',monospace;color:var(--muted);}.extra-info{font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:6px;line-height:1.7;}.card-actions{display:flex;gap:5px;padding-top:9px;border-top:1px solid var(--border);margin-top:auto;}.ab{flex:1;border:1px solid var(--border);background:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:11px;padding:6px 3px;border-radius:6px;cursor:pointer;transition:all 0.2s;text-align:center;}.ab:hover{border-color:var(--accent);color:var(--accent);}.ab-sell{border-color:#c8ff0022;color:var(--accent);}.ab-sell:hover{background:var(--accent);color:#000;}.ab-del:hover{border-color:var(--danger);color:var(--danger);}.empty-state{text-align:center;padding:60px 20px;color:var(--muted);}.empty-state .big{font-size:36px;margin-bottom:10px;}.item-img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border-radius:8px;margin-bottom:9px;display:block;}.item-img-placeholder{width:100%;aspect-ratio:1;background:var(--surface2);border-radius:8px;margin-bottom:9px;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:28px;cursor:pointer;border:1px dashed var(--border);}.item-img-placeholder:hover{border-color:var(--accent);color:var(--accent);}.td-img{width:36px;height:36px;object-fit:contain;background:#fff;border-radius:4px;display:block;}.td-img-ph{width:36px;height:36px;background:var(--surface2);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;border:1px dashed var(--border);flex-shrink:0;}.td-img-ph:hover{border-color:var(--accent);}.img-loading{opacity:0.4;}.img-modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:460px;max-height:85vh;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(200,255,0,0.3) transparent;}.img-preview{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border-radius:var(--radius);margin-bottom:14px;display:none;}.img-preview.show{display:block;}.img-preview-ph{width:100%;aspect-ratio:1;background:var(--surface2);border-radius:var(--radius);margin-bottom:14px;display:flex;align-items:center;justify-content:center;font-size:48px;}.img-status{font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:10px;min-height:18px;}.bulk-bar{display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 18px;align-items:center;gap:12px;box-shadow:0 8px 32px #000d;z-index:300;font-size:13px;white-space:nowrap;}.bulk-bar.vis{display:flex;}
@@ -3222,7 +3224,7 @@ function handleFCatChange(sel) {
 function buildCatSelects() {
   var customCats = getCustomCats();
   var builtinOpts = '<option value="sneakers">Sneakers</option><option value="obleceni">Oblečení</option><option value="pokemon">Pokémon</option><option value="lego">LEGO</option><option value="hotwheels">Hot Wheels</option><option value="alternate">Alternate</option><option value="sberatelske">Sběratelské</option><option value="jine">Jiné</option>';
-  var customOpts = customCats.map(function(c){ return '<option value="'+c.key+'">'+c.label+'</option>'; }).join('');
+  var customOpts = customCats.map(function(c){ return '<option value="'+escHtml(c.key)+'">'+escHtml(c.label)+'</option>'; }).join('');
 
   // fCat — select v modalu přidat/upravit
   var fCat = document.getElementById('fCat');
@@ -5191,7 +5193,7 @@ function buildSoldWhereFilter(){
   if(!sel) return;
   const waitItems = items.filter(it=>(it.saleState==='waiting'||it.saleState==='paid')&&it.soldWhere);
   const places = [...new Set(waitItems.map(it=>it.soldWhere).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">Všechna místa</option>' + places.map(p=>`<option value="${p}">${p}</option>`).join('');
+  sel.innerHTML = '<option value="">Všechna místa</option>' + places.map(p=>`<option value="${escHtml(p)}">${escHtml(p)}</option>`).join('');
 }
 
 function buildPlatFilter(){
@@ -7361,18 +7363,18 @@ function tableHTML(list) {
       <td class="td-name" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;">${kontrolaZnackyHtml(it)}${tNameHtml}${profBadge(it)?' '+profBadge(it):''}</td>
       <td style="text-align:center">${tSkuHtml}</td>
       <td style="font-family:monospace;font-size:11px;text-align:center;cursor:pointer;" data-action="sizeunit">${_velHtml(it.size, it.name) || `<span style="font-family:monospace;font-size:10px;color:var(--muted)">×</span>`}</td>
-      <td style="font-family:monospace;font-size:11px;text-align:center">${COND_L[it.condition]||it.condition||'—'}</td>
+      <td style="font-family:monospace;font-size:11px;text-align:center">${escHtml(COND_L[it.condition]||it.condition)||'—'}</td>
       <td class="td-num td-buy${(it.saleState||'stock')==='stock'?' calc-buy':''}" style="text-align:center">${buyStr}</td>
       ${tab!=='waiting'?`<td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.buyDate)}</td>`:''}
       ${tab==='waiting'?`<td class="td-num td-sell" style="text-align:center">${it.sellPrice?(it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)):'—'}</td>`:''}
       ${(()=>{ if(tab!=='waiting') return ''; var sp=it.sellPrice||0,bp=it.buyPrice||0,ec=it.extraCosts||0,er=it.profitRateEur||eurRate||25; var bpCzk=it.buyCurrency==='EUR'?bp*er:bp; var spEurVal=it.sellCurrency==='EUR'?(it.sellPriceOrig||sp):null; var spCzk=spEurVal?spEurVal*er:sp; var profit=spCzk-bpCzk-ec; var roi=bpCzk>0?parseFloat(((profit/bpCzk)*100).toFixed(1)):null; var pc2=profit>0?'color:var(--accent)':profit<0?'color:var(--danger)':'color:var(--muted)'; return `<td class="td-num" style="${pc2};text-align:center;font-size:12px;">${sp?(profit>=0?'+':'')+Math.round(profit).toLocaleString('cs'):'—'}</td><td style="text-align:center;font-family:monospace;font-size:11px;${roi>0?'color:var(--accent)':roi<0?'color:var(--danger)':'color:var(--muted)'}">${roi!=null&&sp?((roi>=0?'+':'')+roi+'%'):'—'}</td><td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.buyDate)}</td><td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center">${fmtDate(it.saleDate)||'—'}</td>`; })()}
-      ${tab==='waiting'?`<td style="font-size:12px;color:var(--muted)">${it.soldWhere||'—'}</td>`:''}
+      ${tab==='waiting'?`<td style="font-size:12px;color:var(--muted)">${escHtml(it.soldWhere)||'—'}</td>`:''}
       ${tab==='waiting'?`<td style="padding:8px 10px;">${waitStateBadge(it)}</td>`:''}
       ${tab==='sold'?`<td class="td-num td-sell" style="text-align:center">${it.sellPrice?(it.sellCurrency==='EUR'?(getSellOrig(it).toLocaleString('cs')+' €'):czk(it.sellPrice)):'—'}</td>`:''}
       ${tab==='sold'?`<td class="td-num" style="${pc};text-align:center;font-size:12px;">${ps}</td>`:''}
       ${tab==='sold'?`<td style="text-align:center;font-family:monospace;font-size:11px;${it.roi>0?'color:var(--accent)':it.roi<0?'color:var(--danger)':'color:var(--muted)'}">${it.roi!=null?((it.roi>=0?'+':'')+it.roi+'%'):'—'}</td>`:''}
       ${tab==='stock'?(function(){var _loc=it.location||'Doma';var _lc=_loc==='Na cestě'?'var(--warning)':_loc==='Vráceno'?'#ff4444':_loc==='Bude vráceno'?'#ff4444':_loc==='Zrušeno'?'#ff4444':_loc!=='Doma'?'var(--accent2)':'var(--muted)';var _dpdClick2=it.trackingCarrier==='DPD'&&it.trackingNum?' onclick="event.stopPropagation();zkopiruj(\''+_jsText(it.trackingNum)+'\',function(){showToast(\''+_jsText(it.trackingNum)+' zkopírováno\');});"':' onclick="event.stopPropagation()"';
-var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.trackingUrl?'<a href="'+_odkazHtml(it.trackingUrl)+'" target="_blank" rel="noopener"'+_dpdClick2+' class="trk-loc-link" style="color:'+_lc+';text-decoration:none;">'+_loc+'</a>':_loc;return '<td style="font-size:12px;text-align:center;color:'+_lc+'">'+_locTxt+'</td>'})():''}
+var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.trackingUrl?'<a href="'+_odkazHtml(it.trackingUrl)+'" target="_blank" rel="noopener"'+_dpdClick2+' class="trk-loc-link" style="color:'+_lc+';text-decoration:none;">'+escHtml(_loc)+'</a>':escHtml(_loc);return '<td style="font-size:12px;text-align:center;color:'+_lc+'">'+_locTxt+'</td>'})():''}
       ${tab==='stock'?daysCell(it):''}
       ${tab==='stock'&&!jeUctetni()?((()=>{
         const GROUPS=getPlatGroups();
@@ -7497,7 +7499,7 @@ var _locTxt=(_loc==='Na cestě'||_loc==='Vráceno'||_loc==='Bude vráceno')&&it.
     out += '<td style="text-align:center;font-family:monospace;font-size:11px;'+_pcStyle+';">'+_roiStr+'</td>';
     out += '<td></td>';
     out += '<td style="font-family:monospace;font-size:11px;color:var(--muted);text-align:center;">'+(rec.saleDate?fmtDate(rec.saleDate):'')+'</td>';
-    out += '<td style="font-size:12px;color:var(--muted);">'+(rec.soldWhere||'')+'</td>';
+    out += '<td style="font-size:12px;color:var(--muted);">'+escHtml(rec.soldWhere||'')+'</td>';
     out += '<td style="padding:8px 10px;">'+waitStateBadge(rec)+'</td>';
     (function(){
       var ws = rec.waitState || 'sending';
@@ -7584,7 +7586,7 @@ function cardHTML(it){
   const extraParts=[];
   if(!customerMode && it.buyWhere) extraParts.push(`<span class="mt" style="font-size:9px;">${escHtml(it.buyWhere)}</span>`);
   if(!customerMode && it.orderNum) extraParts.push(`<span class="mt" style="font-size:9px;cursor:pointer;" data-tip="Klikni pro zkopírování" data-action="copytext" data-text="${encodeURIComponent('Obj: '+it.orderNum)}">Obj: ${escHtml(it.orderNum)}</span>`);
-  if(!customerMode && it.saleRef) extraParts.push(`<span class="mt" style="font-size:9px;">Prodej: ${it.saleRef}</span>`);
+  if(!customerMode && it.saleRef) extraParts.push(`<span class="mt" style="font-size:9px;">Prodej: ${escHtml(it.saleRef)}</span>`);
   if(!customerMode && it.actualSell&&it.saleState==='paid') extraParts.push(`<span class="mt" style="font-size:9px;">Prodáno: ${Math.round(it.actualSell).toLocaleString('cs')} Kč</span>`);
   if(!customerMode && it.from) extraParts.push(`<span class="mt" style="font-size:9px;">Od: ${escHtml(it.from)}</span>`);
   if(!customerMode && it.note) extraParts.push(`<span style="font-size:10px;color:var(--muted);">${escHtml(it.note)}</span>`);
@@ -9323,7 +9325,7 @@ document.addEventListener('click', function(e) {
 function buildPlatGrid(sel=[]){
   var g=getPlatGroups();
   var allPlats=[...(g.platforms||[]),...(g.eshopy||[]),...(g.local||[])];
-  document.getElementById('platGrid').innerHTML=allPlats.map(function(p){return '<label class="pl-lbl'+(sel.includes(p)?' ck':'')+'" data-action="tgplat"><span>'+p+'</span></label>';}).join('');
+  document.getElementById('platGrid').innerHTML=allPlats.map(function(p){return '<label class="pl-lbl'+(sel.includes(p)?' ck':'')+'" data-action="tgplat"><span>'+escHtml(p)+'</span></label>';}).join('');
 }
 function tgPlat(el){el.classList.toggle('ck');}
 function getPlats(){return[...document.querySelectorAll('#platGrid .pl-lbl.ck')].map(e=>e.querySelector('span').textContent);}
@@ -9479,7 +9481,7 @@ function openEdit(id){
     var _fps=document.getElementById('fFpCislo');
     if(_dt){_dt.value=it.dokladTyp||'id';if(_dt._csSync)_dt._csSync();}
     dokladTypPole(it.dokladTyp||'id');
-    if(_fps && it.dokladTyp==='fp') { if(it.fpCislo) { _fps.innerHTML='<option value="'+it.fpCislo+'">'+it.fpCislo+'</option>'; _fps.value=it.fpCislo; } loadOpenFakturyPrijate().then(function(){
+    if(_fps && it.dokladTyp==='fp') { if(it.fpCislo) { _fps.innerHTML='<option value="'+escHtml(it.fpCislo)+'">'+escHtml(it.fpCislo)+'</option>'; _fps.value=it.fpCislo; } loadOpenFakturyPrijate().then(function(){
       if(!it.fpCislo || !_fps) return;
       /* Nabídka ukazuje jen nezaplacené FP. Kus, jehož FP už je zaplacená
          (nebo se nenačetla), by jinak při uložení číslo FP ztratil — a s ním
@@ -9524,9 +9526,9 @@ function openEdit(id){
   (function(){
     var el = document.getElementById('fPayoutMethod'); if(!el) return;
     var opts = getPaymentOpts().concat(['Vlastní…']);
-    el.innerHTML = '<option value="">— nevybráno —</option>' + opts.map(function(o){ return '<option value="'+o+'">'+o+'</option>'; }).join('');
+    el.innerHTML = '<option value="">— nevybráno —</option>' + opts.map(function(o){ return '<option value="'+escHtml(o)+'">'+escHtml(o)+'</option>'; }).join('');
     var val = it.payoutMethod||''; 
-    if(val && !opts.includes(val)) el.innerHTML += '<option value="'+val+'">'+val+'</option>';
+    if(val && !opts.includes(val)) el.innerHTML += '<option value="'+escHtml(val)+'">'+escHtml(val)+'</option>';
     el.value = val; if(el._csSync) el._csSync();
   })();
   document.getElementById('fNote').value=it.note||''; document.getElementById('fInvoiceUrl').value=it.invoiceUrl||'';
@@ -11571,7 +11573,7 @@ function renderWishlist() {
       h+='</div>';
       if (w.category || w.size) {
         h+='<div style="font-size:10px;color:var(--muted);font-family:\'DM Mono\',monospace;margin-bottom:8px;">';
-        h+=(CAT_N[w.category]||w.category||'')+(w.category&&w.size?' · ':'')+( w.size||'');
+        h+=escHtml((CAT_N[w.category]||w.category||'')+(w.category&&w.size?' · ':'')+( w.size||''));
         h+='</div>';
       }
       if (w.targetPrice) {
@@ -11734,11 +11736,11 @@ function renderTagSuggestions() {
   if (sorted.length === 0) { wrap.innerHTML=''; return; }
   wrap.innerHTML = '<span style="font-size:10px;color:var(--muted2);font-family:\'DM Mono\',monospace;align-self:center;">Použité:</span>'
     + sorted.map(function(t){
-        return '<button type="button" onclick="(function(){'
+        return '<button type="button" data-tag="'+escHtml(t)+'" onclick="(function(t){'
           +'var inp=document.getElementById(\'fTags\');'
           +'var cur=inp.value.split(\',\').map(function(x){return x.trim();}).filter(Boolean);'
-          +'if(!cur.includes(\''+t+'\')){ cur.push(\''+t+'\'); inp.value=cur.join(\', \'); }'
-          +'})()" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;font-family:\'DM Mono\',monospace;color:var(--muted);cursor:pointer;transition:all 0.15s;" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\'">'+t+'</button>';
+          +'if(!cur.includes(t)){ cur.push(t); inp.value=cur.join(\', \'); }'
+          +'})(this.dataset.tag)" style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:2px 8px;font-size:10px;font-family:\'DM Mono\',monospace;color:var(--muted);cursor:pointer;transition:all 0.15s;" onmouseover="this.style.borderColor=\'var(--accent)\';this.style.color=\'var(--accent)\'" onmouseout="this.style.borderColor=\'var(--border)\';this.style.color=\'var(--muted)\'">'+escHtml(t)+'</button>';
       }).join('');
 }
 
@@ -15293,7 +15295,9 @@ function showToast(msg, type, duration) {
   }
   var t = document.createElement('div');
   t.className = 'toast toast-' + (type || 'ok');
-  t.innerHTML = '<span class="toast-dot"></span><span>' + msg + '</span>';
+  // Text hlášky jde jako text, ne HTML — bývá v něm název položky nebo zákazníka (BEZPEČNÉ VKLÁDÁNÍ DO HTML)
+  t.innerHTML = '<span class="toast-dot"></span><span></span>';
+  t.lastChild.textContent = msg == null ? '' : String(msg);
   container.appendChild(t);
   setTimeout(function() {
     t.classList.add('toast-out');
@@ -15435,7 +15439,7 @@ function bulkChangeLoc(){
   overlay.innerHTML =
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:360px;font-family:\'DM Sans\',sans-serif;">' +
       '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;margin-bottom:18px;">Změnit lokaci ('+bulkSelected.size+' ks)</div>' +
-      '<select id="bulkLocSel">' + locOpts.map(function(l){ return '<option value="'+l+'">'+l+'</option>'; }).join('') + '</select>' +
+      '<select id="bulkLocSel">' + locOpts.map(function(l){ return '<option value="'+escHtml(l)+'">'+escHtml(l)+'</option>'; }).join('') + '</select>' +
       '<div style="display:flex;gap:10px;margin-top:18px;">' +
         '<button id="bulkLocSave" style="flex:1;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity 0.15s;">Uložit</button>' +
         '<button id="bulkLocCancel" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:var(--radius-sm);padding:10px 16px;font-size:13px;cursor:pointer;font-family:inherit;transition:all 0.15s;">Zrušit</button>' +
@@ -15534,8 +15538,8 @@ function bulkEditTags(){
       '<div style="font-family:\'Syne\',sans-serif;font-size:17px;font-weight:700;margin-bottom:6px;">Štítky ('+bulkSelected.size+' ks)</div>' +
       '<div style="font-size:11px;color:var(--muted);margin-bottom:14px;">Např. „podnikání" / „osobní" pro rozdělení skladu.</div>' +
       '<input type="text" id="bulkTagInp" list="bulkTagList" placeholder="název štítku…" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:14px;padding:9px 12px;outline:none;">' +
-      '<datalist id="bulkTagList">' + sugg.map(function(t){ return '<option value="'+t.replace(/"/g,'&quot;')+'">'; }).join('') + '</datalist>' +
-      (sugg.length ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;">' + sugg.slice(0,12).map(function(t){ return '<span class="bulk-tag-sugg" data-tag="'+t.replace(/"/g,'&quot;')+'" style="font-size:11px;background:rgba(200,255,0,0.08);border:1px solid rgba(200,255,0,0.2);color:var(--accent);border-radius:20px;padding:2px 9px;cursor:pointer;font-family:\'DM Mono\',monospace;">'+t+'</span>'; }).join('') + '</div>' : '') +
+      '<datalist id="bulkTagList">' + sugg.map(function(t){ return '<option value="'+escHtml(t)+'">'; }).join('') + '</datalist>' +
+      (sugg.length ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;">' + sugg.slice(0,12).map(function(t){ return '<span class="bulk-tag-sugg" data-tag="'+escHtml(t)+'" style="font-size:11px;background:rgba(200,255,0,0.08);border:1px solid rgba(200,255,0,0.2);color:var(--accent);border-radius:20px;padding:2px 9px;cursor:pointer;font-family:\'DM Mono\',monospace;">'+escHtml(t)+'</span>'; }).join('') + '</div>' : '') +
       '<div style="display:flex;gap:10px;margin-top:18px;">' +
         '<button id="bulkTagAdd" style="flex:1;background:var(--accent);color:#000;border:none;border-radius:var(--radius-sm);padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Přidat</button>' +
         '<button id="bulkTagRem" style="flex:1;background:var(--surface2);border:1px solid var(--danger);color:var(--danger);border-radius:var(--radius-sm);padding:10px;font-size:13px;cursor:pointer;font-family:inherit;">Odebrat</button>' +
@@ -15640,7 +15644,7 @@ function openBulkSellModal() {
     var meta = [it.sku, it.size].filter(Boolean).join('  ·  ');
     return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);">' +
       '<span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(it.name) + '</span>' +
-      '<span style="font-size:11px;color:var(--muted);font-family:monospace;white-space:nowrap;">' + meta + '</span>' +
+      '<span style="font-size:11px;color:var(--muted);font-family:monospace;white-space:nowrap;">' + escHtml(meta) + '</span>' +
       '<span style="font-size:11px;color:var(--muted);font-family:monospace;margin-left:8px;white-space:nowrap;">' + (it.buyCurrency==='EUR' ? (it.buyPrice||0)+' €' : czk(it.buyPrice||0)) + '</span>' +
     '</div>';
   }).join('');
@@ -15685,7 +15689,7 @@ function openBulkSellModal() {
       bHtml += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">' +
         '<span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;flex-shrink:1;">' + escHtml(it.name) + '</span>' +
         '<span style="flex:1;"></span>' +
-        '<span style="font-family:monospace;font-size:10px;color:var(--accent);white-space:nowrap;flex-shrink:0;margin-right:6px;">' + (meta||'—') + '</span>' +
+        '<span style="font-family:monospace;font-size:10px;color:var(--accent);white-space:nowrap;flex-shrink:0;margin-right:6px;">' + (escHtml(meta)||'—') + '</span>' +
         '<input type="number" id="bsItemPrice_'+it.id+'" placeholder="0" oninput="calcBulkStats()" style="width:90px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;">' +
         '<span style="font-size:11px;color:var(--muted);font-family:monospace;flex-shrink:0;width:20px;text-align:left;">' + curLabel + '</span>' +
       '</div>';
@@ -16300,7 +16304,7 @@ function openBulkPayoutModal(bulkId) {
       '</div>' +
       '<div style="margin-bottom:14px;">' +
         '<label style="display:block;font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);margin-bottom:5px;">Kam byl payout vyplacen</label>' +
-        '<select id="bulkPayoutMethodInp">' + getPaymentOpts().map(function(o){ return '<option value="'+o+'">'+o+'</option>'; }).join('') + '<option value="Vlastní">Vlastní</option></select>' +
+        '<select id="bulkPayoutMethodInp">' + getPaymentOpts().map(function(o){ return '<option value="'+escHtml(o)+'">'+escHtml(o)+'</option>'; }).join('') + '<option value="Vlastní">Vlastní</option></select>' +
         '<input type="text" id="bulkPayoutMethodCustom" placeholder="Zadej vlastní..." style="display:none;margin-top:7px;width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;">' +
       '</div>' +
       '<div id="bulkPayoutErrMsg" style="color:var(--danger);font-size:12px;margin-bottom:10px;display:none;">Vyplňte prosím obě pole.</div>' +
@@ -18275,7 +18279,7 @@ function _crmTabBehavior(c){
   var sty='style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:7px 10px;outline:none;width:100%;"';
   var mkSel=function(id,opts,cur){
     return '<select id="'+id+'" onchange="crmSaveBehavior(\''+escHtml(c.id)+'\')" '+sty+'>'
-      +opts.map(function(o){return '<option value="'+o.v+'"'+(o.v===cur?' selected':'')+'>'+o.l+'</option>';}).join('')+'</select>';
+      +opts.map(function(o){return '<option value="'+escHtml(o.v)+'"'+(o.v===cur?' selected':'')+'>'+escHtml(o.l)+'</option>';}).join('')+'</select>';
   };
   var pOpts=[{v:'ihned',l:'Platí ihned'},{v:'pomaly',l:'Platí pomalu'},{v:'problemovy',l:'Problémový'}];
   // Doručení: osobní předání + všichni dopravci z nastavení sledování (stejný seznam jako u zásilek)
@@ -18722,7 +18726,7 @@ function deleteCustomer(id){
         saveCrmToFirestore();
         renderCustomers();
         try{ updateCrmFollowupBadge(); }catch(e){}
-        showToast((isB2c?'Zákazník':'Partner')+' „'+escHtml(c.name)+'" smazán.');
+        showToast((isB2c?'Zákazník':'Partner')+' „'+c.name+'" smazán.');
       }
       closeCustomerDetail();
       // Karta odjede stejně jako karta položky, teprve pak se seznam překreslí
@@ -19377,7 +19381,7 @@ function addContactRow(type, value, isPrimary) {
   row.id = 'crmCRow_' + idx;
   row.style.cssText = 'display:grid;grid-template-columns:120px 1fr auto auto;gap:6px;margin-bottom:6px;align-items:center;';
   var types = ['instagram','email','telefon','whatsapp','vinted','facebook','bazos','cardmarket','osobne','jine'];
-  var opts = types.map(function(t){ return '<option value="'+t+'"'+(t===type?' selected':'')+'>'+t+'</option>'; }).join('');
+  var opts = types.map(function(t){ return '<option value="'+escHtml(t)+'"'+(t===type?' selected':'')+'>'+escHtml(t)+'</option>'; }).join('');
   var inputStyle = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 10px;outline:none;width:100%;';
   var selStyle = 'background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:inherit;font-size:13px;padding:8px 6px;outline:none;';
   row.innerHTML = '<select style="'+selStyle+'">'+opts+'</select>'
@@ -22273,7 +22277,7 @@ function renderSoldView(){
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--accent);font-weight:600;">'+(it.sellCurrency==='EUR'?getSellOrig(it)+' \u20ac':czk(it.sellPrice||0))+'</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:'+bpc+';font-weight:600;">'+czkSign(bProfit)+'</td>';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:'+bpc+';">'+(bRoi>=0?'+':'')+bRoi+'%</td>';
-        html+='<td style="padding:6px 8px;text-align:center;font-size:12px;color:var(--text);">'+(it.soldWhere||'—')+'</td>';
+        html+='<td style="padding:6px 8px;text-align:center;font-size:12px;color:var(--text);">'+escHtml(it.soldWhere||'—')+'</td>';
         // Zákazník má přednost před referencí — u balíku je to konkrétnější údaj
         var _bZak = it.linkedCustomerId ? _crmNameById(it.linkedCustomerId) : '';
         html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'
@@ -22328,8 +22332,8 @@ function renderSoldView(){
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:var(--accent);font-weight:600;">'+ss+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:'+pc+';font-weight:600;">'+czkSign(profit)+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:12px;color:'+pc+';">'+(roi!=null?(roi>=0?'+':'')+roi+'%':'—')+'</td>';
-      html+='<td style="padding:6px 8px;text-align:center;font-size:12px;color:var(--text);">'+(it.soldWhere||'—')+'</td>';
-      html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+(it.saleRef||'—')+'</td>';
+      html+='<td style="padding:6px 8px;text-align:center;font-size:12px;color:var(--text);">'+escHtml(it.soldWhere||'—')+'</td>';
+      html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+escHtml(it.saleRef||'—')+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-size:11px;color:var(--muted);">'+fmtDate(it.payoutDate||it.saleDate)+'</td>';
       html+='</tr>';
     });
@@ -22518,13 +22522,13 @@ function renderStockAnalytics() {
 
   var catEntries=Object.entries(byCat).sort(function(a,b){return b[1].val-a[1].val;});
   var maxCatVal=catEntries.length?catEntries[0][1].val:1;
-  saSections['kat'] = catEntries.map(function(e){ return barRow(getCatLabel(e[0])||e[0], e[1].val, maxCatVal, 'var(--accent)', e[1].count+' ks · '+czk(Math.round(e[1].val))); }).join('')||'—';
+  saSections['kat'] = catEntries.map(function(e){ return barRow(escHtml(getCatLabel(e[0])||e[0]), e[1].val, maxCatVal, 'var(--accent)', e[1].count+' ks · '+czk(Math.round(e[1].val))); }).join('')||'—';
   saSections['stari'] = pieHtml;
   saSections['intent'] = Object.entries(byIntent).filter(function(e){return e[1]>0;}).sort(function(a,b){return b[1]-a[1];}).map(function(e){ return barRow(intentLabels[e[0]]||e[0], e[1], totalCount, intentColors[e[0]]||'var(--accent)', e[1]+' ks ('+Math.round(e[1]/totalCount*100)+'%)'); }).join('')||'—';
   var locEntries=Object.entries(byLoc).sort(function(a,b){return b[1]-a[1];}); var locMax=locEntries.length?locEntries[0][1]:1;
-  saSections['lok'] = locEntries.map(function(e){ var c=e[0]==='Na cestě'?'var(--warning)':e[0]==='Vráceno'||e[0]==='Bude vráceno'||e[0]==='Zrušeno'?'var(--danger)':'var(--accent)'; return barRow(e[0],e[1],locMax,c,e[1]+' ks'); }).join('')||'—';
+  saSections['lok'] = locEntries.map(function(e){ var c=e[0]==='Na cestě'?'var(--warning)':e[0]==='Vráceno'||e[0]==='Bude vráceno'||e[0]==='Zrušeno'?'var(--danger)':'var(--accent)'; return barRow(escHtml(e[0]),e[1],locMax,c,e[1]+' ks'); }).join('')||'—';
   var platEntries=Object.entries(byPlat).sort(function(a,b){return b[1]-a[1];}).slice(0,10); var platMax=platEntries.length?platEntries[0][1]:1;
-  saSections['plat'] = platEntries.map(function(e){ return barRow(e[0],e[1],platMax,'#00bfff',e[1]+' ks'); }).join('')||'<span style="color:var(--muted);font-size:12px;">Žádné platformy</span>';
+  saSections['plat'] = platEntries.map(function(e){ return barRow(escHtml(e[0]),e[1],platMax,'#00bfff',e[1]+' ks'); }).join('')||'<span style="color:var(--muted);font-size:12px;">Žádné platformy</span>';
   var healthH='<div style="display:flex;flex-direction:column;gap:8px;">';
   [[noPlat,'Bez platformy','var(--warning)'],[noImg,'Bez obrázku','var(--muted)'],[noSku,'Bez SKU','var(--muted)'],[returned.length,'Vráceno/Zrušeno','var(--danger)']].forEach(function(r){ var pct=Math.round(r[0]/(totalCount||1)*100)||0; healthH+='<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="flex:1;font-size:12px;">'+r[1]+'</span><span style="font-family:monospace;font-size:12px;font-weight:700;color:'+r[2]+';">'+r[0]+' ks</span><span style="font-family:monospace;font-size:11px;color:var(--muted);">('+pct+'%)</span></div>'; });
   if(returned.length) healthH+='<div style="margin-top:8px;font-size:12px;color:var(--muted);">Vázáno v návratkách: <span style="color:var(--danger);font-weight:700;">'+czk(Math.round(returnedVal))+'</span></div>';
@@ -22846,7 +22850,7 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
     var pct=Math.round(e[1].count/mx*100);
     var pc2=e[1].profit>=0?'var(--accent)':'var(--danger)';
     html+='<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">';
-    html+='<span>'+(CAT_N[e[0]]||e[0])+'</span>';
+    html+='<span>'+escHtml(CAT_N[e[0]]||e[0])+'</span>';
     html+='<span style="font-family:monospace;font-size:11px;color:var(--muted);">'+e[1].count+' ks &nbsp;<span style="color:'+pc2+';">'+czkSign(e[1].profit)+'</span></span>';
     html+='</div><div style="height:4px;background:var(--surface);border-radius:2px;"><div class="anim-bar" data-bar-w="'+pct+'" style="height:4px;border-radius:2px;background:var(--accent);width:0%;transition:width 0.6s cubic-bezier(0.34,1,0.64,1);"></div></div></div>';
   });
@@ -22862,7 +22866,7 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
     var pct=Math.round(e[1].count/mw*100);
     var pc2=e[1].profit>=0?'var(--accent)':'var(--danger)';
     html+='<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">';
-    html+='<span>'+e[0]+'</span>';
+    html+='<span>'+escHtml(e[0])+'</span>';
     html+='<span style="font-family:monospace;font-size:11px;color:var(--muted);">'+e[1].count+' ks &nbsp;<span style="color:'+pc2+';">'+czkSign(e[1].profit)+'</span></span>';
     html+='</div><div style="height:4px;background:var(--surface);border-radius:2px;"><div class="anim-bar" data-bar-w="'+pct+'" style="height:4px;border-radius:2px;background:#00bfff;width:0%;transition:width 0.6s cubic-bezier(0.34,1,0.64,1);"></div></div></div>';
   });
@@ -23093,7 +23097,7 @@ function renderSoldAnalytics(sold,soldAll,stats,years){
       var pc=d.profit>=0?'var(--accent)':'var(--danger)';
       var rc=roi!=null&&roi>=0?'var(--accent)':roi<0?'var(--danger)':'var(--muted)';
       html+='<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
-      html+='<td style="padding:6px 8px;font-weight:600;">'+w+'</td>';
+      html+='<td style="padding:6px 8px;font-weight:600;">'+escHtml(w)+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;color:var(--muted);">'+d.count+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;">'+czk(Math.round(d.rev))+'</td>';
       html+='<td style="padding:6px 8px;text-align:center;font-family:monospace;font-weight:700;color:'+pc+';">'+czkSign(Math.round(d.profit))+'</td>';
@@ -23366,7 +23370,7 @@ function openPayoutModal(itemId) {
       '</div>' +
       '<div style="margin-bottom:14px;">' +
         '<label style="display:block;font-size:10px;font-family:\'DM Mono\',monospace;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);margin-bottom:5px;">Kam byl payout vyplacen</label>' +
-        '<select id="payoutMethodInp">' + getPaymentOpts().map(function(o){ return '<option value="'+o+'">'+o+'</option>'; }).join('') + '<option value="Vlastní">Vlastní</option></select>' +
+        '<select id="payoutMethodInp">' + getPaymentOpts().map(function(o){ return '<option value="'+escHtml(o)+'">'+escHtml(o)+'</option>'; }).join('') + '<option value="Vlastní">Vlastní</option></select>' +
         '<input type="text" id="payoutMethodCustom" placeholder="Zadej vlastní..." style="display:none;margin-top:7px;width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;">' +
       '</div>' +
       '<div id="payoutErrMsg" style="color:var(--danger);font-size:12px;margin-bottom:10px;display:none;">Vyplňte prosím obě pole.</div>' +

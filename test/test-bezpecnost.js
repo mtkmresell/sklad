@@ -87,6 +87,53 @@ const M = 'majitel1';
   await projdi('okno Účetnictví');
   await page.evaluate(() => { try { zavriUcetnictvi(); } catch (e) {} });
 
+  section('3b) Zákazníci, wishlist, analytika, hromadná okna, hlášky');
+  await page.evaluate(() => {
+    const Z = (n) => '<img src="x" onerror="window.__xss=(window.__xss||\'\')+\'' + n + ';\'">';
+    const osoba = (id, typ) => ({ id, type: typ, name: 'Karel ' + Z('cname'), instagram: 'ig' + Z('ig'), ig: 'ig' + Z('ig'), phone: '777' + Z('tel'), email: 'a@b.cz' + Z('mail'),
+      note_quick: 'q' + Z('nq'), note_special: 's' + Z('ns'), note: 'n' + Z('cnote'), pickup: 'Z-BOX ' + Z('pickup'), pickup_url: "javascript:window.__xss='pickupurl;'",
+      address: 'Ulice ' + Z('adr'), city: 'Brno' + Z('city'), delivery: 'Zásilkovna' + Z('deliv'), tags_likes: ['Nike' + Z('like')], tags_dislikes: ['Puma' + Z('dislike')],
+      sizes: '42' + Z('csize'), discord: 'd' + Z('discord'), company: 'Firma' + Z('firma'), ico: '123' + Z('ico'), created: new Date().toISOString() });
+    customers = [osoba('c1', 'b2c')]; partners = [osoba('p1', 'b2b')];
+    items.forEach((it, i) => {
+      it.linkedCustomerId = 'c1'; it.fromPartnerId = 'p1'; it.brand = 'Nike' + Z('brand'); it.tags = ['štítek' + Z('tag')]; it.location = 'Doma' + Z('loc');
+      it.saleRef = 'REF' + Z('ref'); it.paymentMethod = 'Převod' + Z('pay'); it.demandSource = 'ig'; it.condition = 'DS' + Z('cond');
+      if (it.saleState !== 'stock') it.soldWhere = 'Vinted' + Z('sold');
+    });
+    wishItems = [{ id: 'w1', name: 'Chci ' + Z('wname'), sku: 'W' + Z('wsku'), size: '43' + Z('wsize'), note: 'pozn' + Z('wnote'), maxPrice: 1000, price: 1000,
+      url: "javascript:window.__xss='wurl;'", link: "javascript:window.__xss='wurl;'", category: 'sneakers', priority: 'high' + Z('wprio'), customer: 'Karel' + Z('wcust'), created: new Date().toISOString() }];
+  });
+  const kroky = [
+    ['zákazníci — seznam', () => { switchTab('customers'); }],
+    ['zákazníci — detail', () => { openCustomerDetail('c1'); }],
+    ['partneři — seznam', () => { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open')); crmSwitchMode('b2b'); }],
+    ['partneři — detail', () => { openCustomerDetail('p1'); }],
+    ['zákazníci — analytika', () => { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open')); try { crmSwitchMode('analytics'); } catch (e) {} }],
+    ['wishlist', () => { switchTab('wishlist'); renderWishlist(); }],
+    ['analytika skladu', () => { switchTab('stock'); stockViewMode = 'analytics'; renderItems(); }],
+    ['analytika prodejů', () => { stockViewMode = 'table'; switchTab('sold'); soldViewMode = 'analytics'; renderSoldView(); }],
+    ['cashflow', () => { soldViewMode = 'table'; switchTab('waiting'); try { openPayoutCalendar(); } catch (e) {} }],
+    ['úprava položky', () => { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open')); document.querySelectorAll('body > div[style*="position:fixed"]').forEach(d => { if (d.id !== 'sklad-tip') d.remove(); }); switchTab('stock'); openEdit('a1'); }],
+    ['okno Přesunout / prodat', () => { document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open')); try { openSellModal('a1'); } catch (e) {} }],
+    ['hromadný výběr a jeho okna', () => {
+      document.querySelectorAll('.mo.open').forEach(m => m.classList.remove('open'));
+      setView('table'); renderItems(); if (!bulkMode) toggleBulkMode();
+      bulkSelected.add('a1'); try { updateBulkBar(); } catch (e) {}
+      ['bulkchangeloc', 'bulktags', 'bulkprofile', 'bulkprodat'].forEach(a => { const b = document.querySelector('#bulkBar [data-action="' + a + '"]'); if (b) b.click(); });
+    }],
+    ['hlášky', () => { showToast('Smazáno: ' + items[0].name); showToast(customers[0].name, 'err'); }],
+  ];
+  for (const [jmeno, fn] of kroky) {
+    const chyba = await page.evaluate((f) => { try { (0, eval)('(' + f + ')')(); return ''; } catch (e) { return String(e); } }, fn.toString());
+    if (chyba) console.log('   (krok „' + jmeno + '" hodil: ' + chyba.slice(0, 120) + ')');
+    await projdi(jmeno);
+  }
+  check('hláška ukáže název jako text', await page.evaluate(() => Array.from(document.querySelectorAll('.toast, [class*="toast"]')).some(t => /<img src="x"/.test(t.textContent))));
+  check('cizí skripty se nenačítají (jen Firebase), knihovny pro Excel jsou v repozitáři', await page.evaluate(() =>
+    Array.from(document.scripts).every(s => !s.src || /^file:|^https:\/\/www\.gstatic\.com\/firebasejs\//.test(s.src)))
+    && fs.existsSync(path.resolve(__dirname, '..', 'knihovny', 'xlsx.full.min.js')) && fs.existsSync(path.resolve(__dirname, '..', 'knihovny', 'exceljs.min.js')));
+  check('knihovny nejsou v .assetsignore', !/knihovny/.test(fs.readFileSync(path.resolve(__dirname, '..', '.assetsignore'), 'utf8')));
+
   section('4) Pomocné funkce a hlavičky');
   const f = await page.evaluate(() => ({
     js: _odkazHtml('javascript:alert(1)'), data: _odkazHtml('data:text/html,x'), ok: _odkazHtml('https://a.cz/x?a=1&b="2"'), bez: _odkazHtml('www.onedrive.com/abc'),

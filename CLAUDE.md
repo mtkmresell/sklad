@@ -17,6 +17,7 @@ ověřuje přes GitHub API (workflow „pages build and deployment", id `2565736
 index.html     celá aplikace — 20 200 řádků, 86 % JS, 7 % CSS, 8 % HTML
 finance.js     prostředí Finance (daňová evidence) — vlastní soubor, viz FINANCE
 fonty/         woff2 soubory (Syne, DM Sans, DM Mono) — servírují se z repozitáře
+knihovny/      knihovny pro Excel (xlsx, exceljs) — servírují se z repozitáře
 test/          testy (nenasazují se)
 zaloha/        ruční zálohy index.html před velkými zásahy
 nastroje/      čtečka dat z cloudu pro příkazovou řádku (nenasazuje se)
@@ -28,7 +29,7 @@ wrangler.jsonc  nasazení webu na Cloudflare (bez buildu); co na web nejde, je v
 ```
 
 Žádný build, žádné závislosti, žádný krok navíc. Aplikace běží i z `file://`.
-Externě se načítá jen Firebase SDK. **Nezaváděj build ani balíčkovač** —
+Externě se načítá jen Firebase SDK (knihovny pro Excel leží v `knihovny/`). **Nezaváděj build ani balíčkovač** —
 bezstavové nasazení a offline provoz jsou záměr, ne opomenutí.
 
 **Fonty se neberou z Googlu.** Leží ve `fonty/` a jsou zapojené přes `@font-face`
@@ -1244,11 +1245,23 @@ soubory.
   **`_headers`** (nosniff, zákaz vložení do rámu, Referrer-Policy) —
   **`_headers` nesmí do `.assetsignore`**.
 
+- **Hláška (`showToast`) bere text, ne HTML** — bývá v ní název položky
+  nebo zákazníka. Kdo by do ní chtěl HTML, musí si to udělat jinak.
+- **Velikost do buňky jde přes `_velHtml()`**: `convertSize()` vrací pro
+  prázdnou velikost HTML značku „×“ a plošné `escHtml()` ji 14. 11.
+  vypsalo jako text („<span…“ v tabulce na mobilu i počítači).
+- **Cizí skripty se nenačítají.** Knihovny pro Excel (xlsx, exceljs) leží
+  v **`knihovny/`** (z npm, stejné verze jako dřív z cdnjs) a načítají se
+  s `defer`. Cizí skript má v přihlášené aplikaci stejná práva jako ona;
+  zbývá jen Firebase SDK z gstatic. **`knihovny/` nesmí do
+  `.assetsignore`.**
+
 `test-bezpecnost.js` prožene „zlé" hodnoty tabulkou, kartami, detailem,
-hledáním a oknem Účetnictví ve všech třech sekcích. **Nepokrývá všechno**
-— CRM, analytiku, wishlist, hromadná okna a hlášky (`showToast` skládá
-HTML) zatím ne; to je další krok, viz Rozdělaná témata. Nové místo, kam
-se vkládá text od člověka, má jít přes `escHtml()`.
+hledáním, Účetnictvím, zákazníky a partnery, wishlistem, oběma
+analytikami, cashflow, úpravou položky, hromadnými okny a hláškami.
+Nové místo, kam se vkládá text od člověka, má jít přes `escHtml()`
+a patří do toho testu. CSP zatím není (aplikace stojí na inline
+skriptech; šlo by jen omezit, odkud se smí načítat).
 
 ### Fotky
 
@@ -2188,15 +2201,6 @@ kus ze skupiny, nebo žádný (`vynechat`). Hlídá to `test-pikastore.js`.
 v `konektor/README.md`. **Ptej se, jestli to zapojil** — do té doby to
 je jen kód v repozitáři. Telegram se zvažoval a majitel ho odmítl:
 nepoužívá ho a časem by ho ignoroval.
-
-**Bezpečnost a vzhled podle doporučení známého (14. 11. 2026).** Hotovo:
-ošetření textů a odkazů v hlavních pohledech, `_headers`. Zbývá a majitel
-si má vybrat: (1) dotáhnout ošetření v CRM, analytice, wishlistu,
-hromadných oknech a hláškách; (2) kontrola integrity cizích skriptů
-(xlsx a exceljs z cdnjs se načítají bez `integrity`) a případně CSP;
-(3) UX/UI průchod na telefonu — nejlíp podle jeho screenshotů, co ho
-na mobilu zdržuje. **Zeptej se, jestli `_headers` po nasazení funguje**
-(Cloudflare → nasazení bez chyby) a co z toho chce dál.
 
 **Další kontroly do „Co chybí".** Majitel chtěl návrhy (9. 10. 2026) a ještě
 si nevybral. Navržené, s počty z ostrých dat toho dne: číslo objednávky
